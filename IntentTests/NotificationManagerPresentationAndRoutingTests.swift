@@ -38,7 +38,7 @@ extension NotificationManagerTests {
         #expect(center.requests.count == 1)
     }
 
-    @Test @MainActor func activeAppKeepsFeedbackAndToastBehavior() {
+    @Test @MainActor func activeAppPostsSystemSoundAndKeepsFeedbackAndToast() {
         var feedbackCount = 0
         let (manager, center) = makeNotificationManager(state: .active) {
             feedbackCount += 1
@@ -50,7 +50,7 @@ extension NotificationManagerTests {
             agentName: "Build Agent"
         )
 
-        #expect(center.requests.isEmpty)
+        #expect(center.requests.count == 1)
         #expect(feedbackCount == 1)
         #expect(manager.currentToast?.agentId == "agent-1")
     }
@@ -68,7 +68,7 @@ extension NotificationManagerTests {
             agentName: "Build Agent"
         )
 
-        #expect(center.requests.isEmpty)
+        #expect(center.requests.count == 1)
         #expect(feedbackCount == 1)
         #expect(manager.currentToast == nil)
     }
@@ -163,7 +163,7 @@ extension NotificationManagerTests {
         )
     }
 
-    @Test func foregroundDeliveryReplaysFeedbackAndToastBeforeSuppressingBanner() async {
+    @Test func foregroundDeliveryPresentsFeedbackAndToastWithSystemSoundOnly() async {
         let center = NotificationManagerFakeCenter()
         let service = LocalNotificationService(center: center)
         var feedbackCount = 0
@@ -190,9 +190,10 @@ extension NotificationManagerTests {
             }
         }
 
-        #expect(options.isEmpty)
+        #expect(options == [.sound])
         #expect(feedbackCount == 1)
         #expect(manager.currentToast?.agentId == "agent-1")
+        #expect(center.requests.isEmpty)
     }
 
     // MARK: - Tap routing and delivered cleanup

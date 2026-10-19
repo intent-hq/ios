@@ -12,6 +12,7 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
         static let darkChannel = 22.0
         static let lightChannel = 255.0
         static let lightSettings = [240.0, 240.0, 235.0]
+        static let darkSidebar = [39.0, 39.0, 39.0]
         static let lightDiagnostics = [242.0, 242.0, 247.0]
         static let contentOffset: CGFloat = 40
     }
@@ -125,7 +126,10 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             let settings = app.scrollViews["settings.scroll"]
             let point = CGPoint(x: settings.frame.minX + Sample.gutterInset, y: manual.frame.midY)
             let actual = try background(in: app, at: point, capture: "workspace-background-settings-\(appearance)")
-            assertMatches(actual, expected: expected, screen: "Settings (\(appearance))")
+            // The iPad sidebar keeps shell chrome; only the main panel uses the workspace background.
+            let isSidebar = app.buttons["ipad.rail.settings"].exists
+            let settingsExpected = isSidebar && appearance == "dark" ? Sample.darkSidebar : expected
+            assertMatches(actual, expected: settingsExpected, screen: "Settings (\(appearance))")
             manual.tap()
             let host = app.textFields["manual.host"]
             XCTAssertTrue(host.waitForExistence(timeout: Sample.timeout))
@@ -149,6 +153,42 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             let confirmation = try background(in: app, at: confirmationPoint, capture: "workspace-background-disconnect-confirmation-\(appearance)")
             assertMatches(confirmation, expected: expected, screen: "Disconnect confirmation (\(appearance))")
             cancelDisconnect.tap()
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testIPadSettingsSidebarKeepsShellBackground() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar")
+        // Portrait only: XCUITest screenshots of a landscape iPad simulator come back rotated and cropped.
+        XCUIDevice.shared.orientation = .portrait
+        for appearance in ["dark", "light"] {
+            let app = XCUIApplication()
+            let content = try openWorkspace(
+                in: app,
+                appearance: appearance,
+                arguments: ["--demo-settings", "--demo-ipad-pane-geometry"]
+            )
+            let shell = appearance == "dark" ? Sample.darkSidebar : Sample.lightSettings
+            openSettings(in: app)
+            let manual = app.buttons["settings.pairing.manual"]
+            let settings = app.scrollViews["settings.scroll"]
+            let point = CGPoint(x: settings.frame.minX + Sample.gutterInset, y: manual.frame.midY)
+            let sidebar = try background(in: app, at: point, capture: "ipad-settings-sidebar-\(appearance)")
+            assertMatches(sidebar, expected: shell, screen: "iPad Settings sidebar (\(appearance))")
+            // Wide iPads keep the workspace beside the sidebar; smaller ones cover it with a drawer.
+            let heading = app.staticTexts["workspace.title.heading"]
+            if heading.exists, heading.isHittable {
+                let detailPoint = CGPoint(x: heading.frame.minX - Sample.gutterInset, y: heading.frame.midY)
+                let detail = try background(in: app, at: detailPoint, capture: "ipad-settings-detail-\(appearance)")
+                assertMatches(detail, expected: content, screen: "iPad workspace beside Settings (\(appearance))")
+            }
+            // A rounded drawer corner would expose the shade against the rail.
+            let panel = app.descendants(matching: .any)["ipad.sidebar.panel.geometry"].firstMatch
+            XCTAssertTrue(panel.waitForExistence(timeout: Sample.timeout))
+            let corner = CGPoint(x: panel.frame.minX + 1, y: panel.frame.minY + 1)
+            let cornerColor = try background(in: app, at: corner, capture: "ipad-settings-corner-\(appearance)")
+            assertMatches(cornerColor, expected: shell, screen: "iPad Settings sidebar leading corner (\(appearance))")
             app.terminate()
         }
     }

@@ -428,6 +428,7 @@ extension DemoFixtures {
     private static let agentAndTaskResponses: [String: @MainActor ([String: Any]) -> Any] = [
         "agent.create": { $0["workspaceId"] as? String == Workspace.chiefWorkspaceId ? createAssistantAgent() : workspaceCreationResponse(for: "agent.create", params: $0) },
         "agent.list": agentListResponse,
+        "agent.delete": deleteAssistantAgent,
         "agent.get": agentGetResponse,
         "agent.getConversation": conversationResponse,
         "chat.subscribe": { ["subscriptionId": chatSubscriptionId(agentId: $0["agentId"] as? String)] },

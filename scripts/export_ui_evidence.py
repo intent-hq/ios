@@ -31,6 +31,10 @@ CAPTURES = {
         "testDeadlineRemainsVisibleUntilServerExpiry": (
             "script-monitors-deadline", "script-monitors-expired", "script-monitors-final-state",
         ),
+        "testSeveralWatchesShareOneCountedPill": (
+            "script-monitors-multiple", "script-monitors-multiple-menu", "script-monitors-multiple-details",
+            "script-monitors-final-state",
+        ),
         "testQuestionFlowKeepsWatchReachableWithAccessibilityText": (
             "script-monitors-question-accessibility", "script-monitors-question-details", "script-monitors-final-state",
         ),
@@ -76,6 +80,9 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for screen in ("reference", "settings", "manual", "disconnect-confirmation")
         ),
+        "testIPadSettingsSidebarKeepsShellBackground": (
+            "ipad-settings-sidebar-light", "ipad-settings-sidebar-dark",
+        ),
         "testSettingsSupportBackgroundsMatchWorkspaceInBothAppearances": tuple(
             f"workspace-background-{screen}-{appearance}"
             for appearance in ("light", "dark")
@@ -111,6 +118,16 @@ CAPTURES = {
             for mode in ("Recent", "Repo", "Status")
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
+    },
+    "IPadAssistantSwipeUITests": {
+        "testSwipeDeletionPreservesSelectionAndSupportsCancellationInBothThemes": (
+            "iPad Assistant swipe delete light", "iPad Assistant swipe delete dark",
+        ),
+    },
+    "IPhoneAssistantHistoryUITests": {
+        "testSwipeDeletionPreservesDraftAndSelectionInBothThemes": (
+            "iPhone Assistant history swipe delete light", "iPhone Assistant history swipe delete dark",
+        ),
     },
     "HomeActionMenuUITests": {
         "testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle": ("Duo workspace detail without header",),

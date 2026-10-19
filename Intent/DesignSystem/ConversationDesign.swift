@@ -79,7 +79,7 @@ extension Constants.Conversation.Design {
     enum Status {
         static let minimumHeight: CGFloat = 32
         static let leadingPadding: CGFloat = 16
-        static let trailingPadding: CGFloat = 4
+        static let trailingPadding: CGFloat = 12
         static let iconSpacing: CGFloat = 12
         static let composerSpacing: CGFloat = 8
         static let goToEndLeadingPadding: CGFloat = 12

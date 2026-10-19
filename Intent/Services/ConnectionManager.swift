@@ -186,7 +186,7 @@ extension ConnectionManager {
         capabilities = .unknown
         if demoScriptMonitorFixtures?.supportsMonitors == true {
             capabilities = ConnectionCapabilities(hello: [
-                "server": ["protocolVersion": "14.0", "capabilities": ["scriptMonitors": 2, "scriptActiveLists": 1]]
+                "server": ["protocolVersion": "15.0", "capabilities": ["scriptMonitors": 2, "scriptActiveLists": 1]]
             ])
         }
     }

@@ -147,7 +147,7 @@ nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
             } else if method == "principal.me" {
                 response["result"] = ["id": "test-owner", "isAdministrator": true]
             } else if method == "client.hello" {
-                response["result"] = ["server": ["capabilities": [String: Int]()]]
+                response["result"] = ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": [String: Int]()]]
             } else {
                 response["result"] = [String: Any]()
             }

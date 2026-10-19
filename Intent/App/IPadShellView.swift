@@ -172,7 +172,7 @@ struct IPadShellView: View {
             .frame(width: workspaceSearchVisible ? layout.focusedPanelWidth : layout.sidebarWidth)
             .frame(maxHeight: .infinity)
             .background(IPadShellStyle.background(for: colorScheme))
-            .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
+            .clipShape(sidebarShape)
             .modifier(IPadPaneBounds(identifier: "ipad.sidebar.panel", isAccessible: isSidebarAccessible))
             .padding(.leading, workspaceSearchVisible ? 0 : layout.railLeadingInset)
             .frame(maxWidth: .infinity, alignment: workspaceSearchVisible ? .center : .leading)
@@ -180,6 +180,18 @@ struct IPadShellView: View {
             .opacity(navigation.isSidebarVisible || workspaceSearchVisible ? 1 : 0)
             .allowsHitTesting(isSidebarAccessible)
             .environment(\.isIPadPaneVisible, isSidebarAccessible)
+    }
+
+    /// A drawer sits flush against the undimmed shell, so only its trailing edge is rounded.
+    private var sidebarShape: UnevenRoundedRectangle {
+        let radius = IPadShellLayout.cornerRadius
+        let leading = navigation.usesSidebarOverlay && !workspaceSearchVisible ? 0 : radius
+        return UnevenRoundedRectangle(
+            topLeadingRadius: leading,
+            bottomLeadingRadius: leading,
+            bottomTrailingRadius: radius,
+            topTrailingRadius: radius
+        )
     }
 
     private var detail: some View {

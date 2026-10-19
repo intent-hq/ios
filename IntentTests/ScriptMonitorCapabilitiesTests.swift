@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 struct ScriptMonitorCapabilitiesTests {
-    static func hello(version: Any = "14.0", monitors: Any = 2, lists: Any = 1) -> [String: Any] {
+    static func hello(version: Any = ProtocolFixtures.currentProtocolVersion, monitors: Any = 2, lists: Any = 1) -> [String: Any] {
         ["server": ["protocolVersion": version, "capabilities": ["scriptMonitors": monitors, "scriptActiveLists": lists]]]
     }
 
@@ -18,14 +18,15 @@ struct ScriptMonitorCapabilitiesTests {
         #expect(!ConnectionCapabilities(hello: Self.hello(monitors: 1)).supportsScriptMonitors)
         #expect(!ConnectionCapabilities(hello: Self.hello(lists: 2)).supportsScriptMonitors)
         #expect(!ConnectionCapabilities(hello: [:]).supportsScriptMonitors)
-        #expect(!ConnectionCapabilities(hello: ["server": ["protocolVersion": "14.0", "capabilities": [:]]]).supportsScriptMonitors)
+        #expect(!ConnectionCapabilities(hello: ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": [:]]]).supportsScriptMonitors)
     }
 
-    @Test func protocolMustBeInTheExplicitlySupportedMajor() {
-        #expect(ConnectionCapabilities(hello: Self.hello(version: "14.12")).supportsScriptMonitors)
-        let invalid: [Any] = ["13.99", "15.0", "14", "14.0.0", "14.-1", "14.x", " 14.0", "14.0 ", "１４.0", true, 14, NSNull()]
-        for version in invalid {
-            #expect(!ConnectionCapabilities(hello: Self.hello(version: version)).supportsScriptMonitors)
+    @Test func capabilitiesAloneGateMonitorsOnEveryProtocolVersion() {
+        // intent-hq/intent#7206: a protocol-major gate hid monitors from protocol 15 daemons.
+        for version in ["14.0", "14.12", "15.0", "15.3", "16.0", "99.1"] {
+            #expect(ConnectionCapabilities(hello: Self.hello(version: version)).supportsScriptMonitors)
+            #expect(!ConnectionCapabilities(hello: Self.hello(version: version, monitors: 1)).supportsScriptMonitors)
+            #expect(!ConnectionCapabilities(hello: Self.hello(version: version, lists: 2)).supportsScriptMonitors)
         }
     }
 

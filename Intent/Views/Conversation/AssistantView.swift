@@ -5,6 +5,7 @@ struct AssistantView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.conversationPresentation) private var presentation
+    @State private var showsHistory = false
 
     private var store: AssistantStore { session.assistantStore }
 
@@ -17,6 +18,14 @@ struct AssistantView: View {
         presentation == .iPad || horizontalSizeClass == .compact
         #else
         false
+        #endif
+    }
+
+    private var historyAction: (() -> Void)? {
+        #if os(iOS)
+        presentation == .iPad ? nil : { showsHistory = true }
+        #else
+        nil
         #endif
     }
 
@@ -43,6 +52,10 @@ struct AssistantView: View {
         .accessibilityAction(.escape) {
             coordinator.selectedSection = .workspaces
         }
+        .sheet(isPresented: $showsHistory) {
+            AssistantHistorySheet(store: store, coordinator: coordinator)
+                .coversConversationComposers()
+        }
         .task {
             await store.refresh()
             if coordinator.assistantAgentId == nil {
@@ -63,7 +76,7 @@ struct AssistantView: View {
             onNewConversation: createThread
         ) {
             Menu {
-                AssistantHistoryMenu(store: store, coordinator: coordinator)
+                AssistantHistoryMenu(store: store, coordinator: coordinator, onOpenHistory: historyAction)
             } label: {
                 ToolbarOverflowLabel()
             }
@@ -98,7 +111,7 @@ struct AssistantView: View {
         if selectedThread == nil {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    AssistantHistoryMenu(store: store, coordinator: coordinator)
+                    AssistantHistoryMenu(store: store, coordinator: coordinator, onOpenHistory: historyAction)
                 } label: {
                     ToolbarOverflowLabel()
                 }
@@ -117,7 +130,8 @@ struct AssistantView: View {
                 workspaceId: Workspace.chiefWorkspaceId,
                 agentName: thread.name,
                 session: session,
-                assistantStore: store
+                assistantStore: store,
+                onShowAssistantHistory: historyAction
             ) {
                 store.removeThread(thread.id)
                 coordinator.assistantAgentId = store.threads.first?.id
@@ -166,14 +180,26 @@ struct AssistantHistoryMenu: View {
     let store: AssistantStore
     // Explicit input survives native toolbar hosting without environment inheritance (#745).
     let coordinator: AppCoordinator
+    var onOpenHistory: (() -> Void)?
 
     var body: some View {
+        Group {
+            if let onOpenHistory {
+                Button(action: onOpenHistory) { historyLabel }
+            } else {
+                historyMenu
+            }
+        }
+        .accessibilityIdentifier("assistant.conversations")
+    }
+
+    private var historyMenu: some View {
         let threads = store.threads
         let selectedThreadId = coordinator.assistantAgentId ?? threads.first?.id
         let rows = threads.map { thread in
             (id: thread.id, content: threadButton(thread, isSelected: selectedThreadId == thread.id))
         }
-        Menu {
+        return Menu {
             Button {
                 Task {
                     if let id = await store.createThread() {
@@ -191,13 +217,16 @@ struct AssistantHistoryMenu: View {
                 row.content
             }
         } label: {
-            Label {
-                Text("Assistant conversations").interFont(Constants.Typography.bodyS)
-            } icon: {
-                Image(.messageList)
-            }
+            historyLabel
         }
-        .accessibilityIdentifier("assistant.conversations")
+    }
+
+    private var historyLabel: some View {
+        Label {
+            Text("Assistant conversations").interFont(Constants.Typography.bodyS)
+        } icon: {
+            Image(.messageList)
+        }
     }
 
     private func threadButton(_ thread: AgentSession, isSelected: Bool) -> some View {

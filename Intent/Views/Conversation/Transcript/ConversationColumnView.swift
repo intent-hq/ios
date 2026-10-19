@@ -165,12 +165,8 @@ struct ConversationColumnView: View {
         // A floating host presents the composer from an ornament instead.
         if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
-                if usesWorkspaceDesign, !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
-                    MonitoredPrsRow(
-                        viewModel: viewModel,
-                        monitoredPrStore: viewModel.monitoredPrStore,
-                        usesWorkspaceDesign: true
-                    )
+                if usesWorkspaceDesign, viewModel.showsWorkspaceStatusPills {
+                    WorkspaceStatusPillsRow(viewModel: viewModel)
                     .padding(.horizontal, stickyHorizontalInset)
                     .padding(.top, Design.Composer.keyboardBottomSpacing)
                     .padding(.bottom, workspaceQueueVisible ? Design.Status.composerSpacing : 0)
@@ -352,7 +348,8 @@ extension ConversationColumnView {
             && (!viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil)
         let showsHooks = !viewModel.activeAgentHooks.isEmpty || viewModel.hookStore.error != nil
         let showsQueue = !usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
-        return viewModel.store.isWaitingForAgents || showsMonitors || showsHooks || showsQueue || viewModel.showsScriptMonitorStatus
+        let showsScripts = !usesWorkspaceDesign && viewModel.showsScriptMonitorStatus
+        return viewModel.store.isWaitingForAgents || showsMonitors || showsHooks || showsQueue || showsScripts
     }
 
     private var accessoryRowsLauncherTop: CGFloat? {
@@ -374,7 +371,7 @@ extension ConversationColumnView {
         if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
 
         // Keep watch details mounted outside the composer and question slot.
-        MonitoredScriptsRow(viewModel: viewModel)
+        MonitoredScriptsRow(viewModel: viewModel, showsRow: !usesWorkspaceDesign)
         if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
                 AgentWaitingView(
@@ -418,8 +415,8 @@ extension ConversationColumnView {
         // The inline iPad wizard occupies the composer slot. Keep monitoring and
         // queued-message actions reachable while that slot is answering questions.
         if presentation == .iPad, !composerVisible, !viewModel.showsLoadingState {
-            if !viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil {
-                MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: viewModel.monitoredPrStore, usesWorkspaceDesign: true)
+            if viewModel.showsWorkspaceStatusPills {
+                WorkspaceStatusPillsRow(viewModel: viewModel)
                     .padding(.vertical, Design.Status.composerSpacing)
             }
             if workspaceQueueVisible {

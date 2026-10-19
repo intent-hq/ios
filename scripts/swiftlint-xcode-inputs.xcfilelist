@@ -373,6 +373,7 @@ $(SRCROOT)/Intent/Views/Connection/SavedConnectionCard.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionDetails.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantEmptyState.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantErrorBanner.swift
+$(SRCROOT)/Intent/Views/Conversation/AssistantHistorySheet.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantStateContent.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/ComposerCoverage.swift
@@ -445,6 +446,8 @@ $(SRCROOT)/Intent/Views/Conversation/StatusStrip/MonitoredScriptsRow.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorClock.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorDetailView.swift
 $(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptMonitorPresentation.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/ScriptWatchPills.swift
+$(SRCROOT)/Intent/Views/Conversation/StatusStrip/WorkspaceStatusPill.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/AssistantMessageView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationColumnView.swift
 $(SRCROOT)/Intent/Views/Conversation/Transcript/ConversationEmptyView.swift
@@ -736,6 +739,7 @@ $(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
 $(SRCROOT)/IntentTests/CreationPickerRenderedGeometry.swift
+$(SRCROOT)/IntentTests/CurrentProtocolVersion.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoConversationStartupTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesDesignTests.swift
@@ -826,6 +830,7 @@ $(SRCROOT)/IntentTests/NoteStoreFetchIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerPresentationAndRoutingTests.swift
+$(SRCROOT)/IntentTests/NotificationManagerSoundDeliveryTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
@@ -1027,9 +1032,11 @@ $(SRCROOT)/IntentUITests/DiagnosticExportUITests.swift
 $(SRCROOT)/IntentUITests/FixtureCaptureLifecycleUITests.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuTestSupport.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuUITests.swift
+$(SRCROOT)/IntentUITests/IPadAssistantSwipeUITests.swift
 $(SRCROOT)/IntentUITests/IPadFocusInteractionTestSupport.swift
 $(SRCROOT)/IntentUITests/IPadProducerVisibilityUITests.swift
 $(SRCROOT)/IntentUITests/IPadSidebarUITests.swift
+$(SRCROOT)/IntentUITests/IPhoneAssistantHistoryUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
