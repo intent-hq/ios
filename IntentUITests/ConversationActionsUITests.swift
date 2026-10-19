@@ -147,9 +147,9 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
         retry.tap()
         XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
-        capture(app, named: "Assistant-Model-Picker-Empty")
         assertField("high", identifier: "creation.reasoningPicker", in: app)
         choose("Auto", identifier: "creation.reasoningPicker", in: app)
+        capture(app, named: "Assistant-Model-Picker-Empty")
         app.buttons["conversation.model.save"].tap()
         XCTAssertTrue(app.navigationBars["Model Settings"].waitForNonExistence(timeout: Self.timeout))
         app.buttons["assistant.actions"].tap()
@@ -174,8 +174,14 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
         let field = app.buttons[identifier]
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND enabled == true"), object: field)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: Self.timeout), .completed)
-        if !field.isHittable { app.scrollViews["conversation.model.form"].swipeUp() }
+        let form = app.scrollViews["conversation.model.form"]
+        let save = app.buttons["conversation.model.save"]
+        for _ in 0..<3 where !field.isHittable || !form.frame.contains(field.frame) || field.frame.maxY > save.frame.minY {
+            form.swipeUp()
+        }
         XCTAssertTrue(field.isHittable)
+        XCTAssertTrue(form.frame.contains(field.frame), "Scroll the entire field into the form before tapping")
+        XCTAssertLessThanOrEqual(field.frame.maxY, save.frame.minY, "The Save footer must not cover the field")
         field.tap()
         let choice = app.buttons[value]
         XCTAssertTrue(choice.waitForExistence(timeout: Self.timeout))
