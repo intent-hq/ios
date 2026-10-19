@@ -2,6 +2,7 @@ import XCTest
 
 nonisolated final class IPadSidebarUITests: XCTestCase {
     private static let timeout: TimeInterval = 30
+    private static let railSettleDuration: TimeInterval = 0.5
     private static let focusPanelWidth: CGFloat = 624
     private static let transcriptTapX: CGFloat = 0.02
     private static let backgroundRowTap = CGVector(dx: 0.1, dy: 0.2)
@@ -66,6 +67,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let app = launch(appearance: "dark", accessibility: true)
         for destination in ["assistant", "workspaces", "connections", "settings"] {
             let button = app.buttons["ipad.rail.\(destination)"]
+            waitForStableRailButton(button)
             XCTAssertTrue(button.isHittable)
             button.tap()
             XCTAssertTrue(button.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
@@ -281,6 +283,26 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         XCTAssertFalse(host.exists)
         app.buttons["ipad.rail.workspaces"].tap()
+    }
+
+    @MainActor
+    private func waitForStableRailButton(_ button: XCUIElement) {
+        var previousFrame: CGRect?
+        var stableSince = Date()
+        let settled = waitUntil(timeout: Self.timeout) {
+            guard button.exists, button.isEnabled, button.isHittable else {
+                previousFrame = nil
+                stableSince = Date()
+                return false
+            }
+            let currentFrame = button.frame
+            if currentFrame != previousFrame {
+                previousFrame = currentFrame
+                stableSince = Date()
+            }
+            return Date().timeIntervalSince(stableSince) >= Self.railSettleDuration
+        }
+        XCTAssertTrue(settled, "Rail button must stop moving before the physical tap")
     }
 
     @MainActor
