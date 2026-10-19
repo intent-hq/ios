@@ -16,10 +16,16 @@ fi
 
 available_runner() {
   jq -er --argjson required "$1" --argjson reserved "$reserved" '
-    first(.runners[] |
+    .runners as $fleet |
+    first($fleet[] |
       select(.status == "online" and .busy == false) |
       select(($required - [.labels[].name]) | length == 0) |
-      select(.name as $name | $reserved | index($name) | not)) | .name // empty
+      select(.name as $name | $reserved | index($name) | not) |
+      select((.id | type) == "number" and .id > 0) |
+      ("intent-ios-runner-" + (.id | tostring)) as $routing |
+      select(any(.labels[]; .name == $routing)) |
+      select([$fleet[] | select(any(.labels[]; .name == $routing))] | length == 1) |
+      {name, runsOn: ($required + [$routing])})
   ' "$response"
 }
 
@@ -47,9 +53,12 @@ else
   fi
 fi
 
-if [ "$selected" != "$hosted" ] && [ -n "${RUNNER_RESERVATIONS_FILE:-}" ]; then
-  jq -cn --argjson reserved "$reserved" --arg name "$available" \
-    '$reserved + [$name]' > "$RUNNER_RESERVATIONS_FILE"
+if [ "$selected" != "$hosted" ]; then
+  selected=$(jq -c '.runsOn' <<< "$available")
+  if [ -n "${RUNNER_RESERVATIONS_FILE:-}" ]; then
+    jq -cn --argjson reserved "$reserved" --argjson allocated "$available" \
+      '$reserved + [$allocated.name]' > "$RUNNER_RESERVATIONS_FILE"
+  fi
 fi
 
 echo "runs-on=$selected" >> "$GITHUB_OUTPUT"

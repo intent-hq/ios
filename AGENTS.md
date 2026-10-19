@@ -97,6 +97,9 @@ GitHub-hosted `macos-26-xlarge` is the fallback when every matching local runner
 is busy or offline, or runner status cannot be read. Selection uses an availability
 snapshot and allocates each idle service once across that run's builds and UI lanes.
 Independent workflows can still race for capacity before assignment.
+Each runner registration needs a unique `intent-ios-runner-<id>` label using its
+GitHub runner ID. The selector verifies and emits that label to bind routing to
+the allocated service; missing or duplicate routing labels use hosted fallback.
 Scheduled/manual full runs keep
 one full-bundle iPhone job and the iPad regressions. Each job owns its simulator,
 build directory, results, and evidence. Keep matrix `fail-fast: false` and the

@@ -547,8 +547,8 @@ class OrdinaryCITests(unittest.TestCase):
                     pools = (["intent-ios"], ["intent-ios-build"], ["intent-ios"],
                              ["intent-ios", "intent-ios-build"])
                     fixture.write_text(json.dumps({"runners": [
-                        {"name": f"mac-{index}", "status": "online", "busy": busy,
-                         "labels": [{"name": label} for label in labels + pool]}
+                        {"id": index + 1, "name": f"mac-{index}", "status": "online", "busy": busy,
+                         "labels": [{"name": label} for label in labels + pool + [f"intent-ios-runner-{index + 1}"]]}
                         for index, pool in enumerate(pools)]}))
                     stub = directory / "curl"
                     stub.write_text('#!/bin/bash\nset -eu\nwhile [ "$1" != -o ]; do shift; done\n'
@@ -584,6 +584,16 @@ class OrdinaryCITests(unittest.TestCase):
                     reserved = json.loads(allocation.read_text()) if allocation.exists() else []
                     self.assertEqual(len(reserved), 0 if busy else 4)
                     self.assertEqual(len(reserved), len(set(reserved)))
+                    runners = json.loads(fixture.read_text())["runners"]
+                    targets = []
+                    for choice in choices:
+                        if choice == "macos-26-xlarge":
+                            continue
+                        matches = [item["name"] for item in runners
+                                   if set(choice) <= {label["name"] for label in item["labels"]}]
+                        self.assertEqual(len(matches), 1)
+                        targets.extend(matches)
+                    self.assertEqual(targets, reserved)
 
     def test_iphone_ui_step_selects_smoke_or_full_and_preserves_failures(self):
         scripts = Path(__file__).resolve().parent

@@ -489,6 +489,10 @@ busy or offline, or runner status cannot be read. Selection uses a snapshot of
 runner availability. CI allocates each idle service once across builds and UI
 lanes, then sends remaining jobs to hosted Macs. Independent workflows can still
 race for the same capacity before GitHub assigns them.
+Each local registration must carry `intent-ios-runner-<id>`, using its GitHub
+runner ID. The selector verifies that label is unique and includes it in the
+job's routing labels, so GitHub schedules the service counted by the allocation.
+Missing or duplicate routing labels make that service ineligible for selection.
 The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
 Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.
