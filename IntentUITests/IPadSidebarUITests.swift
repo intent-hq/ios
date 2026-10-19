@@ -286,26 +286,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    private func waitForStableRailButton(_ button: XCUIElement) {
-        var previousFrame: CGRect?
-        var stableSince = Date()
-        let settled = waitUntil(timeout: Self.timeout) {
-            guard button.exists, button.isEnabled, button.isHittable else {
-                previousFrame = nil
-                stableSince = Date()
-                return false
-            }
-            let currentFrame = button.frame
-            if currentFrame != previousFrame {
-                previousFrame = currentFrame
-                stableSince = Date()
-            }
-            return Date().timeIntervalSince(stableSince) >= Self.railSettleDuration
-        }
-        XCTAssertTrue(settled, "Rail button must stop moving before the physical tap")
-    }
-
-    @MainActor
     private func launch(appearance: String, accessibility: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "-appThemePreference", appearance] + extraArguments
@@ -418,5 +398,27 @@ extension IPadSidebarUITests {
         // AX expands the thumb's hit target; compare its outer edge, then inspect the screenshot for the visible track.
         XCTAssertGreaterThan(indicator.frame.maxX, visibleRow.frame.maxX, app.debugDescription)
         XCTAssertLessThanOrEqual(indicator.frame.maxX, list.frame.maxX + 1, app.debugDescription)
+    }
+}
+
+extension IPadSidebarUITests {
+    @MainActor
+    private func waitForStableRailButton(_ button: XCUIElement) {
+        var previousFrame: CGRect?
+        var stableSince = Date()
+        let settled = waitUntil(timeout: Self.timeout) {
+            guard button.exists, button.isEnabled, button.isHittable else {
+                previousFrame = nil
+                stableSince = Date()
+                return false
+            }
+            let currentFrame = button.frame
+            if currentFrame != previousFrame {
+                previousFrame = currentFrame
+                stableSince = Date()
+            }
+            return Date().timeIntervalSince(stableSince) >= Self.railSettleDuration
+        }
+        XCTAssertTrue(settled, "Rail button must stop moving before the physical tap")
     }
 }
