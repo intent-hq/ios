@@ -164,7 +164,9 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
 
 @MainActor
 @Observable class WorkspaceListViewModel {
-    var viewMode: ViewMode = .recent
+    var viewMode: ViewMode {
+        didSet { persistence.saveWorkspaceListViewMode(viewMode) }
+    }
     var searchText = ""
 
     var showArchived: Bool {
@@ -174,6 +176,7 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
 
     /// The window's workspace store, injected from its `BackendSession`.
     @ObservationIgnored private let workspaceStore: WorkspaceStore
+    @ObservationIgnored private let persistence: PersistenceManager
     @ObservationIgnored private let activityTime: @MainActor (Workspace) -> TimeInterval
     @ObservationIgnored private var activityTimes: [String: ActivityTime] = [:]
     @ObservationIgnored private var sortedCache: SortedWorkspaces?
@@ -181,9 +184,12 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
 
     init(
         workspaceStore: WorkspaceStore,
+        persistence: PersistenceManager = .shared,
         activityTime: @escaping @MainActor (Workspace) -> TimeInterval = workspaceActivityDisplayTime
     ) {
         self.workspaceStore = workspaceStore
+        self.persistence = persistence
+        self.viewMode = persistence.loadWorkspaceListViewMode()
         self.activityTime = activityTime
     }
 

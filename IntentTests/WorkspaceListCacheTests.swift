@@ -21,13 +21,17 @@ struct WorkspaceListCacheTests {
     }
 
     @Test func unchangedReadsReuseListsGroupsAndParsedTimes() throws {
+        let suiteName = "WorkspaceListCacheTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = try [
             workspace("older", ["lastActivity": "2026-01-01T00:00:00Z", "repositoryName": "app"]),
             workspace("newer", ["lastActivity": "2026-02-01T00:00:00Z", "repositoryName": "lib"])
         ]
         var parsedIDs: [String] = []
-        let model = WorkspaceListViewModel(workspaceStore: store) { workspace in
+        let model = WorkspaceListViewModel(workspaceStore: store, persistence: persistence) { workspace in
             parsedIDs.append(workspace.id)
             return workspaceActivityDisplayTime(workspace)
         }
