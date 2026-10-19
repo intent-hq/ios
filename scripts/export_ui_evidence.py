@@ -11,6 +11,13 @@ import tempfile
 
 
 CAPTURES = {
+    "QuestionAttachmentUITests": {
+        "testImageAnswerCanBeRemovedReattachedAndSentAcrossSteps": tuple(
+            f"question-image{state}-{appearance}"
+            for appearance in ("light", "dark")
+            for state in ("", "-sent")
+        ),
+    },
     "ScriptMonitorsUITests": {
         "testOwnedWatchDetailsUpdateAndRemovalWithoutRestart": (
             "script-monitors-active", "script-monitors-details", "script-monitors-text-update",

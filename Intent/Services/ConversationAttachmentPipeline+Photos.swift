@@ -4,6 +4,12 @@ import UIKit
 import UniformTypeIdentifiers
 
 extension ConversationAttachmentPipeline {
+    var remainingPhotoImageCount: Int? {
+        maximumPhotoImageCount.map { max(0, $0 - pendingImages.count) }
+    }
+
+    func addImage(_ image: UIImage) { pendingImages.append(image) }
+
     func startLoadingSelectedPhotos(workspaceId: String) {
         guard photoImportTask == nil, !selectedPhotoItems.isEmpty else { return }
         photoImportTask = Task { [weak self] in
@@ -31,16 +37,35 @@ extension ConversationAttachmentPipeline {
             guard !Task.isCancelled else { return }
             let items = selectedPhotoItems
             selectedPhotoItems.removeAll()
+            let imageCount = items.filter { item in
+                !item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+            }.count
+            guard canImportPhotoImages(imageCount) else { continue }
+            if maximumPhotoImageCount != nil {
+                imagePlacementError = nil
+            }
             for item in items {
                 guard !Task.isCancelled else { return }
                 if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
                     await loadVideo(item, workspaceId: workspaceId)
                 } else if let data = await loadPhotoData(item),
                           let image = UIImage(data: data), !Task.isCancelled {
+                    // Paste or another selection can consume capacity while
+                    // Photos is loading the transferable data.
+                    guard canImportPhotoImages(1) else { continue }
                     pendingImages.append(image)
                 }
             }
         }
+    }
+
+    private func canImportPhotoImages(_ count: Int) -> Bool {
+        guard let maximumPhotoImageCount, let remainingPhotoImageCount else { return true }
+        guard count <= remainingPhotoImageCount else {
+            imagePlacementError = "You can attach up to \(maximumPhotoImageCount) images. Remove an image before adding more."
+            return false
+        }
+        return true
     }
 
     func addVideo(_ video: ImportedPhotoVideo, workspaceId: String) throws {

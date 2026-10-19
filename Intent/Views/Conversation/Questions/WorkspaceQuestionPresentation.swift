@@ -11,14 +11,17 @@ struct WorkspaceQuestionPresentation: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     @State private var availableHeight: CGFloat = 0
     @State private var submitting = false
+    @State private var submittingQuestions: PendingQuestionSet?
     @Namespace private var questionSurface
     @AccessibilityFocusState private var panelFocused: Bool
 
     private typealias Design = Constants.Conversation.Design
 
     private var isActive: Bool {
-        isEnabled && isPresented && viewModel.pendingQuestions != nil
+        isEnabled && isPresented && presentedQuestions != nil
     }
+
+    private var presentedQuestions: PendingQuestionSet? { viewModel.pendingQuestions ?? submittingQuestions }
 
     private var collapsed: Binding<Bool> {
         Binding(get: { !isActive }, set: { isPresented = !$0 })
@@ -37,7 +40,7 @@ struct WorkspaceQuestionPresentation: ViewModifier {
             .accessibilityElement(children: .contain)
             .accessibilityHidden(isActive || submitting)
             .overlay {
-                if isEnabled, let pending = viewModel.pendingQuestions {
+                if isEnabled, let pending = presentedQuestions {
                     ZStack(alignment: .bottom) {
                         (reduceTransparency ? Design.Palette.surface(for: colorScheme) : Color.black.opacity(Design.Question.backdropOpacity))
                             .ignoresSafeArea()
@@ -47,8 +50,11 @@ struct WorkspaceQuestionPresentation: ViewModifier {
                         QuestionWizardView(
                             questions: pending.questions,
                             collapsed: collapsed,
+                            attachments: viewModel.questionAttachments(for: pending.messageId),
+                            workspaceId: viewModel.workspaceId,
                             workspaceAvailableHeight: max(0, availableHeight - Design.Question.modalTopInset),
-                            onComplete: { submit($0, messageId: pending.messageId) },
+                            isSubmitting: submitting,
+                            onComplete: { submit($0, pending: pending) },
                             onCollapse: { isPresented = false }
                         )
                         .id(pending.messageId)
@@ -72,14 +78,24 @@ struct WorkspaceQuestionPresentation: ViewModifier {
                 AppLog.userInterface.debug("[SCROLL][QUESTION] panel active=\(active) submitting=\(submitting)")
                 panelFocused = active
             }
-            .onChange(of: viewModel.pendingQuestions?.messageId) { _, _ in isPresented = false }
+            .onChange(of: viewModel.pendingQuestions?.messageId) { _, _ in
+                if !submitting { isPresented = false }
+            }
             .onChange(of: isEnabled) { _, enabled in
                 if !enabled { isPresented = false }
             }
     }
 
-    private func submit(_ answers: [QuestionAnswer], messageId: String) {
+    private func submit(_ answers: [QuestionAnswer], pending: PendingQuestionSet) {
         guard !submitting else { return }
+        submittingQuestions = pending
+        // Keep attachment progress and retryable drafts mounted during upload
+        // and the optimistic answer row. A failed RPC must not reset the wizard.
+        if viewModel.questionAttachments(for: pending.messageId).hasPendingAttachments {
+            submitting = true
+            Task { await send(answers, messageId: pending.messageId) }
+            return
+        }
         AppLog.userInterface.debug("[SCROLL][QUESTION] submit collapse-start")
         // Keep the banner mounted for the matched transition, but fade it and
         // release its reserved height as the panel closes, before the send.
@@ -90,11 +106,16 @@ struct WorkspaceQuestionPresentation: ViewModifier {
             AppLog.userInterface.debug("[SCROLL][QUESTION] submit collapse-completed")
             Task {
                 AppLog.userInterface.debug("[SCROLL][QUESTION] submit request-start")
-                await viewModel.submitQuestionAnswers(answers, answeredQuestionsMessageId: messageId)
-                AppLog.userInterface.debug("[SCROLL][QUESTION] submit request-returned pending=\(viewModel.pendingQuestions != nil)")
-                submitting = false
+                await send(answers, messageId: pending.messageId)
             }
         }
+    }
+
+    private func send(_ answers: [QuestionAnswer], messageId: String) async {
+        await viewModel.submitQuestionAnswers(answers, answeredQuestionsMessageId: messageId)
+        isPresented = viewModel.pendingQuestions?.messageId == messageId
+        submittingQuestions = nil
+        submitting = false
     }
 }
 

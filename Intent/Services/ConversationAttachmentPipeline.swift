@@ -97,9 +97,11 @@ enum ComposerImageRecovery {
     @ObservationIgnored private var securityScopedURLs: [URL] = []
     @ObservationIgnored private let startSecurityScopedAccess: @Sendable (URL) -> Bool
     @ObservationIgnored private let stopSecurityScopedAccess: @Sendable (URL) -> Void
+    let maximumPhotoImageCount: Int?
 
     init(
         uploadService: AttachmentUploadService = .shared,
+        maximumPhotoImageCount: Int? = nil,
         startSecurityScopedAccess: @escaping @Sendable (URL) -> Bool = { url in
             url.startAccessingSecurityScopedResource()
         },
@@ -108,6 +110,7 @@ enum ComposerImageRecovery {
         }
     ) {
         self.uploadService = uploadService
+        self.maximumPhotoImageCount = maximumPhotoImageCount
         self.startSecurityScopedAccess = startSecurityScopedAccess
         self.stopSecurityScopedAccess = stopSecurityScopedAccess
     }
@@ -118,8 +121,6 @@ enum ComposerImageRecovery {
             stopSecurityScopedAccess(url)
         }
     }
-
-    func addImage(_ image: UIImage) { pendingImages.append(image) }
 
     /// Called only by the native Paste action. Snapshot each image item before
     /// returning to the run loop, while lazy clipboard providers are available.

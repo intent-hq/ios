@@ -13,6 +13,7 @@ struct ConversationColumnView: View {
     /// Room a floating Intent launcher needs over this chat (0 when none).
     @Environment(\.workspaceActionLauncherClearance) private var launcherClearance
     @State private var questionWizardCollapsed = false
+    @State private var submittingQuestions: PendingQuestionSet?
     @State private var conversationHeight: CGFloat = 0
     @State private var questionInputTop: CGFloat?
     @State private var composerInputTop: CGFloat?
@@ -32,18 +33,13 @@ struct ConversationColumnView: View {
     #endif
 
     var body: some View {
-        VStack(spacing: 0) {
-            columnContent
-        }
+        VStack(spacing: 0) { columnContent }
         .ignoresSafeArea(.container, edges: usesWorkspaceDesign && usesVerticalBar && !keyboardVisible ? .bottom : [])
         .environment(\.conversationComposerFocus, $composerFocused)
+        .modifier(QuestionAttachmentLifecycle(viewModel: viewModel))
         .modifier(IPadTypingFocus(isFocused: $composerFocused, composerVisible: composerVisible))
         // Measure inside keyboard avoidance so the cap uses the remaining visible height.
-        .onGeometryChange(for: CGFloat.self) { proxy in
-            proxy.size.height
-        } action: { height in
-            conversationHeight = height
-        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { conversationHeight = $0 }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardVisible = true
         }
@@ -56,7 +52,7 @@ struct ConversationColumnView: View {
             #if os(visionOS)
             // Auto-present on a new question set; close when the set clears
             // (answered/dismissed elsewhere, or superseded).
-            questionSheetPresented = newId != nil
+            if submittingQuestions == nil { questionSheetPresented = newId != nil }
             #endif
         }
         .onChange(of: viewModel.filteredMessageIDs, initial: true) { _, messageIDs in
@@ -194,7 +190,7 @@ struct ConversationColumnView: View {
 
     @ViewBuilder
     private var questionRegion: some View {
-        if let pendingSet = viewModel.pendingQuestions {
+        if let pendingSet = viewModel.pendingQuestions ?? submittingQuestions {
             #if os(visionOS)
             // Deliberate sheet presentation on visionOS: the inline slot is
             // only the opener banner; the wizard itself lives in the sheet.
@@ -223,15 +219,12 @@ struct ConversationColumnView: View {
                 QuestionWizardView(
                     questions: pendingSet.questions,
                     collapsed: $questionWizardCollapsed,
+                    attachments: viewModel.questionAttachments(for: pendingSet.messageId),
+                    workspaceId: viewModel.workspaceId,
                     containerHeight: conversationHeight,
+                    isSubmitting: submittingQuestions != nil,
                     onComplete: { answers in
-                        let answeredId = pendingSet.messageId
-                        Task {
-                            await viewModel.submitQuestionAnswers(
-                                answers,
-                                answeredQuestionsMessageId: answeredId
-                            )
-                        }
+                        submit(answers, pending: pendingSet)
                     },
                     onDismiss: {
                         let dismissedId = pendingSet.messageId
@@ -290,22 +283,18 @@ struct ConversationColumnView: View {
     #if os(visionOS)
     @ViewBuilder
     private var questionSheet: some View {
-        if let pendingSet = viewModel.pendingQuestions {
+        if let pendingSet = viewModel.pendingQuestions ?? submittingQuestions {
             QuestionWizardView(
                 questions: pendingSet.questions,
                 collapsed: Binding(
                     get: { false },
                     set: { if $0 { questionSheetPresented = false } }
                 ),
+                attachments: viewModel.questionAttachments(for: pendingSet.messageId),
+                workspaceId: viewModel.workspaceId,
+                isSubmitting: submittingQuestions != nil,
                 onComplete: { answers in
-                    let answeredId = pendingSet.messageId
-                    questionSheetPresented = false
-                    Task {
-                        await viewModel.submitQuestionAnswers(
-                            answers,
-                            answeredQuestionsMessageId: answeredId
-                        )
-                    }
+                    submit(answers, pending: pendingSet)
                 },
                 onDismiss: {
                     let dismissedId = pendingSet.messageId
@@ -321,9 +310,23 @@ struct ConversationColumnView: View {
         }
     }
     #endif
+
+    private func submit(_ answers: [QuestionAnswer], pending: PendingQuestionSet) {
+        guard submittingQuestions == nil else { return }
+        submittingQuestions = pending
+        Task { await send(answers, messageId: pending.messageId) }
+    }
 }
 
 extension ConversationColumnView {
+    private func send(_ answers: [QuestionAnswer], messageId: String) async {
+        await viewModel.submitQuestionAnswers(answers, answeredQuestionsMessageId: messageId)
+        submittingQuestions = nil
+        #if os(visionOS)
+        questionSheetPresented = viewModel.pendingQuestions != nil
+        #endif
+    }
+
     private var workspaceQueueVisible: Bool {
         usesWorkspaceDesign && !viewModel.queuedMessages.isEmpty
     }
