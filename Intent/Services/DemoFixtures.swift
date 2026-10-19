@@ -481,8 +481,7 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
-    /// Non-transcript timestamp relative to one response's snapshot time, so
-    /// relative-time labels and future events refresh together on each request.
+    /// Non-transcript labels and future events share each response's snapshot time.
     static func iso(minutesAgo: Double) -> String {
         iso(minutesAgo: minutesAgo, relativeTo: snapshotTimestampAnchor ?? Date())
     }

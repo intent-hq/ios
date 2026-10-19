@@ -21,6 +21,13 @@ extension DemoFixtures {
             ]
         case "github.branches.list", "github.branches.listCached":
             return ["branches": ["main", "feature/docs"], "defaultBranch": "main"]
+        default:
+            return providerOptionsResponse(for: method, params: params)
+        }
+    }
+
+    private static func providerOptionsResponse(for method: String, params: [String: Any]) -> Any {
+        switch method {
         case "providers.catalog":
             let providers = ["auggie", "codex"].map { id in
                 ["id": id, "visible": true, "canBeDisabled": true] as [String: Any]
