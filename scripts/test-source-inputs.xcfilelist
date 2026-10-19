@@ -636,6 +636,7 @@ $(SRCROOT)/Intent/Views/Connection/SavedConnectionDetails.swift
 $(SRCROOT)/Intent/Views/Conversation
 $(SRCROOT)/Intent/Views/Conversation/AssistantEmptyState.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantErrorBanner.swift
+$(SRCROOT)/Intent/Views/Conversation/AssistantHistorySheet.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantStateContent.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer

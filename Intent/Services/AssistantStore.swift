@@ -8,6 +8,7 @@ final class AssistantStore {
     private(set) var threads: [AgentSession] = []
     private(set) var isLoading = false
     private(set) var isCreating = false
+    private(set) var deletingThreadIDs: Set<String> = []
     private(set) var hasLoaded = false
     private(set) var errorMessage: String?
 
@@ -118,8 +119,26 @@ final class AssistantStore {
         }
     }
 
+    func deleteThread(_ agentId: String) async -> Bool {
+        guard deletingThreadIDs.insert(agentId).inserted else { return false }
+        defer { deletingThreadIDs.remove(agentId) }
+        do {
+            _ = try await connection.request("agent.delete", params: [
+                "agentId": agentId,
+                "workspaceId": Workspace.chiefWorkspaceId
+            ])
+            removeThread(agentId)
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func removeThread(_ agentId: String) {
         threads.removeAll { $0.id == agentId }
+        if isLoading { refreshRequested = true }
     }
 
     private func timestamp(_ agent: AgentSession) -> Date {
