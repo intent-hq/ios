@@ -149,17 +149,23 @@ extension ConversationStartupRPCTests {
         printCatalogLedger("visible-settings-refresh", connection.traffic(since: checkpoint))
     }
 
-    @Test func absentProviderUsesAgentModelsOnlyForExplicitPicker() async {
+    @Test func absentProviderUsesHostDefaultAndSharesItsCatalog() async {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
+        fixture.connection.responseMap["settings.get"] = ["path": "model.defaultProvider", "value": "codex"]
+        fixture.connection.responseMap["models.list"] = ["models": [["id": "inherited-model", "name": "Inherited Model"]]]
         let viewModel = fixture.makeViewModel()
         await viewModel.load()
         let checkpoint = fixture.connection.checkpoint
         await viewModel.loadModelCatalogIfNeeded()
-        #expect(fixture.connection.traffic(since: checkpoint).requests.isEmpty)
-        fixture.connection.responseMap["agent.getModels"] = ["models": []]
+        #expect(viewModel.currentProviderId == nil)
+        #expect(viewModel.modelProviderId == "codex")
+        #expect(viewModel.selectableModels?.map(\.id) == ["inherited-model"])
+        #expect(fixture.connection.traffic(since: checkpoint).methodCounts == ["settings.get": 1, "models.list": 1])
+        #expect(fixture.connection.traffic(since: checkpoint).calls("models.list").first?.params["providerId"] as? String == "codex")
         await viewModel.refreshSelectableModels()
-        #expect(fixture.connection.traffic(since: checkpoint).methodCounts == ["agent.getModels": 1])
-        printCatalogLedger("explicit-unknown-provider-picker", fixture.connection.traffic(since: checkpoint))
+        #expect(fixture.connection.traffic(since: checkpoint).methodCounts == ["settings.get": 2, "models.list": 2])
+        #expect(fixture.connection.traffic().calls("agent.getModels").isEmpty)
+        printCatalogLedger("explicit-inherited-provider-picker", fixture.connection.traffic(since: checkpoint))
     }
 }
