@@ -1,6 +1,7 @@
 import Foundation
 @testable import Intent
 import PhotosUI
+import SwiftUI
 import Testing
 import UIKit
 
