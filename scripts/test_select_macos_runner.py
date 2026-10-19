@@ -75,8 +75,15 @@ class RunnerSelectionTests(unittest.TestCase):
         ])
         self.assertEqual(output, f"runs-on={POOL}")
 
-    def test_busy_runner_remains_eligible_for_queued_jobs(self):
-        output, _ = self.select([runner("busy", busy=True), runner("offline", "offline")])
+    def test_busy_runners_use_hosted(self):
+        for runners in ([runner("busy", busy=True), runner("offline", "offline")],
+                        [runner("busy-1", busy=True), runner("busy-2", busy=True)]):
+            with self.subTest(runners=runners):
+                output, _ = self.select(runners)
+                self.assertEqual(output, f"runs-on={HOSTED}")
+
+    def test_idle_runner_is_preferred_when_another_is_busy(self):
+        output, _ = self.select([runner("busy", busy=True), runner("idle")])
         self.assertEqual(output, f"runs-on={POOL}")
 
     def test_missing_any_required_label_uses_hosted(self):
@@ -96,6 +103,24 @@ class RunnerSelectionTests(unittest.TestCase):
         output, _ = self.select([runner("simulator"), runner("build", "offline", labels)],
                                 pool_label="intent-ios-build")
         self.assertEqual(output, f"runs-on={POOL}")
+
+    def test_busy_build_pool_falls_back_to_idle_simulator_pool(self):
+        labels = ["self-hosted", "macOS", "ARM64", "intent-ios-build"]
+        output, _ = self.select([runner("simulator"), runner("build", labels=labels, busy=True)],
+                                pool_label="intent-ios-build")
+        self.assertEqual(output, f"runs-on={POOL}")
+
+    def test_busy_build_and_simulator_pools_use_hosted(self):
+        labels = ["self-hosted", "macOS", "ARM64", "intent-ios-build"]
+        output, _ = self.select([runner("simulator", busy=True), runner("build", labels=labels, busy=True)],
+                                pool_label="intent-ios-build")
+        self.assertEqual(output, f"runs-on={HOSTED}")
+
+    def test_idle_build_pool_is_preferred_when_simulator_pool_is_busy(self):
+        labels = ["self-hosted", "macOS", "ARM64", "intent-ios-build"]
+        output, _ = self.select([runner("simulator", busy=True), runner("build", labels=labels)],
+                                pool_label="intent-ios-build")
+        self.assertEqual(output, 'runs-on=["self-hosted","macOS","ARM64","intent-ios-build"]')
 
     def test_simulator_jobs_do_not_select_build_only_runner(self):
         labels = ["self-hosted", "macOS", "ARM64", "intent-ios-build"]

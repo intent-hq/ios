@@ -419,7 +419,8 @@ class OrdinaryCITests(unittest.TestCase):
 
         self.assertIn("fail-fast: false", job)
         self.assertIn("fromJSON(needs.select-macos-runner.outputs.ui-matrix)", job)
-        self.assertIn("matrix.hosted && 'macos-26-xlarge'", job)
+        runner = next(line.strip() for line in job.splitlines() if line.strip().startswith("runs-on:"))
+        self.assertEqual(runner, 'runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || \'"macos-26-xlarge"\') }}')
         self.assertLess(job.index("name: Create owned UI simulator"), job.index("name: Pre-boot simulator"))
         cleanup = job.split("      - name: Clean up owned UI simulator\n", 1)[1].split("\n      - name:", 1)[0]
         self.assertIn("if: always()", cleanup)
@@ -520,13 +521,9 @@ class OrdinaryCITests(unittest.TestCase):
                 self.assertEqual(sorted(lane["shard"] for lane in phones), [0] if full else [1, 2])
                 ipads = [lane for lane in lanes if lane["family"] == "ipad"]
                 self.assertEqual(len(ipads), 1)
-                self.assertTrue(ipads[0]["hosted"])
-                self.assertEqual([lane["hosted"] for lane in sorted(phones, key=lambda lane: lane["shard"])],
-                                 [False] if full else [False, True])
                 capture = [lane for lane in lanes if lane["capture"]]
                 self.assertEqual(len(capture), 1)
                 self.assertEqual(capture[0]["family"], "iphone")
-                self.assertFalse(capture[0]["hosted"])
 
     def test_iphone_ui_step_selects_smoke_or_full_and_preserves_failures(self):
         scripts = Path(__file__).resolve().parent

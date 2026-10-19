@@ -92,8 +92,11 @@ and on any branch with `gh workflow run ci.yml --repo intent-hq/ios --ref <branc
 selectors and skipped-only selections are rejected. See the README's CI section
 for evidence artifacts and the disposable simulator route.
 
-The first iPhone shard uses the selected Mac pool; the second iPhone shard and
-iPad use GitHub-hosted `macos-26-xlarge` for independent capacity. Scheduled/manual full runs keep
+Every iPhone shard and iPad UI job prefers the selected self-hosted Mac pool.
+GitHub-hosted `macos-26-xlarge` is the fallback when every matching local runner
+is busy or offline, or runner status cannot be read. Selection uses an availability
+snapshot; simultaneous jobs can still queue if capacity changes before assignment.
+Scheduled/manual full runs keep
 one full-bundle iPhone job and the iPad regressions. Each job owns its simulator,
 build directory, results, and evidence. Keep matrix `fail-fast: false` and the
 aggregate `iOS UI Tests` check,

@@ -7,7 +7,7 @@ set -euo pipefail
 hosted='"macos-26-xlarge"'
 local_runner='["self-hosted","macOS","ARM64","intent-ios"]'
 pool_label=${RUNNER_POOL_LABEL:-intent-ios}
-preferred_runner=$(jq -cn --arg label "$pool_label" '["self-hosted","macOS","ARM64",$label]')
+preferred_runner=$(jq -cn --arg pool "$pool_label" '["self-hosted","macOS","ARM64",$pool]')
 selected="$hosted"
 
 if [ -z "${RUNNER_STATUS_TOKEN:-}" ]; then
@@ -22,20 +22,20 @@ else
       -o "$response"; then
     if jq -e --argjson required "$preferred_runner" '
         any(.runners[];
-          .status == "online" and
+          .status == "online" and .busy == false and
           (($required - [.labels[].name]) | length == 0))
       ' "$response" >/dev/null; then
       selected="$preferred_runner"
-      echo "::notice::A matching Mac is online; using the $pool_label runner pool"
+      echo "::notice::A matching Mac is online and idle; using the $pool_label runner pool"
     elif [ "$pool_label" != intent-ios ] && jq -e --argjson required "$local_runner" '
         any(.runners[];
-          .status == "online" and
+          .status == "online" and .busy == false and
           (($required - [.labels[].name]) | length == 0))
       ' "$response" >/dev/null; then
       selected="$local_runner"
       echo '::notice::Build pool unavailable; using the intent-ios runner pool'
     else
-      echo '::notice::No matching Mac is online; using macos-26-xlarge'
+      echo '::notice::No matching Mac is online and idle; using macos-26-xlarge'
     fi
   else
     echo '::warning::Could not check local Mac status; using macos-26-xlarge'
