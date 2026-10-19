@@ -318,12 +318,13 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
-queue. iPhone UI tests and all seven focused iPad sidebar regressions run in
-independent jobs, each with its own build directory and disposable simulator.
-The iPad job uses Depot macOS so it can overlap the local iPhone job; matrix
-fail-fast is disabled so an iPhone failure does not cancel iPad coverage. The
-existing `iOS UI Tests` check requires both jobs to succeed. Go tests, wrapper
-self-tests, and the strict SwiftLint gate run on Linux. The full UI bundle runs
+queue. Smoke coverage uses two balanced iPhone shards and an independent job for
+all seven focused iPad sidebar regressions. Each lane owns its build directory,
+disposable simulator, results, and evidence. The second iPhone shard and iPad use
+Depot macOS so they can overlap the selected local Mac pool. Matrix fail-fast is
+disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
+Go tests, wrapper self-tests, and the strict SwiftLint gate run on Linux.
+The full UI bundle runs once in one iPhone job, alongside the iPad regressions,
 on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
 
 ```bash
@@ -337,6 +338,16 @@ Replace `your-branch` with the branch to test. Filtered dispatches are
 
 Both workspace creation entry tests exercise light and dark appearances on every
 run, including ordinary PRs.
+
+Each selector in `scripts/ui-smoke-tests.txt` has a `# shard: 1` or `# shard: 2`
+annotation. Assign new selectors to a shard and keep suite members together when
+practical. `python3 scripts/ui_smoke_tests.py --shard 1` prints that shard's
+selection. Invalid annotations, duplicate selectors, or empty shards fail before
+native tests start. Run `python3 scripts/test_ui_smoke_tests.py` after changing
+selection logic and `python3 scripts/test_ci_simulator.py` after changing the
+workflow. Screenshot artifact names use `-iphone-1`, `-iphone-2`, and `-ipad`
+suffixes for smoke runs; full runs use `-iphone` and `-ipad`. Simulator and failure
+artifacts also include the lane name.
 
 `pre_pr_gate=true` runs the literal `scripts/xcodebuild.sh test-ios` gate,
 building once and running unit and UI tests together on an owned iPhone simulator.
@@ -409,8 +420,9 @@ resolve dynamic dispatch, aliases, computed properties, or constructors.
 After `scripts/xcodebuild.sh build-for-testing-ui`, run
 `python3 scripts/verify_fixture_capture_lifecycle.py --output-root build/capture-contract`
 with the same simulator and derived-data settings. The output directory must be
-new. The iPhone UI CI job runs this contract separately from the smoke selection and
-uploads `ios-fixture-capture-lifecycle`, including the original failing xcresults,
+new. The first iPhone smoke shard, or the single full iPhone job, runs this contract
+separately from the smoke selection and uploads `ios-fixture-capture-lifecycle`,
+including the original failing xcresults,
 result JSON, logs, and compact PNG manifests. The isolated abort fixture opts in
 only for this verifier; ordinary test runs skip that intentional failure.
 The verifier requires exit 65, the original marked assertion recorded as Failed,
@@ -457,8 +469,9 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 ### Depot GitHub Actions runners
 
 Script and Go jobs use Depot Ubuntu 24.04. The independent iPad UI job always
-uses Depot macOS so it can overlap local simulator jobs. This requires hosted
-capacity on each UI run. Each pool selects its installed Xcode independently.
+uses Depot macOS; smoke runs also use Depot for the second iPhone shard. This
+requires hosted capacity for both jobs so they can overlap the selected Mac pool.
+Each pool selects its installed Xcode independently.
 The 18 October 2026 validation used Xcode 26.5 on Depot for iPad and 26.3 on the
 local iPhone Mac.
 The pools do not guarantee the same toolchain or simulator runtime. Record the

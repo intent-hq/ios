@@ -83,6 +83,7 @@ jobs:
       build-runs-on: ${{ steps.select-build.outputs.runs-on || '"depot-macos-latest"' }}
       runs-on: ${{ steps.select.outputs.runs-on || '"depot-macos-latest"' }}
       fixture-capture-repetitions: ${{ steps.capture-contract.outputs.repetitions || '2' }}
+      ui-matrix: ${{ steps.ui-lanes.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
       - name: Check local Mac status
@@ -104,6 +105,16 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bash .github/scripts/select-fixture-capture-repetitions.sh
+      - name: Select UI test lanes
+        id: ui-lanes
+        env:
+          FULL_UI_SUITE: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && '1' || '' }}
+        run: |
+          if [ -n "$FULL_UI_SUITE" ]; then
+            echo 'matrix={"include":[{"lane":"iphone","family":"iphone","shard":0,"capture":true,"hosted":false},{"lane":"ipad","family":"ipad","shard":0,"capture":false,"hosted":true}]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix={"include":[{"lane":"iphone-1","family":"iphone","shard":1,"capture":true,"hosted":false},{"lane":"iphone-2","family":"iphone","shard":2,"capture":false,"hosted":true},{"lane":"ipad","family":"ipad","shard":0,"capture":false,"hosted":true}]}' >> "$GITHUB_OUTPUT"
+          fi
 
   go-test:
     name: Go unit tests (TailcatKit)
@@ -148,6 +159,7 @@ jobs:
         run: |
           python3 scripts/test_select_macos_runner.py
           python3 scripts/test_select_fixture_capture_repetitions.py
+          python3 scripts/test_ui_smoke_tests.py
 
       - name: Xcode Cloud post-clone tests
         run: scripts/test-ci-post-clone.sh
@@ -726,27 +738,28 @@ jobs:
           if-no-files-found: warn
 
   ios-ui-test-lanes:
-    name: ${{ matrix.family == 'ipad' && 'iOS iPad UI Tests' || 'iOS iPhone UI Tests' }}
+    name: ${{ matrix.family == 'ipad' && 'iOS iPad UI Tests' || matrix.shard == 0 && 'iOS iPhone UI Tests' || format('iOS iPhone UI Tests ({0}/2)', matrix.shard) }}
     # Pull requests, the merge queue and smoke dispatches run the selectors in
     # scripts/ui-smoke-tests.txt; the schedule and ui_suite=full dispatches
     # run the complete UI bundle. Filtered dispatches already run their
     # requested selector in build-and-test.
-    # The iOS UI Tests check below requires both lanes, even if one fails.
-    if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad' || inputs.pre_pr_gate)) }}
+    # The iOS UI Tests check below requires every lane, even if one fails.
+    if: ${{ !cancelled() && needs.select-macos-runner.result == 'success' && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad' || inputs.pre_pr_gate)) }}
     needs: select-macos-runner
     strategy:
       fail-fast: false
-      matrix:
-        family: [iphone, ipad]
-    # Give iPad independent capacity instead of queueing behind the local Macs.
-    runs-on: ${{ matrix.family == 'ipad' && 'depot-macos-latest' || fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
+      matrix: ${{ fromJSON(needs.select-macos-runner.outputs.ui-matrix) }}
+    # Shard 2 and iPad need independent capacity to overlap the local shard.
+    runs-on: ${{ matrix.hosted && 'depot-macos-latest' || fromJSON(needs.select-macos-runner.outputs.runs-on || '"depot-macos-latest"') }}
     # Allow setup, the full iPhone suite, and cleanup (ios#429).
     timeout-minutes: 90
     env:
       GIT_TERMINAL_PROMPT: '0'
       SPM_CLONE_DIR: build/SourcePackages
-      RESULT_BUNDLE: ${{ matrix.family == 'ipad' && 'IPadMenuTestResults' || 'UITestResults' }}
+      RESULT_BUNDLE: ${{ matrix.family == 'ipad' && 'IPadMenuTestResults' || format('UITestResults-{0}', matrix.lane) }}
       SIMULATOR_FAMILY: ${{ matrix.family }}
+      UI_LANE: ${{ matrix.lane }}
+      UI_SHARD: ${{ matrix.shard }}
       SIM_LOCK_TIMEOUT: '60'
     steps:
       - name: Checkout
@@ -754,8 +767,8 @@ jobs:
 
       - name: Use isolated build directory
         run: |
-          echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui-$SIMULATOR_FAMILY" >> "$GITHUB_ENV"
-          echo "SIMULATOR_EVIDENCE_DIR=$RUNNER_TEMP/intent-simulator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui-$SIMULATOR_FAMILY" >> "$GITHUB_ENV"
+          echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui-$UI_LANE" >> "$GITHUB_ENV"
+          echo "SIMULATOR_EVIDENCE_DIR=$RUNNER_TEMP/intent-simulator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui-$UI_LANE" >> "$GITHUB_ENV"
 
       - name: Select Xcode
         run: |
@@ -829,13 +842,13 @@ jobs:
         run: scripts/xcodebuild.sh build-for-testing-ui
 
       - name: Verify assertion-abort fixture evidence
-        if: matrix.family == 'iphone'
+        if: matrix.capture
         env:
           CAPTURE_REPETITIONS: ${{ needs.select-macos-runner.outputs.fixture-capture-repetitions || '2' }}
         run: python3 scripts/verify_fixture_capture_lifecycle.py --output-root FixtureCaptureContract --repetitions "$CAPTURE_REPETITIONS"
 
       - name: Upload assertion-abort fixture evidence
-        if: always() && matrix.family == 'iphone'
+        if: always() && matrix.capture
         uses: actions/upload-artifact@v7
         with:
           name: ios-fixture-capture-lifecycle
@@ -859,9 +872,9 @@ jobs:
             export ONLY_TESTING=IntentUITests
             echo "UI tests: full IntentUITests bundle" >> "$GITHUB_STEP_SUMMARY"
           else
-            ONLY_TESTING=$(sed -e 's/#.*//' scripts/ui-smoke-tests.txt | xargs)
+            ONLY_TESTING=$(python3 scripts/ui_smoke_tests.py --shard "$UI_SHARD")
             export ONLY_TESTING
-            echo "UI tests: smoke list (scripts/ui-smoke-tests.txt)" >> "$GITHUB_STEP_SUMMARY"
+            echo "UI tests: smoke shard $UI_SHARD/2 (scripts/ui-smoke-tests.txt)" >> "$GITHUB_STEP_SUMMARY"
           fi
           scripts/xcodebuild.sh test-without-building-ui
 
@@ -886,7 +899,7 @@ jobs:
         if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.family == 'ipad' && 'ios-ipad-simulator-evidence' || 'ios-ui-simulator-evidence' }}
+          name: ${{ format('ios-{0}-simulator-evidence', matrix.lane) }}
           path: |
             ${{ env.SIMULATOR_EVIDENCE_DIR }}/*.json
             ${{ env.SIMULATOR_EVIDENCE_DIR }}/boot.log
@@ -896,7 +909,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.family == 'ipad' && 'ios-ipad-ui-test-results' || 'ios-ui-test-results' }}
+          name: ${{ format('ios-{0}-ui-test-results', matrix.lane) }}
           path: |
             ${{ env.RESULT_BUNDLE }}
             ${{ env.RESULT_BUNDLE }}-retry
@@ -906,7 +919,7 @@ jobs:
         uses: ./.github/actions/export-ui-evidence
         with:
           bundles: ${{ env.RESULT_BUNDLE }}
-          artifact-suffix: ${{ matrix.family == 'ipad' && '-ipad' || '' }}
+          artifact-suffix: ${{ format('-{0}', matrix.lane) }}
 
   ios-ui-tests:
     name: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && 'iOS UI Tests (full)' || 'iOS UI Tests' }}
@@ -915,12 +928,12 @@ jobs:
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require iPhone and iPad UI tests
+      - name: Require all iPhone shards and iPad UI tests
         env:
           UI_RESULT: ${{ needs.ios-ui-test-lanes.result }}
         run: |
           if [ "$UI_RESULT" != success ]; then
-            echo "::error::iPhone and iPad UI tests must both succeed (result: $UI_RESULT)"
+            echo "::error::Every iPhone shard and iPad UI test job must succeed (result: $UI_RESULT)"
             exit 1
           fi
 

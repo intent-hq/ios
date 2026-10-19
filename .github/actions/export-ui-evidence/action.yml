@@ -16,9 +16,10 @@ runs:
       shell: bash
       env:
         EVIDENCE_BUNDLES: ${{ inputs.bundles }}
+        EVIDENCE_SUFFIX: ${{ inputs.artifact-suffix }}
       run: >-
         python3 scripts/export_ui_evidence.py
-        --output-root "$RUNNER_TEMP/ui-evidence-$GITHUB_JOB"
+        --output-root "$RUNNER_TEMP/ui-evidence-$GITHUB_JOB$EVIDENCE_SUFFIX"
         --bundles "$EVIDENCE_BUNDLES"
 
     - name: Upload review screenshots
@@ -26,7 +27,7 @@ runs:
       uses: actions/upload-artifact@v7
       with:
         name: ios-ui-review-evidence${{ inputs.artifact-suffix }}
-        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/review
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}${{ inputs.artifact-suffix }}/review
         retention-days: 14
         if-no-files-found: ignore
 
@@ -35,7 +36,7 @@ runs:
       uses: actions/upload-artifact@v7
       with:
         name: ios-agent-group-evidence${{ inputs.artifact-suffix }}
-        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/agent-groups
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}${{ inputs.artifact-suffix }}/agent-groups
         retention-days: 14
         if-no-files-found: ignore
 
@@ -44,6 +45,6 @@ runs:
       uses: actions/upload-artifact@v7
       with:
         name: ios-transcript-recovery-evidence${{ inputs.artifact-suffix }}
-        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}/recovery
+        path: ${{ runner.temp }}/ui-evidence-${{ github.job }}${{ inputs.artifact-suffix }}/recovery
         retention-days: 14
         if-no-files-found: ignore

@@ -81,8 +81,9 @@ Debug-only plaintext fixtures and must not be treated as Release coverage.
 runs the same filter in CI as a non-gating `iOS Filtered Tests` job, with the
 per-selector table in the job summary. In CI, pull requests and the merge queue
 run the UI smoke selectors in `scripts/ui-smoke-tests.txt` plus focused iPad sidebar
-regressions in independent matrix jobs (keep the smoke list to a few fast tests
-per core flow and update it when renaming a listed test); the full
+regressions in independent matrix jobs. Smoke runs use two balanced iPhone shards;
+each selector has a `# shard: 1` or `# shard: 2` annotation. Keep the smoke list to
+a few fast tests per core flow and update it when renaming a listed test. The full
 `IntentUITests` bundle runs on `main` at
 09:00 and 21:00 UTC as `iOS UI Tests (full)`,
 and on any branch with `gh workflow run ci.yml --repo intent-hq/ios --ref <branch>
@@ -91,18 +92,28 @@ and on any branch with `gh workflow run ci.yml --repo intent-hq/ios --ref <branc
 selectors and skipped-only selections are rejected. See the README's CI section
 for evidence artifacts and the disposable simulator route.
 
-The iPad matrix job uses Depot macOS for independent capacity; iPhone keeps the
-selected Mac pool. Each job owns its simulator, build directory, results, and
-evidence. Keep matrix `fail-fast: false` and the aggregate `iOS UI Tests` check,
-which must fail unless both jobs succeed. Filtered and `pre_pr_gate` dispatches
-skip the matrix and aggregate. Parallel iPad screenshot artifacts use the `-ipad`
-suffix in `.github/actions/export-ui-evidence/action.yml`.
+The first iPhone shard uses the selected Mac pool; the second iPhone shard and
+iPad use Depot macOS for independent capacity. Scheduled/manual full runs keep
+one full-bundle iPhone job and the iPad regressions. Each job owns its simulator,
+build directory, results, and evidence. Keep matrix `fail-fast: false` and the
+aggregate `iOS UI Tests` check,
+which must fail unless every job succeeds. Filtered and `pre_pr_gate` dispatches
+skip the matrix and aggregate. Evidence and failure artifacts include lane names;
+screenshots use `-iphone-1`, `-iphone-2`, and `-ipad` suffixes for smoke runs, or
+`-iphone` and `-ipad` for full runs. Keep exporter output directories separate too.
+Run `python3 scripts/test_ui_smoke_tests.py` after changing shard selection and
+`python3 scripts/test_ci_simulator.py` after changing workflow wiring. The selector
+must reject invalid/missing annotations, duplicates, and empty shards before
+invoking native tests.
+
 Depot adds hosted runner cost, and its installed Xcode/runtime can differ from the
 local iPhone pool. Record the actual runner and toolchain in timing evidence.
 
 The native screenshot-retention contract runs once on ordinary PRs and twice
 for capture-tooling changes, scheduled/manual runs, and the merge queue. The
-selector `.github/scripts/select-fixture-capture-repetitions.sh` defaults to two
+first iPhone smoke shard, or single full job, owns this contract; do not duplicate
+it in the second shard. The selector
+`.github/scripts/select-fixture-capture-repetitions.sh` defaults to two
 when changed files cannot be inspected. Run
 `python3 scripts/test_select_fixture_capture_repetitions.py` after changing it.
 PR metadata must match the event head, base, and file count before and after lookup;
