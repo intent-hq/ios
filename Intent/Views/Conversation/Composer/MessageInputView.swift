@@ -24,14 +24,12 @@ struct MessageInputView: View {
     @State private var textViewHeight: CGFloat = Constants.Conversation.Composer.minimumTextViewHeight
     @State private var isPhotoPickerPresented: Bool = false
     @State private var isFilePickerPresented: Bool = false
-
+    @State private var skillCompletion = ComposerSkillCompletion()
     #if os(visionOS)
     @Environment(\.scenePhase) private var scenePhase
     @State private var dictation = SpeechDictationController()
     @State private var dictationSession: DictationSession?
-    /// Last caret offset observed from the text view; `nil` until a selection
-    /// change fires (a programmatically restored draft never fires one), which
-    /// dictation treats as end-of-text.
+    /// Last observed caret offset; dictation treats nil as end-of-text.
     @State private var caretOffset: Int?
     #endif
 
@@ -108,6 +106,9 @@ struct MessageInputView: View {
 private extension MessageInputView {
     var inputContent: some View {
         VStack(spacing: 0) {
+            if isFocused, skillCompletion.context != nil {
+                SkillSuggestionsView(completion: skillCompletion, workspaceId: viewModel.workspaceId, connection: viewModel.connection)
+            }
             supplementalRows
             if usesWorkspaceDesign {
                 WorkspaceComposerRow(
@@ -123,7 +124,8 @@ private extension MessageInputView {
                     },
                     onPhotos: { isPhotoPickerPresented = true },
                     onFiles: { isFilePickerPresented = true },
-                    onPasteImages: viewModel.pasteImages
+                    onPasteImages: viewModel.pasteImages,
+                    skillCompletion: skillCompletion
                 )
             } else {
                 inputRow
@@ -244,7 +246,8 @@ private extension MessageInputView {
                 onSubmit: { sendCurrentMessage() },
                 onPasteImages: viewModel.pasteImages,
                 onHeightChange: updateTextViewHeight,
-                onCaretChange: updateCaretOffset
+                onCaretChange: updateCaretOffset,
+                skillCompletion: skillCompletion
             )
             .padding(.horizontal, Constants.Conversation.Composer.textEditorHorizontalPadding)
             .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)

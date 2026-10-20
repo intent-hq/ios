@@ -11,6 +11,13 @@ import tempfile
 
 
 CAPTURES = {
+    "SkillAutocompleteUITests": {
+        "testSkillSuggestionsFilterInsertAndSendInBothThemes": tuple(
+            f"skill-{state}-{appearance}"
+            for state in ("suggestions", "inserted")
+            for appearance in ("light", "dark")
+        ),
+    },
     "QuestionAttachmentUITests": {
         "testImageAnswerCanBeRemovedReattachedAndSentAcrossSteps": tuple(
             f"question-image{state}-{appearance}"

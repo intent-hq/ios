@@ -76,7 +76,7 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 - note and comment reading and live state, plus task listing, status changes, and live state;
 - agent discovery and lifecycle plus conversation history, sending, queue management, questions, models, and streaming controls;
 - attachment upload, placement, and download;
-- repository, branch, provider, model, and specialist discovery;
+- repository, branch, provider, model, specialist, and workspace skill discovery;
 - Git status, diffs, and commit history across workspace repositories;
 - workspace transfer and mobile terminal lifecycle, input, output, and resizing; and
 - background-hook and pull-request-monitor status and controls.
@@ -84,6 +84,11 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 Live updates combine domain subscriptions for workspaces, notes, tasks, comments, and chats—delivered as `subscription.push` notifications—with filtered `events.subscribe` streams for agent, hook, and pull-request-monitor events.
 Browser previews use an auxiliary authenticated WebSocket tunnel rather than
 passing daemon credentials to web content.
+
+In an agent conversation, type `/` in the prompt to browse available workspace
+skills. Keep typing to filter by name or description, then tap a skill to insert
+its slash command. Hardware keyboards can use Up/Down to select, Tab to insert,
+and Escape to dismiss the suggestions.
 
 ## Quickstart
 

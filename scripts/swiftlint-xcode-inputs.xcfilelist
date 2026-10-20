@@ -79,6 +79,7 @@ $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
 $(SRCROOT)/Intent/Models/ScriptMonitor.swift
 $(SRCROOT)/Intent/Models/ScriptMonitorPage.swift
+$(SRCROOT)/Intent/Models/SkillInfo.swift
 $(SRCROOT)/Intent/Models/WatchedAgentRow.swift
 $(SRCROOT)/Intent/Models/WorkspaceAction.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
@@ -127,6 +128,7 @@ $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
 $(SRCROOT)/Intent/Presentation/RetainedIPadPane.swift
+$(SRCROOT)/Intent/Presentation/SlashSkillContext.swift
 $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
 $(SRCROOT)/Intent/Presentation/SplashAnimation.swift
@@ -251,6 +253,7 @@ $(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
 $(SRCROOT)/Intent/Services/ProposalActionStore.swift
 $(SRCROOT)/Intent/Services/RemoteImageLoader.swift
+$(SRCROOT)/Intent/Services/SkillCatalogStore.swift
 $(SRCROOT)/Intent/Services/SocketPathObservation.swift
 $(SRCROOT)/Intent/Services/SpeechDictationController.swift
 $(SRCROOT)/Intent/Services/SyncedBackendConnectionMerge.swift
@@ -379,12 +382,14 @@ $(SRCROOT)/Intent/Views/Conversation/AssistantHistorySheet.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantStateContent.swift
 $(SRCROOT)/Intent/Views/Conversation/AssistantView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/ComposerCoverage.swift
+$(SRCROOT)/Intent/Views/Conversation/Composer/ComposerSkillCompletion.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/FloatingComposerOrnament.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/FloatingComposerPolicy.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputAttachments.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/MessageInputView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/ModelPickerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/QueuedMessagesView.swift
+$(SRCROOT)/Intent/Views/Conversation/Composer/SkillSuggestionsView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/SubmittableTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceComposerRow.swift
 $(SRCROOT)/Intent/Views/Conversation/Composer/WorkspaceQueuedMessagesView.swift
@@ -632,6 +637,7 @@ $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/ComposerDraftBindingTests.swift
 $(SRCROOT)/IntentTests/ComposerFocusBindingTests.swift
+$(SRCROOT)/IntentTests/ComposerSkillCompletionTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
 $(SRCROOT)/IntentTests/ConnectionAdmissionRaceTests.swift
 $(SRCROOT)/IntentTests/ConnectionFailureViewTests.swift
@@ -887,6 +893,8 @@ $(SRCROOT)/IntentTests/SharedWorkspaceStatusFailureTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusLifetimeTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusRaceTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusTests.swift
+$(SRCROOT)/IntentTests/SkillCatalogStoreTests.swift
+$(SRCROOT)/IntentTests/SlashSkillContextTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
 $(SRCROOT)/IntentTests/SplashAnimationTests.swift
@@ -1054,6 +1062,7 @@ $(SRCROOT)/IntentUITests/QuestionAttachmentUITests.swift
 $(SRCROOT)/IntentUITests/QuestionWizardUITests.swift
 $(SRCROOT)/IntentUITests/ScriptMonitorsUITests.swift
 $(SRCROOT)/IntentUITests/SettingsUITests.swift
+$(SRCROOT)/IntentUITests/SkillAutocompleteUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
 $(SRCROOT)/IntentUITests/WatcherMessageUITests.swift
