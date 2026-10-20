@@ -11,14 +11,15 @@ extension ConversationTranscriptView {
         let ownershipRevision = scrollState.viewportOwnershipRevision
         // Snapshot hydration, cached heights and workspace inputs on MainActor.
         // SwiftUI may request these prepared row values on its render thread.
-        let rows = viewModel.filteredMessages.map { message in
+        let messages = viewModel.filteredMessages
+        let rows = messages.enumerated().map { index, message in
             (id: message.id, content: transcriptMessageRow(
                 for: message,
                 proxy: proxy,
                 dividerAnchorId: dividerAnchorId,
                 generation: generation,
                 ownershipRevision: ownershipRevision
-            ))
+            ).padding(.top, messageSpacing(at: index, in: messages)))
         }
         if viewModel.olderMessagesError != nil || !viewModel.hasOlderMessages {
             olderMessagesRow(proxy: proxy)
@@ -31,13 +32,29 @@ extension ConversationTranscriptView {
         // Realize a bounded tail and its footer together. A separately lazy
         // footer can remain absent at the stack's estimated bottom after
         // rows resize, even when repeated scrollTo calls land.
-        VStack(spacing: transcriptRowSpacing) {
+        VStack(spacing: 0) {
             ForEach(rows.suffix(Self.eagerTailMessageLimit), id: \.id) { @Sendable row in
                 row.content
             }
             transcriptEndRows(proxy: proxy)
+                .padding(.top, transcriptRowSpacing)
         }
         .id("transcript-tail")
+    }
+
+    private func messageSpacing(at index: Int, in messages: [ConversationMessage]) -> CGFloat {
+        guard index > 0 else {
+            return viewModel.olderMessagesError != nil || !viewModel.hasOlderMessages ? transcriptRowSpacing : 0
+        }
+        if isMessageTrace(messages[index - 1]), isMessageTrace(messages[index]) {
+            return Constants.Conversation.Design.Transcript.toolRowSpacing
+        }
+        return transcriptRowSpacing
+    }
+
+    private func isMessageTrace(_ message: ConversationMessage) -> Bool {
+        message.role == .user
+            && (message.agentMessageAttribution != nil || message.eventWakeAttribution != nil)
     }
 
     @ViewBuilder

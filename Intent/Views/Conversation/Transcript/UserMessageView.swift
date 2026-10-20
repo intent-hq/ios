@@ -58,7 +58,16 @@ struct UserMessageView: View {
     }
 
     var body: some View {
-        if workspaceDesign {
+        if agentMessage != nil {
+            VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+                attributionHeader
+                if isAgentMessageExpanded {
+                    messageContents
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(MessageCopyContextMenu(text: copyText, userStyled: true, isStreaming: false))
+        } else if workspaceDesign {
             WorkspaceUserBubbleLayout(
                 usesFullWidth: dynamicTypeSize.isAccessibilitySize || hookWake != nil || prWake != nil,
                 layoutDirection: layoutDirection,
