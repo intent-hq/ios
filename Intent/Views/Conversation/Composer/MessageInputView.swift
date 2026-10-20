@@ -25,6 +25,7 @@ struct MessageInputView: View {
     @State private var isPhotoPickerPresented: Bool = false
     @State private var isFilePickerPresented: Bool = false
     @State private var skillCompletion = ComposerSkillCompletion()
+
     #if os(visionOS)
     @Environment(\.scenePhase) private var scenePhase
     @State private var dictation = SpeechDictationController()
@@ -52,8 +53,7 @@ struct MessageInputView: View {
         nonmutating set { focusBinding.wrappedValue = newValue }
     }
 
-    /// Overlay visibility is presentation policy, not permission to consume a
-    /// draft. Read the live backend state again at both submission boundaries.
+    /// Read live connection state at both submission boundaries before consuming a draft.
     var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
 
     var body: some View {
