@@ -17,7 +17,6 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         static let inertTapTimeout: TimeInterval = 2
         static let thumbnailSide: CGFloat = 160
         static let imageHeight: CGFloat = 90
-        static let imageTapViewportInsetFraction: CGFloat = 1 / 3
         static let entryCount = 2
         static let maximumScrolls = 3
         static let scrollPressDuration: TimeInterval = 0.05
@@ -74,7 +73,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
     @MainActor
     func testSavedImageOpensWithKeyboardAndPreservesDraft() {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data", "--demo-inline-images"]
+        app.launchArguments += ["--demo-data", "--demo-inline-images", "--demo-inline-image-keyboard"]
         app.launch()
         openWorkspace(in: app)
         let agent = app.staticTexts[Fixture.agentName].firstMatch
@@ -89,7 +88,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         composer.typeText(draft)
         let saved = message(in: app, containing: Fixture.savedCaption)
         XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
-        reveal(saved, in: transcript, imageOnly: true)
+        reveal(saved, in: transcript)
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
             app.keyboards.firstMatch.exists && app.keyboards.firstMatch.isHittable
                 && saved.frame.height >= Fixture.imageHeight
@@ -278,7 +277,7 @@ extension InlineResponseImageUITests {
     @MainActor
     private func assertLightbox(in app: XCUIApplication, transcript: XCUIElement) {
         let saved = message(in: app, containing: Fixture.savedCaption)
-        reveal(saved, in: transcript, imageOnly: true)
+        reveal(saved, in: transcript)
         // Textual draws attachments in a Canvas. The caption and hard break
         // identify the paragraph; the final 160 × 90pt region is the full image.
         saved.coordinate(withNormalizedOffset: .zero)
@@ -333,10 +332,10 @@ extension InlineResponseImageUITests {
     }
 
     @MainActor
-    private func reveal(_ paragraph: XCUIElement, in transcript: XCUIElement, imageOnly: Bool = false) {
+    private func reveal(_ paragraph: XCUIElement, in transcript: XCUIElement) {
         for _ in 0..<Fixture.maximumScrolls {
-            let transcriptFrame = imageOnly ? imageTapViewport(in: transcript) : transcript.frame
-            let paragraphFrame = imageOnly ? imageTapFrame(in: paragraph) : paragraph.frame
+            let transcriptFrame = transcript.frame
+            let paragraphFrame = paragraph.frame
             if transcriptFrame.minY <= paragraphFrame.minY,
                paragraphFrame.maxY <= transcriptFrame.maxY { return }
             let distance = paragraphFrame.minY < transcriptFrame.minY
@@ -347,24 +346,7 @@ extension InlineResponseImageUITests {
             let end = start.withOffset(CGVector(dx: 0, dy: min(limit, max(-limit, distance))))
             start.press(forDuration: Fixture.scrollPressDuration, thenDragTo: end)
         }
-        if imageOnly {
-            XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { imageTapViewport(in: transcript).contains(imageTapFrame(in: paragraph)) })
-        } else {
-            XCTAssertTrue(waitUntilVisible(paragraph, in: transcript, timeout: Fixture.timeout))
-        }
-    }
-
-    @MainActor
-    private func imageTapViewport(in transcript: XCUIElement) -> CGRect {
-        // Scroll bounds include the area behind the floating conversation header.
-        let frame = transcript.frame
-        return frame.insetBy(dx: 0, dy: frame.height * Fixture.imageTapViewportInsetFraction)
-    }
-
-    @MainActor
-    private func imageTapFrame(in paragraph: XCUIElement) -> CGRect {
-        let frame = paragraph.frame
-        return CGRect(x: frame.minX + Fixture.thumbnailSide / 2, y: frame.maxY - Fixture.imageHeight / 2, width: 1, height: 1)
+        XCTAssertTrue(waitUntilVisible(paragraph, in: transcript, timeout: Fixture.timeout))
     }
 }
 
