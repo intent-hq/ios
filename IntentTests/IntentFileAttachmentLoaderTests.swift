@@ -300,7 +300,7 @@ struct IntentFileAttachmentLoaderTests {
 
     // MARK: - Thumbnail sizing
 
-    @Test func attachmentSizeIsFixedSquare() {
+    @Test func mediaCardSizeIsFixedSquare() {
         let side = SquareImageThumbnail.transcriptSide
         #expect(
             IntentFileImageAttachment.thumbnailSize(proposedWidth: 1000)
@@ -321,12 +321,22 @@ struct IntentFileAttachmentLoaderTests {
 }
 
 extension IntentFileAttachmentLoaderTests {
+    @Test func inlineImageSizesFitTheFullImage() {
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 400, height: 200)) == CGSize(width: 160, height: 80))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 200, height: 400)) == CGSize(width: 80, height: 160))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 200, height: 200)) == CGSize(width: 160, height: 160))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 400, height: 200), proposedWidth: 60) == CGSize(width: 60, height: 30))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 200, height: 400), proposedWidth: 60) == CGSize(width: 60, height: 120))
+        #expect(InlineImageThumbnail.size(for: .zero) == CGSize(width: 160, height: 160))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 400, height: 200), proposedWidth: 0) == .zero)
+    }
+
     @Test(arguments: [
         CGSize(width: 400, height: 200),
         CGSize(width: 200, height: 400),
         CGSize(width: 200, height: 200)
     ])
-    func imageSymbolPreservesProportionsWhenScaledIntoText(_ sourceSize: CGSize) throws {
+    func imageSymbolShowsFullImageWhenScaledIntoText(_ sourceSize: CGSize) throws {
         let source = UIGraphicsImageRenderer(size: sourceSize).image { context in
             UIColor.blue.setFill()
             context.fill(CGRect(origin: .zero, size: sourceSize))
@@ -340,9 +350,10 @@ extension IntentFileAttachmentLoaderTests {
         }
         let attachment = IntentFileImageAttachment(image: source, altText: "Proportions fixture")
         let symbol = try #require(ImageRenderer(content: attachment.body).uiImage)
-        #expect(symbol.size == CGSize(width: 160, height: 160))
+        #expect(max(symbol.size.width, symbol.size.height) == 160)
+        #expect(symbol.size.width / symbol.size.height == sourceSize.width / sourceSize.height)
 
-        for width: CGFloat in [160, 100] {
+        for width: CGFloat in [160, 60] {
             let bounds = CGRect(origin: .zero, size: attachment.sizeThatFits(
                 ProposedViewSize(width: width, height: nil), in: TextEnvironmentValues()
             ))
@@ -352,8 +363,10 @@ extension IntentFileAttachmentLoaderTests {
                 symbol.draw(in: bounds)
             }
             let marker = try redMarkerSize(in: rendered)
-            #expect(abs(marker.width - width / 2) <= 1)
-            #expect(abs(marker.height - width / 2) <= 1)
+            let scale = min(width / sourceSize.width, 160 / sourceSize.height)
+            #expect(bounds.size == CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale))
+            #expect(abs(marker.width - 100 * scale) <= 1)
+            #expect(abs(marker.height - 100 * scale) <= 1)
         }
     }
 

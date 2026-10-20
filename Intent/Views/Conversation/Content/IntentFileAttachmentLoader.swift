@@ -212,8 +212,8 @@ struct IntentFileImageAttachment: Attachment {
     var description: String { altText }
 
     var body: some View {
-        // Textual scales an ideal-sized Canvas symbol into the measured square.
-        SquareImageThumbnail(image: image, side: SquareImageThumbnail.transcriptSide)
+        // Textual's ideal-sized symbol must match the measured image proportions.
+        InlineImageThumbnail(image: image)
             .accessibilityLabel(altText)
             .contextMenu {
                 ImageActionMenuItems(image: image)
@@ -221,11 +221,10 @@ struct IntentFileImageAttachment: Attachment {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {
-        Self.thumbnailSize(proposedWidth: proposal.width)
+        InlineImageThumbnail.size(for: image.size, proposedWidth: proposal.width)
     }
 
-    /// Fixed square transcript thumbnail (FE parity), clamped to the
-    /// proposed width so narrow layouts don't overflow.
+    /// Square media-card bounds, clamped to the available text width.
     static func thumbnailSize(proposedWidth: CGFloat?) -> CGSize {
         let side = min(
             SquareImageThumbnail.transcriptSide,
