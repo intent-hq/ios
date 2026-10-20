@@ -171,7 +171,7 @@ private extension ConversationTranscriptView {
     // swiftlint:disable:next function_body_length
     private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: transcriptRowSpacing) {
                 transcriptRows(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
             .padding(.horizontal, transcriptHorizontalInset)
