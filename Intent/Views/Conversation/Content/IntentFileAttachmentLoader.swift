@@ -212,7 +212,12 @@ struct IntentFileImageAttachment: Attachment {
     var description: String { altText }
 
     var body: some View {
-        IntentFileAttachmentImageView(image: image, accessibilityLabel: altText)
+        // Textual scales an ideal-sized Canvas symbol into the measured square.
+        SquareImageThumbnail(image: image, side: SquareImageThumbnail.transcriptSide)
+            .accessibilityLabel(altText)
+            .contextMenu {
+                ImageActionMenuItems(image: image)
+            }
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {
@@ -289,35 +294,5 @@ private extension UIContentSizeCategory {
         case .accessibility5: return .accessibilityExtraExtraExtraLarge
         default: return .large
         }
-    }
-}
-
-/// Rendering for a loaded attachment image, cropped to fill the square
-/// frame Textual derives from `sizeThatFits`; tap handling lives in
-/// `MarkdownTextView` via the Textual attachment tap action.
-private struct IntentFileAttachmentImageView: View {
-    let image: UIImage
-    let accessibilityLabel: String
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        Color.clear
-            .overlay(
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .accessibilityLabel(accessibilityLabel)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius)
-                    .strokeBorder(
-                        Theme.border(for: colorScheme),
-                        lineWidth: Constants.Conversation.ImageThumbnail.borderWidth
-                    )
-            )
-            .contextMenu {
-                ImageActionMenuItems(image: image)
-            }
     }
 }
