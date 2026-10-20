@@ -17,6 +17,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         static let inertTapTimeout: TimeInterval = 2
         static let thumbnailSide: CGFloat = 160
         static let imageHeight: CGFloat = 90
+        static let imageTapViewportInsetFraction: CGFloat = 1 / 3
         static let entryCount = 2
         static let maximumScrolls = 3
         static let scrollPressDuration: TimeInterval = 0.05
@@ -334,7 +335,7 @@ extension InlineResponseImageUITests {
     @MainActor
     private func reveal(_ paragraph: XCUIElement, in transcript: XCUIElement, imageOnly: Bool = false) {
         for _ in 0..<Fixture.maximumScrolls {
-            let transcriptFrame = transcript.frame
+            let transcriptFrame = imageOnly ? imageTapViewport(in: transcript) : transcript.frame
             let paragraphFrame = imageOnly ? imageTapFrame(in: paragraph) : paragraph.frame
             if transcriptFrame.minY <= paragraphFrame.minY,
                paragraphFrame.maxY <= transcriptFrame.maxY { return }
@@ -347,10 +348,17 @@ extension InlineResponseImageUITests {
             start.press(forDuration: Fixture.scrollPressDuration, thenDragTo: end)
         }
         if imageOnly {
-            XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { transcript.frame.contains(imageTapFrame(in: paragraph)) })
+            XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { imageTapViewport(in: transcript).contains(imageTapFrame(in: paragraph)) })
         } else {
             XCTAssertTrue(waitUntilVisible(paragraph, in: transcript, timeout: Fixture.timeout))
         }
+    }
+
+    @MainActor
+    private func imageTapViewport(in transcript: XCUIElement) -> CGRect {
+        // Scroll bounds include the area behind the floating conversation header.
+        let frame = transcript.frame
+        return frame.insetBy(dx: 0, dy: frame.height * Fixture.imageTapViewportInsetFraction)
     }
 
     @MainActor
