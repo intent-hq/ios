@@ -1,0 +1,45 @@
+name: App Store screenshots
+on:
+  push:
+    branches: [chore/capture-116-screenshots]
+    paths:
+      - .github/workflows/app-store-capture.yml
+      - .github/app-store-capture/**
+      - scripts/xcodebuild.sh
+permissions:
+  contents: read
+concurrency:
+  group: app-store-capture-116
+  cancel-in-progress: false
+jobs:
+  capture:
+    runs-on: [self-hosted, macOS, ARM64, intent-ios]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select installed Xcode
+        run: |
+          test "$(uname -m)" = arm64
+          test -d /Applications/Xcode_26.3.app
+          echo 'DEVELOPER_DIR=/Applications/Xcode_26.3.app/Contents/Developer' >> "$GITHUB_ENV"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+      - name: Capture exact candidate UI
+        env:
+          CAPTURE_SLOTS: APP_APPLE_VISION_PRO
+        run: .github/app-store-capture/run.sh
+      - name: Preserve screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: app-store-116-captures
+          path: |
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.png
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.json
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.txt
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.log
+            ${{ runner.temp }}/listing-capture-${{ github.run_id }}/**/*.xcresult/**
+            !${{ runner.temp }}/listing-capture-${{ github.run_id }}/derived-*/**
+          retention-days: 14
