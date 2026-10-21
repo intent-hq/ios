@@ -299,7 +299,7 @@ struct ContentBlockBody: View, Equatable {
                     lightboxPresented = true
                 }
             } label: {
-                SquareImageThumbnail(image: uiImage, side: SquareImageThumbnail.transcriptSide)
+                InlineImageThumbnail(image: uiImage)
                     .opacity(isHydrating
                         ? Constants.Conversation.ContentBlock.hydratingImageOpacity
                         : Constants.Conversation.ContentBlock.loadedImageOpacity)

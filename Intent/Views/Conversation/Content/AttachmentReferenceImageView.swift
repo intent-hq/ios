@@ -6,7 +6,7 @@ import SwiftUI
 /// tap-to-retry placeholder on failure.
 struct AttachmentReferenceImageView: View {
     enum Style {
-        /// Assistant-row inline rendering: large fixed square thumbnail.
+        /// Assistant-row inline rendering: full image with its original proportions.
         case inline
         /// User-row attachment grid: small fixed square thumbnail.
         case thumbnail
@@ -63,7 +63,7 @@ struct AttachmentReferenceImageView: View {
                 composerFocus?.wrappedValue = false
                 lightboxPresented = true
             } label: {
-                SquareImageThumbnail(image: image, side: side)
+                thumbnail(image)
                     .copyContextMenuPassthrough()
             }
             .buttonStyle(IntentContentButtonStyle())
@@ -103,8 +103,15 @@ struct AttachmentReferenceImageView: View {
         }
     }
 
-    /// Rendered side for this style: transcript-size square for inline
-    /// images, the small user-row square for attachment-grid thumbnails.
+    @ViewBuilder
+    private func thumbnail(_ image: UIImage) -> some View {
+        switch style {
+        case .inline: InlineImageThumbnail(image: image)
+        case .thumbnail: SquareImageThumbnail(image: image, side: side)
+        }
+    }
+
+    /// Placeholder side before the image dimensions are available.
     private var side: CGFloat {
         switch style {
         case .inline: SquareImageThumbnail.transcriptSide
@@ -112,7 +119,7 @@ struct AttachmentReferenceImageView: View {
         }
     }
 
-    /// Placeholder square sized to match the eventual rendering.
+    /// Placeholder square shown while image dimensions are unknown.
     private func placeholder<Content: View>(@ViewBuilder _ label: () -> Content) -> some View {
         VStack(spacing: Constants.Conversation.ImagePlaceholder.loadingLabelSpacing) { label() }
             .font(.caption)

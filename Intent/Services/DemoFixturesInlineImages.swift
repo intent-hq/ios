@@ -20,6 +20,8 @@ extension DemoFixtures {
         if ProcessInfo.processInfo.arguments.contains("--demo-assistant-image-block") {
             return imageBlockConversation(role: "assistant")
         }
+        let response = ProcessInfo.processInfo.arguments.contains("--demo-inline-image-keyboard")
+            ? inlineImageSavedPreviewText : inlineImageResponseText
         return [
             [
                 "id": "demo-inline-images-user",
@@ -31,7 +33,7 @@ extension DemoFixtures {
                 "id": "demo-inline-images-assistant",
                 "role": "assistant",
                 "timestamp": transcriptIso(minutesAgo: 1),
-                "contentBlocks": [["type": "text", "text": inlineImageResponseText]]
+                "contentBlocks": [["type": "text", "text": response]]
             ]
         ]
     }
@@ -50,15 +52,19 @@ extension DemoFixtures {
         ]
     }
 
+    private static var inlineImageSavedPreviewText: String {
+        let savedURL = "workspace-asset://\(statusImageWorkspaceId)/\(statusImageAssetId)"
+        return "Saved preview:  \n![Saved settings preview](\(savedURL))"
+    }
+
     static var inlineImageResponseText: String {
         // Explicit hard breaks keep each caption and its attachment in one
         // paragraph, whose real layout bounds are observable by XCUITest even
         // though Textual draws the attachment body as a Canvas symbol.
-        let savedURL = "workspace-asset://\(statusImageWorkspaceId)/\(statusImageAssetId)"
         let missingURL = "workspace-asset://\(statusImageWorkspaceId)/missing-preview.png"
         return [
             "Before the saved image.",
-            "Saved preview:  \n![Saved settings preview](\(savedURL))",
+            inlineImageSavedPreviewText,
             "After the saved image, before the missing image.",
             "Missing preview:  \n![Missing settings preview](\(missingURL))",
             "After the missing image. The response is still readable.",

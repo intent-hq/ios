@@ -16,6 +16,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         static let launchTimeout: TimeInterval = 30
         static let inertTapTimeout: TimeInterval = 2
         static let thumbnailSide: CGFloat = 160
+        static let imageHeight: CGFloat = 90
         static let entryCount = 2
         static let maximumScrolls = 3
         static let scrollPressDuration: TimeInterval = 0.05
@@ -72,7 +73,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
     @MainActor
     func testSavedImageOpensWithKeyboardAndPreservesDraft() {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data", "--demo-inline-images"]
+        app.launchArguments += ["--demo-data", "--demo-inline-images", "--demo-inline-image-keyboard"]
         app.launch()
         openWorkspace(in: app)
         let agent = app.staticTexts[Fixture.agentName].firstMatch
@@ -90,7 +91,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         reveal(saved, in: transcript)
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
             app.keyboards.firstMatch.exists && app.keyboards.firstMatch.isHittable
-                && saved.frame.height >= Fixture.thumbnailSide
+                && saved.frame.height >= Fixture.imageHeight
         }, "The image must be loaded and the software keyboard visible before the tap")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Response image with keyboard open"
@@ -264,7 +265,7 @@ extension InlineResponseImageUITests {
         }
 
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
-            saved.frame.height >= Fixture.thumbnailSide
+            saved.frame.height >= Fixture.imageHeight
                 && missing.frame.height < Fixture.thumbnailSide
                 && before.frame.maxY <= saved.frame.minY
                 && saved.frame.maxY <= between.frame.minY
@@ -278,11 +279,11 @@ extension InlineResponseImageUITests {
         let saved = message(in: app, containing: Fixture.savedCaption)
         reveal(saved, in: transcript)
         // Textual draws attachments in a Canvas. The caption and hard break
-        // identify the paragraph; the final 160pt square is the real thumbnail.
+        // identify the paragraph; the final 160 × 90pt region is the full image.
         saved.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(
                 dx: Fixture.thumbnailSide / 2,
-                dy: saved.frame.height - Fixture.thumbnailSide / 2
+                dy: saved.frame.height - Fixture.imageHeight / 2
             ))
             .tap()
         assertPresentedLightbox(in: app)

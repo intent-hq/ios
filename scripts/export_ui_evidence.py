@@ -208,6 +208,9 @@ CAPTURES = {
         ),
     },
     "InlineResponseImageUITests": {
+        "testSavedAndMissingImagesPreserveResponseAndLightboxAfterReopening": (
+            "Inline image response, entry 1", "Inline image response, entry 2", "Saved response image in lightbox",
+        ),
         "testSavedImageOpensWithKeyboardAndPreservesDraft": (
             "Response image with keyboard open", "Saved response image in lightbox",
         ),
