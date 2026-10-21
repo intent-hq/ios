@@ -7,8 +7,7 @@
     "test": "node test.mjs"
   },
   "dependencies": {
-    "@mermaid-js/layout-elk": "0.2.3",
-    "mermaid": "11.17.2"
+    "pele": "1.8.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

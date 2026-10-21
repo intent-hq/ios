@@ -203,12 +203,24 @@ Tailcat routes. Never restore plaintext fallback for legacy saved pairings.
 `Intent/Services/WebSocketConnectionSecurity.swift` confines its explicit plaintext
 override to Debug loopback tests; Release must continue rejecting missing pins.
 
-Mermaid diagrams use the checked-in assets in `Intent/Resources/Mermaid/`, not a
-CDN. Regenerate the vendor bundle through `scripts/vendor-mermaid/` (`npm ci`
-then `npm run build` there), rather than hand-editing `mermaid.bundle.js`. Keep
-the lockfile, bundle, `vendor.json`, and license notices consistent. The README
+Mermaid diagrams use Pele 1.8.0 from the checked-in assets in
+`Intent/Resources/Mermaid/`, not a CDN. Regenerate the vendor bundle through
+`scripts/vendor-mermaid/` (`npm ci` then `npm run build` there), rather than
+hand-editing `pele.bundle.js`. Keep the lockfile, bundle, `vendor.json`, and
+license notices consistent. The README
 documents renderer tests; native coverage is in `MermaidMarkdownContentTests`,
 `MermaidWebViewTests`, and `ConversationMermaidUITests`.
+The engine's `window.intentPele.render(source, options)` is synchronous; the
+existing `window.renderMermaid` bridge still prepares fonts asynchronously and
+reports revision/height/error messages. Preserve stale-request suppression,
+natural-size scrolling, source directions, local Inter fonts, and light/dark
+brand themes. Keep links and images disabled, source limited to 50,000
+characters, and flowchart/agentflow edges limited to 500; source frontmatter and
+directives must not override these restrictions. Browser stale-request tests should gate font
+preparation rather than make Pele's synchronous render return a promise.
+Keep browser screenshot output outside git (for example,
+`MERMAID_SCREENSHOT_DIR=/tmp/intent-pele-screenshots npm test` from the vendoring
+directory) and review representative diagrams in both appearances.
 Native Mermaid JavaScript probes must remain bounded even when WebKit never
 calls back. Keep the missing/late-callback and cancellation coverage in
 `MermaidJavaScriptProbeTests`; a task-group timeout around WebKit's async API

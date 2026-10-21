@@ -42,7 +42,7 @@ scripts/                       Build/test/lint wrappers and Mermaid vendoring to
 ci_scripts/                    Xcode Cloud dependency preparation
 ```
 
-The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport, **Textual** for Markdown, **SwiftTerm** for terminal emulation, and **Lottie** for bundled animations. Mermaid diagrams render in a `WKWebView` using bundled JavaScript, without a CDN or runtime Node dependency.
+The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport, **Textual** for Markdown, **SwiftTerm** for terminal emulation, and **Lottie** for bundled animations. Mermaid diagrams render through bundled **Pele** JavaScript in a `WKWebView`, without a CDN or runtime Node dependency.
 
 ## Pairing
 
@@ -125,12 +125,30 @@ Direct dependencies managed via Swift Package Manager (integrated in Xcode):
 the resolved direct and transitive packages. The separate Go bridge pins its
 dependencies in `TailcatKit/go.mod` and `TailcatKit/go.sum`.
 
-### Offline Mermaid bundle
+### Offline Mermaid rendering with Pele
 
-`Intent/Resources/Mermaid/` contains the checked-in Mermaid **11.17.2** and ELK
-layout **0.2.3** bundle, renderer, licenses, and `vendor.json` provenance. Normal
-Xcode builds use those assets directly; Node/npm is only needed to regenerate
-them or run the renderer's tests.
+`Intent/Resources/Mermaid/` contains the checked-in Pele **1.8.0** engine in
+`pele.bundle.js`, the renderer, licenses, and `vendor.json` provenance. Pele
+replaces the Mermaid/ELK engine while retaining Mermaid source syntax and the
+existing resource and vendoring directories. Normal Xcode builds use those
+assets directly; Node/npm is only needed to regenerate them or run the
+renderer's tests.
+
+The engine exposes synchronous `window.intentPele.render(source, options)`.
+The app's `window.renderMermaid` bridge still prepares local Inter fonts,
+discards stale revisions, and reports height or errors to Swift. Diagrams keep
+their natural size and source direction, with horizontal scrolling and pinch
+zoom for wide content. Light and dark themes use Intent brand colors through
+Pele CSS variables, using the palette and radii from the
+[Intent Brand System](https://www.figma.com/design/yMkewdoHbGpIqVvZO09oA2/Intent-Brand---Working?node-id=2753-15362).
+Links and images are disabled; source is limited to 50,000 characters and
+flowchart/agentflow diagrams to 500 edges. Source directives and frontmatter
+cannot relax those restrictions. The page's CSP and native navigation policy
+continue to prevent external content access.
+
+Pele uses its own layout and SVG structure; Mermaid layout engines and
+`themeVariables` do not carry over. Labels support text formatting rather than
+arbitrary HTML. TeX labels show their source because no math typesetter is bundled.
 
 To regenerate the bundle from its locked dependencies:
 
@@ -140,9 +158,23 @@ npm ci
 npm run build
 ```
 
-Review the generated bundle, license notices, and `vendor.json` together. To test
+Review the lockfile, generated bundle, license notices, and `vendor.json` together. To test
 the shipped renderer from the same directory, run `npx playwright install chromium webkit`
-then `npm test`. Native coverage lives in `MermaidMarkdownContentTests`,
+then `npm test`. The browser suite covers flowchart, sequence, state, class, ER,
+pie, XY chart, Gantt, Git graph, and frontmatter fixtures in both themes, plus
+security, source and edge limits, stale requests during font loading, source directions,
+natural-size scrolling, fullscreen sizing, and completion without animation
+frames. Set `MERMAID_BROWSERS=chromium` or `MERMAID_BROWSERS=webkit` for a focused
+run. To capture all fixtures in both themes, set `MERMAID_SCREENSHOT_DIR` to a
+directory outside the checkout, for example:
+
+```bash
+MERMAID_SCREENSHOT_DIR=/tmp/intent-pele-screenshots npm test
+```
+
+Screenshot names include the engine, browser, fixture, and appearance. Review
+the images before claiming visual coverage; browser screenshots do not replace
+native device or simulator validation. Native coverage lives in `MermaidMarkdownContentTests`,
 `MermaidWebViewTests`, and `ConversationMermaidUITests`.
 The native Mermaid probes have a five-second JavaScript deadline and require a
 successful render before inspecting the page. `MermaidJavaScriptProbeTests`

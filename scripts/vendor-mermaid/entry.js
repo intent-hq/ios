@@ -1,5 +1,3 @@
-import mermaid from 'mermaid';
-import elkLayouts from '@mermaid-js/layout-elk';
+import { render } from 'pele';
 
-mermaid.registerLayoutLoaders(elkLayouts);
-window.intentMermaid = mermaid;
+window.intentPele = { render };
