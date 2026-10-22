@@ -401,8 +401,11 @@ iPhone route, it selects an available runtime matching the selected Xcode SDK's
 major version and fails before creation if no compatible iPad is available.
 
 The full UI bundle still excludes `AppStoreScreenshotTests` and honors runtime
-skips. Quarantined transcript cases in `ConversationTranscriptFullGateUITests`
-require `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run;
+skips. Quarantined transcript cases in
+[`ConversationTranscriptFullGateUITests.swift`](IntentUITests/ConversationTranscriptFullGateUITests.swift)
+extend `ConversationTranscriptScrollUITests`. Select
+`ONLY_TESTING='IntentUITests/ConversationTranscriptScrollUITests'` with
+`TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run;
 `ui_suite=full` alone does not opt into them.
 
 #### Mermaid UI quarantine
