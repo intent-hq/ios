@@ -361,8 +361,10 @@ extension ScriptMonitorsUITests {
         let value = try XCTUnwrap(marker.value as? String)
         let bounds = try JSONDecoder().decode([String: CGFloat].self, from: Data(value.utf8))
         let row = CGRect(
-            x: try XCTUnwrap(bounds["x"]), y: try XCTUnwrap(bounds["y"]),
-            width: try XCTUnwrap(bounds["width"]), height: try XCTUnwrap(bounds["height"])
+            x: try XCTUnwrap(bounds["x"]),
+            y: try XCTUnwrap(bounds["y"]),
+            width: try XCTUnwrap(bounds["width"]),
+            height: try XCTUnwrap(bounds["height"])
         )
         let geometry = XCTAttachment(string: "row=\(row) first=\(first.frame) second=\(second.frame)")
         geometry.name = "Status pill native bounds"
