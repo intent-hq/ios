@@ -125,7 +125,7 @@ struct WorkspaceStatusPillsRow: View {
     var body: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Design.Status.composerSpacing))
-            : AnyLayout(WorkspaceStatusPillsLayout(layoutDirection: layoutDirection))
+            : AnyLayout(WorkspaceStatusPillsLayout(spacing: Design.Status.composerSpacing, layoutDirection: layoutDirection))
         layout {
             if viewModel.showsPrMonitorStatus {
                 MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: viewModel.monitoredPrStore, usesWorkspaceDesign: true)
@@ -142,9 +142,8 @@ struct WorkspaceStatusPillsRow: View {
 
 /// Each child gets an equal width limit; short pills still hug their content.
 struct WorkspaceStatusPillsLayout: Layout {
+    var spacing: CGFloat
     var layoutDirection: LayoutDirection
-
-    private var spacing: CGFloat { Constants.Conversation.Design.Status.composerSpacing }
 
     private func childProposal(_ proposal: ProposedViewSize, count: Int) -> ProposedViewSize {
         let gaps = spacing * CGFloat(max(0, count - 1))

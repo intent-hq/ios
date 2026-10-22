@@ -39,7 +39,7 @@ struct MonitoredPrsRow: View {
                 if activeMonitors.count == 1, let monitor = activeMonitors.first {
                     monitorChip(monitor)
                 } else if activeMonitors.count == 2 {
-                    WorkspaceStatusPillsLayout(layoutDirection: layoutDirection) {
+                    WorkspaceStatusPillsLayout(spacing: Constants.Conversation.Design.Status.composerSpacing, layoutDirection: layoutDirection) {
                         ForEach(activeMonitors) { monitor in
                             monitorChip(monitor)
                         }

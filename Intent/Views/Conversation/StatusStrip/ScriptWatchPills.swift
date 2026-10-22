@@ -8,7 +8,7 @@ struct ScriptWatchPills: View {
 
     var body: some View {
         ScriptMonitorClock { now in
-            WorkspaceStatusPillsLayout(layoutDirection: layoutDirection) {
+            WorkspaceStatusPillsLayout(spacing: Constants.Conversation.Design.Status.composerSpacing, layoutDirection: layoutDirection) {
                 watches(now: now)
                 if hasError || (isStale && !isLoading) { retryPill }
                 if hasMore { loadMorePill }
