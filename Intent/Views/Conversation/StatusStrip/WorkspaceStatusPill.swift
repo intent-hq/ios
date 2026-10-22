@@ -150,7 +150,7 @@ struct WorkspaceStatusPillsLayout: Layout {
     var spacing: CGFloat
     var layoutDirection: LayoutDirection
 
-    private nonisolated struct Measurement {
+    nonisolated private struct Measurement {
         let sizes: [CGSize]
         let proposal: ProposedViewSize
         let stacks: Bool
