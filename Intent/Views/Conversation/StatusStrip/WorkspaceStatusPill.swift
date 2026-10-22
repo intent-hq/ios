@@ -150,10 +150,16 @@ struct WorkspaceStatusPillsLayout: Layout {
     var spacing: CGFloat
     var layoutDirection: LayoutDirection
 
+    private nonisolated struct Measurement {
+        let sizes: [CGSize]
+        let proposal: ProposedViewSize
+        let stacks: Bool
+    }
+
     private func measurement(
         proposal: ProposedViewSize,
         subviews: Subviews
-    ) -> (sizes: [CGSize], proposal: ProposedViewSize, stacks: Bool) {
+    ) -> Measurement {
         let availableWidth = proposal.width.flatMap { $0.isFinite ? $0 : nil }
         let gaps = spacing * CGFloat(max(0, subviews.count - 1))
         let width = availableWidth.map { max(0, $0 - gaps) / CGFloat(max(1, subviews.count)) }
@@ -161,9 +167,9 @@ struct WorkspaceStatusPillsLayout: Layout {
         let sizes = subviews.map { $0.sizeThatFits(childProposal) }
         if let width, sizes.contains(where: { $0.width > width.nextUp }) {
             let stackedProposal = ProposedViewSize(width: availableWidth, height: nil)
-            return (subviews.map { $0.sizeThatFits(stackedProposal) }, stackedProposal, true)
+            return Measurement(sizes: subviews.map { $0.sizeThatFits(stackedProposal) }, proposal: stackedProposal, stacks: true)
         }
-        return (sizes, childProposal, false)
+        return Measurement(sizes: sizes, proposal: childProposal, stacks: false)
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
