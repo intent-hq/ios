@@ -32,10 +32,12 @@ struct ProviderManagementStoreTests {
 
     @Test func catalogPolicyPreservesDisabledAndUnknownAuthenticationRows() async {
         let host = host()
-        host.responseMap["providers.catalog"] = ["providers": [
-            entry("codex"), entry("auggie"), entry("hidden", visible: false),
-            entry("always", canBeDisabled: false), entry("new", supportsTest: false)
-        ]]
+        host.responseMap["providers.catalog"] = [
+            "providers": [
+                entry("codex"), entry("auggie"), entry("hidden", visible: false),
+                entry("always", canBeDisabled: false), entry("new", supportsTest: false)
+            ]
+        ]
         host.responseMap["settings.get"] = settings(["codex": true, "always": false, "hidden": true])
         let store = ProviderManagementStore(connectionManager: host)
         await store.load()

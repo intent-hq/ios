@@ -54,10 +54,10 @@ import Observation
         do {
             let catalog: Catalog = try await request("providers.catalog", generation: startedAt)
             let settings: Enablement = try await request(
-                "settings.get", params: ["path": "providers.enabled"], generation: startedAt
+                "settings.get", generation: startedAt, params: ["path": "providers.enabled"]
             )
             let authentication: Authentication = try await request(
-                "host.providerAuthStatus", params: ["force": true], generation: startedAt
+                "host.providerAuthStatus", generation: startedAt, params: ["force": true]
             )
             providers = try Self.makeProviders(catalog, settings: settings, authentication: authentication)
             hasLoaded = true
@@ -79,7 +79,7 @@ import Observation
             // The wire replaces the whole map. Re-read immediately before writing
             // so unrelated and unknown provider entries are preserved.
             let current: Enablement = try await request(
-                "settings.get", params: ["path": "providers.enabled"], generation: startedAt
+                "settings.get", generation: startedAt, params: ["path": "providers.enabled"]
             )
             var value = try current.validatedValue()
             value[providerID] = enabled
@@ -88,7 +88,7 @@ import Observation
             ])
             try checkGeneration(startedAt)
             let confirmed: Enablement = try await request(
-                "settings.get", params: ["path": "providers.enabled"], generation: startedAt
+                "settings.get", generation: startedAt, params: ["path": "providers.enabled"]
             )
             let confirmedValue = try confirmed.validatedValue()
             for index in providers.indices {
@@ -125,13 +125,15 @@ import Observation
                 providers[index].authentication = authentication.status(for: providers[index].id)
             }
         } catch {
-            fail("Couldn’t finish checking this provider. Retry loading its status before testing again.",
-                 generation: startedAt)
+            fail(
+                "Couldn’t finish checking this provider. Retry loading its status before testing again.",
+                generation: startedAt
+            )
         }
     }
 
     private func request<Response: Decodable>(
-        _ method: String, params: [String: Any] = [:], generation: Int
+        _ method: String, generation: Int, params: [String: Any] = [:]
     ) async throws -> Response {
         try checkGeneration(generation)
         let response = try await connectionManager.request(method, params: params)
@@ -167,7 +169,9 @@ import Observation
         }
         return catalog.providers.filter(\.visible).map { entry in
             Provider(
-                id: entry.id, name: entry.displayName, canBeDisabled: entry.canBeDisabled,
+                id: entry.id,
+                name: entry.displayName,
+                canBeDisabled: entry.canBeDisabled,
                 supportsTestPrompt: entry.supportsTestPrompt == true,
                 loginDocsURL: entry.loginDocsUrl.flatMap(Self.documentationURL),
                 enabled: !entry.canBeDisabled || enabled[entry.id] == true,
@@ -199,17 +203,22 @@ private extension ProviderManagementStore {
         let loginDocsUrl: String?
     }
 
+    enum EnablementCodingKeys: String, CodingKey {
+        case path
+        case value
+    }
+
+    enum TestResultCodingKeys: String, CodingKey {
+        case reason
+        case succeeded = "ok"
+    }
+
     struct Enablement: Decodable {
         let path: String
         let value: [String: Bool]
 
-        enum CodingKeys: String, CodingKey {
-            case path
-            case value
-        }
-
         init(from decoder: Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let container = try decoder.container(keyedBy: EnablementCodingKeys.self)
             path = try container.decode(String.self, forKey: .path)
             value = try container.decodeNil(forKey: .value) ? [:] : container.decode([String: Bool].self, forKey: .value)
         }
@@ -230,7 +239,8 @@ private extension ProviderManagementStore {
         }
 
         func status(for id: String) -> ProviderAuthentication {
-            switch providers.first(where: { $0.id == id })?.authenticated {
+            let entry = providers.first { $0.id == id }
+            return switch entry?.authenticated {
             case true: .signedIn
             case false: .signedOut
             case nil: .unknown
@@ -248,9 +258,10 @@ private extension ProviderManagementStore {
         let succeeded: Bool
         let reason: String?
 
-        enum CodingKeys: String, CodingKey {
-            case reason
-            case succeeded = "ok"
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: TestResultCodingKeys.self)
+            succeeded = try container.decode(Bool.self, forKey: .succeeded)
+            reason = try container.decodeIfPresent(String.self, forKey: .reason)
         }
 
         var guidance: String {

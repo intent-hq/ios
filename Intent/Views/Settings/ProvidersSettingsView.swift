@@ -62,14 +62,13 @@ struct ProvidersSettingsView: View {
             if state == .connected { Task { await store.load() } }
         }
         .onDisappear { store.invalidate() }
-        .confirmationDialog("Test provider on this host?", isPresented: testConfirmation, presenting: providerToTest) {
-            provider in
+        .confirmationDialog("Test provider on this host?", isPresented: testConfirmation, presenting: providerToTest) { provider in
             Button("Test \(provider.name)") {
                 guard canEdit else { return }
                 Task { await store.testProvider(provider.id) }
             }
         } message: { _ in
-            Text("This sends a short prompt using the host’s provider account and may use paid usage.")
+            Text("This sends a short prompt using the host’s provider account and may incur provider charges.")
         }
         .accessibilityIdentifier("settings.providers")
     }
@@ -103,16 +102,7 @@ struct ProvidersSettingsView: View {
                 .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(SettingsStyle.muted(for: colorScheme, contrast: contrast))
                 .accessibilityIdentifier("settings.providers.\(provider.id).status")
-            Toggle("Enabled on this host", isOn: Binding(
-                get: { provider.enabled },
-                set: { enabled in
-                    guard canEdit else { return }
-                    Task { await store.setEnabled(enabled, providerID: provider.id) }
-                }
-            ))
-            .interFont(Constants.Typography.bodyS)
-            .disabled(!canEdit || !provider.canBeDisabled || !store.canManage)
-            .accessibilityIdentifier("settings.providers.\(provider.id).enabled")
+            providerToggle(provider)
             if !provider.canBeDisabled {
                 Text("This provider is always enabled on the host.").interFont(Constants.Typography.subtextXXS)
             }
@@ -135,11 +125,24 @@ struct ProvidersSettingsView: View {
         .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))
     }
 
+    private func providerToggle(_ provider: ProviderManagementStore.Provider) -> some View {
+        Toggle("Enabled on this host", isOn: Binding(
+            get: { provider.enabled },
+            set: { enabled in
+                guard canEdit else { return }
+                Task { await store.setEnabled(enabled, providerID: provider.id) }
+            }
+        ))
+        .interFont(Constants.Typography.bodyS)
+        .disabled(!canEdit || !provider.canBeDisabled || !store.canManage)
+        .accessibilityIdentifier("settings.providers.\(provider.id).enabled")
+    }
+
     @ViewBuilder private func providerIcon(_ id: String) -> some View {
         switch id {
-        case "codex": Image(.openAI).resizable().scaledToFit()
-        case "antigravity": Image(.gemini).resizable().scaledToFit()
-        default: Image(.agents).resizable().scaledToFit()
+        case "codex": Image(.openAI).resizable().scaledToFit().accessibilityHidden(true)
+        case "antigravity": Image(.gemini).resizable().scaledToFit().accessibilityHidden(true)
+        default: Image(.agents).resizable().scaledToFit().accessibilityHidden(true)
         }
     }
 
