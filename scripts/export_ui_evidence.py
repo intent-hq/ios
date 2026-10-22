@@ -19,12 +19,20 @@ CAPTURES = {
         ),
     },
     "ScriptMonitorsUITests": {
+        "testRetainedWatchAndPagingActionsFitInBothThemes": (
+            "status-pills-page-error-light", "status-pills-page-error-dark",
+            "status-pills-page-recovered-light", "status-pills-page-recovered-dark", "script-monitors-final-state",
+        ),
         "testOwnedWatchDetailsUpdateAndRemovalWithoutRestart": (
             "script-monitors-active", "script-monitors-details", "script-monitors-text-update",
             "script-monitors-removed-details", "script-monitors-removed", "script-monitors-final-state",
         ),
         "testLoadingFailureRetriesWithoutInventingAnEmptyState": (
             "script-monitors-loading", "script-monitors-error", "script-monitors-retried", "script-monitors-final-state",
+        ),
+        "testStatusPillsShareWidthAndStaySingleLineInBothThemes": (
+            "status-pills-retry-light", "status-pills-retry-dark",
+            "status-pills-watching-light", "status-pills-watching-dark", "script-monitors-final-state",
         ),
         "testEmptyOwnerCanLoadNextPageAndRetryItsFailure": (
             "script-monitors-empty-owner-more", "script-monitors-page-error", "script-monitors-next-page", "script-monitors-final-state",

@@ -7,6 +7,7 @@ final class DemoScriptMonitorFixtures {
     enum Scenario: String {
         case active, unsupported, retry, multiple
         case emptyOwner = "empty-owner"
+        case ownedPageRetry = "owned-page-retry"
         case pageRetry = "page-retry"
         case detailRetry = "detail-retry"
         case deadlineReached = "deadline-reached"
@@ -111,7 +112,7 @@ final class DemoScriptMonitorFixtures {
         }
         if let cursor = params["cursor"] as? String {
             guard cursor == Self.cursor else { throw failure("Unknown cursor", code: Self.invalidParams) }
-            if scenario == .pageRetry, !failedPage {
+            if scenario == .pageRetry || scenario == .ownedPageRetry, !failedPage {
                 failedPage = true
                 throw failure("Demo next page temporarily unavailable")
             }
@@ -119,6 +120,9 @@ final class DemoScriptMonitorFixtures {
         }
         if scenario == .emptyOwner || scenario == .pageRetry {
             return ["view": "summary", "monitors": [otherOwnerRow], "nextCursor": Self.cursor]
+        }
+        if scenario == .ownedPageRetry {
+            return ["view": "summary", "monitors": [ownedRow(full: false)], "nextCursor": Self.cursor]
         }
         return ["view": "summary", "monitors": (active ? [ownedRow(full: false)] : []) + extraOwnedRows + [otherOwnerRow]]
     }

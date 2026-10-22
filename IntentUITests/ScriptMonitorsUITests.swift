@@ -9,6 +9,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     private static let originalName = "Build verification — long script name with 日本語 and accessibility context"
     private static let updatedName = "Renamed verification — same watch and run"
     private static let tapHeight: CGFloat = 44
+    private static let pillSpacing: CGFloat = 8
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -253,17 +254,25 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     }
 
     @MainActor
-    private func launch(directory: URL, scenario: String = "active", design: String = "conversation", accessibility: Bool = false) -> XCUIApplication {
+    private func launch(
+        directory: URL,
+        scenario: String = "active",
+        design: String = "conversation",
+        accessibility: Bool = false,
+        appearance: String = "light",
+        longPrLabel: Bool = false
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "--demo-data", "--demo-design-scenario=" + design, "--demo-script-monitors=" + scenario,
             "--demo-script-monitor-hit-probe",
-            "--demo-script-monitor-directory=" + directory.path, "-appThemePreference", accessibility ? "dark" : "light"
+            "--demo-script-monitor-directory=" + directory.path, "-appThemePreference", accessibility ? "dark" : appearance
         ]
+        if longPrLabel { app.launchArguments.append("--demo-long-pr-label") }
         if accessibility { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] }
         app.launch()
         addTeardownBlock { @MainActor [self] () async in
-            capture(app, "script-monitors-final-state")
+            if app.state == .runningForeground { capture(app, "script-monitors-final-state") }
             app.terminate()
         }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
@@ -313,5 +322,107 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+extension ScriptMonitorsUITests {
+    @MainActor
+    func testRetainedWatchAndPagingActionsFitInBothThemes() throws {
+        for appearance in ["light", "dark"] {
+            let directory = try fixtureDirectory()
+            let app = launch(directory: directory, scenario: "owned-page-retry", appearance: appearance, longPrLabel: true)
+            let monitor = app.buttons["monitoredPr.demo-design-pr-56"]
+            let watch = app.buttons[Self.rowID]
+            let more = app.buttons["script-monitors-load-more"]
+            XCTAssertTrue(watch.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(more.waitForExistence(timeout: Self.timeout))
+            more.tap()
+            let retry = app.buttons["script-monitors-retry"]
+            XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+            capture(app, "status-pills-page-error-" + appearance)
+            let row = try statusPillRowBounds(in: app)
+            let controls = [monitor, watch, retry, more]
+            for (index, control) in controls.enumerated() {
+                XCTAssertTrue(control.exists)
+                XCTAssertGreaterThan(control.frame.width, 0)
+                XCTAssertLessThanOrEqual(control.frame.width, (row.width - Self.pillSpacing) / 2 + 1)
+                XCTAssertEqual(control.frame.height, Self.tapHeight, accuracy: 1)
+                XCTAssertTrue(row.insetBy(dx: -1, dy: -1).contains(control.frame))
+                for neighbor in controls.dropFirst(index + 1) {
+                    XCTAssertFalse(control.frame.intersects(neighbor.frame), "Status actions must not overlap")
+                }
+            }
+            XCTAssertTrue(watch.label.contains(Self.originalName))
+            retry.tap()
+            XCTAssertTrue(retry.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(more.waitForNonExistence(timeout: Self.timeout))
+            try assertPillWidths(monitor, watch, in: app)
+            capture(app, "status-pills-page-recovered-" + appearance)
+            watch.tap()
+            assertDetailText(app, Self.originalName)
+            closeDetails(app)
+            capture(app, "script-monitors-final-state")
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testStatusPillsShareWidthAndStaySingleLineInBothThemes() throws {
+        for appearance in ["light", "dark"] {
+            let directory = try fixtureDirectory()
+            let app = launch(directory: directory, scenario: "retry", appearance: appearance, longPrLabel: true)
+            let monitor = app.buttons["monitoredPr.demo-design-pr-56"]
+            XCTAssertTrue(monitor.waitForExistence(timeout: Self.timeout))
+            XCTAssertEqual(monitor.label, "Monitoring PR intent-hq/intentd: #56")
+            try trigger("list-ready", directory: directory)
+            let retry = app.buttons["script-monitors-retry"]
+            XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+            capture(app, "status-pills-retry-" + appearance)
+            try assertPillWidths(monitor, retry, in: app)
+            retry.tap()
+            let watch = app.buttons[Self.rowID]
+            XCTAssertTrue(watch.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(retry.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(watch.label.contains(Self.originalName))
+            capture(app, "status-pills-watching-" + appearance)
+            try assertPillWidths(monitor, watch, in: app)
+            watch.tap()
+            assertDetailText(app, Self.originalName)
+            closeDetails(app)
+            capture(app, "script-monitors-final-state")
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    private func assertPillWidths(_ first: XCUIElement, _ second: XCUIElement, in app: XCUIApplication) throws {
+        let row = try statusPillRowBounds(in: app)
+        let geometry = XCTAttachment(string: "row=\(row) first=\(first.frame) second=\(second.frame)")
+        geometry.name = "Status pill native bounds"
+        geometry.lifetime = .keepAlways
+        add(geometry)
+        let maximumWidth = (row.width - Self.pillSpacing) / 2
+        for pill in [first, second] {
+            XCTAssertGreaterThan(pill.frame.width, 0)
+            XCTAssertLessThanOrEqual(pill.frame.width, maximumWidth + 1)
+            XCTAssertEqual(pill.frame.height, Self.tapHeight, accuracy: 1, "Pill labels must remain on one line")
+            XCTAssertTrue(row.insetBy(dx: -1, dy: -1).contains(pill.frame), "Pills must fit inside their row")
+        }
+        XCTAssertEqual(first.frame.midY, second.frame.midY, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(second.frame.minX - first.frame.maxX, Self.pillSpacing - 1)
+    }
+
+    @MainActor
+    private func statusPillRowBounds(in app: XCUIApplication) throws -> CGRect {
+        let marker = app.descendants(matching: .any)["workspace-status-pills.geometry"].firstMatch
+        XCTAssertTrue(marker.waitForExistence(timeout: Self.timeout))
+        let value = try XCTUnwrap(marker.value as? String)
+        let bounds = try JSONDecoder().decode([String: CGFloat].self, from: Data(value.utf8))
+        return CGRect(
+            x: try XCTUnwrap(bounds["x"]),
+            y: try XCTUnwrap(bounds["y"]),
+            width: try XCTUnwrap(bounds["width"]),
+            height: try XCTUnwrap(bounds["height"])
+        )
     }
 }
