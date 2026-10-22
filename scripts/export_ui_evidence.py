@@ -19,6 +19,10 @@ CAPTURES = {
         ),
     },
     "ScriptMonitorsUITests": {
+        "testRetainedWatchAndPagingActionsFitInBothThemes": (
+            "status-pills-page-error-light", "status-pills-page-error-dark",
+            "status-pills-page-recovered-light", "status-pills-page-recovered-dark", "script-monitors-final-state",
+        ),
         "testOwnedWatchDetailsUpdateAndRemovalWithoutRestart": (
             "script-monitors-active", "script-monitors-details", "script-monitors-text-update",
             "script-monitors-removed-details", "script-monitors-removed", "script-monitors-final-state",

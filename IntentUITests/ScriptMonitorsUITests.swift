@@ -327,6 +327,46 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
 
 extension ScriptMonitorsUITests {
     @MainActor
+    func testRetainedWatchAndPagingActionsFitInBothThemes() throws {
+        for appearance in ["light", "dark"] {
+            let directory = try fixtureDirectory()
+            let app = launch(directory: directory, scenario: "owned-page-retry", appearance: appearance, longPrLabel: true)
+            let monitor = app.buttons["monitoredPr.demo-design-pr-56"]
+            let watch = app.buttons[Self.rowID]
+            let more = app.buttons["script-monitors-load-more"]
+            XCTAssertTrue(watch.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(more.waitForExistence(timeout: Self.timeout))
+            more.tap()
+            let retry = app.buttons["script-monitors-retry"]
+            XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+            capture(app, "status-pills-page-error-" + appearance)
+            let row = try statusPillRowBounds(in: app)
+            let controls = [monitor, watch, retry, more]
+            for (index, control) in controls.enumerated() {
+                XCTAssertTrue(control.exists)
+                XCTAssertGreaterThan(control.frame.width, 0)
+                XCTAssertLessThanOrEqual(control.frame.width, (row.width - Self.pillSpacing) / 2 + 1)
+                XCTAssertEqual(control.frame.height, Self.tapHeight, accuracy: 1)
+                XCTAssertTrue(row.insetBy(dx: -1, dy: -1).contains(control.frame))
+                for neighbor in controls.dropFirst(index + 1) {
+                    XCTAssertFalse(control.frame.intersects(neighbor.frame), "Status actions must not overlap")
+                }
+            }
+            XCTAssertTrue(watch.label.contains(Self.originalName))
+            retry.tap()
+            XCTAssertTrue(retry.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(more.waitForNonExistence(timeout: Self.timeout))
+            try assertPillWidths(monitor, watch, in: app)
+            capture(app, "status-pills-page-recovered-" + appearance)
+            watch.tap()
+            assertDetailText(app, Self.originalName)
+            closeDetails(app)
+            capture(app, "script-monitors-final-state")
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testStatusPillsShareWidthAndStaySingleLineInBothThemes() throws {
         for appearance in ["light", "dark"] {
             let directory = try fixtureDirectory()
@@ -356,16 +396,7 @@ extension ScriptMonitorsUITests {
 
     @MainActor
     private func assertPillWidths(_ first: XCUIElement, _ second: XCUIElement, in app: XCUIApplication) throws {
-        let marker = app.descendants(matching: .any)["workspace-status-pills.geometry"].firstMatch
-        XCTAssertTrue(marker.waitForExistence(timeout: Self.timeout))
-        let value = try XCTUnwrap(marker.value as? String)
-        let bounds = try JSONDecoder().decode([String: CGFloat].self, from: Data(value.utf8))
-        let row = CGRect(
-            x: try XCTUnwrap(bounds["x"]),
-            y: try XCTUnwrap(bounds["y"]),
-            width: try XCTUnwrap(bounds["width"]),
-            height: try XCTUnwrap(bounds["height"])
-        )
+        let row = try statusPillRowBounds(in: app)
         let geometry = XCTAttachment(string: "row=\(row) first=\(first.frame) second=\(second.frame)")
         geometry.name = "Status pill native bounds"
         geometry.lifetime = .keepAlways
@@ -379,5 +410,19 @@ extension ScriptMonitorsUITests {
         }
         XCTAssertEqual(first.frame.midY, second.frame.midY, accuracy: 1)
         XCTAssertGreaterThanOrEqual(second.frame.minX - first.frame.maxX, Self.pillSpacing - 1)
+    }
+
+    @MainActor
+    private func statusPillRowBounds(in app: XCUIApplication) throws -> CGRect {
+        let marker = app.descendants(matching: .any)["workspace-status-pills.geometry"].firstMatch
+        XCTAssertTrue(marker.waitForExistence(timeout: Self.timeout))
+        let value = try XCTUnwrap(marker.value as? String)
+        let bounds = try JSONDecoder().decode([String: CGFloat].self, from: Data(value.utf8))
+        return CGRect(
+            x: try XCTUnwrap(bounds["x"]),
+            y: try XCTUnwrap(bounds["y"]),
+            width: try XCTUnwrap(bounds["width"]),
+            height: try XCTUnwrap(bounds["height"])
+        )
     }
 }

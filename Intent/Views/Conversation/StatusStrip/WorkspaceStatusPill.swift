@@ -145,41 +145,52 @@ struct WorkspaceStatusPillsRow: View {
     }
 }
 
-/// Each child gets an equal width limit; short pills still hug their content.
+/// Equal width limits keep short pills compact; rows stack when minimum widths cannot fit.
 struct WorkspaceStatusPillsLayout: Layout {
     var spacing: CGFloat
     var layoutDirection: LayoutDirection
 
-    private func childProposal(_ proposal: ProposedViewSize, count: Int) -> ProposedViewSize {
-        let gaps = spacing * CGFloat(max(0, count - 1))
-        let width = proposal.width.flatMap { width in
-            width.isFinite ? max(0, width - gaps) / CGFloat(max(1, count)) : nil
+    private func measurement(
+        proposal: ProposedViewSize,
+        subviews: Subviews
+    ) -> (sizes: [CGSize], proposal: ProposedViewSize, stacks: Bool) {
+        let availableWidth = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+        let gaps = spacing * CGFloat(max(0, subviews.count - 1))
+        let width = availableWidth.map { max(0, $0 - gaps) / CGFloat(max(1, subviews.count)) }
+        let childProposal = ProposedViewSize(width: width, height: nil)
+        let sizes = subviews.map { $0.sizeThatFits(childProposal) }
+        if let width, sizes.contains(where: { $0.width > width.nextUp }) {
+            let stackedProposal = ProposedViewSize(width: availableWidth, height: nil)
+            return (subviews.map { $0.sizeThatFits(stackedProposal) }, stackedProposal, true)
         }
-        return ProposedViewSize(width: width, height: nil)
+        return (sizes, childProposal, false)
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
         guard !subviews.isEmpty else { return .zero }
-        let childProposal = childProposal(proposal, count: subviews.count)
-        let sizes = subviews.map { $0.sizeThatFits(childProposal) }
-        let naturalWidth = sizes.reduce(0) { $0 + $1.width } + spacing * CGFloat(subviews.count - 1)
+        let measured = measurement(proposal: proposal, subviews: subviews)
+        let gaps = spacing * CGFloat(subviews.count - 1)
         return CGSize(
-            width: naturalWidth,
-            height: sizes.map(\.height).max() ?? 0
+            width: measured.stacks ? measured.sizes.map(\.width).max() ?? 0 : measured.sizes.reduce(0) { $0 + $1.width } + gaps,
+            height: measured.stacks ? measured.sizes.reduce(0) { $0 + $1.height } + gaps : measured.sizes.map(\.height).max() ?? 0
         )
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
-        let childProposal = childProposal(proposal, count: subviews.count)
+        let measured = measurement(proposal: proposal, subviews: subviews)
         let isRightToLeft = layoutDirection == .rightToLeft
         var position = isRightToLeft ? bounds.maxX : bounds.minX
-        for subview in subviews {
-            let size = subview.sizeThatFits(childProposal)
+        var top = bounds.minY
+        for (subview, size) in zip(subviews, measured.sizes) {
             subview.place(
-                at: CGPoint(x: isRightToLeft ? position - size.width : position, y: bounds.midY - size.height / 2),
-                proposal: childProposal
+                at: CGPoint(x: isRightToLeft ? position - size.width : position, y: measured.stacks ? top : bounds.midY - size.height / 2),
+                proposal: measured.proposal
             )
-            position += (size.width + spacing) * (isRightToLeft ? -1 : 1)
+            if measured.stacks {
+                top += size.height + spacing
+            } else {
+                position += (size.width + spacing) * (isRightToLeft ? -1 : 1)
+            }
         }
     }
 }
