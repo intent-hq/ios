@@ -26,6 +26,10 @@ CAPTURES = {
         "testLoadingFailureRetriesWithoutInventingAnEmptyState": (
             "script-monitors-loading", "script-monitors-error", "script-monitors-retried", "script-monitors-final-state",
         ),
+        "testStatusPillsShareWidthAndStaySingleLineInBothThemes": (
+            "status-pills-retry-light", "status-pills-retry-dark",
+            "status-pills-watching-light", "status-pills-watching-dark", "script-monitors-final-state",
+        ),
         "testEmptyOwnerCanLoadNextPageAndRetryItsFailure": (
             "script-monitors-empty-owner-more", "script-monitors-page-error", "script-monitors-next-page", "script-monitors-final-state",
         ),

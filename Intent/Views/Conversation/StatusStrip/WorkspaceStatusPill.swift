@@ -24,7 +24,8 @@ struct WorkspaceStatusPill<Trailing: View>: View {
             } else {
                 text
                     .interFont(Design.Typography.status)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             trailing
         }
@@ -117,23 +118,65 @@ struct MarqueeText<Content: View>: View {
 struct WorkspaceStatusPillsRow: View {
     let viewModel: ConversationViewModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.layoutDirection) private var layoutDirection
 
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Design.Status.composerSpacing))
-            : AnyLayout(HStackLayout(spacing: Design.Status.composerSpacing))
+            : AnyLayout(WorkspaceStatusPillsLayout(layoutDirection: layoutDirection))
         layout {
             if viewModel.showsPrMonitorStatus {
                 MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: viewModel.monitoredPrStore, usesWorkspaceDesign: true)
-                    .layoutPriority(1)
             }
             if viewModel.showsScriptMonitorStatus {
                 ScriptWatchPills(viewModel: viewModel)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("workspace-status-pills")
+    }
+}
+
+/// Each child gets an equal width limit; short pills still hug their content.
+struct WorkspaceStatusPillsLayout: Layout {
+    var layoutDirection: LayoutDirection
+
+    private var spacing: CGFloat { Constants.Conversation.Design.Status.composerSpacing }
+
+    private func childProposal(_ proposal: ProposedViewSize, count: Int) -> ProposedViewSize {
+        let gaps = spacing * CGFloat(max(0, count - 1))
+        let width = proposal.width.flatMap { width in
+            width.isFinite ? max(0, width - gaps) / CGFloat(max(1, count)) : nil
+        }
+        return ProposedViewSize(width: width, height: nil)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        let childProposal = childProposal(proposal, count: subviews.count)
+        let sizes = subviews.map { $0.sizeThatFits(childProposal) }
+        let naturalWidth = sizes.reduce(0) { $0 + $1.width } + spacing * CGFloat(subviews.count - 1)
+        return CGSize(
+            width: naturalWidth,
+            height: sizes.map(\.height).max() ?? 0
+        )
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let childProposal = childProposal(proposal, count: subviews.count)
+        let isRightToLeft = layoutDirection == .rightToLeft
+        var position = isRightToLeft ? bounds.maxX : bounds.minX
+        for subview in subviews {
+            let size = subview.sizeThatFits(childProposal)
+            subview.place(
+                at: CGPoint(x: isRightToLeft ? position - size.width : position, y: bounds.midY - size.height / 2),
+                proposal: childProposal
+            )
+            position += (size.width + spacing) * (isRightToLeft ? -1 : 1)
+        }
     }
 }
 

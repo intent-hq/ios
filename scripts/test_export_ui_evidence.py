@@ -109,6 +109,8 @@ class ExportTests(unittest.TestCase):
         expected = set()
         for test in sorted(tests):
             captures = re.findall(r'capture\(app, "([^"\\]+)"\)', methods[test])
+            for prefix in re.findall(r'capture\(app, "([^"\\]+)" \+ appearance\)', methods[test]):
+                captures.extend(prefix + appearance for appearance in ("light", "dark"))
             captures += ["script-monitors-final-state"]
             self.assertEqual(set(captures), set(evidence.CAPTURES[suite][test]))
             attachments = []

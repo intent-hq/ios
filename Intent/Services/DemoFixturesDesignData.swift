@@ -112,9 +112,10 @@ extension DemoDesignFixtures {
     }
 
     var monitor: [String: Any] {
-        [
+        let repo = ProcessInfo.processInfo.arguments.contains("--demo-long-pr-label") ? "intent-hq/intentd" : "intent-ha/ios"
+        return [
             "monitorId": Self.monitorId, "workspaceId": Self.workspaceId, "agentId": Self.agentId,
-            "repo": "intent-ha/ios", "prNumber": 56, "state": monitorCancelled ? "cancelled" : "active",
+            "repo": repo, "prNumber": 56, "state": monitorCancelled ? "cancelled" : "active",
             "title": "Use the attention circle icon", "createdAt": Self.timestamp, "updatedAt": Self.timestamp,
             "pendingChanges": [String](), "hasPendingChanges": false,
             "lastSnapshot": [

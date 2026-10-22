@@ -4,10 +4,11 @@ import SwiftUI
 /// sheet directly; several collapse into a counted menu that opens the same sheet.
 struct ScriptWatchPills: View {
     let viewModel: ConversationViewModel
+    @Environment(\.layoutDirection) private var layoutDirection
 
     var body: some View {
         ScriptMonitorClock { now in
-            HStack(spacing: Constants.Conversation.Design.Status.composerSpacing) {
+            WorkspaceStatusPillsLayout(layoutDirection: layoutDirection) {
                 watches(now: now)
                 if hasError || (isStale && !isLoading) { retryPill }
                 if hasMore { loadMorePill }
