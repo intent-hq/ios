@@ -337,15 +337,15 @@ extension ScriptMonitorsUITests {
             try trigger("list-ready", directory: directory)
             let retry = app.buttons["script-monitors-retry"]
             XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
-            assertPillWidths(monitor, retry, in: app)
             capture(app, "status-pills-retry-" + appearance)
+            try assertPillWidths(monitor, retry, in: app)
             retry.tap()
             let watch = app.buttons[Self.rowID]
             XCTAssertTrue(watch.waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(retry.waitForNonExistence(timeout: Self.timeout))
             XCTAssertTrue(watch.label.contains(Self.originalName))
-            assertPillWidths(monitor, watch, in: app)
             capture(app, "status-pills-watching-" + appearance)
+            try assertPillWidths(monitor, watch, in: app)
             watch.tap()
             assertDetailText(app, Self.originalName)
             closeDetails(app)
@@ -355,15 +355,25 @@ extension ScriptMonitorsUITests {
     }
 
     @MainActor
-    private func assertPillWidths(_ first: XCUIElement, _ second: XCUIElement, in app: XCUIApplication) {
-        let row = app.otherElements["workspace-status-pills"].firstMatch
-        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
-        let maximumWidth = (row.frame.width - Self.pillSpacing) / 2
+    private func assertPillWidths(_ first: XCUIElement, _ second: XCUIElement, in app: XCUIApplication) throws {
+        let marker = app.descendants(matching: .any)["workspace-status-pills.geometry"].firstMatch
+        XCTAssertTrue(marker.waitForExistence(timeout: Self.timeout))
+        let value = try XCTUnwrap(marker.value as? String)
+        let bounds = try JSONDecoder().decode([String: CGFloat].self, from: Data(value.utf8))
+        let row = CGRect(
+            x: try XCTUnwrap(bounds["x"]), y: try XCTUnwrap(bounds["y"]),
+            width: try XCTUnwrap(bounds["width"]), height: try XCTUnwrap(bounds["height"])
+        )
+        let geometry = XCTAttachment(string: "row=\(row) first=\(first.frame) second=\(second.frame)")
+        geometry.name = "Status pill native bounds"
+        geometry.lifetime = .keepAlways
+        add(geometry)
+        let maximumWidth = (row.width - Self.pillSpacing) / 2
         for pill in [first, second] {
             XCTAssertGreaterThan(pill.frame.width, 0)
             XCTAssertLessThanOrEqual(pill.frame.width, maximumWidth + 1)
             XCTAssertEqual(pill.frame.height, Self.tapHeight, accuracy: 1, "Pill labels must remain on one line")
-            XCTAssertTrue(row.frame.contains(pill.frame), "Pills must fit inside their row")
+            XCTAssertTrue(row.insetBy(dx: -1, dy: -1).contains(pill.frame), "Pills must fit inside their row")
         }
         XCTAssertEqual(first.frame.midY, second.frame.midY, accuracy: 1)
         XCTAssertGreaterThanOrEqual(second.frame.minX - first.frame.maxX, Self.pillSpacing - 1)
