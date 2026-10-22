@@ -51,9 +51,7 @@ struct EventWakeAttribution: Equatable {
         )
     }
 
-    /// Compact human summary of the wake, in daemon order. Large bursts stay
-    /// count-only; small wakes list deduplicated per-event labels (FE parity:
-    /// EventWakeupBanner `friendlySummary`).
+    /// Preserve event order while sharing the name for consecutive actions by one agent.
     var summaryLabel: String {
         if eventCount >= Self.summaryEventCountThreshold { return "\(eventCount) events" }
         let sources = events.isEmpty
@@ -62,9 +60,21 @@ struct EventWakeAttribution: Equatable {
         if sources.isEmpty { return "Subscription update" }
         var labels: [String] = []
         var seen = Set<String>()
+        var previousAgent: String?
         for event in sources {
             let label = Self.activityLabel(for: event)
-            if seen.insert(label).inserted { labels.append(label) }
+            guard seen.insert(label).inserted else { continue }
+            if let name = event.agentName, let action = Self.agentAction(for: event.type) {
+                if previousAgent == name, !labels.isEmpty {
+                    labels[labels.count - 1] += " and \(action)"
+                } else {
+                    labels.append(label)
+                }
+                previousAgent = name
+            } else {
+                labels.append(label)
+                previousAgent = nil
+            }
         }
         return labels.joined(separator: ", ")
     }
@@ -74,19 +84,29 @@ struct EventWakeAttribution: Equatable {
     /// category label (FE parity: activity-labels + event-wake-summary).
     static func activityLabel(for event: Event) -> String {
         let name = event.agentName
+        if let action = agentAction(for: event.type) {
+            return "\(name ?? "Agent") \(action)"
+        }
         switch event.type {
-        case "agent:idle":
-            return name.map { "\($0) finished" } ?? "Agent finished"
-        case "agent:reportToParent":
-            return name.map { "\($0) sent a message" } ?? "Agent sent a message"
-        case "agent:completed":
-            return name.map { "\($0) completed" } ?? "Agent completed"
-        case "agent:failed":
-            return name.map { "\($0) failed" } ?? "Agent failed"
         case "agent:created":
             return name.map { "Created agent \($0)" } ?? "New agent created"
         default:
             return categoryLabel(for: event.type) ?? humanized(event.type)
+        }
+    }
+
+    private static func agentAction(for type: String) -> String? {
+        switch type {
+        case "agent:idle":
+            return "finished"
+        case "agent:reportToParent":
+            return "sent a message"
+        case "agent:completed":
+            return "completed"
+        case "agent:failed":
+            return "failed"
+        default:
+            return nil
         }
     }
 

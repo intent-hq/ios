@@ -144,6 +144,35 @@ struct EventWakeAttributionTests {
         #expect(burst?.summaryLabel == "7 events")
     }
 
+    @Test func consecutiveAgentActionsShareTheirNameAndDeduplicate() {
+        let attribution = EventWakeAttribution(eventCount: 3, eventTypes: [], events: [
+            .init(type: "agent:reportToParent", agentName: "Canvas note model"),
+            .init(type: "agent:reportToParent", agentName: "Canvas note model"),
+            .init(type: "agent:idle", agentName: "Canvas note model")
+        ])
+        #expect(attribution.summaryLabel == "Canvas note model sent a message and finished")
+        #expect(attribution.eventCount == 3)
+    }
+
+    @Test func differentAgentsAndInterveningEventsKeepTheirOrder() {
+        let attribution = EventWakeAttribution(eventCount: 4, eventTypes: [], events: [
+            .init(type: "agent:reportToParent", agentName: "Canvas note model"),
+            .init(type: "agent:failed", agentName: "Note editor"),
+            .init(type: "file:changed", agentName: nil),
+            .init(type: "agent:idle", agentName: "Canvas note model")
+        ])
+        #expect(attribution.summaryLabel ==
+            "Canvas note model sent a message, Note editor failed, File changes, Canvas note model finished")
+    }
+
+    @Test func unnamedAgentsAreNotAssumedToBeTheSameSender() {
+        let attribution = EventWakeAttribution(eventCount: 2, eventTypes: [], events: [
+            .init(type: "agent:reportToParent", agentName: nil),
+            .init(type: "agent:idle", agentName: nil)
+        ])
+        #expect(attribution.summaryLabel == "Agent sent a message, Agent finished")
+    }
+
     @Test func unknownTypesAreHumanized() {
         // Machine identifiers never surface verbatim in the banner.
         let attribution = EventWakeAttribution.from([
