@@ -474,6 +474,7 @@ $(SRCROOT)/Intent/Services/DemoFixturesNavigation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesTranscriptVideo.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Services/DemoFixturesWorkspaceProposal.swift
+$(SRCROOT)/Intent/Services/DemoHostSettingsFixtures.swift
 $(SRCROOT)/Intent/Services/DemoIPadProducerVisibility.swift
 $(SRCROOT)/Intent/Services/DemoMode.swift
 $(SRCROOT)/Intent/Services/DemoNetworkPathMonitor.swift
@@ -483,6 +484,7 @@ $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
+$(SRCROOT)/Intent/Services/GlobalInstructionsStore.swift
 $(SRCROOT)/Intent/Services/ImagePasteboard.swift
 $(SRCROOT)/Intent/Services/ImportedPhotoVideo.swift
 $(SRCROOT)/Intent/Services/InvitedImportOutcome.swift
@@ -506,6 +508,7 @@ $(SRCROOT)/Intent/Services/OutgoingImagePayload.swift
 $(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
 $(SRCROOT)/Intent/Services/ProposalActionStore.swift
+$(SRCROOT)/Intent/Services/ProviderManagementStore.swift
 $(SRCROOT)/Intent/Services/RemoteImageLoader.swift
 $(SRCROOT)/Intent/Services/SocketPathObservation.swift
 $(SRCROOT)/Intent/Services/SpeechDictationController.swift
@@ -772,8 +775,11 @@ $(SRCROOT)/Intent/Views/Settings/AcknowledgementsView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticExportView.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticPreviewSection.swift
 $(SRCROOT)/Intent/Views/Settings/DiagnosticShareSheet.swift
+$(SRCROOT)/Intent/Views/Settings/GlobalInstructionsSettingsView.swift
 $(SRCROOT)/Intent/Views/Settings/LogOffConfirmationSheet.swift
+$(SRCROOT)/Intent/Views/Settings/ProvidersSettingsView.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsActionLabel.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsAgentSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsHeader.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsPairingSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsSection.swift
@@ -1056,6 +1062,7 @@ $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
+$(SRCROOT)/IntentTests/GlobalInstructionsStoreTests.swift
 $(SRCROOT)/IntentTests/HTMLFileWebViewTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
 $(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
@@ -1141,6 +1148,7 @@ $(SRCROOT)/IntentTests/PlatformGuardAllowlistTests.swift
 $(SRCROOT)/IntentTests/PrivacyManifestDriftTests.swift
 $(SRCROOT)/IntentTests/ProposalActionStoreTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
+$(SRCROOT)/IntentTests/ProviderManagementStoreTests.swift
 $(SRCROOT)/IntentTests/QuestionAttachmentLifecycleTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
 $(SRCROOT)/IntentTests/QuestionWizardLayoutTests.swift

@@ -89,6 +89,7 @@ extension ConnectionManager {
         if let gate = DemoFixtures.responseGate(for: method, params: params) {
             try await DemoFixtures.wait(for: gate)
         }
+        if let response = try demoHostSettingsFixtures.response(for: method, params: params) { return response }
         let response = DemoFixtures.response(for: method, params: params)
         // Routed ahead of the ack: the router buffers it until the caller
         // registers its handler, the same order a live daemon can produce.

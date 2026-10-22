@@ -109,6 +109,7 @@ private struct SettingsContent: View {
             CertMismatchListView(mismatches: session.connection.certMismatches)
         }
         SettingsPairingSection(onScanQR: onScanQR, onManualPairing: onManualPairing)
+        SettingsAgentSection()
         if isEmbedded {
             SettingsSection(title: "SETTINGS") { SettingsSupportSection() }
         } else {

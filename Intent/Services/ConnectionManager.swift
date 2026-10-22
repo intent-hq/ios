@@ -46,6 +46,7 @@ import os
     @ObservationIgnored private var isDemoConnection = false
     @ObservationIgnored var servesDemoFixtures = false
     @ObservationIgnored var demoScriptMonitorFixtures: DemoScriptMonitorFixtures?
+    @ObservationIgnored var demoHostSettingsFixtures = DemoHostSettingsFixtures()
     @ObservationIgnored var scriptMonitorsDisabledForConnection = false
     var capabilities: ConnectionCapabilities = .unknown {
         didSet { capabilitiesSubject.send(capabilities) }

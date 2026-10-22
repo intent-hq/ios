@@ -30,7 +30,7 @@ import Observation
         case .failed:
             "Couldn’t load provider settings from this host. Retry, or check that the host is up to date."
         case .loaded where providers.isEmpty:
-            "No providers are enabled on this host. Enable a provider in the Intent desktop app, then retry."
+            "No providers are enabled on this host. Enable a provider in Settings, then retry."
         default:
             nil
         }

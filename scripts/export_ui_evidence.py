@@ -11,6 +11,19 @@ import tempfile
 
 
 CAPTURES = {
+    "SettingsAgentUITests": {
+        "testGlobalInstructionsSaveAndReopenInBothAppearances": (
+            "Global-Instructions-Light", "Global-Instructions-Dark",
+            "Global-Instructions-Saved-Light", "Global-Instructions-Saved-Dark", "Settings-Agents-Final",
+        ),
+        "testFailedSaveRetainsDraftAndCloseRequiresDiscard": (
+            "Global-Instructions-Save-Failure", "Settings-Agents-Final",
+        ),
+        "testProviderEnablementPersistsAfterRefreshInBothAppearances": (
+            "Settings-Agents-Light", "Settings-Agents-Dark", "Providers-Light", "Providers-Dark",
+            "Providers-Disabled-Light", "Providers-Disabled-Dark", "Settings-Agents-Final",
+        ),
+    },
     "QuestionAttachmentUITests": {
         "testImageAnswerCanBeRemovedReattachedAndSentAcrossSteps": tuple(
             f"question-image{state}-{appearance}"
