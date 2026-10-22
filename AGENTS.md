@@ -276,3 +276,7 @@ in markdown files.
   comment on / link the existing issue instead of filing a duplicate.
 - **Cross-reference**: reference the issue number in related commits/PRs (e.g.
   `fix: keep tool block state on sparse ticks (#123)`).
+
+## Pull Requests
+
+When PRs include UI changes you should attach screenshots to the PR description using the `--attach` flag in the `gh` cli. You must not add screenshots files to the repo.
