@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ProvidersSettingsView: View {
+    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var store: ProviderManagementStore
@@ -46,6 +47,7 @@ struct ProvidersSettingsView: View {
         .buttonStyle(IntentContentButtonStyle())
         .navigationTitle("Providers")
         .toolbarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .intentNavigationBackButton()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -62,7 +64,10 @@ struct ProvidersSettingsView: View {
         .onDisappear { store.invalidate() }
         .confirmationDialog("Test provider on this host?", isPresented: testConfirmation, presenting: providerToTest) {
             provider in
-            Button("Test \(provider.name)") { Task { await store.testProvider(provider.id) } }
+            Button("Test \(provider.name)") {
+                guard canEdit else { return }
+                Task { await store.testProvider(provider.id) }
+            }
         } message: { _ in
             Text("This sends a short prompt using the host’s provider account and may use paid usage.")
         }
@@ -76,6 +81,11 @@ struct ProvidersSettingsView: View {
                 Text("Provider changes apply to this host. To sign in or sign out, use Intent or the provider’s CLI on the host computer, then refresh here.")
                     .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(SettingsStyle.muted(for: colorScheme, contrast: contrast))
+                if !canEdit {
+                    Text("Only the host owner can change or test providers.")
+                        .interFont(Constants.Typography.bodyS)
+                        .accessibilityIdentifier("settings.providers.readOnly")
+                }
             }
         }
     }
@@ -95,17 +105,20 @@ struct ProvidersSettingsView: View {
                 .accessibilityIdentifier("settings.providers.\(provider.id).status")
             Toggle("Enabled on this host", isOn: Binding(
                 get: { provider.enabled },
-                set: { enabled in Task { await store.setEnabled(enabled, providerID: provider.id) } }
+                set: { enabled in
+                    guard canEdit else { return }
+                    Task { await store.setEnabled(enabled, providerID: provider.id) }
+                }
             ))
             .interFont(Constants.Typography.bodyS)
-            .disabled(!provider.canBeDisabled || !store.canManage)
+            .disabled(!canEdit || !provider.canBeDisabled || !store.canManage)
             .accessibilityIdentifier("settings.providers.\(provider.id).enabled")
             if !provider.canBeDisabled {
                 Text("This provider is always enabled on the host.").interFont(Constants.Typography.subtextXXS)
             }
             if provider.supportsTestPrompt {
                 Button("Test provider") { providerToTest = provider }
-                    .disabled(!store.canManage || !provider.enabled)
+                    .disabled(!canEdit || !store.canManage || !provider.enabled)
                     .accessibilityIdentifier("settings.providers.\(provider.id).test")
             }
             if let message = store.testMessages[provider.id] {
@@ -141,4 +154,6 @@ struct ProvidersSettingsView: View {
     private var testConfirmation: Binding<Bool> {
         Binding(get: { providerToTest != nil }, set: { if !$0 { providerToTest = nil } })
     }
+
+    private var canEdit: Bool { session.connection.currentPrincipal?.isOwner == true }
 }
