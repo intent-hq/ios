@@ -35,6 +35,7 @@ nonisolated enum WebSocketProtocolViolation: Error, Equatable, Sendable {
     case controlFrameTooLong
     case fragmentedControlFrame
     case frameTooLarge
+    case invalidCloseFrame
     case invalidCompressedData
     case invalidMasking
     case invalidTextEncoding
@@ -51,7 +52,7 @@ nonisolated enum WebSocketProtocolViolation: Error, Equatable, Sendable {
             WebSocketCloseCode.messageTooBig
         case .invalidCompressedData, .invalidTextEncoding:
             WebSocketCloseCode.invalidFramePayloadData
-        case .controlFrameTooLong, .fragmentedControlFrame, .invalidMasking, .reservedBitsSet,
+        case .controlFrameTooLong, .fragmentedControlFrame, .invalidCloseFrame, .invalidMasking, .reservedBitsSet,
              .unexpectedContinuation, .unexpectedDataFrame, .unknownOpcode:
             WebSocketCloseCode.protocolError
         }
@@ -67,6 +68,8 @@ nonisolated enum WebSocketCloseCode {
     static let abnormalClosure: UInt16 = 1006
     static let invalidFramePayloadData: UInt16 = 1007
     static let messageTooBig: UInt16 = 1009
+    static let tlsHandshake: UInt16 = 1015
+    static let maximumApplication: UInt16 = 4999
 }
 
 /// Bit layout of the RFC 6455 §5.2 base framing protocol.
