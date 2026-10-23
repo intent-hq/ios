@@ -45,6 +45,26 @@ struct SuggestedPromptsParityTests {
         #expect(SuggestedPrompts.parse(text) == [labelPipe, destinationPipe, labelPipe, destinationPipe])
     }
 
+    @Test func trimsDecodedByteOrderMarkLikeTheDesktop() {
+        // JS trim() removes U+FEFF; Foundation's whitespace set does not.
+        let text = "&lt;!-- suggested-prompts\n&#xFEFF;\nok\n--&gt;"
+        #expect(SuggestedPrompts.parse(text) == ["ok"])
+    }
+
+    @Test func delayPrefixNeverSpansADecodedLineBreak() {
+        // The desktop's `^delay:(\d+)\|(.*)$` fails when `.` meets a newline.
+        let text = "&lt;!-- suggested-prompts\nL|delay:5|run&#10;tests\n--&gt;"
+        #expect(SuggestedPrompts.parse(text) == ["delay:5|run\ntests"])
+    }
+
+    @Test func decodingStaysLinearWithoutNearbySemicolons() {
+        let line = String(repeating: "&", count: 50_000) + ";"
+        let text = "&lt;!-- suggested-prompts\n\(line)\n--&gt;"
+        let start = Date()
+        _ = SuggestedPrompts.parse(text)
+        #expect(Date().timeIntervalSince(start) < 1)
+    }
+
     @Test func visibleTextKeepsNonLinkBracketsLiteral() {
         #expect(SuggestedPromptLinks.visibleText("See [docs](https://a.test) now") == "See docs now")
         #expect(SuggestedPromptLinks.visibleText("![img](https://a.test/x.png)") == "![img](https://a.test/x.png)")

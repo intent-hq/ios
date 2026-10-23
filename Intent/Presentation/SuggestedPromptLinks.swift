@@ -43,22 +43,25 @@ enum SuggestedPromptLinks {
     /// Text after the legacy `Label|` delimiter — the first `|` outside any
     /// inline link — or nil when the line has none.
     static func textAfterLabel(_ line: String) -> String? {
-        var prefix = String.UnicodeScalarView()
         let scalars = Array(line.unicodeScalars)
+        var offset = 0
         for part in parts(scalars) {
             switch part {
             case let .text(content):
                 if let pipe = content.firstIndex(of: "|") {
-                    let consumed = prefix.count + pipe + 1
-                    return String(String.UnicodeScalarView(scalars[consumed...]))
+                    return String(String.UnicodeScalarView(scalars[(offset + pipe + 1)...]))
                 }
-                prefix.append(contentsOf: content)
+                offset += content.count
             case let .link(label, url):
-                prefix.append(contentsOf: ["["] + label + ["]", "("] + url + [")"])
+                offset += label.count + url.count + linkSyntaxLength
             }
         }
         return nil
     }
+
+    /// `[`, `]`, `(` and `)` around a link's label and destination.
+    private static let linkSyntaxLength = 4
+    private static let linkSchemes = ["http://", "https://", "intent://"]
 
     private static func parts(_ prompt: [Unicode.Scalar]) -> [Part] {
         var result: [Part] = []
@@ -134,7 +137,7 @@ enum SuggestedPromptLinks {
     }
 
     private static func hasLinkScheme(_ url: [Unicode.Scalar]) -> Bool {
-        String(String.UnicodeScalarView(url))
-            .range(of: "^(https?|intent)://", options: [.regularExpression, .caseInsensitive]) != nil
+        let lowered = String(String.UnicodeScalarView(url.prefix(linkSchemes.map(\.count).max() ?? 0))).lowercased()
+        return linkSchemes.contains { lowered.hasPrefix($0) }
     }
 }

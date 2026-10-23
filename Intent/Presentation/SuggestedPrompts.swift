@@ -112,7 +112,7 @@ enum SuggestedPrompts {
     private static func prompts(fromLastOf found: [Block]) -> [String] {
         guard let last = found.last else { return [] }
         let lines = last.body
-            .map { (last.escaped ? decodeEntities($0) : $0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { (last.escaped ? decodeEntities($0) : $0).trimmingCharacters(in: promptTrimSet) }
             .filter { !$0.isEmpty }
         guard !lines.isEmpty, !lines.contains(where: looksLikeBodyText) else { return [] }
         return prompts(from: lines)
@@ -322,27 +322,27 @@ enum SuggestedPrompts {
     /// `[0-9]` (not `\d`) keeps digit matching ASCII-only like the desktop's
     /// non-Unicode JS regex; ICU `\d` would also match e.g. Arabic-Indic digits.
     private static func parsePromptLine(_ line: String) -> String? {
-        let delayPattern = "^delay:[0-9]+\\|"
-        if let delayRange = line.range(
-            of: delayPattern,
-            options: [.regularExpression, .caseInsensitive]
-        ) {
-            let text = String(line[delayRange.upperBound...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let text = afterDelayPrefix(line) {
             return isValidPrompt(text) ? text : nil
         }
         var promptPart = line
         if let afterLabel = SuggestedPromptLinks.textAfterLabel(line) {
-            promptPart = afterLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+            promptPart = afterLabel.trimmingCharacters(in: promptTrimSet)
         }
-        if let delayRange = promptPart.range(
-            of: delayPattern,
-            options: [.regularExpression, .caseInsensitive]
-        ) {
-            promptPart = String(promptPart[delayRange.upperBound...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+        if let text = afterDelayPrefix(promptPart) { promptPart = text }
         return isValidPrompt(promptPart) ? promptPart : nil
+    }
+
+    /// The trimmed text after a `delay:N|` prefix, or nil. Like the desktop's
+    /// `/^delay:(\d+)\|(.*)$/i`, the rest must not span a line terminator (a
+    /// decoded `&#10;` can put one inside a prompt).
+    private static func afterDelayPrefix(_ text: String) -> String? {
+        guard let range = text.range(of: "^delay:[0-9]+\\|", options: [.regularExpression, .caseInsensitive]) else {
+            return nil
+        }
+        let rest = text[range.upperBound...]
+        guard !rest.unicodeScalars.contains(where: lineTerminators.contains) else { return nil }
+        return String(rest).trimmingCharacters(in: promptTrimSet)
     }
 
     /// Non-empty, and the visible text (link labels in place of their
@@ -358,6 +358,12 @@ private extension SuggestedPrompts {
     /// (1–7 digits) and hex (1–6 digits) references. Unknown, zero,
     /// out-of-range and surrogate references stay literal, matching the
     /// desktop's `decodeEscapedPromptText`.
+    /// What JS `String.prototype.trim` removes: whitespace and line
+    /// terminators, plus the U+FEFF byte-order mark Foundation keeps.
+    static let promptTrimSet = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}"))
+    /// Characters the desktop's `.` never matches.
+    static let lineTerminators = CharacterSet(charactersIn: "\n\r\u{2028}\u{2029}")
+    static let namedEntities: [String: String] = ["lt": "<", "gt": ">", "quot": "\"", "apos": "'", "amp": "&"]
     static let maxEntityBodyLength = 8
     static let hexRadix = 16
     static let decimalRadix = 10
@@ -365,19 +371,20 @@ private extension SuggestedPrompts {
     static let maxDecimalDigits = 7
 
     static func decodeEntities(_ line: String) -> String {
-        let named: [String: String] = ["lt": "<", "gt": ">", "quot": "\"", "apos": "'", "amp": "&"]
         let scalars = Array(line.unicodeScalars)
         var out = String.UnicodeScalarView()
         var index = 0
         while index < scalars.count {
-            guard scalars[index] == "&", let semicolon = scalars[(index + 1)...].firstIndex(of: ";"),
-                  semicolon - index - 1 <= maxEntityBodyLength else {
+            // Only look as far as the longest entity body, so a run of `&`
+            // without a nearby `;` stays linear.
+            let window = scalars[(index + 1)..<min(scalars.count, index + 2 + maxEntityBodyLength)]
+            guard scalars[index] == "&", let semicolon = window.firstIndex(of: ";") else {
                 out.append(scalars[index])
                 index += 1
                 continue
             }
             let name = String(String.UnicodeScalarView(scalars[(index + 1)..<semicolon]))
-            if let decoded = named[name] ?? numericReference(name) {
+            if let decoded = namedEntities[name] ?? numericReference(name) {
                 out.append(contentsOf: decoded.unicodeScalars)
                 index = semicolon + 1
             } else {
