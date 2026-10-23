@@ -174,9 +174,14 @@ struct WorkspaceChangesSnapshot {
         self.changes = changes.map { change in
             guard let tracked = trackedByPath[change.path]?.first(where: { $0.stage == change.stage }) else { return change }
             return WorkspaceChange(
-                id: change.id, path: change.path, stage: change.stage, status: change.status,
-                additions: tracked.additions, deletions: tracked.deletions,
-                isBinary: tracked.isBinary, agentName: tracked.agentName
+                id: change.id,
+                path: change.path,
+                stage: change.stage,
+                status: change.status,
+                additions: tracked.additions,
+                deletions: tracked.deletions,
+                isBinary: tracked.isBinary,
+                agentName: tracked.agentName
             )
         }
         isTruncated = dictionary["filesTruncated"] as? Bool ?? false

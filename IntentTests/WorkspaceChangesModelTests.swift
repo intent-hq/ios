@@ -55,13 +55,17 @@ struct WorkspaceChangesModelTests {
             staged,
             WorkspaceChangesFixture.change(path: "removed.swift")
         ]))
-        let snapshot = try WorkspaceChangesSnapshot([
-            "files": [
-                ["path": "src/main.swift", "status": "D", "staged": true],
-                ["path": "src/main.swift", "status": "M", "staged": false],
-                ["path": "manual.swift", "status": "?", "staged": false]
-            ]
-        ], rootId: "primary", trackedChanges: tracked.changes)
+        let snapshot = try WorkspaceChangesSnapshot(
+            [
+                "files": [
+                    ["path": "src/main.swift", "status": "D", "staged": true],
+                    ["path": "src/main.swift", "status": "M", "staged": false],
+                    ["path": "manual.swift", "status": "?", "staged": false]
+                ]
+            ],
+            rootId: "primary",
+            trackedChanges: tracked.changes
+        )
         #expect(snapshot.changes.map(\.stage) == ["staged", "unstaged", "unstaged"])
         #expect(snapshot.changes.map(\.status) == ["deleted", "modified", "untracked"])
         #expect(snapshot.changes[0].id != snapshot.changes[1].id)
