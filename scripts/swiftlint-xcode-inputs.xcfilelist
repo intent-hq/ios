@@ -266,6 +266,7 @@ $(SRCROOT)/Intent/Services/TaskStore.swift
 $(SRCROOT)/Intent/Services/TransportDiagnosticFailure.swift
 $(SRCROOT)/Intent/Services/WebSocketAdmission.swift
 $(SRCROOT)/Intent/Services/WebSocketConnection.swift
+$(SRCROOT)/Intent/Services/WebSocketConnectionIO.swift
 $(SRCROOT)/Intent/Services/WebSocketConnectionSecurity.swift
 $(SRCROOT)/Intent/Services/WebSocketFrameCodec.swift
 $(SRCROOT)/Intent/Services/WebSocketHandshake.swift
@@ -954,8 +955,11 @@ $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WatcherMessagePresentationTests.swift
+$(SRCROOT)/IntentTests/WebSocketCompressionServer.swift
+$(SRCROOT)/IntentTests/WebSocketCompressionTests.swift
 $(SRCROOT)/IntentTests/WebSocketFrameCodecTests.swift
 $(SRCROOT)/IntentTests/WebSocketHandshakeTests.swift
+$(SRCROOT)/IntentTests/WebSocketInboundStreamTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceActionMenuDepthTests.swift
 $(SRCROOT)/IntentTests/WorkspaceActionTests.swift
