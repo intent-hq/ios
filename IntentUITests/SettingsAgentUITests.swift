@@ -9,11 +9,14 @@ nonisolated final class SettingsAgentUITests: XCTestCase {
             let app = launch(appearance: appearance)
             openInstructions(app)
             capture(app, named: "Global-Instructions-" + appearance)
+            let enabled = app.switches["settings.instructions.enabled"]
+            XCTAssertEqual(enabled.value as? String, "1")
+            enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            let disabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == '0'"), object: enabled)
+            XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: Self.timeout), .completed)
             let editor = app.textViews["settings.instructions.content"]
             editor.tap()
             editor.typeText("\nKeep responses concise.")
-            let enabled = app.switches["settings.instructions.enabled"]
-            enabled.tap()
             let save = app.buttons["settings.instructions.save"]
             XCTAssertTrue(save.isEnabled)
             save.tap()
@@ -69,6 +72,7 @@ nonisolated final class SettingsAgentUITests: XCTestCase {
         app.buttons["settings.instructions.close"].tap()
         let keepEditing = app.buttons["Keep editing"]
         XCTAssertTrue(keepEditing.waitForExistence(timeout: Self.timeout))
+        capture(app, named: "Global-Instructions-Discard-Confirmation")
         keepEditing.tap()
         XCTAssertEqual((editor.value as? String)?.contains("Keep my draft."), true)
         app.buttons["settings.instructions.close"].tap()

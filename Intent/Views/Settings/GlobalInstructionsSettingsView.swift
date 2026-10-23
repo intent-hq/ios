@@ -40,7 +40,7 @@ struct GlobalInstructionsSettingsView: View {
                 }
             }
             .toolbar(.visible, for: .navigationBar)
-            .confirmationDialog("Discard your changes?", isPresented: $showingDiscardConfirmation, titleVisibility: .visible) {
+            .alert("Discard your changes?", isPresented: $showingDiscardConfirmation) {
                 Button("Discard changes", role: .destructive) { dismiss() }
                 Button("Keep editing", role: .cancel) {}
             }

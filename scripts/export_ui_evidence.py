@@ -17,7 +17,7 @@ CAPTURES = {
             "Global-Instructions-Saved-Light", "Global-Instructions-Saved-Dark", "Settings-Agents-Final",
         ),
         "testFailedSaveRetainsDraftAndCloseRequiresDiscard": (
-            "Global-Instructions-Save-Failure", "Settings-Agents-Final",
+            "Global-Instructions-Save-Failure", "Global-Instructions-Discard-Confirmation", "Settings-Agents-Final",
         ),
         "testProviderEnablementPersistsAfterRefreshInBothAppearances": (
             "Settings-Agents-Light", "Settings-Agents-Dark", "Providers-Light", "Providers-Dark",
