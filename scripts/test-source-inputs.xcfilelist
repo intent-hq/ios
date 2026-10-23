@@ -384,6 +384,7 @@ $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
 $(SRCROOT)/Intent/Presentation/SplashAnimation.swift
 $(SRCROOT)/Intent/Presentation/SplashPlaybackState.swift
+$(SRCROOT)/Intent/Presentation/SuggestedPromptLinks.swift
 $(SRCROOT)/Intent/Presentation/SuggestedPrompts.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
@@ -1055,6 +1056,8 @@ $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
 $(SRCROOT)/IntentTests/Fixtures
 $(SRCROOT)/IntentTests/Fixtures/backend-keychain
 $(SRCROOT)/IntentTests/Fixtures/backend-keychain/v1
+$(SRCROOT)/IntentTests/Fixtures/suggested-prompts
+$(SRCROOT)/IntentTests/Fixtures/suggested-prompts/v1
 $(SRCROOT)/IntentTests/FloatingComposerImportTests.swift
 $(SRCROOT)/IntentTests/FloatingComposerPolicyTests.swift
 $(SRCROOT)/IntentTests/ForEachSnapshotTests.swift
@@ -1177,7 +1180,10 @@ $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
 $(SRCROOT)/IntentTests/SplashAnimationTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
+$(SRCROOT)/IntentTests/SuggestedPromptsContractTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
+$(SRCROOT)/IntentTests/SuggestedPromptsEscapedTests.swift
+$(SRCROOT)/IntentTests/SuggestedPromptsParityTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionMergeTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionTombstoneTests.swift

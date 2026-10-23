@@ -133,6 +133,7 @@ $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
 $(SRCROOT)/Intent/Presentation/SplashAnimation.swift
 $(SRCROOT)/Intent/Presentation/SplashPlaybackState.swift
+$(SRCROOT)/Intent/Presentation/SuggestedPromptLinks.swift
 $(SRCROOT)/Intent/Presentation/SuggestedPrompts.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
@@ -899,7 +900,10 @@ $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
 $(SRCROOT)/IntentTests/SplashAnimationTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
+$(SRCROOT)/IntentTests/SuggestedPromptsContractTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
+$(SRCROOT)/IntentTests/SuggestedPromptsEscapedTests.swift
+$(SRCROOT)/IntentTests/SuggestedPromptsParityTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionMergeTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionTombstoneTests.swift
