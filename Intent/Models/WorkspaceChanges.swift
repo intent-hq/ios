@@ -162,14 +162,23 @@ struct WorkspaceChangesSnapshot {
         isTruncated = truncated
     }
 
-    init(_ result: Any, rootId: String) throws {
+    init(_ result: Any, rootId: String, trackedChanges: [WorkspaceChange] = []) throws {
         guard let dictionary = result as? [String: Any],
               let rows = dictionary["files"] as? [[String: Any]] else {
             throw WorkspaceChangesDecodingError.invalidChanges
         }
         let changes = rows.compactMap { WorkspaceChange.parseStatus($0, rootId: rootId) }
         guard changes.count == rows.count else { throw WorkspaceChangesDecodingError.invalidChanges }
-        self.changes = changes
+        let trackedByPath = Dictionary(grouping: trackedChanges, by: \.path)
+        // Git owns membership and stage; attribution only enriches an exact path and stage match.
+        self.changes = changes.map { change in
+            guard let tracked = trackedByPath[change.path]?.first(where: { $0.stage == change.stage }) else { return change }
+            return WorkspaceChange(
+                id: change.id, path: change.path, stage: change.stage, status: change.status,
+                additions: tracked.additions, deletions: tracked.deletions,
+                isBinary: tracked.isBinary, agentName: tracked.agentName
+            )
+        }
         isTruncated = dictionary["filesTruncated"] as? Bool ?? false
     }
 }

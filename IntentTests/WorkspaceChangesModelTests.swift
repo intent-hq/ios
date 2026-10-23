@@ -47,6 +47,35 @@ enum WorkspaceChangesFixture {
 }
 
 struct WorkspaceChangesModelTests {
+    @Test func gitStatusOnlyEnrichesMatchingPathAndStage() throws {
+        var staged = WorkspaceChangesFixture.change(id: "staged", stage: "staged")
+        staged["stats"] = ["additions": 0, "deletions": 0, "binary": true]
+        let tracked = try WorkspaceChangesSnapshot(WorkspaceChangesFixture.snapshot([
+            WorkspaceChangesFixture.change(id: "unstaged", stage: "unstaged"),
+            staged,
+            WorkspaceChangesFixture.change(path: "removed.swift")
+        ]))
+        let snapshot = try WorkspaceChangesSnapshot([
+            "files": [
+                ["path": "src/main.swift", "status": "D", "staged": true],
+                ["path": "src/main.swift", "status": "M", "staged": false],
+                ["path": "manual.swift", "status": "?", "staged": false]
+            ]
+        ], rootId: "primary", trackedChanges: tracked.changes)
+        #expect(snapshot.changes.map(\.stage) == ["staged", "unstaged", "unstaged"])
+        #expect(snapshot.changes.map(\.status) == ["deleted", "modified", "untracked"])
+        #expect(snapshot.changes[0].id != snapshot.changes[1].id)
+        #expect(snapshot.changes[0].additions == tracked.changes[1].additions)
+        #expect(snapshot.changes[0].isBinary)
+        #expect(snapshot.changes[1].additions == tracked.changes[0].additions)
+        #expect(snapshot.changes[1].isBinary == false)
+        #expect(snapshot.changes[1].agentName == "Implementor")
+        #expect(snapshot.changes[0].hasLineStats)
+        #expect(snapshot.changes[2].hasLineStats == false)
+        #expect(snapshot.changes[2].agentName == nil)
+        #expect(snapshot.changes.map(\.path).contains("removed.swift") == false)
+    }
+
     @Test func trackedFilePreservesPathStageBinaryStatsAndAttribution() throws {
         var wire = WorkspaceChangesFixture.change(stage: "staged")
         wire["status"] = "renamed"
