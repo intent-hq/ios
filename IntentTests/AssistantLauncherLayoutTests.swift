@@ -4,6 +4,29 @@ import Testing
 
 @MainActor
 struct AssistantLauncherLayoutTests {
+    @Test(arguments: [3, 4, 5, 6])
+    func allMenuActionsFitWhenMinimumWidthsAreAvailable(actionCount: Int) {
+        let count = CGFloat(actionCount)
+        let spacing: CGFloat = 8
+        let minimumWidth: CGFloat = 160
+        let minimumRowWidth = count * minimumWidth + (count - 1) * spacing
+        for width in stride(from: minimumRowWidth, through: 1400, by: 1) {
+            let tile = HomeActionTiles.tileWidth(in: width, actionCount: actionCount, accessibility: false)
+            #expect(tile >= minimumWidth)
+            #expect(tile <= 192)
+            #expect(tile * count + (count - 1) * spacing <= width + 0.001)
+        }
+        #expect(HomeActionTiles.tileWidth(in: minimumRowWidth, actionCount: actionCount, accessibility: false) == minimumWidth)
+        #expect(HomeActionTiles.tileWidth(in: minimumRowWidth - 1, actionCount: actionCount, accessibility: false) == 192)
+    }
+
+    @Test func menuKeepsScrollingCardsOnNarrowScreensAndWithAccessibilityText() {
+        #expect(HomeActionTiles.tileWidth(in: 352, actionCount: 5, accessibility: false) == 172)
+        #expect(HomeActionTiles.tileWidth(in: 320, actionCount: 5, accessibility: false) == 160)
+        #expect(HomeActionTiles.tileWidth(in: 352, actionCount: 5, accessibility: true) == 352)
+        #expect(HomeActionTiles.tileWidth(in: 900, actionCount: 5, accessibility: true) == 392)
+    }
+
     @Test func spatialControlsAreModestlyLargerAndFartherFromResizeCorner() {
         let old = AssistantLauncherLayout.handheld
         let spatial = AssistantLauncherLayout.spatial

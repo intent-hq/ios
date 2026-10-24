@@ -32,6 +32,17 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(assistant.isHittable)
         XCTAssertTrue(workspace.isHittable)
         XCTAssertLessThan(assistant.frame.minX, workspace.frame.minX)
+        let actions = ["assistant", "workspace", "connections", "appearance", "settings"]
+        let viewport = app.scrollViews["intent.menu.tiles"].frame.intersection(app.frame)
+        let contentWidth = viewport.width - 2 * max(0, assistant.frame.minX - viewport.minX)
+        let minimumRowWidth = CGFloat(actions.count) * 160 + CGFloat(actions.count - 1) * 8
+        if contentWidth >= minimumRowWidth {
+            for action in actions {
+                let tile = app.buttons["intent.menu.\(action)"]
+                XCTAssertTrue(viewport.insetBy(dx: -1, dy: -1).contains(tile.frame), "\(action) must fit without horizontal scrolling")
+                XCTAssertTrue(tile.isHittable)
+            }
+        }
         XCTAssertFalse(app.buttons["assistant.actions"].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Intent home action tiles"

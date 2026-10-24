@@ -43,10 +43,7 @@ struct HomeActionTiles: View {
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Layout.spacing) {
-                ForEach(Action.allCases.filter { action in
-                    (action != .workspace || allowsWorkspaceCreation) && (action != .assistant || allowsAssistant)
-                        && (action != .workspaces || showsWorkspaceList)
-                }, id: \.self) { action in
+                ForEach(actions, id: \.self) { action in
                     tile(action)
                 }
             }
@@ -62,6 +59,26 @@ struct HomeActionTiles: View {
         .accessibilityIdentifier("intent.menu.tiles")
     }
 
+    private var actions: [Action] {
+        Action.allCases.filter { action in
+            (action != .workspace || allowsWorkspaceCreation) && (action != .assistant || allowsAssistant)
+                && (action != .workspaces || showsWorkspaceList)
+        }
+    }
+
+    static func tileWidth(in width: CGFloat, actionCount: Int, accessibility: Bool) -> CGFloat {
+        if !accessibility, actionCount > 0 {
+            let count = CGFloat(actionCount)
+            let fittedWidth = (width - Layout.spacing * (count - 1)) / count
+            if fittedWidth >= Layout.minimumTileWidth {
+                return min(Layout.maximumTileWidth, fittedWidth)
+            }
+        }
+        let columns: CGFloat = accessibility ? 1 : 2
+        let contentWidth = min(width, Layout.maximumTileWidth * 2 + Layout.spacing)
+        return max(Layout.minimumTileWidth, (contentWidth - Layout.spacing * (columns - 1)) / columns)
+    }
+
     private func tile(_ action: Action) -> some View {
         Button { onSelect(action) } label: {
             VStack(alignment: .leading) {
@@ -74,9 +91,7 @@ struct HomeActionTiles: View {
             .padding(Layout.inset)
             .frame(maxWidth: .infinity, minHeight: max(Layout.minimumHeight, tileHeight), alignment: .leading)
             .containerRelativeFrame(.horizontal) { width, _ in
-                let columns: CGFloat = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-                let contentWidth = min(width, Layout.maximumTileWidth * 2 + Layout.spacing)
-                return max(Layout.minimumTileWidth, (contentWidth - Layout.spacing * (columns - 1)) / columns)
+                Self.tileWidth(in: width, actionCount: actions.count, accessibility: dynamicTypeSize.isAccessibilitySize)
             }
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
             .homeActionTileSurface(cornerRadius: Layout.cornerRadius, fill: Constants.WorkspaceList.controlSurface(for: colorScheme))
