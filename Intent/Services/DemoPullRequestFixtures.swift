@@ -62,7 +62,8 @@ enum DemoPullRequestFixtures {
             "user": ["login": pull.author],
             "updatedAt": DemoFixtures.iso(minutesAgo: pull.minutesAgo),
             "owner": owner,
-            "repo": pull.repo
+            "repo": pull.repo,
+            "headRef": "feature/pr-\(pull.number)"
         ]
     }
 }

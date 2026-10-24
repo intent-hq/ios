@@ -11,6 +11,7 @@ struct PullRequestListItem: Identifiable, Equatable {
     let status: WorkspacePrPill.Status
     let author: String?
     let updatedAt: String?
+    let headRef: String?
 
     /// Lowercased `owner/repo#number`, shared with workspace links.
     var id: String { Self.key(owner: owner, repo: repo, number: number) }
@@ -27,7 +28,8 @@ struct PullRequestListItem: Identifiable, Equatable {
         url: URL? = nil,
         status: WorkspacePrPill.Status = .open,
         author: String? = nil,
-        updatedAt: String? = nil
+        updatedAt: String? = nil,
+        headRef: String? = nil
     ) {
         self.owner = owner
         self.repo = repo
@@ -37,6 +39,7 @@ struct PullRequestListItem: Identifiable, Equatable {
         self.status = status
         self.author = author
         self.updatedAt = updatedAt
+        self.headRef = headRef
     }
 
     /// `owner`/`repo` fall back to the batch's first repository, as the
@@ -61,7 +64,8 @@ struct PullRequestListItem: Identifiable, Equatable {
             url: (wire["htmlUrl"] as? String).flatMap(URL.init(string:)),
             status: status,
             author: (wire["user"] as? [String: Any])?["login"] as? String,
-            updatedAt: wire["updatedAt"] as? String
+            updatedAt: wire["updatedAt"] as? String,
+            headRef: wire["headRef"] as? String
         )
     }
 

@@ -219,6 +219,11 @@ extension CreateWorkspaceView {
         return [defaultBranch] + branches.filter { $0 != defaultBranch }
     }
 
+    static func including(_ pinned: String?, in branches: [String]) -> [String] {
+        guard let pinned, !branches.contains(pinned) else { return branches }
+        return branches + [pinned]
+    }
+
     static func preselectedBranch(current: String?, branches: [String], defaultBranch: String?) -> String? {
         if let current, branches.contains(current) { return current }
         return branches.first { $0 == defaultBranch } ?? branches.first

@@ -26,6 +26,7 @@ struct WorkspaceListView: View {
     @AppStorage("pullRequests.filter") private var pullRequestFilter: PullRequestListStore.Filter = .all
     @State private var showsClosedPullRequests = false
     @State private var pullRequestSearchText = ""
+    @State private var creationPullRequest: PullRequestListItem?
     @FocusState private var searchFocused: Bool
     @ScaledMetric(relativeTo: .largeTitle) private var headingTracking: CGFloat = -1.2
     @ScaledMetric(relativeTo: .title) private var compactHeadingTracking: CGFloat = -0.56
@@ -39,7 +40,7 @@ struct WorkspaceListView: View {
 
     private var canSwitchConnections: Bool {
         guard case .workspaceList = coordinator.currentScreen else { return false }
-        return !showingConnections && !showingCreateWorkspace && pendingAction == nil && actionError == nil
+        return !showingConnections && !showingCreateWorkspace && creationPullRequest == nil && pendingAction == nil && actionError == nil
             && !isAgentHistoryOpen
     }
 
@@ -61,10 +62,17 @@ struct WorkspaceListView: View {
         .navigationTitle("Workspaces")
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
-            if shouldDismiss { showingCreateWorkspace = false }
+            if shouldDismiss {
+                showingCreateWorkspace = false
+                creationPullRequest = nil
+            }
         }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session, coordinator: coordinator)
+                .environment(coordinator)
+        }
+        .sheet(item: $creationPullRequest) { item in
+            CreateWorkspaceView(session: session, coordinator: coordinator, pullRequest: item)
                 .environment(coordinator)
         }
         .sheet(isPresented: $showingConnections) {
@@ -387,6 +395,12 @@ private extension WorkspaceListView {
             ) { workspaceId in
                 searchFocused = false
                 coordinator.onSelectWorkspace(workspaceId)
+            } onOpenAgent: { workspaceId in
+                searchFocused = false
+                coordinator.onOpenRecentWorkspaceAgent(workspaceId)
+            } onCreateWorkspace: { item in
+                searchFocused = false
+                if coordinator.canCreateWorkspace { creationPullRequest = item }
             }
         } else if viewModel.isLoading, viewModel.workspaces.isEmpty {
             ProgressView {

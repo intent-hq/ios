@@ -3,6 +3,7 @@ import SwiftUI
 enum WorkspaceSwipeTarget: Hashable {
     case assistant(String)
     case browser(String)
+    case pullRequest(String)
     case script(String)
     case terminal(String)
     case workspace(String)

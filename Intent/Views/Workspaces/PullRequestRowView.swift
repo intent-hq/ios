@@ -7,6 +7,9 @@ struct PullRequestRowView: View {
     let item: PullRequestListItem
     var showsRepository = true
     var linkedWorkspace: Workspace?
+    var iconHidden = false
+    var leadingSwipeProgress: CGFloat = 0
+    var onIconCenterChanged: (CGFloat) -> Void = { _ in }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .headline) private var titleTracking: CGFloat = -0.36
@@ -26,8 +29,12 @@ struct PullRequestRowView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(stateColor)
+                .foregroundStyle(Self.stateColor(item.status, colorScheme: colorScheme, contrast: contrast))
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + iconBaseline }
+                .opacity(iconHidden ? 0 : 1)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.frame(in: .named(item.id)).midY
+                } action: { onIconCenterChanged($0) }
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: Constants.WorkspaceRow.spaciousTitleSpacing) {
@@ -49,7 +56,9 @@ struct PullRequestRowView: View {
                 metadata
             }
         }
+        .offset(x: -(iconSize + Constants.WorkspaceRow.spaciousRowSpacing) * leadingSwipeProgress)
         .padding(.vertical, Constants.WorkspaceRow.spaciousPadding)
+        .coordinateSpace(name: item.id)
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityText)
@@ -82,12 +91,12 @@ struct PullRequestRowView: View {
         }
     }
 
-    private var stateColor: Color {
-        switch item.status {
+    static func stateColor(_ status: WorkspacePrPill.Status, colorScheme: ColorScheme, contrast: ColorSchemeContrast) -> Color {
+        switch status {
         case .open: Constants.Colors.WorkspaceStatus.prOpen
         case .merged: Constants.Colors.WorkspaceStatus.prMerged
         case .closed: Theme.destructive(for: colorScheme)
-        case .draft: secondary
+        case .draft: Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: contrast)
         }
     }
 

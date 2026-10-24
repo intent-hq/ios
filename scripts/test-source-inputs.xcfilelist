@@ -813,6 +813,7 @@ $(SRCROOT)/Intent/Views/Workspaces/ProviderModelStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestListContent.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestRowView.swift
+$(SRCROOT)/Intent/Views/Workspaces/PullRequestSwipeRow.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift

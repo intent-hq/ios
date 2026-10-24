@@ -70,6 +70,17 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             XCTAssertTrue(reviewOnly.exists)
             capture(app, named: "pull-requests-review-\(appearance)")
 
+            let start = reviewOnly.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 260, dy: 0)))
+            let source = app.buttons["creation.sourceCard"]
+            XCTAssertTrue(source.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(source.label.contains("nova-labs/gateway"))
+            XCTAssertTrue(source.label.contains("feature/pr-311"))
+            XCTAssertTrue((app.textViews["creation.prompt"].value as? String)?.contains("/gateway/pull/311") == true)
+            capture(app, named: "pull-requests-new-workspace-\(appearance)")
+            app.buttons["creation.close"].tap()
+            XCTAssertTrue(source.waitForNonExistence(timeout: Self.timeout))
+
             app.buttons["pullRequests.filter.All"].tap()
             app.buttons["workspaces.menu"].tap()
             app.buttons["workspaces.menu.content"].tap()

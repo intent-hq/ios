@@ -8,6 +8,9 @@ struct PullRequestListContent: View {
     let query: PullRequestListStore.Query
     let workspaces: [Workspace]
     let onOpenWorkspace: (String) -> Void
+    let onOpenAgent: (String) -> Void
+    let onCreateWorkspace: (PullRequestListItem) -> Void
+    @State private var revealedTarget: WorkspaceSwipeTarget?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.openURL) private var openURL
@@ -43,19 +46,19 @@ struct PullRequestListContent: View {
     }
 
     private func row(_ item: PullRequestListItem, linkedWorkspace: Workspace?, showsRepository: Bool) -> some View {
-        Button {
+        PullRequestSwipeRow(
+            item: item,
+            showsRepository: showsRepository,
+            linkedWorkspace: linkedWorkspace,
+            revealedTarget: $revealedTarget
+        ) {
             if let linkedWorkspace {
                 onOpenWorkspace(linkedWorkspace.id)
             } else if let url = item.url {
                 openURL(url)
             }
-        } label: {
-            PullRequestRowView(item: item, showsRepository: showsRepository, linkedWorkspace: linkedWorkspace)
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .padding(.horizontal, Constants.WorkspaceList.pageInset)
-        .overlay(alignment: .bottom) {
-            Divider().padding(.horizontal, Constants.WorkspaceList.pageInset)
+        } onSwipe: {
+            startWork(on: item, linkedWorkspace: linkedWorkspace)
         }
         .contextMenu {
             if let url = item.url {
@@ -64,13 +67,23 @@ struct PullRequestListContent: View {
             }
             if let linkedWorkspace {
                 Button("Open workspace", systemImage: "arrow.right.circle") { onOpenWorkspace(linkedWorkspace.id) }
+                Button("Open agent", systemImage: "bubble.left") { onOpenAgent(linkedWorkspace.id) }
+            } else {
+                Button("New workspace", systemImage: "plus") { onCreateWorkspace(item) }
             }
         }
         .visionListRowHitTarget()
         .onAppear {
             if item.id == store.items.last?.id { Task { await store.loadMore() } }
         }
-        .accessibilityIdentifier("pullRequests.row.\(item.id)")
+    }
+
+    private func startWork(on item: PullRequestListItem, linkedWorkspace: Workspace?) {
+        if let linkedWorkspace {
+            onOpenAgent(linkedWorkspace.id)
+        } else {
+            onCreateWorkspace(item)
+        }
     }
 
     @ViewBuilder private var placeholder: some View {

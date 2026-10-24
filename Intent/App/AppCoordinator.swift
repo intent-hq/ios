@@ -150,7 +150,11 @@ class AppCoordinator {
     }
 
     func makeWorkspaceCreationDraft() -> WorkspaceCreationDraft {
-        workspaceCreationDraft ?? WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
+        workspaceCreationDraft ?? makeFreshWorkspaceCreationDraft()
+    }
+
+    func makeFreshWorkspaceCreationDraft() -> WorkspaceCreationDraft {
+        WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
     }
 
     /// Temporary transport recovery keeps the draft while submission remains
