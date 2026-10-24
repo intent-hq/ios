@@ -11,16 +11,14 @@ import Observation
 @Observable final class PullRequestListStore {
     nonisolated enum Filter: String, CaseIterable {
         case all = "All"
-        case created = "Created"
+        case created = "Mine"
         case reviewRequested = "Review"
-        case assigned = "Assigned"
 
         var wireValue: String {
             switch self {
             case .all: "all"
             case .created: "created"
             case .reviewRequested: "review-requested"
-            case .assigned: "assigned"
             }
         }
     }

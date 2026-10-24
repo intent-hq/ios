@@ -27,13 +27,27 @@ struct PullRequestListStoreTests {
 
     @Test func linksWorkspacesByPullURLOrOwnRepository() {
         let byURL = Workspace(
-            id: "ws-url", title: "URL", branch: nil, baseRef: nil, status: nil, activity: nil, displayStatus: nil,
-            repositoryOwner: "acme", repositoryName: "app",
+            id: "ws-url",
+            title: "URL",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            repositoryOwner: "acme",
+            repositoryName: "app",
             pullRequests: [WorkspacePullRequest(number: 7, status: "Open", url: "https://github.com/Acme/Lib/pull/7")]
         )
         let byRepo = Workspace(
-            id: "ws-repo", title: "Repo", branch: nil, baseRef: nil, status: nil, activity: nil, displayStatus: nil,
-            repositoryOwner: "Acme", repositoryName: "App",
+            id: "ws-repo",
+            title: "Repo",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            repositoryOwner: "Acme",
+            repositoryName: "App",
             activePullRequest: WorkspacePullRequest(number: 9, status: "Open")
         )
         let links = PullRequestListItem.linkedWorkspaces([byURL, byRepo])
@@ -46,8 +60,15 @@ struct PullRequestListStoreTests {
         let pairs: [(String?, String)] = [("Acme", "App"), ("acme", "app"), ("acme", "lib"), (nil, "local")]
         let workspaces = pairs.enumerated().map { index, repo in
             Workspace(
-                id: "ws-\(index)", title: "", branch: nil, baseRef: nil, status: nil, activity: nil, displayStatus: nil,
-                repositoryOwner: repo.0, repositoryName: repo.1
+                id: "ws-\(index)",
+                title: "",
+                branch: nil,
+                baseRef: nil,
+                status: nil,
+                activity: nil,
+                displayStatus: nil,
+                repositoryOwner: repo.0,
+                repositoryName: repo.1
             )
         }
         #expect(PullRequestListRepository.scope(workspaces).map(\.name) == ["App", "lib"])

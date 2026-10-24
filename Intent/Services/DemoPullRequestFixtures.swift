@@ -24,10 +24,10 @@ enum DemoPullRequestFixtures {
         Pull(repo: "gateway", number: 311, title: "fix: back off websocket reconnects with jitter", author: "mona", minutesAgo: 48, reviewRequested: true),
         Pull(repo: "mobile", number: 157, title: "Dark mode tokens for settings screens", author: "hubot", minutesAgo: 190, draft: true, mine: true),
         Pull(repo: "billing", number: 904, title: "test: deflake payment webhook retries", author: "mona", minutesAgo: 340, reviewRequested: true),
-        Pull(repo: "console", number: 479, title: "chore: upgrade chart library to v5", author: "dependabot", minutesAgo: 1_500),
-        Pull(repo: "gateway", number: 305, title: "feat: per-tenant rate limit overrides", author: "octocat", minutesAgo: 4_300, mine: true),
-        Pull(repo: "console", number: 470, title: "fix: keep filters when paging the audit log", author: "hubot", minutesAgo: 2_900, state: "closed", merged: true),
-        Pull(repo: "billing", number: 899, title: "Prototype invoice PDF renderer", author: "octocat", minutesAgo: 7_200, state: "closed", mine: true)
+        Pull(repo: "console", number: 479, title: "chore: upgrade chart library to v5", author: "dependabot", minutesAgo: 25 * 60),
+        Pull(repo: "gateway", number: 305, title: "feat: per-tenant rate limit overrides", author: "octocat", minutesAgo: 72 * 60, mine: true),
+        Pull(repo: "console", number: 470, title: "fix: keep filters when paging the audit log", author: "hubot", minutesAgo: 48 * 60, state: "closed", merged: true),
+        Pull(repo: "billing", number: 899, title: "Prototype invoice PDF renderer", author: "octocat", minutesAgo: 120 * 60, state: "closed", mine: true)
     ]
     // swiftlint:enable no_magic_numbers
 
@@ -46,7 +46,6 @@ enum DemoPullRequestFixtures {
                 && (pull.state == "closed") == closed
                 && (filter != "created" || pull.mine)
                 && (filter != "review-requested" || pull.reviewRequested)
-                && (filter != "assigned" || pull.mine)
                 && (query.isEmpty || pull.title.lowercased().contains(query))
         }
         return ["pulls": rows.map(wire)]

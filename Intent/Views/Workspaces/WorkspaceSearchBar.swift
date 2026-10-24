@@ -44,8 +44,6 @@ struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: Vie
                 } label: {
                     Text(mode.rawValue)
                         .interFont(Constants.Typography.bodySEmphasized)
-                        .lineLimit(1)
-                        .minimumScaleFactor(WorkspaceSearchBarStyle.segmentMinimumScale)
                         .tracking(segmentTracking)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: controlHeight - segmentInset * 2)
@@ -76,7 +74,6 @@ struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: Vie
 
 private enum WorkspaceSearchBarStyle {
     static let selectionAnimationDuration = 0.35
-    static let segmentMinimumScale: CGFloat = 0.75
 }
 
 struct WorkspaceSearchButton: View {
