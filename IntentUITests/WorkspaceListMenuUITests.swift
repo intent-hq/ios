@@ -88,6 +88,9 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             let prompt = app.textViews["creation.prompt"].value as? String ?? ""
             XCTAssertTrue(prompt.contains("/gateway/pull/311"))
             capture(app, named: "pull-requests-new-workspace-\(appearance)")
+            app.buttons["creation.back"].tap()
+            XCTAssertTrue(app.buttons["creation.branch.feature/pr-311"].waitForExistence(timeout: Self.timeout))
+            app.buttons["creation.branchBack"].tap()
             app.buttons["creation.close"].tap()
             XCTAssertTrue(source.waitForNonExistence(timeout: Self.timeout))
 
