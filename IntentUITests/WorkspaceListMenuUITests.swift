@@ -78,8 +78,9 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             XCTAssertTrue(reviewOnly.exists)
             capture(app, named: "pull-requests-review-\(appearance)")
 
-            let start = reviewOnly.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
-            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 260, dy: 0)))
+            // "New workspace" is a wide pill; the swipe must travel past it.
+            let start = reviewOnly.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 320, dy: 0)))
             let source = app.buttons["creation.sourceCard"]
             XCTAssertTrue(source.waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(source.label.contains("nova-labs/gateway"))

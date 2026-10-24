@@ -24,6 +24,7 @@ struct PullRequestRowView: View {
     var body: some View {
         // Sits the icon's centre on the title's first line, like the status icon.
         let iconBaseline = iconSize * Self.iconBaselineRatio
+        let rowSpace = item.id
         HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.spaciousRowSpacing) {
             Image(WorkspaceRowView.pillImage(for: item.status))
                 .resizable()
@@ -33,7 +34,7 @@ struct PullRequestRowView: View {
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + iconBaseline }
                 .opacity(iconHidden ? 0 : 1)
                 .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.frame(in: .named(item.id)).midY
+                    proxy.frame(in: .named(rowSpace)).midY
                 } action: { onIconCenterChanged($0) }
                 .accessibilityHidden(true)
 
