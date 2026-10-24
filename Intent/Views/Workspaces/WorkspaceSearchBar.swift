@@ -2,7 +2,6 @@ import SwiftUI
 
 struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: View
     where Mode.RawValue == String, Mode.AllCases: RandomAccessCollection {
-
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var viewMode: Mode
@@ -45,6 +44,8 @@ struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: Vie
                 } label: {
                     Text(mode.rawValue)
                         .interFont(Constants.Typography.bodySEmphasized)
+                        .lineLimit(1)
+                        .minimumScaleFactor(WorkspaceSearchBarStyle.segmentMinimumScale)
                         .tracking(segmentTracking)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: controlHeight - segmentInset * 2)
@@ -75,6 +76,7 @@ struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: Vie
 
 private enum WorkspaceSearchBarStyle {
     static let selectionAnimationDuration = 0.35
+    static let segmentMinimumScale: CGFloat = 0.75
 }
 
 struct WorkspaceSearchButton: View {

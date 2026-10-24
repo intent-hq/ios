@@ -61,8 +61,7 @@ struct PullRequestRowView: View {
                 .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(secondary)
                 .lineLimit(1)
-                .truncationMode(.middle)
-                .layoutPriority(-1)
+                .fixedSize()
             if let author = item.author {
                 RepoOwnerAvatarView(owner: author, size: avatarSize, fallbackSymbol: "person.fill", cornerRadius: avatarSize / 2)
                     .accessibilityHidden(true)
@@ -72,10 +71,12 @@ struct PullRequestRowView: View {
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(secondary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                     .padding(.horizontal, Constants.WorkspaceRow.outlinedPillHorizontalPadding)
                     .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
                     .frame(minHeight: Constants.WorkspaceRow.outlinedPillMinimumHeight)
                     .background(Capsule().fill(Constants.WorkspaceList.controlSurface(for: colorScheme)))
+                    .layoutPriority(-1)
                     .accessibilityIdentifier("pullRequests.row.workspace")
             }
         }

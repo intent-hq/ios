@@ -12,7 +12,7 @@ struct WorkspaceControlGazeTests {
         let source = try source("Intent/Views/Workspaces/WorkspaceSearchBar.swift")
         let switcher = try #require(source.components(separatedBy: "private var viewModeSwitcher: some View {").last)
             .components(separatedBy: "struct WorkspaceSearchButton:")[0]
-        #expect(switcher.contains("ForEach(ViewMode.allCases"))
+        #expect(switcher.contains("ForEach(Mode.allCases"))
         #expect(switcher.contains(".visionWorkspaceControlHover(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius)"))
         #expect(source.contains("visionWorkspaceHover: true"))
         #expect(source.contains("isEnabled: visionWorkspaceHover"))

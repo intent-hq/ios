@@ -18,6 +18,7 @@ enum DemoPullRequestFixtures {
 
     private static let owner = "nova-labs"
 
+    // swiftlint:disable no_magic_numbers
     private static let pulls: [Pull] = [
         Pull(repo: "console", number: 482, title: "feat: usage analytics dashboard with CSV export", author: "octocat", minutesAgo: 25, mine: true),
         Pull(repo: "gateway", number: 311, title: "fix: back off websocket reconnects with jitter", author: "mona", minutesAgo: 48, reviewRequested: true),
@@ -28,6 +29,7 @@ enum DemoPullRequestFixtures {
         Pull(repo: "console", number: 470, title: "fix: keep filters when paging the audit log", author: "hubot", minutesAgo: 2_900, state: "closed", merged: true),
         Pull(repo: "billing", number: 899, title: "Prototype invoice PDF renderer", author: "octocat", minutesAgo: 7_200, state: "closed", mine: true)
     ]
+    // swiftlint:enable no_magic_numbers
 
     static func response(for method: String, params: [String: Any]) -> Any? {
         guard method == "github.pulls.search" else { return nil }
