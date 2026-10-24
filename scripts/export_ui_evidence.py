@@ -307,6 +307,11 @@ CAPTURES = {
     "WorkspaceListMenuUITests": {
         "testEmptyWorkspaceButtonOpensCreationAndReturns": ("empty-workspaces-light", "empty-workspaces-dark"),
         "testNewWorkspaceMenuOpensCreationAndReturns": ("new-workspace-menu-light", "new-workspace-menu-dark"),
+        "testPullRequestsListSwitchesFromMenuInBothThemes": tuple(
+            f"pull-requests{state}-{appearance}"
+            for appearance in ("light", "dark")
+            for state in ("", "-review")
+        ),
         "testRecentAgentsOpensAndClosesExistingDrawer": (
             "workspace-list-menu", "workspace-menu-recent-agents",
         ),

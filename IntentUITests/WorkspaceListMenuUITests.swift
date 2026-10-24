@@ -52,6 +52,34 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     }
 
     @MainActor
+    func testPullRequestsListSwitchesFromMenuInBothThemes() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "The iPad sidebar has no pull requests mode yet")
+        for appearance in ["light", "dark"] {
+            let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
+            let linked = app.buttons["pullRequests.row.nova-labs/console#482"]
+            let reviewOnly = app.buttons["pullRequests.row.nova-labs/gateway#311"]
+            app.buttons["workspaces.menu"].tap()
+            app.buttons["workspaces.menu.content"].tap()
+            XCTAssertTrue(linked.waitForExistence(timeout: Self.timeout))
+            XCTAssertEqual(app.staticTexts["workspaces.title"].label, "Pull requests")
+            XCTAssertTrue(linked.label.contains("Workspace Add usage analytics dashboard"))
+            capture(app, named: "pull-requests-\(appearance)")
+
+            app.buttons["pullRequests.filter.Review"].tap()
+            XCTAssertTrue(linked.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(reviewOnly.exists)
+            capture(app, named: "pull-requests-review-\(appearance)")
+
+            app.buttons["pullRequests.filter.All"].tap()
+            app.buttons["workspaces.menu"].tap()
+            app.buttons["workspaces.menu.content"].tap()
+            XCTAssertTrue(app.staticTexts["Add usage analytics dashboard"].waitForExistence(timeout: Self.timeout))
+            XCTAssertFalse(linked.exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
     func testRecentAgentsOpensAndClosesExistingDrawer() {
         let app = launchWorkspaces()
         app.buttons["workspaces.menu"].tap()
