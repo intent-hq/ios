@@ -2,7 +2,6 @@ import SwiftUI
 
 struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: View
     where Mode.RawValue == String, Mode.AllCases: RandomAccessCollection {
-    private static var selectionAnimationDuration: Double { 0.35 }
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -68,10 +67,14 @@ struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: Vie
         }
         .padding(segmentInset)
         .background { if !isSidebar { WorkspaceSearchSurface() } }
-        .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: viewMode)
+        .animation(reduceMotion ? nil : .snappy(duration: WorkspaceSearchBarStyle.selectionAnimationDuration), value: viewMode)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityTitle)
     }
+}
+
+private enum WorkspaceSearchBarStyle {
+    static let selectionAnimationDuration = 0.35
 }
 
 struct WorkspaceSearchButton: View {

@@ -208,55 +208,6 @@ struct WorkspaceListView: View {
         .modifier(WorkspaceListDuoLeadingInset())
     }
 
-    @ViewBuilder private var workspaceContent: some View {
-        if showsPullRequests {
-            PullRequestListContent(
-                store: session.pullRequestListStore,
-                query: pullRequestQuery,
-                workspaces: viewModel.workspaces
-            ) { workspaceId in
-                searchFocused = false
-                coordinator.onSelectWorkspace(workspaceId)
-            }
-        } else if viewModel.isLoading, viewModel.workspaces.isEmpty {
-            ProgressView {
-                Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
-            }
-            .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
-        } else if !viewModel.filteredWorkspaces.isEmpty {
-            workspaceSections
-        }
-    }
-
-    @ViewBuilder
-    private var workspaceSections: some View {
-        switch viewModel.viewMode {
-        case .recent:
-            if !isSearching {
-                Color.clear
-                    .frame(height: Constants.WorkspaceList.recentTopSpacing)
-                    .accessibilityHidden(true)
-            }
-            workspaceRows(viewModel.filteredWorkspaces)
-        case .repo:
-            let groups = viewModel.groupedByRepo.map { repoName, workspaces in
-                (id: repoName, heading: groupHeading(repoName), rows: workspaceRows(workspaces, showRepo: false))
-            }
-            ForEach(groups, id: \.id) { @Sendable group in
-                group.heading
-                group.rows
-            }
-        case .status:
-            let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
-                (id: statusLabel, heading: groupHeading(statusLabel), rows: workspaceRows(workspaces, usesVisionHitTarget: false))
-            }
-            ForEach(groups, id: \.id) { @Sendable group in
-                group.heading
-                group.rows
-            }
-        }
-    }
-
     private func workspaceRows(
         _ workspaces: [Workspace],
         showRepo: Bool = true,
@@ -422,6 +373,57 @@ private extension WorkspaceListView {
             )
         } else {
             WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
+        }
+    }
+}
+
+private extension WorkspaceListView {
+    @ViewBuilder var workspaceContent: some View {
+        if showsPullRequests {
+            PullRequestListContent(
+                store: session.pullRequestListStore,
+                query: pullRequestQuery,
+                workspaces: viewModel.workspaces
+            ) { workspaceId in
+                searchFocused = false
+                coordinator.onSelectWorkspace(workspaceId)
+            }
+        } else if viewModel.isLoading, viewModel.workspaces.isEmpty {
+            ProgressView {
+                Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+            }
+            .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
+        } else if !viewModel.filteredWorkspaces.isEmpty {
+            workspaceSections
+        }
+    }
+
+    @ViewBuilder
+    var workspaceSections: some View {
+        switch viewModel.viewMode {
+        case .recent:
+            if !isSearching {
+                Color.clear
+                    .frame(height: Constants.WorkspaceList.recentTopSpacing)
+                    .accessibilityHidden(true)
+            }
+            workspaceRows(viewModel.filteredWorkspaces)
+        case .repo:
+            let groups = viewModel.groupedByRepo.map { repoName, workspaces in
+                (id: repoName, heading: groupHeading(repoName), rows: workspaceRows(workspaces, showRepo: false))
+            }
+            ForEach(groups, id: \.id) { @Sendable group in
+                group.heading
+                group.rows
+            }
+        case .status:
+            let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
+                (id: statusLabel, heading: groupHeading(statusLabel), rows: workspaceRows(workspaces, usesVisionHitTarget: false))
+            }
+            ForEach(groups, id: \.id) { @Sendable group in
+                group.heading
+                group.rows
+            }
         }
     }
 }

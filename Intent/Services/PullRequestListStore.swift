@@ -115,8 +115,8 @@ import Observation
     }
 
     static func batches(_ repositories: [PullRequestListRepository]) -> [[PullRequestListRepository]] {
-        stride(from: 0, to: repositories.count, by: batchSize).map {
-            Array(repositories[$0..<min($0 + batchSize, repositories.count)])
+        stride(from: 0, to: repositories.count, by: batchSize).map { start in
+            Array(repositories[start..<min(start + batchSize, repositories.count)])
         }
     }
 

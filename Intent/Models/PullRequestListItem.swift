@@ -80,11 +80,19 @@ struct PullRequestListItem: Identifiable, Equatable {
         return links
     }
 
+    /// `/{owner}/{repo}/pull/{number}` path component indices.
+    private enum PullPath {
+        static let owner = 0
+        static let repo = 1
+        static let kind = 2
+        static let number = 3
+    }
+
     private static func linkKey(_ pull: WorkspacePullRequest, workspace: Workspace) -> String? {
         if let url = pull.url.flatMap(URL.init(string:)), url.host()?.lowercased() == "github.com" {
             let parts = url.pathComponents.filter { $0 != "/" }
-            if parts.count >= 4, parts[2] == "pull", let number = Int(parts[3]) {
-                return key(owner: parts[0], repo: parts[1], number: number)
+            if parts.count > PullPath.number, parts[PullPath.kind] == "pull", let number = Int(parts[PullPath.number]) {
+                return key(owner: parts[PullPath.owner], repo: parts[PullPath.repo], number: number)
             }
         }
         guard let owner = workspace.repositoryOwner, let repo = workspace.repositoryName,

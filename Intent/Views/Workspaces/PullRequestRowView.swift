@@ -12,19 +12,22 @@ struct PullRequestRowView: View {
     @ScaledMetric(relativeTo: .headline) private var titleTracking: CGFloat = -0.36
     @ScaledMetric(relativeTo: .caption) private var avatarSize: CGFloat = 16
     @ScaledMetric(relativeTo: .headline) private var iconSize = Constants.WorkspaceRow.statusIconSize
+    private static let iconBaselineRatio: CGFloat = 0.3
 
     private var secondary: Color {
         Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: contrast)
     }
 
     var body: some View {
+        // Sits the icon's centre on the title's first line, like the status icon.
+        let iconBaseline = iconSize * Self.iconBaselineRatio
         HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.spaciousRowSpacing) {
             Image(WorkspaceRowView.pillImage(for: item.status))
                 .resizable()
                 .scaledToFit()
                 .frame(width: iconSize, height: iconSize)
                 .foregroundStyle(stateColor)
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + iconSize * 0.3 }
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + iconBaseline }
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: Constants.WorkspaceRow.spaciousTitleSpacing) {

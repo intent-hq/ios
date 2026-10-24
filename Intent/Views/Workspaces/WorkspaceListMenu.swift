@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Which list the workspace page shows; switched from its overflow menu.
 nonisolated enum WorkspaceListContentKind: String {
-    case workspaces
     case pullRequests
+    case workspaces
 }
 
 struct WorkspaceListMenu: View {
@@ -44,17 +44,7 @@ struct WorkspaceListMenu: View {
             }
             .accessibilityIdentifier("workspaces.menu.recentConnections")
             if showsPullRequests, let showsClosedPullRequests {
-                Button {
-                    showsClosedPullRequests.wrappedValue.toggle()
-                } label: {
-                    Label {
-                        Text(showsClosedPullRequests.wrappedValue ? "Hide closed" : "Show closed")
-                            .interFont(Constants.Typography.bodyS)
-                    } icon: {
-                        Image(.pullRequestClosed)
-                    }
-                }
-                .accessibilityIdentifier("workspaces.menu.closedPullRequests")
+                closedToggle(showsClosedPullRequests)
             } else {
                 archivedToggle
             }
@@ -80,6 +70,20 @@ struct WorkspaceListMenu: View {
         }
         .disabled(!canCreateWorkspace)
         .accessibilityIdentifier("workspaces.menu.create")
+    }
+
+    private func closedToggle(_ showsClosed: Binding<Bool>) -> some View {
+        Button {
+            showsClosed.wrappedValue.toggle()
+        } label: {
+            Label {
+                Text(showsClosed.wrappedValue ? "Hide closed" : "Show closed")
+                    .interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(.pullRequestClosed)
+            }
+        }
+        .accessibilityIdentifier("workspaces.menu.closedPullRequests")
     }
 
     private var archivedToggle: some View {
