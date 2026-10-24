@@ -3,13 +3,14 @@ import SwiftUI
 /// A pull request row with the workspace list's leading swipe: the state
 /// icon grows into "Open agent" when a workspace tracks the pull request,
 /// otherwise "New workspace", and a completed swipe performs it.
-struct PullRequestSwipeRow: View {
+struct PullRequestSwipeRow<MenuItems: View>: View {
     let item: PullRequestListItem
     let showsRepository: Bool
     let linkedWorkspace: Workspace?
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     let onSelect: () -> Void
     let onSwipe: () -> Void
+    @ViewBuilder let menuItems: () -> MenuItems
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .headline) private var iconSize = Constants.WorkspaceRow.statusIconSize
@@ -51,6 +52,7 @@ struct PullRequestSwipeRow: View {
                     ) { iconCenter = $0 }
                 }
                 .buttonStyle(IntentContentButtonStyle())
+                .contextMenu { menuItems() }
                 .accessibilityIdentifier("pullRequests.row.\(item.id)")
             },
             actions: { EmptyView() }
@@ -70,6 +72,7 @@ struct PullRequestSwipeRow: View {
                     .scaledToFit()
                     .frame(width: iconSize, height: iconSize)
                     .foregroundStyle(PullRequestRowView.stateColor(item.status, colorScheme: colorScheme, contrast: contrast))
+                    .accessibilityHidden(true)
             }
             .offset(
                 x: inset + min(0, swipeOffset),

@@ -379,8 +379,7 @@ extension DemoFixtures {
             ?? DemoTerminalFixtures.response(for: method, params: params)
             ?? DemoBrowserFixtures.response(for: method, params: params) { return response }
         if let changesResponse = DemoChangesFixtures.response(for: method, params: params) { return changesResponse }
-        if let response = DemoFilesFixtures.response(for: method, params: params)
-            ?? DemoPullRequestFixtures.response(for: method, params: params) { return response }
+        if let response = DemoFilesFixtures.response(for: method, params: params) ?? DemoPullRequestFixtures.response(for: method, params: params) { return response }
         return $snapshotTimestampAnchor.withValue(snapshotAnchor) {
             workspaceAndNoteResponse(for: method, params: params)
         }

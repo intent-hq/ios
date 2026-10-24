@@ -157,6 +157,13 @@ class AppCoordinator {
         WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
     }
 
+    /// A fresh prefilled draft; the saved ordinary draft stays untouched.
+    func makeWorkspaceCreationDraft(for pullRequest: PullRequestListItem) -> WorkspaceCreationDraft {
+        var draft = makeFreshWorkspaceCreationDraft()
+        draft.prefill(pullRequest: pullRequest)
+        return draft
+    }
+
     /// Temporary transport recovery keeps the draft while submission remains
     /// gated. An authority invalidation, demotion, or final disconnect closes it.
     var shouldDismissWorkspaceCreation: Bool {

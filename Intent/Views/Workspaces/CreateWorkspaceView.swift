@@ -30,18 +30,10 @@ struct CreateWorkspaceView: View {
     @State private var catalogConsumer = UUID()
     @State private var catalogIsVisible = true
 
-    /// A pull request opens a fresh prefilled draft and leaves the saved
-    /// draft for an ordinary New Workspace untouched.
     init(session: BackendSession, coordinator: AppCoordinator, pullRequest: PullRequestListItem? = nil) {
         self.session = session
         persistsDraft = pullRequest == nil
-        if let pullRequest {
-            var draft = coordinator.makeFreshWorkspaceCreationDraft()
-            draft.prefill(pullRequest: pullRequest)
-            _form = State(initialValue: draft)
-        } else {
-            _form = State(initialValue: coordinator.makeWorkspaceCreationDraft())
-        }
+        _form = State(initialValue: pullRequest.map(coordinator.makeWorkspaceCreationDraft(for:)) ?? coordinator.makeWorkspaceCreationDraft())
     }
 
     /// The session-owned repo cache: it outlives this sheet so a reopen

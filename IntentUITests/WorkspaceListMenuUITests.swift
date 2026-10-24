@@ -54,6 +54,14 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     @MainActor
     func testPullRequestsListSwitchesFromMenuInBothThemes() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "The iPad sidebar has no pull requests mode yet")
+        // The list choice persists; never leave later tests on pull requests.
+        addTeardownBlock { @MainActor [self] () async in
+            let app = launchWorkspaces()
+            if app.staticTexts["workspaces.title"].label == "Pull requests" {
+                app.buttons["workspaces.menu"].tap()
+                app.buttons["workspaces.menu.content"].tap()
+            }
+        }
         for appearance in ["light", "dark"] {
             let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
             let linked = app.buttons["pullRequests.row.nova-labs/console#482"]
@@ -76,7 +84,8 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             XCTAssertTrue(source.waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(source.label.contains("nova-labs/gateway"))
             XCTAssertTrue(source.label.contains("feature/pr-311"))
-            XCTAssertTrue((app.textViews["creation.prompt"].value as? String)?.contains("/gateway/pull/311") == true)
+            let prompt = app.textViews["creation.prompt"].value as? String ?? ""
+            XCTAssertTrue(prompt.contains("/gateway/pull/311"))
             capture(app, named: "pull-requests-new-workspace-\(appearance)")
             app.buttons["creation.close"].tap()
             XCTAssertTrue(source.waitForNonExistence(timeout: Self.timeout))

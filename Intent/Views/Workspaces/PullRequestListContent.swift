@@ -59,8 +59,7 @@ struct PullRequestListContent: View {
             }
         } onSwipe: {
             startWork(on: item, linkedWorkspace: linkedWorkspace)
-        }
-        .contextMenu {
+        } menuItems: {
             if let url = item.url {
                 Button("Open on GitHub", systemImage: "safari") { openURL(url) }
                 ShareLink(item: url)
