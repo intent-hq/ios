@@ -95,6 +95,7 @@ final class BackendSession {
     let hooksStore: WorkspaceStatusStore<BackgroundHook>
     let scriptMonitorsStore: WorkspaceScriptMonitorsStore
     let prMonitorsStore: WorkspacePrMonitorsStore
+    let pullRequestListStore: PullRequestListStore
     let mobileTerminalStore: MobileTerminalStore
     let browserStore: WorkspaceBrowserStore
     let attachmentUploadService: AttachmentUploadService
@@ -132,6 +133,7 @@ final class BackendSession {
         self.hooksStore = BackgroundHookStore.makeWorkspaceStore(connection: connection)
         self.prMonitorsStore = prMonitorsStore
         self.scriptMonitorsStore = WorkspaceScriptMonitorsStore(connection: connection)
+        pullRequestListStore = PullRequestListStore(connection: connection)
         mobileTerminalStore = MobileTerminalStore(
             connection: connection,
             persistence: MobileTerminalPersistence(backendID: backendID)
@@ -195,6 +197,7 @@ final class BackendSession {
         creationOptionsStore.reset()
         hooksStore.reset()
         prMonitorsStore.reset()
+        pullRequestListStore.reset()
         scriptMonitorsStore.reset()
         conversations.reset()
         agentDetails.reset()

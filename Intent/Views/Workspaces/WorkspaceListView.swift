@@ -22,6 +22,10 @@ struct WorkspaceListView: View {
     @State private var isSearching = false
     @State private var isFilterPinned = false
     @State private var pageHeaderHeight: CGFloat = 0
+    @AppStorage("workspaceList.content") private var listContent: WorkspaceListContentKind = .workspaces
+    @AppStorage("pullRequests.filter") private var pullRequestFilter: PullRequestListStore.Filter = .all
+    @State private var showsClosedPullRequests = false
+    @State private var pullRequestSearchText = ""
     @FocusState private var searchFocused: Bool
     @ScaledMetric(relativeTo: .largeTitle) private var headingTracking: CGFloat = -1.2
     @ScaledMetric(relativeTo: .title) private var compactHeadingTracking: CGFloat = -0.56
@@ -99,12 +103,7 @@ struct WorkspaceListView: View {
                     workspaceContent
                 } header: {
                     if !isSearching {
-                        WorkspaceSearchBar(
-                            viewMode: $viewModel.viewMode,
-                            isSearching: $isSearching,
-                            horizontalPadding: Constants.WorkspaceList.pageInset,
-                            isCompact: isFilterPinned
-                        )
+                        filterBar
                         .modifier(WorkspaceListDuoLeadingInset())
                         .background(Constants.WorkspaceList.canvas(for: colorScheme))
                         .transition(.opacity)
@@ -131,15 +130,28 @@ struct WorkspaceListView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
-                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
+                searchInput
                     .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
         .refreshable {
-            await workspaceStore.fetchAll()
+            if showsPullRequests {
+                await session.pullRequestListStore.load(pullRequestQuery)
+            } else {
+                await workspaceStore.fetchAll()
+            }
+        }
+        .task(id: showsPullRequests ? pullRequestQuery : nil) {
+            guard showsPullRequests else { return }
+            await PullRequestListContent.sync(session.pullRequestListStore, to: pullRequestQuery)
+        }
+        .onChange(of: listContent) { _, _ in
+            searchFocused = false
+            isSearching = false
+            revealedSwipeTarget = nil
         }
         .overlay {
-            if viewModel.filteredWorkspaces.isEmpty,
+            if !showsPullRequests, viewModel.filteredWorkspaces.isEmpty,
                !(viewModel.isLoading && viewModel.workspaces.isEmpty) {
                 if viewModel.hasSearchQuery {
                     WorkspaceSearchEmptyState()
@@ -169,7 +181,7 @@ struct WorkspaceListView: View {
         let font = CTFontCreateWithName(face.rawValue as CFString, isSearching ? compactHeadingSize : headingSize, nil)
         return HStack {
             WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
-                Text("Workspaces")
+                Text(showsPullRequests ? "Pull requests" : "Workspaces")
                     .interFont(style)
                     .tracking(isSearching ? compactHeadingTracking : headingTracking)
                     .fixedSize(horizontal: false, vertical: true)
@@ -197,7 +209,16 @@ struct WorkspaceListView: View {
     }
 
     @ViewBuilder private var workspaceContent: some View {
-        if viewModel.isLoading, viewModel.workspaces.isEmpty {
+        if showsPullRequests {
+            PullRequestListContent(
+                store: session.pullRequestListStore,
+                query: pullRequestQuery,
+                workspaces: viewModel.workspaces
+            ) { workspaceId in
+                searchFocused = false
+                coordinator.onSelectWorkspace(workspaceId)
+            }
+        } else if viewModel.isLoading, viewModel.workspaces.isEmpty {
             ProgressView {
                 Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
             }
@@ -341,12 +362,66 @@ private extension WorkspaceListView {
     }
 
     var pageMenu: some View {
-        WorkspaceListMenu(showArchived: $viewModel.showArchived, canCreateWorkspace: coordinator.canCreateWorkspace, onCreateWorkspace: createWorkspace) {
-            prepareConnectionSwitcher()
-            openAgentHistory()
-        } onRecentConnections: {
-            prepareConnectionSwitcher()
-            showingConnectionSwitcher = true
+        WorkspaceListMenu(
+            showArchived: $viewModel.showArchived,
+            canCreateWorkspace: coordinator.canCreateWorkspace,
+            onCreateWorkspace: createWorkspace,
+            onRecentAgents: {
+                prepareConnectionSwitcher()
+                openAgentHistory()
+            },
+            onRecentConnections: {
+                prepareConnectionSwitcher()
+                showingConnectionSwitcher = true
+            },
+            content: $listContent,
+            showsClosedPullRequests: $showsClosedPullRequests
+        )
+    }
+
+    var showsPullRequests: Bool { listContent == .pullRequests }
+
+    var pullRequestQuery: PullRequestListStore.Query {
+        PullRequestListStore.Query(
+            repositories: PullRequestListRepository.scope(viewModel.workspaces),
+            filter: pullRequestFilter,
+            showsClosed: showsClosedPullRequests,
+            text: pullRequestSearchText
+        )
+    }
+
+    @ViewBuilder var filterBar: some View {
+        if showsPullRequests {
+            WorkspaceSearchBar(
+                viewMode: $pullRequestFilter,
+                isSearching: $isSearching,
+                horizontalPadding: Constants.WorkspaceList.pageInset,
+                isCompact: isFilterPinned,
+                identifierPrefix: "pullRequests.filter",
+                accessibilityTitle: "Pull request filter",
+                searchLabel: "Search pull requests"
+            )
+        } else {
+            WorkspaceSearchBar(
+                viewMode: $viewModel.viewMode,
+                isSearching: $isSearching,
+                horizontalPadding: Constants.WorkspaceList.pageInset,
+                isCompact: isFilterPinned
+            )
+        }
+    }
+
+    @ViewBuilder var searchInput: some View {
+        if showsPullRequests {
+            WorkspaceSearchInput(
+                text: $pullRequestSearchText,
+                isSearching: $isSearching,
+                isFocused: $searchFocused,
+                placeholder: "Search pull requests",
+                identifierPrefix: "pullRequests.search"
+            )
+        } else {
+            WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
         }
     }
 }
