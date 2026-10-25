@@ -175,6 +175,14 @@ CAPTURES = {
             "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
         ),
     },
+    "ConversationTranscriptHistoryUITests": {
+        "testFailedHistoryLoadCanBeRetriedWithoutLeavingConversation": (
+            "history-retry-older-message-visible",
+        ),
+        "testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop": (
+            "history-before-chained-prepend", "history-after-chained-prepend",
+        ),
+    },
     "ConversationToolActivityUITests": {
         "testIPadClaudeToolTitlesKeepExpandedDetails": (
             "iPad Claude tools collapsed light", "iPad Claude tools expanded light",

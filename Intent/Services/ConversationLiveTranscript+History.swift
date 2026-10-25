@@ -1,7 +1,7 @@
 import Foundation
 
 extension ConversationLiveTranscript {
-    func loadOlderMessages(using commands: ConversationCommands) async {
+    func loadOlderMessages(using commands: ConversationCommands, beforePrepend: (() -> Void)? = nil) async {
         guard !Task.isCancelled, !isLoadingOlderMessages,
               let agentId, let cursor = olderMessagesCursor else { return }
         let generation = olderHistoryGeneration
@@ -28,6 +28,9 @@ extension ConversationLiveTranscript {
             // The daemon serves each page oldest-first. Existing live rows win
             // over page duplicates, including any newer content or hydration.
             let older = page.messages.filter { residentIds.insert($0.id).inserted }
+            // Capture the current reading intent before publishing changes that
+            // can replace the measured row frames. No suspension separates them.
+            if !older.isEmpty { beforePrepend?() }
             messages.insert(contentsOf: older, at: 0)
             remergeHydratedBlocks()
             olderMessagesCursor = page.nextToken
