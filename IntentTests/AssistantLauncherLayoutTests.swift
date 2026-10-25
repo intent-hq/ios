@@ -17,14 +17,28 @@ struct AssistantLauncherLayoutTests {
             #expect(tile * count + (count - 1) * spacing <= width + 0.001)
         }
         #expect(HomeActionTiles.tileWidth(in: minimumRowWidth, actionCount: actionCount, accessibility: false) == minimumWidth)
-        #expect(HomeActionTiles.tileWidth(in: minimumRowWidth - 1, actionCount: actionCount, accessibility: false) == 192)
+        #expect(HomeActionTiles.columnCount(in: minimumRowWidth - 1, actionCount: actionCount, accessibility: false) == actionCount - 1)
     }
 
-    @Test func menuKeepsScrollingCardsOnNarrowScreensAndWithAccessibilityText() {
+    @Test func menuWrapsCardsOnNarrowScreensAndUsesOneColumnForAccessibilityText() {
         #expect(HomeActionTiles.tileWidth(in: 352, actionCount: 5, accessibility: false) == 172)
-        #expect(HomeActionTiles.tileWidth(in: 320, actionCount: 5, accessibility: false) == 160)
+        #expect(HomeActionTiles.tileWidth(in: 320, actionCount: 5, accessibility: false) == 156)
         #expect(HomeActionTiles.tileWidth(in: 352, actionCount: 5, accessibility: true) == 352)
-        #expect(HomeActionTiles.tileWidth(in: 900, actionCount: 5, accessibility: true) == 392)
+        #expect(HomeActionTiles.tileWidth(in: 900, actionCount: 5, accessibility: true) == 900)
+        #expect(HomeActionTiles.columnCount(in: 620, actionCount: 5, accessibility: false) == 3)
+        #expect(HomeActionTiles.columnCount(in: 352, actionCount: 5, accessibility: false) == 2)
+    }
+
+    @Test(arguments: [1, 3, 4, 5, 6])
+    func menuColumnsNeverOverflowTheirContainer(actionCount: Int) {
+        for accessibility in [false, true] {
+            for width in stride(from: CGFloat(0), through: 1400, by: 1) {
+                let columns = HomeActionTiles.columnCount(in: width, actionCount: actionCount, accessibility: accessibility)
+                let tile = HomeActionTiles.tileWidth(in: width, actionCount: actionCount, accessibility: accessibility)
+                #expect(columns >= 1 && columns <= actionCount)
+                #expect(tile * CGFloat(columns) + CGFloat(columns - 1) * 8 <= width + 0.001)
+            }
+        }
     }
 
     @Test func spatialControlsAreModestlyLargerAndFartherFromResizeCorner() {

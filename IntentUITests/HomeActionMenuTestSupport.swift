@@ -1,5 +1,39 @@
 import XCTest
 
+extension HomeActionMenuUITests {
+    @MainActor
+    func testMenuCardsFitInPortraitAndLandscape() {
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for theme in ["light", "dark"] {
+            XCUIDevice.shared.orientation = .portrait
+            let app = XCUIApplication()
+            app.launchArguments = ["--demo-data", "-appThemePreference", theme]
+            app.launch()
+            let launcher = app.buttons["intent.menu.open"]
+            XCTAssertTrue(launcher.waitForExistence(timeout: HomeActionMenuTestSupport.timeout))
+            launcher.tap()
+            for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+                XCUIDevice.shared.orientation = orientation
+                let viewport = app.scrollViews["intent.menu.tiles"]
+                let fits = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    let bounds = viewport.frame.intersection(app.frame).insetBy(dx: -1, dy: -1)
+                    return ["assistant", "workspace", "connections", "appearance", "settings"].allSatisfy { action in
+                        let tile = app.buttons["intent.menu.\(action)"]
+                        return tile.exists && !tile.frame.isEmpty && bounds.contains(tile.frame)
+                    }
+                }, object: nil)
+                XCTAssertEqual(XCTWaiter.wait(for: [fits], timeout: HomeActionMenuTestSupport.timeout), .completed)
+                XCTAssertTrue(app.frame.contains(app.buttons["intent.menu.close"].frame))
+                let capture = XCTAttachment(screenshot: app.screenshot())
+                capture.name = "Menu wrapping \(theme) \(orientation.rawValue)"
+                capture.lifetime = .keepAlways
+                add(capture)
+            }
+            app.terminate()
+        }
+    }
+}
+
 extension XCUIElementQuery {
     @MainActor
     func waitForSingleHittableElement(timeout: TimeInterval, file: StaticString = #filePath, line: UInt = #line) throws -> XCUIElement {
@@ -80,17 +114,15 @@ extension XCUIApplication {
             viewport = carousel.frame.intersection(frame)
             let target = tile.frame
             if viewport.contains(CGPoint(x: target.midX, y: target.midY)) { break }
-            // A fling can skip a tile, and the next target may be behind us.
-            // Drag toward its center, at most half a viewport, then remeasure.
-            let limit = viewport.width / 2
-            let distance = min(max(viewport.midX - target.midX, -limit), limit)
+            let limit = viewport.height / 2
+            let distance = min(max(viewport.midY - target.midY, -limit), limit)
             let start = coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-                dx: viewport.midX - frame.minX - distance / 2,
-                dy: viewport.midY - frame.minY
+                dx: viewport.midX - frame.minX,
+                dy: viewport.midY - frame.minY - distance / 2
             ))
             start.press(
                 forDuration: HomeActionMenuTestSupport.dragHoldDuration,
-                thenDragTo: start.withOffset(CGVector(dx: distance, dy: 0)),
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)),
                 withVelocity: .slow,
                 thenHoldForDuration: HomeActionMenuTestSupport.dragHoldDuration
             )
@@ -98,7 +130,7 @@ extension XCUIApplication {
         viewport = carousel.frame.intersection(frame)
         XCTAssertTrue(
             viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)),
-            "Horizontal swipes must bring \(action) into view: tile \(tile.frame), viewport \(viewport)",
+            "Vertical swipes must bring \(action) into view: tile \(tile.frame), viewport \(viewport)",
             file: file,
             line: line
         )

@@ -19,7 +19,7 @@ struct HomeActionTiles: View {
     var allowsAssistant = true
     var showsWorkspaceList = false
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var availableWidth: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var tileHeight = Layout.minimumHeight
@@ -30,9 +30,10 @@ struct HomeActionTiles: View {
         static let inset: CGFloat = 24
         static let spacing: CGFloat = 8
         static let maximumTileWidth: CGFloat = 192
-        static let minimumTileWidth: CGFloat = 160
         static let minimumFittedTileWidth: CGFloat = 152
         static let minimumHeight: CGFloat = 240
+        static let wrappedHeight: CGFloat = 144
+        static let maximumHeightFraction: CGFloat = 0.75
         static let cornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 24
         static let iconOpacity = 0.3
@@ -42,21 +43,26 @@ struct HomeActionTiles: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Layout.spacing) {
+        let columns = Self.columnCount(in: availableWidth, actionCount: actions.count, accessibility: dynamicTypeSize.isAccessibilitySize)
+        let width = Self.tileWidth(in: availableWidth, actionCount: actions.count, accessibility: dynamicTypeSize.isAccessibilitySize)
+        let rows = max(1, (actions.count + columns - 1) / columns)
+        let height = rows == 1 ? tileHeight : tileHeight * Layout.wrappedHeight / Layout.minimumHeight
+        ScrollView(.vertical) {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(width), spacing: Layout.spacing), count: columns), spacing: Layout.spacing) {
                 ForEach(actions, id: \.self) { action in
-                    tile(action)
+                    tile(action, height: height)
                 }
             }
-            .scrollTargetLayout()
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal, Layout.inset)
         }
-        .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-        .scrollTargetBehavior(.viewAligned)
-        .defaultScrollAnchor(.trailing, for: .alignment)
-        .contentMargins(.horizontal, sizeClass == .regular ? 0 : Layout.inset, for: .scrollContent)
-        .padding(.horizontal, sizeClass == .regular ? Layout.inset : 0)
-        .fixedSize(horizontal: false, vertical: true)
+        .containerRelativeFrame(.vertical) { containerHeight, _ in
+            min(CGFloat(rows) * height + CGFloat(rows - 1) * Layout.spacing, containerHeight * Layout.maximumHeightFraction)
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            max(0, geometry.size.width - 2 * Layout.inset)
+        } action: { availableWidth = $0 }
         .accessibilityIdentifier("intent.menu.tiles")
     }
 
@@ -68,19 +74,18 @@ struct HomeActionTiles: View {
     }
 
     static func tileWidth(in width: CGFloat, actionCount: Int, accessibility: Bool) -> CGFloat {
-        if !accessibility, actionCount > 0 {
-            let count = CGFloat(actionCount)
-            let fittedWidth = (width - Layout.spacing * (count - 1)) / count
-            if fittedWidth >= Layout.minimumFittedTileWidth {
-                return min(Layout.maximumTileWidth, fittedWidth)
-            }
-        }
-        let columns: CGFloat = accessibility ? 1 : 2
-        let contentWidth = min(width, Layout.maximumTileWidth * 2 + Layout.spacing)
-        return max(Layout.minimumTileWidth, (contentWidth - Layout.spacing * (columns - 1)) / columns)
+        let columns = CGFloat(columnCount(in: width, actionCount: actionCount, accessibility: accessibility))
+        let fittedWidth = max(0, (width - Layout.spacing * (columns - 1)) / columns)
+        return accessibility ? fittedWidth : min(Layout.maximumTileWidth, fittedWidth)
     }
 
-    private func tile(_ action: Action) -> some View {
+    static func columnCount(in width: CGFloat, actionCount: Int, accessibility: Bool) -> Int {
+        guard !accessibility else { return 1 }
+        let columns = Int(max(0, width + Layout.spacing) / (Layout.minimumFittedTileWidth + Layout.spacing))
+        return max(1, min(actionCount, columns))
+    }
+
+    private func tile(_ action: Action, height: CGFloat) -> some View {
         Button { onSelect(action) } label: {
             VStack(alignment: .leading) {
                 icon(action)
@@ -90,10 +95,7 @@ struct HomeActionTiles: View {
                 tileTitle(action)
             }
             .padding(Layout.inset)
-            .frame(maxWidth: .infinity, minHeight: max(Layout.minimumHeight, tileHeight), alignment: .leading)
-            .containerRelativeFrame(.horizontal) { width, _ in
-                Self.tileWidth(in: width, actionCount: actions.count, accessibility: dynamicTypeSize.isAccessibilitySize)
-            }
+            .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
             .homeActionTileSurface(cornerRadius: Layout.cornerRadius, fill: Constants.WorkspaceList.controlSurface(for: colorScheme))
         }
