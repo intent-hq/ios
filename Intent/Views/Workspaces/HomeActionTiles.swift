@@ -48,9 +48,14 @@ struct HomeActionTiles: View {
         let rows = max(1, (actions.count + columns - 1) / columns)
         let height = rows == 1 ? tileHeight : tileHeight * Layout.wrappedHeight / Layout.minimumHeight
         ScrollView(.vertical) {
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(width), spacing: Layout.spacing), count: columns), spacing: Layout.spacing) {
-                ForEach(actions, id: \.self) { action in
-                    tile(action, height: height)
+            Grid(horizontalSpacing: Layout.spacing, verticalSpacing: Layout.spacing) {
+                ForEach(0..<rows, id: \.self) { row in
+                    GridRow {
+                        ForEach(actions.dropFirst(row * columns).prefix(columns), id: \.self) { action in
+                            tile(action, height: height)
+                                .frame(width: width)
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
