@@ -85,6 +85,12 @@ Live updates combine domain subscriptions for workspaces, notes, tasks, comments
 Browser previews use an auxiliary authenticated WebSocket tunnel rather than
 passing daemon credentials to web content.
 
+The workspace browser also opens HTTP and HTTPS addresses reachable from the
+device, including LAN IP addresses, local hostnames, and Tailscale hostnames.
+Allow Intent's local network access when prompted. The app declares an App
+Transport Security exception for web content so user-entered HTTP sites can
+load; daemon connections still require pinned WSS/TLS.
+
 In an agent conversation, type `/` in the prompt to browse available workspace
 skills. Keep typing to filter by name or description, then tap a skill to insert
 its slash command. Hardware keyboards can use Up/Down to select, Tab to insert,
