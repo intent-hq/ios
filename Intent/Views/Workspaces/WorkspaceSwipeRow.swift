@@ -27,6 +27,7 @@ struct WorkspaceSwipeRow: View {
 
     private var actionSize: CGFloat { max(Constants.Accessibility.minimumTapTarget, scaledActionSize) }
     private var horizontalInset: CGFloat { spacious ? Constants.WorkspaceList.pageInset : 0 }
+    private var statusIconSize: CGFloat { isSidebar ? IPadSidebarStyle.statusDotSize : Constants.WorkspaceRow.statusIconSize }
     private var statusInset: CGFloat { horizontalInset + (isSidebar ? IPadSidebarStyle.rowInset : (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding)) }
     private var leadingLayout: WorkspaceSwipePolicy.LeadingLayout {
         WorkspaceSwipePolicy.leadingLayout(
@@ -70,11 +71,12 @@ struct WorkspaceSwipeRow: View {
             WorkspaceStatusSwipeBadge(
                 workspace: workspace,
                 progress: leadingProgress,
-                availableWidth: leadingLayout.maximumBadgeWidth
+                availableWidth: leadingLayout.maximumBadgeWidth,
+                dotSize: statusIconSize
             ) { badgeSize = $0 }
             .offset(
                 x: statusInset + min(0, swipeOffset),
-                y: statusCenter + (rowSize.height / 2 - statusCenter) * leadingProgress - Constants.WorkspaceRow.statusIconSize / 2
+                y: statusCenter + (rowSize.height / 2 - statusCenter) * leadingProgress - statusIconSize / 2
             )
         }
         .clipped()

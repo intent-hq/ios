@@ -12,6 +12,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case agentGroupsLarge = "agent-groups-large"
     case agentGroupsRetry = "agent-groups-retry"
     case blocker
+    case claudeTools = "claude-tools"
     case composer
     case context
     case conversation
@@ -52,10 +53,14 @@ final class DemoDesignFixtures {
     private(set) var questionsResolved = false
     private(set) var questionsDismissed = false
     private(set) var monitorCancelled = false
+    private(set) var modelId = "default-model"
+    private(set) var providerId = "auggie"
+    private(set) var reasoningEffort: String?
     private var sentMessages: [[String: Any]] = []
     private var queuedMessages: [[String: Any]] = []
     private var sequence = 0
     private var failedBackgroundRead = false
+    private let attachments = DemoDesignAttachments()
 
     init(scenario: DemoDesignScenario) {
         self.scenario = scenario
@@ -74,12 +79,19 @@ final class DemoDesignFixtures {
     private var totalMessageCount: Int { messages.count + (historyIsTruncated ? Self.archivedMessageCount : 0) }
 
     func response(for method: String, params: [String: Any]) -> Any? {
+        if let response = attachments.response(for: method, params: params) { return response }
         let ownsAgent = params["agentId"] as? String == Self.agentId
         let ownsWorkspace = params["workspaceId"] as? String == Self.workspaceId
         if ownsAgent, let response = queueResponse(for: method, params: params) { return response }
         if ownsAgent, let response = agentResponse(for: method, params: params) { return response }
         if ownsWorkspace, let response = monitorResponse(for: method, params: params) { return response }
         switch method {
+        case "skill.list" where ownsWorkspace:
+            return [
+                ["name": "code-review", "description": "Review changes for bugs, regressions, and missing tests.", "location": "/demo/code-review/SKILL.md", "scope": "project"],
+                ["name": "ios-device-build", "description": "Build and run the iOS app on a connected device.", "location": "/demo/ios-device-build/SKILL.md", "scope": "user"],
+                ["name": "release-notes", "description": "Write release notes from recent changes.", "location": "/demo/release-notes/SKILL.md", "scope": "project"]
+            ]
         case "workspace.list":
             return ["workspaces": [workspace] + (scenario == .mermaidHistory ? DemoFixtures.workspaces : [])]
         case "note.list" where ownsWorkspace && scenario == .context: return ["notes": contextNotes]
@@ -95,6 +107,8 @@ final class DemoDesignFixtures {
     private func agentResponse(for method: String, params: [String: Any]) -> Any? {
         switch method {
         case "agent.get": return ["agent": agent]
+        case "agent.setModel", "agent.update":
+            return modelResponse(for: method, params: params)
         case "agent.getConversation":
             return ["messages": messages, "truncated": historyIsTruncated, "totalMessages": totalMessageCount]
         case "chat.subscribe":
@@ -115,10 +129,28 @@ final class DemoDesignFixtures {
         }
     }
 
+    private func modelResponse(for method: String, params: [String: Any]) -> Any? {
+        guard params["workspaceId"] as? String == Self.workspaceId else { return nil }
+        switch method {
+        case "agent.setModel":
+            guard let modelId = params["modelId"] as? String else { return nil }
+            self.modelId = modelId
+            if let provider = params["providerId"] as? String { providerId = provider }
+            return ["success": true]
+        case "agent.update":
+            if let changes = params["changes"] as? [String: Any] { reasoningEffort = changes["reasoningEffort"] as? String }
+            return ["success": true]
+        default:
+            return nil
+        }
+    }
+
     private func sendMessageResponse(params: [String: Any]) -> Any? {
         guard let messageId = params["messageId"] as? String,
               let content = params["content"] as? String else { return nil }
-        var row = Self.message(id: messageId, role: "user", blocks: [DemoFixtures.textBlock(content)])
+        let images = params["imageBlocks"] as? [[String: Any]] ?? []
+        let files = params["fileBlocks"] as? [[String: Any]] ?? []
+        var row = Self.message(id: messageId, role: "user", blocks: [DemoFixtures.textBlock(content)] + images + files)
         if let metadata = params["messageMetadata"] as? [String: Any] {
             row["metadata"] = metadata
             if metadata["type"] as? String == "question_answers",

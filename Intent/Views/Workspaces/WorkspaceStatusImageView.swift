@@ -76,14 +76,20 @@ struct WorkspaceStatusImageView: View {
     private var content: some View {
         if let image {
             Button { lightboxPresented = true } label: {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .accessibilityLabel(Layout.accessibilityLabel)
-                    .frame(maxHeight: Layout.detailMaxHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
-                    .overlay(border)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                StatusImagePreviewLayout(imageSize: image.size) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .accessibilityLabel(Layout.accessibilityLabel)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+                .overlay(border)
+                .frame(
+                    minWidth: Constants.Accessibility.minimumTapTarget,
+                    minHeight: Constants.Accessibility.minimumTapTarget,
+                    alignment: .leading
+                )
+                .contentShape(Rectangle())
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel(Layout.accessibilityLabel)
@@ -95,6 +101,7 @@ struct WorkspaceStatusImageView: View {
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: image)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else if failed {
             Button { attempt += 1 } label: {
                 placeholder(
@@ -136,5 +143,20 @@ struct WorkspaceStatusImageView: View {
         .frame(height: Layout.detailPlaceholderHeight)
         .background(Theme.muted(for: colorScheme).opacity(Layout.placeholderOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+    }
+}
+
+private struct StatusImagePreviewLayout: Layout {
+    let imageSize: CGSize
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews _: Subviews, cache _: inout ()) -> CGSize {
+        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
+        let availableWidth = max(0, proposal.width ?? imageSize.width)
+        let scale = min(1, availableWidth / imageSize.width, WorkspaceStatusImageLayout.detailMaxHeight / imageSize.height)
+        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
     }
 }

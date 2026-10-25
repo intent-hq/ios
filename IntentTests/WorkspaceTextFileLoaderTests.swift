@@ -49,8 +49,8 @@ struct WorkspaceTextFileLoaderTests {
         #expect(connection.paramsForMethod("file.readChunk").map { $0["offset"] as? Int } == Array(stride(from: 0, to: limit, by: chunkSize)))
     }
 
-    @Test(arguments: ["missing", "oversized", "non-utf8", "partial"])
-    func unavailableFilesAreCachedUntilRetry(_ failure: String) async throws {
+    @Test(arguments: ["missing", "oversized", "non-utf8", "nul-byte", "partial"], ["notes.txt", "page.html"])
+    func unavailableFilesAreCachedUntilRetry(_ failure: String, path: String) async throws {
         let connection = FakeConnectionManager()
         let expectedError: WorkspaceFileImageLoader.LoadError?
         switch failure {
@@ -63,13 +63,17 @@ struct WorkspaceTextFileLoaderTests {
         case "non-utf8":
             connection.responseMap["file.readChunk"] = Self.chunk(Data([0xC3, 0x28]), size: 2)
             expectedError = .notUTF8Text
+        case "nul-byte":
+            let bytes = Data("SQLite format 3\0".utf8)
+            connection.responseMap["file.readChunk"] = Self.chunk(bytes, size: bytes.count)
+            expectedError = .notUTF8Text
         default:
             connection.responseMap["file.readChunk"] = Self.chunk(Data(), size: 1)
             expectedError = .malformedResponse
         }
         let loader = WorkspaceFileImageLoader(connection: connection)
         do {
-            _ = try await loader.text(workspaceId: "ws", path: "notes.txt")
+            _ = try await loader.text(workspaceId: "ws", path: path)
             Issue.record("An unavailable text file must not load")
         } catch {
             if let expectedError {
@@ -82,11 +86,11 @@ struct WorkspaceTextFileLoaderTests {
         connection.errorMap["file.readChunk"] = nil
         connection.responseMap["file.readChunk"] = Self.chunk(bytes, size: bytes.count)
         await #expect(throws: WorkspaceFileImageLoader.LoadError.previouslyFailed) {
-            _ = try await loader.text(workspaceId: "ws", path: "notes.txt")
+            _ = try await loader.text(workspaceId: "ws", path: path)
         }
         #expect(connection.paramsForMethod("file.readChunk").count == 1)
-        loader.forgetFailure(workspaceId: "ws", path: "notes.txt")
-        let recovered = try await loader.text(workspaceId: "ws", path: "notes.txt")
+        loader.forgetFailure(workspaceId: "ws", path: path)
+        let recovered = try await loader.text(workspaceId: "ws", path: path)
         #expect(recovered.content == "Recovered text")
         #expect(connection.paramsForMethod("file.readChunk").count == 2)
     }

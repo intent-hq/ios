@@ -34,6 +34,40 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
     }
 
     @MainActor
+    func testTitleDraftSurvivesScrollingOffscreenAndBack() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-design-scenario=agent-groups-large"]
+        app.launch()
+        let workspace = app.staticTexts["Workspace agent design"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let heading = app.staticTexts["workspace.title.heading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+        heading.doubleTap()
+        let field = app.textFields["workspace.title.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        field.typeText(" edited")
+        let draft = "Workspace agent design edited"
+        XCTAssertEqual(field.value as? String, draft)
+        let scroll = app.scrollViews["workspace.detail.scroll"]
+        XCTAssertTrue(scroll.exists)
+        scrollTitleEditor(scroll, app: app, towardTop: false)
+        scrollTitleEditor(scroll, app: app, towardTop: false)
+        XCTAssertFalse(field.isHittable)
+        for _ in 0..<6 where !field.isHittable { scrollTitleEditor(scroll, app: app, towardTop: true) }
+        XCTAssertTrue(field.isHittable)
+        XCTAssertEqual(field.value as? String, draft)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        field.typeText(" again")
+        XCTAssertEqual(field.value as? String, draft + " again")
+        app.buttons["workspace.title.cancel"].tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertEqual(heading.label, "Workspace agent design")
+    }
+
+    @MainActor
     func testFailedSaveKeepsTheDraftAndCancelDiscardsIt() {
         let app = openWorkspace(failing: true)
         let heading = app.staticTexts["workspace.title.heading"]
@@ -51,6 +85,23 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
 
         XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
         XCTAssertEqual(heading.label, Self.workspaceTitle)
+    }
+
+    @MainActor
+    private func scrollTitleEditor(_ scroll: XCUIElement, app: XCUIApplication, towardTop: Bool) {
+        let frame = scroll.frame.intersection(app.frame)
+        let keyboard = app.keyboards.firstMatch
+        let navigation = app.navigationBars.firstMatch
+        let top = navigation.exists ? max(frame.minY, navigation.frame.maxY) : frame.minY + 100
+        let bottom = keyboard.exists ? min(frame.maxY, keyboard.frame.minY - 80) : frame.maxY
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let upper = origin.withOffset(CGVector(dx: frame.minX + 20, dy: top + 30))
+        let lower = origin.withOffset(CGVector(dx: frame.minX + 20, dy: bottom - 30))
+        if towardTop {
+            upper.press(forDuration: 0.05, thenDragTo: lower)
+        } else {
+            lower.press(forDuration: 0.05, thenDragTo: upper)
+        }
     }
 
     @MainActor

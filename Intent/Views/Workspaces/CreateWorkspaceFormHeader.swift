@@ -23,7 +23,11 @@ struct CreateWorkspaceNavigationButton: View {
                 .foregroundStyle(isEnabled
                     ? CreateWorkspaceFormStyle.foreground(for: colorScheme)
                     : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
-                .background { WorkspaceControlSurface() }
+                .background {
+                    RoundedRectangle(cornerRadius: CreateWorkspaceFormStyle.cornerRadius)
+                        .fill(Constants.Pairing.surface(for: colorScheme))
+                        .modifier(CreateWorkspaceControlShadow())
+                }
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(control == .back ? "Back" : "Close")
@@ -41,6 +45,9 @@ struct CreateWorkspaceSubmitButton: View {
     let isCreating: Bool
     let isDisabled: Bool
     var title: LocalizedStringKey = "Create"
+    var progressTitle: LocalizedStringKey = "Creating workspace"
+    var icon: ImageResource = .addIcon
+    var identifier = "creation.create"
     let onCreate: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -57,8 +64,8 @@ struct CreateWorkspaceSubmitButton: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(isDisabled || isCreating)
-        .accessibilityLabel(isCreating ? "Creating workspace" : title)
-        .accessibilityIdentifier("creation.create")
+        .accessibilityLabel(isCreating ? progressTitle : title)
+        .accessibilityIdentifier(identifier)
     }
 
     private var morphingLabel: some View {
@@ -69,7 +76,7 @@ struct CreateWorkspaceSubmitButton: View {
                 .scaleEffect(isCreating && !reduceMotion ? Motion.labelScale : 1)
                 .opacity(isCreating ? 0 : 1)
             if isCreating {
-                IntentLoadingIndicator(size: iconSize, label: "Creating workspace")
+                IntentLoadingIndicator(size: iconSize, label: progressTitle)
                     .environment(\.colorScheme, .light)
                     .transition(.opacity)
             }
@@ -84,7 +91,7 @@ struct CreateWorkspaceSubmitButton: View {
                 .fill(isDisabled && !isCreating
                     ? CreateWorkspaceFormStyle.disabledBackground(for: colorScheme)
                     : CreateWorkspaceFormStyle.primary)
-                .modifier(WorkspaceControlShadow())
+                .modifier(CreateWorkspaceControlShadow())
         }
         .accessibilityHidden(true)
         .animation(reduceMotion ? nil : .spring(duration: Motion.duration, bounce: Motion.bounce), value: isCreating)
@@ -92,7 +99,7 @@ struct CreateWorkspaceSubmitButton: View {
 
     private var readyLabel: some View {
         HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(.addIcon)
+            Image(icon)
                 .resizable()
                 .scaledToFit()
                 .frame(width: iconSize, height: iconSize)

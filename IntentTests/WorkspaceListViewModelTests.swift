@@ -371,6 +371,63 @@ struct WorkspaceListViewModelTests {
     }
 }
 
+extension WorkspaceListViewModelTests {
+    @Test @MainActor func viewModeDefaultsToRecentWithoutReplacingUnknownPreference() throws {
+        let suiteName = "WorkspaceListViewModeTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        let store = WorkspaceStore(forTesting: true)
+
+        #expect(WorkspaceListViewModel(workspaceStore: store, persistence: persistence).viewMode == .recent)
+        #expect(defaults.object(forKey: "workspaceListViewMode") == nil)
+
+        defaults.set("future-mode", forKey: "workspaceListViewMode")
+        let model = WorkspaceListViewModel(workspaceStore: store, persistence: persistence)
+        #expect(model.viewMode == .recent)
+        #expect(defaults.string(forKey: "workspaceListViewMode") == "future-mode")
+        model.viewMode = .repo
+        #expect(persistence.loadWorkspaceListViewMode() == .repo)
+    }
+
+    @Test(arguments: ViewMode.allCases)
+    @MainActor func viewModeRestoresWithNewPersistenceInstance(_ mode: ViewMode) throws {
+        let suiteName = "WorkspaceListViewModeTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        let model = WorkspaceListViewModel(workspaceStore: WorkspaceStore(forTesting: true), persistence: persistence)
+        model.viewMode = mode == .repo ? .status : .repo
+        model.viewMode = mode
+
+        let restoredDefaults = try #require(UserDefaults(suiteName: suiteName))
+        let restoredPersistence = PersistenceManager(defaults: restoredDefaults, keychainStorage: InMemoryKeychainStorage())
+        let restored = WorkspaceListViewModel(workspaceStore: WorkspaceStore(forTesting: true), persistence: restoredPersistence)
+        #expect(restored.viewMode == mode)
+    }
+
+    @Test @MainActor func viewModeFollowsLatestSelectionAcrossBackendStores() throws {
+        let suiteName = "WorkspaceListViewModeTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        let firstStore = WorkspaceStore(forTesting: true)
+        let secondStore = WorkspaceStore(forTesting: true)
+        let first = WorkspaceListViewModel(workspaceStore: firstStore, persistence: persistence)
+        first.viewMode = .status
+
+        let second = WorkspaceListViewModel(workspaceStore: secondStore, persistence: persistence)
+        #expect(second.viewMode == .status)
+        second.searchText = "payment"
+        second.showArchived = true
+        #expect(persistence.loadWorkspaceListViewMode() == .status)
+        second.viewMode = .repo
+
+        let returned = WorkspaceListViewModel(workspaceStore: firstStore, persistence: persistence)
+        #expect(returned.viewMode == .repo)
+    }
+}
+
 /// Duplicate windows bound to one backend all observe the same
 /// FeedbackEvent/WindowCueEvent; the claim registry lets exactly one
 /// window's emitter play each event.

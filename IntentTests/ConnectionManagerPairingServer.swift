@@ -32,6 +32,7 @@ extension ConnectionManagerTests {
         var heldMethods: Set<String> = []
         var heldReplies: [HeldReply] = []
         var systemStatus = Data("{}".utf8)
+        var hello: Data?
     }
 
     nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
@@ -81,6 +82,11 @@ extension ConnectionManagerTests {
         func setSystemStatus(_ status: [String: Any]) throws {
             let data = try JSONSerialization.data(withJSONObject: status)
             state.withLock { $0.systemStatus = data }
+        }
+
+        func setHello(_ hello: [String: Any]) throws {
+            let data = try JSONSerialization.data(withJSONObject: hello)
+            state.withLock { $0.hello = data }
         }
 
         func dropConnections() {
@@ -178,11 +184,14 @@ extension ConnectionManagerTests {
                 if method == "client.hello", let clientID {
                     state.helloIDs.append(clientID)
                 }
-                return (state.principal, state.modern, state.systemStatus)
+                return (state.principal, state.modern, state.systemStatus, state.hello)
             }
             if method == "principal.me" { return (try? JSONSerialization.jsonObject(with: snapshot.0)) as? [String: Any] ?? [:] }
             if method == "system.status" { return (try? JSONSerialization.jsonObject(with: snapshot.2)) as? [String: Any] ?? [:] }
-            return ["server": ["capabilities": snapshot.1 ? ["hostMembership": 1] : [String: Int]()]]
+            if method == "client.hello", let hello = snapshot.3 {
+                return (try? JSONSerialization.jsonObject(with: hello)) as? [String: Any] ?? [:]
+            }
+            return ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": snapshot.1 ? ["hostMembership": 1] : [String: Int]()]]
         }
 
         private func receiveNext(on connection: NWConnection) {

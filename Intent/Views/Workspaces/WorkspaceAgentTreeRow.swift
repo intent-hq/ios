@@ -1,5 +1,44 @@
 import SwiftUI
 
+/// Keep padding in a lazy body instead of passing an opaque, non-Sendable
+/// modified view through the deferred row provider.
+struct WorkspaceAgentListEntry: View {
+    let row: WorkspaceAgentListRow
+    let isFirst: Bool
+
+    var body: some View {
+        row
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+            .padding(.top, isFirst ? 0 : WorkspaceDetailStyle.rowSpacing)
+    }
+}
+
+/// One identified layout child per entry keeps section expansion out of nested
+/// dynamic view lists, whose height estimates can cycle near the scroll boundary.
+struct WorkspaceAgentListRow: View, Identifiable {
+    enum Content {
+        case agent(WorkspaceAgentTreeRow)
+        case header(BackgroundAgentsHeader)
+        case retired(WorkspaceAgentButton)
+        case status(WorkspaceAgentGroupStatus)
+    }
+
+    let id: String
+    let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            switch content {
+            case let .agent(row): row
+            case let .header(header): header.accessibilityIdentifier(id)
+            case let .retired(button): button
+            case let .status(status): status
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct WorkspaceAgentGroupSnapshot {
     enum LoadStatus {
         case empty
@@ -21,6 +60,7 @@ struct WorkspaceAgentTreeRow: View {
     let depth: Int
     let group: WorkspaceAgentGroupSnapshot?
     let colorScheme: ColorScheme
+    let onLoadGroup: @MainActor () async -> Void
     let onToggle: @MainActor () -> Void
     let onRetry: @MainActor () -> Void
 
@@ -37,6 +77,7 @@ struct WorkspaceAgentTreeRow: View {
                     onToggle: onToggle
                 )
                 .accessibilityIdentifier(group.identifier)
+                .task(id: group.identifier) { await onLoadGroup() }
                 if group.isExpanded {
                     WorkspaceAgentGroupStatus(status: group.status, identifier: group.identifier, onRetry: onRetry)
                 }

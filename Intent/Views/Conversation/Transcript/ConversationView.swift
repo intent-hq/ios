@@ -8,6 +8,7 @@ struct ConversationView: View {
     var onBack: (() -> Void)?
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
+    var onShowAssistantHistory: (() -> Void)?
 
     init(
         agentId: String,
@@ -15,6 +16,7 @@ struct ConversationView: View {
         agentName: String,
         session: BackendSession,
         assistantStore: AssistantStore? = nil,
+        onShowAssistantHistory: (() -> Void)? = nil,
         navigationRequestId: Int = 0,
         onBack: (() -> Void)? = nil,
         onAgentUnavailable: (() -> Void)? = nil
@@ -23,6 +25,7 @@ struct ConversationView: View {
         self.onBack = onBack
         self.onAgentUnavailable = onAgentUnavailable
         self.assistantStore = assistantStore
+        self.onShowAssistantHistory = onShowAssistantHistory
         _proposals = State(initialValue: ProposalActionStore(connection: session.connection, agentId: agentId, workspaceId: workspaceId, details: session.agentDetails, workspaceStore: session.workspaceStore))
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
@@ -34,7 +37,8 @@ struct ConversationView: View {
             agentDetails: session.agentDetails,
             conversations: session.conversations,
             hooks: session.hooksStore,
-            monitors: session.prMonitorsStore
+            monitors: session.prMonitorsStore,
+            scriptMonitors: session.scriptMonitorsStore
         ))
     }
 
@@ -44,7 +48,8 @@ struct ConversationView: View {
             navigationRequestId: navigationRequestId,
             onBack: onBack,
             onAgentUnavailable: onAgentUnavailable,
-            assistantStore: assistantStore
+            assistantStore: assistantStore,
+            onShowAssistantHistory: onShowAssistantHistory
         )
         .environment(proposals)
         .task(id: viewModel.store.sessionMetadataGeneration) {
@@ -59,6 +64,7 @@ private struct ConversationViewContent: View {
     var onBack: (() -> Void)?
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
+    var onShowAssistantHistory: (() -> Void)?
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
@@ -138,35 +144,23 @@ private struct ConversationViewContent: View {
             }
     }
 
-    /// Sheets, confirmation dialog, and alerts.
+    /// Sheets and alerts; the delete confirmation is anchored to its menu.
     private var conversationPresentation: some View {
         conversationChrome
             .sheet(isPresented: $showModelPicker) {
                 ModelPickerView(viewModel: viewModel)
+                    .coversConversationComposers()
             }
             .sheet(item: $presentedNote) { noteInfo in
-                noteSheet(for: noteInfo)
-            }
-            .confirmationDialog(
-                "Delete Agent?",
-                isPresented: $showDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive, action: deleteAgent)
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will permanently delete this agent and its conversation history.")
+                noteSheet(for: noteInfo).coversConversationComposers()
             }
             .alert("Rename Agent", isPresented: $showRenameAlert) {
                 TextField("Agent name", text: $renameText)
                 Button("Rename", action: renameAgent)
                 Button("Cancel", role: .cancel) {}
             }
-            // Non-destructive dismiss-failure surface (intent-hq/monorepo#1800):
-            // nothing was dismissed — the wizard re-pends via the store's marker
-            // rollback; this alert just makes the failure explicit. `presenting:`
-            // hands the closures a captured non-optional detail so the message
-            // doesn't degrade mid-dismissal (same shape as ConnectionsView).
+            // Keep the failure detail stable while the wizard restores its pending marker
+            // (intent-hq/monorepo#1800).
             .alert(
                 "Couldn't Dismiss Questions",
                 isPresented: dismissQuestionsErrorPresented,
@@ -176,10 +170,7 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The questions were not dismissed and are still pending. " + detail)
             }
-            // Image placement failure (monorepo#3338): the message was NOT
-            // sent — the draft text and captured images are restored to the
-            // composer; this alert makes the failure explicit (same shape as
-            // the dismiss-failure alert above).
+            // Failed image placement restores the draft and images (monorepo#3338).
             .alert(
                 "Couldn't Send Images",
                 isPresented: imagePlacementErrorPresented,
@@ -189,9 +180,7 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The message was not sent. " + detail)
             }
-            // File placement failure: the message was NOT sent — the draft
-            // text is restored and the pending files stay attached (same
-            // fail-closed shape as the image alert above).
+            // Failed file placement restores the draft and retains pending attachments.
             .alert(
                 "Couldn't Send Files",
                 isPresented: filePlacementErrorPresented,
@@ -253,30 +242,28 @@ private extension ConversationViewContent {
     /// Keep the column's identity (including its scroll state) across width changes.
     private var conversationChrome: some View {
         legacyConversationChrome
+            .conversationReadableColumn()
             .navigationBarBackButtonHidden(assistantStore == nil)
             .toolbarBackground(viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
             #if os(iOS)
             .toolbar(usesWorkspaceDesign && !usesVerticalNavigation ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if usesWorkspaceDesign, !usesVerticalNavigation {
-                    WorkspaceConversationHeader(
-                        title: viewModel.agentName,
-                        showsBackground: !viewModel.showsLoadingState,
-                        assistantStore: assistantStore,
-                        onBack: navigateBack
-                    ) { agentMenu }
-                    .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
-                }
-            }
+            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign && !usesVerticalNavigation) {
+                WorkspaceConversationHeader(
+                    title: viewModel.agentName,
+                    showsBackground: !viewModel.showsLoadingState,
+                    assistantStore: assistantStore,
+                    onBack: navigateBack
+                ) { agentMenu }
+                .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
+            })
             .modifier(WorkspaceQuestionPresentation(
                 viewModel: viewModel,
                 isPresented: $answeringWorkspaceQuestions,
                 isEnabled: usesPhoneQuestionPresentation
             ))
             #endif
-            .conversationReadableColumn()
             .background {
                 ConversationBackground(isLoading: viewModel.showsLoadingState, usesWorkspaceDesign: usesWorkspaceDesign)
             }
@@ -333,8 +320,6 @@ private extension ConversationViewContent {
         )
     }
 
-    /// Presented-or-not binding for the image-placement-failure alert, hoisted
-    /// like `dismissQuestionsErrorPresented`.
     private var imagePlacementErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.imagePlacementError != nil },
@@ -342,8 +327,6 @@ private extension ConversationViewContent {
         )
     }
 
-    /// Presented-or-not binding for the file-placement-failure alert, hoisted
-    /// like `imagePlacementErrorPresented`.
     private var filePlacementErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.filePlacementError != nil },
@@ -354,6 +337,16 @@ private extension ConversationViewContent {
     /// The native menu owns its container shape and dismissal on every device.
     private var agentMenu: some View {
         nativeAgentMenu
+            .confirmationDialog(
+                "Delete Agent?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive, action: deleteAgent)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete this agent and its conversation history.")
+            }
     }
 
     private enum AgentAction {
@@ -365,7 +358,8 @@ private extension ConversationViewContent {
     private func handleAgentAction(_ action: AgentAction) {
         switch action {
         case .changeModel:
-            if viewModel.filteredMessages.isEmpty { showModelPicker = true }
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            showModelPicker = true
         case .delete:
             showDeleteConfirmation = true
         case .rename:
@@ -374,23 +368,18 @@ private extension ConversationViewContent {
         }
     }
 
-    /// Ellipsis toolbar menu (model info, rename, delete).
+    /// Ellipsis toolbar menu (model selection, rename, delete).
     private var nativeAgentMenu: some View {
         Menu {
             if let assistantStore {
-                AssistantHistoryMenu(store: assistantStore, coordinator: coordinator)
+                AssistantHistoryMenu(store: assistantStore, coordinator: coordinator, onOpenHistory: onShowAssistantHistory)
                 Divider()
             }
-            if let displayName = viewModel.currentModelDisplayName {
-                Text("Model: \(displayName)")
-                    .accessibilityIdentifier("conversation.actions.modelInformation")
+            Button { handleAgentAction(.changeModel) } label: {
+                Label { Text(viewModel.currentModelDisplayName ?? "Select Model") } icon: { Image(.settings2) }
             }
-            if viewModel.filteredMessages.isEmpty {
-                Button { handleAgentAction(.changeModel) } label: {
-                    Label { Text("Change Model") } icon: { Image(.settings2) }
-                }
-                .accessibilityIdentifier("conversation.actions.model")
-            }
+            .accessibilityIdentifier("conversation.actions.model")
+            .accessibilityHint("Change model")
             Button { handleAgentAction(.rename) } label: {
                 Label { Text("Rename") } icon: { Image(.edit) }
             }

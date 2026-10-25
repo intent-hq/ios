@@ -16,6 +16,7 @@ struct MarkdownTextView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.assistantMessageStreaming) private var isStreaming
+    @Environment(\.conversationComposerFocus) private var composerFocus
     /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
@@ -104,6 +105,7 @@ struct MarkdownTextView: View {
             .textual.textSelection(.enabled)
             .textual.onAttachmentTap { attachment in
                 if let image = Self.lightboxImage(for: attachment) {
+                    composerFocus?.wrappedValue = false
                     lightboxItem = LightboxItem(image: image)
                 } else if let video = Self.playbackVideo(for: attachment) {
                     videoItem = VideoItem(video: video)
@@ -128,12 +130,15 @@ struct MarkdownTextView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)
+                    .coversConversationComposers()
             }
             .fullScreenCover(item: $videoItem) { item in
                 VideoLightboxView(video: item.video)
+                    .coversConversationComposers()
             }
             .fullScreenCover(item: $pdfItem) { item in
                 PDFLightboxView(pdf: item.pdf)
+                    .coversConversationComposers()
             }
 
         markdownView
@@ -141,6 +146,7 @@ struct MarkdownTextView: View {
             .fullScreenCover(item: $browserItem) { browser in
                 if let session {
                     WorkspaceBrowserView(browser: browser, connection: session.connection)
+                        .coversConversationComposers()
                 }
             }
     }

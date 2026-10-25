@@ -195,12 +195,15 @@ struct ScrollViewFinder: UIViewRepresentable {
         }
 
         @objc private func handleTap() {
-            UIApplication.shared.sendAction(
-                #selector(UIResponder.resignFirstResponder),
-                to: nil,
-                from: nil,
-                for: nil
-            )
+            // Resolve child image/link taps before keyboard dismissal moves their layout.
+            DispatchQueue.main.async {
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder),
+                    to: nil,
+                    from: nil,
+                    for: nil
+                )
+            }
         }
 
         func gestureRecognizer(

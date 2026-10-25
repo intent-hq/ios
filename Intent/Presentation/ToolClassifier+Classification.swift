@@ -34,6 +34,9 @@ extension ToolClassifier {
 
     static func classify(name: String, input: [String: AnyCodable]) -> ToolDisplay {
         let context = ClassificationContext(name: name, input: input)
+        if isDeferredToolLoad(context) {
+            return ToolDisplay(icon: .search, verb: "Loading tools", subject: nil, path: nil)
+        }
         if let display = classifyWorkspaceAndFiles(context) { return display }
         if let display = classifyExecutionAndSearch(context) { return display }
         if let display = classifyServices(context) { return display }
@@ -45,6 +48,39 @@ extension ToolClassifier {
 }
 
 private extension ToolClassifier {
+    static func isDeferredToolLoad(_ context: ClassificationContext) -> Bool {
+        if deferredToolName(context.name).lowercased() == "toolsearch" { return true }
+        let selector = #"select:\s*mcp(__|\.)"#
+        if let query = context.query, firstCapture("^" + selector, in: query, group: 0) != nil {
+            return true
+        }
+        return firstCapture(selector, in: context.name, group: 0) != nil
+            || firstCapture(selector, in: context.acpTitle ?? "", group: 0) != nil
+    }
+
+    // Match desktop's cleanToolName for deferred-load recognition only. Other
+    // categories retain their existing normalization and human-title handling.
+    static func deferredToolName(_ name: String) -> String {
+        let urlTool = name.range(of: #"(?<=//local/mcp/).+$"#, options: .regularExpression)
+        var clean = urlTool.map { String(name[$0]) } ?? name
+        for pattern in [#"^mcp__[^_]+__"#, #"^mcp\.[^.]+\."#] {
+            clean = clean.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        }
+        let prefixes = ["workspace-mcp_", "workspace_mcp_", "filesystem_", "browser-mcp_", "browser_mcp_"]
+        if let prefix = prefixes.first(where: { clean.lowercased().hasPrefix($0) }) {
+            clean = String(clean.dropFirst(prefix.count))
+        }
+        let suffixes = [
+            "_workspace-mcp", "-workspace-mcp", "_playwright", "_browser_mcp", "_context_7",
+            "_svelte", "_npx", "_sequential_thinking", "_figma", "_slack", "_sentry", "_github",
+            "_linear", "_notion", "_jira"
+        ]
+        while let suffix = suffixes.first(where: { clean.lowercased().hasSuffix($0) }) {
+            clean = String(clean.dropLast(suffix.count))
+        }
+        return clean
+    }
+
     static func classifyWorkspaceAndFiles(_ context: ClassificationContext) -> ToolDisplay? {
         classifyWorkspaceAndReads(context) ?? classifyFileMutations(context)
     }
@@ -275,7 +311,7 @@ private extension ToolClassifier {
             let request = query ?? infoReq ?? (input["pattern"]?.value as? String)
             return ToolDisplay(
                 icon: .search,
-                verb: "Search",
+                verb: clean == "glob" ? "Find" : "Search",
                 subject: request.map { request in
                     String(request.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
                 },

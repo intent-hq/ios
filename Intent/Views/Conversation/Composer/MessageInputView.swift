@@ -9,30 +9,28 @@ struct MessageInputView: View {
     private let store: ConversationStore
     private let usesWorkspaceDesign: Bool
     private let allowsSending: Bool
-    private let onFocusChange: ((Bool) -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
     @Environment(\.workspaceQuestionPanelPresented) private var questionPanelPresented
-
+    @Environment(\.conversationComposerFocus) private var conversationFocus
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
     @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
     @ScaledMetric(relativeTo: .callout) private var suggestedPromptIconSide: CGFloat = 16
     private let sendArrowScale: CGFloat = 0.75
 
-    @State private var isFocused: Bool = false
+    @State private var localFocus = false
     @State private var textViewHeight: CGFloat = Constants.Conversation.Composer.minimumTextViewHeight
     @State private var isPhotoPickerPresented: Bool = false
     @State private var isFilePickerPresented: Bool = false
+    @State private var skillCompletion = ComposerSkillCompletion()
 
     #if os(visionOS)
     @Environment(\.scenePhase) private var scenePhase
     @State private var dictation = SpeechDictationController()
     @State private var dictationSession: DictationSession?
-    /// Last caret offset observed from the text view; `nil` until a selection
-    /// change fires (a programmatically restored draft never fires one), which
-    /// dictation treats as end-of-text.
+    /// Last observed caret offset; dictation treats nil as end-of-text.
     @State private var caretOffset: Int?
     #endif
 
@@ -40,51 +38,26 @@ struct MessageInputView: View {
         viewModel: ConversationViewModel,
         store: ConversationStore,
         usesWorkspaceDesign: Bool = false,
-        allowsSending: Bool = true,
-        onFocusChange: ((Bool) -> Void)? = nil
+        allowsSending: Bool = true
     ) {
         self.viewModel = viewModel
         self.store = store
         self.usesWorkspaceDesign = usesWorkspaceDesign
         self.allowsSending = allowsSending
-        self.onFocusChange = onFocusChange
     }
 
-    /// Overlay visibility is presentation policy, not permission to consume a
-    /// draft. Read the live backend state again at both submission boundaries.
+    private var focusBinding: Binding<Bool> { conversationFocus ?? $localFocus }
+
+    private var isFocused: Bool {
+        get { focusBinding.wrappedValue }
+        nonmutating set { focusBinding.wrappedValue = newValue }
+    }
+
+    /// Read live connection state at both submission boundaries before consuming a draft.
     var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
 
     var body: some View {
-        VStack(spacing: 0) {
-            supplementalRows
-            if usesWorkspaceDesign {
-                WorkspaceComposerRow(
-                    text: $viewModel.messageText,
-                    isFocused: $isFocused,
-                    isStreaming: store.isStreaming,
-                    hasAttachments: viewModel.hasPendingAttachments,
-                    canSend: hasSendableContent,
-                    onSend: sendCurrentMessage,
-                    onStop: {
-                        HapticManager.impact(.light)
-                        Task { await viewModel.stopStreaming() }
-                    },
-                    onPhotos: { isPhotoPickerPresented = true },
-                    onFiles: { isFilePickerPresented = true },
-                    onPasteImages: viewModel.pasteImages
-                )
-            } else {
-                inputRow
-            }
-        }
-        .background {
-            if usesWorkspaceDesign {
-                RoundedRectangle(cornerRadius: workspaceCornerRadius)
-                    .fill(Constants.Conversation.Design.Palette.surface(for: colorScheme))
-            } else {
-                Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
-            }
-        }
+        IPadTypingFocusRow(isFocused: focusBinding) { inputContent }
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
@@ -94,9 +67,9 @@ struct MessageInputView: View {
         .onChange(of: viewModel.selectedPhotoItems) { _, _ in
             viewModel.loadSelectedPhotos()
         }
-        .onDisappear {
-            viewModel.cancelPhotoImport()
-        }
+        #if !os(visionOS)
+        .onDisappear { viewModel.cancelPhotoImport() } // visionOS: FloatingComposerOrnament's onWithdraw
+        #endif
         .fileImporter(
             isPresented: $isFilePickerPresented,
             allowedContentTypes: [.item],
@@ -105,9 +78,6 @@ struct MessageInputView: View {
             if case .success(let urls) = result {
                 viewModel.addFiles(urls)
             }
-        }
-        .onChange(of: isFocused) { _, focused in
-            onFocusChange?(focused)
         }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled { isFocused = false }
@@ -134,10 +104,44 @@ struct MessageInputView: View {
 }
 
 private extension MessageInputView {
-    var workspaceCornerRadius: CGFloat {
-        let active = store.isStreaming || !viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || viewModel.hasPendingAttachments
-        return active ? Constants.Conversation.Design.Composer.activeCornerRadius : Constants.Conversation.Design.cornerRadius
+    var inputContent: some View {
+        VStack(spacing: 0) {
+            if isFocused, skillCompletion.context != nil {
+                SkillSuggestionsView(completion: skillCompletion, workspaceId: viewModel.workspaceId, connection: viewModel.connection)
+            }
+            supplementalRows
+            if usesWorkspaceDesign {
+                WorkspaceComposerRow(
+                    text: $viewModel.messageText,
+                    isFocused: focusBinding,
+                    isStreaming: store.isStreaming,
+                    hasAttachments: viewModel.hasPendingAttachments,
+                    canSend: hasSendableContent,
+                    onSend: sendCurrentMessage,
+                    onStop: {
+                        HapticManager.impact(.light)
+                        Task { await viewModel.stopStreaming() }
+                    },
+                    onPhotos: { isPhotoPickerPresented = true },
+                    onFiles: { isFilePickerPresented = true },
+                    onPasteImages: viewModel.pasteImages,
+                    skillCompletion: skillCompletion
+                )
+            } else {
+                inputRow
+            }
+        }
+        .background {
+            if usesWorkspaceDesign {
+                WorkspaceComposerSurface(text: viewModel.messageText, hasAttachments: viewModel.hasPendingAttachments, isStreaming: store.isStreaming)
+            } else {
+                #if os(visionOS)
+                Color.clear // the floating ornament host supplies the glass
+                #else
+                Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
+                #endif
+            }
+        }
     }
 
     @ViewBuilder
@@ -238,11 +242,12 @@ private extension MessageInputView {
         ZStack(alignment: .leading) {
             SubmittableTextView(
                 text: $viewModel.messageText,
-                isFocused: $isFocused,
+                isFocused: focusBinding,
                 onSubmit: { sendCurrentMessage() },
                 onPasteImages: viewModel.pasteImages,
                 onHeightChange: updateTextViewHeight,
-                onCaretChange: updateCaretOffset
+                onCaretChange: updateCaretOffset,
+                skillCompletion: skillCompletion
             )
             .padding(.horizontal, Constants.Conversation.Composer.textEditorHorizontalPadding)
             .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)

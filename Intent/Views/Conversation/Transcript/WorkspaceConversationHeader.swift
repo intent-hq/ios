@@ -6,11 +6,12 @@ extension View {
     func workspacePhoneNavigation<Actions: View>(
         title: String,
         createdAt: String?,
+        showsBackButton: Bool = true,
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
         #if os(iOS)
-        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, onBack: onBack, actions: actions))
+        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, showsBackButton: showsBackButton, onBack: onBack, actions: actions))
         #else
         self
         #endif
@@ -21,16 +22,22 @@ extension View {
 private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let title: String
     let createdAt: String?
+    let showsBackButton: Bool
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.conversationPresentation) private var presentation
+
+    private var usesCustomHeader: Bool {
+        presentation == .iPad || (horizontalSizeClass == .compact && !usesVerticalBar)
+    }
 
     func body(content: Content) -> some View {
         content
-            .toolbar(horizontalSizeClass == .compact && !usesVerticalBar ? .hidden : .automatic, for: .navigationBar)
+            .toolbar(usesCustomHeader ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if horizontalSizeClass == .compact, !usesVerticalBar {
+                if usesCustomHeader {
                     WorkspaceNavigationHeader(
                         title: title,
                         subtitle: "Workspace",
@@ -38,7 +45,8 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
                         backIdentifier: "workspaceDetail.back",
                         showsWorkspacePlaceholder: true,
                         workspaceCreatedAt: createdAt,
-                        onBack: onBack,
+                        usesConversationLayout: presentation == .iPad,
+                        onBack: showsBackButton ? onBack : nil,
                         actions: actions
                     )
                 }
@@ -96,24 +104,17 @@ struct AssistantConversationHeader<Actions: View>: View {
     var body: some View {
         WorkspaceNavigationHeader(
             title: title,
-            subtitle: title == "Assistant" ? nil : "Assistant",
+            subtitle: presentation == .iPad || title == "Assistant" ? nil : "Assistant",
+            backLabel: "New Conversation",
+            backIdentifier: "assistant.newConversation",
+            leadingIcon: .displayEdit,
+            isLeadingActionEnabled: canCreateConversation,
             showsBackground: showsBackground,
-            usesConversationLayout: true
-        ) {
-            HStack(spacing: 0) {
-                if presentation != .iPad {
-                    IntentIconButton(
-                        icon: .displayEdit,
-                        label: "New Conversation",
-                        showsBackground: false,
-                        action: onNewConversation
-                    )
-                    .disabled(!canCreateConversation)
-                    .accessibilityIdentifier("assistant.newConversation")
-                }
-                actions()
-            }
-        }
+            showsTitle: presentation != .iPad || title != "Assistant",
+            usesConversationLayout: true,
+            onBack: presentation == .iPad ? nil : onNewConversation,
+            actions: actions
+        )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("assistant.header")
     }
@@ -125,7 +126,10 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     let subtitle: LocalizedStringKey?
     var backLabel: LocalizedStringKey = "Back"
     var backIdentifier = "conversation.back"
+    var leadingIcon: ImageResource = .arrowLeft
+    var isLeadingActionEnabled = true
     var showsBackground = true
+    var showsTitle = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
     var usesConversationLayout = false
@@ -151,7 +155,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     private var windowAdaptedControls: some View {
         #if os(iOS)
         if usesIPadDesign {
-            // The shell already respects the window safe area around this inset pane.
+            // The shell gutter and header inset keep these controls below system chrome.
             controls
         } else if #available(iOS 26.0, *) {
             // Reserve only the system's actual corner region (including iPad window controls).
@@ -168,14 +172,18 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         HStack(spacing: 0) {
             if let onBack {
                 Button(action: onBack) {
-                    Image(.arrowLeft)
+                    Image(leadingIcon)
                         .resizable()
                         .scaledToFit()
                         .frame(width: Design.iconSize, height: Design.iconSize)
+                        .foregroundStyle(isLeadingActionEnabled
+                            ? Design.Palette.foreground(for: colorScheme)
+                            : CreateWorkspaceFormStyle.disabledForeground(for: colorScheme))
                         .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(IntentContentButtonStyle())
+                .disabled(!isLeadingActionEnabled)
                 .accessibilityLabel(backLabel)
                 .accessibilityIdentifier(backIdentifier)
             } else if usesIPadDesign {
@@ -190,7 +198,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
-        .padding(.horizontal, usesIPadDesign ? 0 : Design.horizontalInset)
+        .padding(.horizontal, Design.horizontalInset)
         .padding(.top, usesIPadDesign ? Design.IPad.headerTopInset : Design.Header.verticalPadding)
         .padding(.bottom, usesIPadDesign ? Design.IPad.headerBottomInset : Design.Header.verticalPadding)
     }
@@ -201,7 +209,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 WorkspaceTitle(title: title, createdAt: workspaceCreatedAt) { title in
                     WorkspaceHeaderText(Text(title), style: Constants.Typography.bodyXSEmphasized, lineLimit: 1)
                 }
-            } else {
+            } else if showsTitle {
                 WorkspaceHeaderText(
                     Text(title),
                     style: Constants.Typography.bodyXSEmphasized,

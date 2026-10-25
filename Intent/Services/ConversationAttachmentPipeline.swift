@@ -79,6 +79,11 @@ enum ComposerImageRecovery {
     var selectedPhotoItems: [PhotosPickerItem] = []
     var isLoadingPhotos = false
     @ObservationIgnored var photoImportTask: Task<Void, Never>?
+    /// Loads one picked photo's bytes. A seam so tests can hold an import in
+    /// flight; production reads the item's transferable data.
+    @ObservationIgnored var loadPhotoData: (PhotosPickerItem) async -> Data? = { item in
+        try? await item.loadTransferable(type: Data.self)
+    }
     var pendingFiles: [PendingFile] = []
     var fileUploadProgress: [UUID: Double] = [:]
     var imagePlacementError: String?
@@ -92,9 +97,11 @@ enum ComposerImageRecovery {
     @ObservationIgnored private var securityScopedURLs: [URL] = []
     @ObservationIgnored private let startSecurityScopedAccess: @Sendable (URL) -> Bool
     @ObservationIgnored private let stopSecurityScopedAccess: @Sendable (URL) -> Void
+    let maximumPhotoImageCount: Int?
 
     init(
         uploadService: AttachmentUploadService = .shared,
+        maximumPhotoImageCount: Int? = nil,
         startSecurityScopedAccess: @escaping @Sendable (URL) -> Bool = { url in
             url.startAccessingSecurityScopedResource()
         },
@@ -103,6 +110,7 @@ enum ComposerImageRecovery {
         }
     ) {
         self.uploadService = uploadService
+        self.maximumPhotoImageCount = maximumPhotoImageCount
         self.startSecurityScopedAccess = startSecurityScopedAccess
         self.stopSecurityScopedAccess = stopSecurityScopedAccess
     }
@@ -113,8 +121,6 @@ enum ComposerImageRecovery {
             stopSecurityScopedAccess(url)
         }
     }
-
-    func addImage(_ image: UIImage) { pendingImages.append(image) }
 
     /// Called only by the native Paste action. Snapshot each image item before
     /// returning to the run loop, while lazy clipboard providers are available.

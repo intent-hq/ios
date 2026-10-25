@@ -13,6 +13,7 @@ extension ConversationViewModel {
             detailConsumer = agentDetails.retain(agentId: agentId)
             if streamingObserverId == nil { observeStreaming() }
             store.retainConversation(conversationConsumer, agentId: agentId, workspaceId: workspaceId)
+            activateScriptMonitors()
             latchEntryWhenReady()
         }
         let activation = liveStoreActivationGeneration
@@ -22,8 +23,9 @@ extension ConversationViewModel {
                 async let model: () = fetchCurrentModel(refresh: false)
                 async let hooks: () = hookStore.subscribe(workspaceId: workspaceId, agentId: agentId)
                 async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
+                async let scriptMonitors: () = scriptMonitorsStore.load(workspaceId: workspaceId)
                 await store.bootstrapTask?.value
-                _ = await (model, hooks, monitors)
+                _ = await (model, hooks, monitors, scriptMonitors)
             }
         }
         await withTaskCancellationHandler {
@@ -81,6 +83,7 @@ extension ConversationViewModel {
             latchEntryWhenReady()
             if store.metadataReadyForEntry, let detail = agentDetails.cached(agentId: agentId) {
                 currentModelId = detail.values["model"] as? String
+                currentReasoningEffort = detail.values["reasoningEffort"] as? String
                 currentProviderId = (detail.values["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             }
         }
@@ -169,6 +172,7 @@ extension ConversationViewModel {
             modelMetadataGeneration = generation
             modelMetadataEpoch = agentDetails.connectionEpoch
             currentModelId = detail.values["model"] as? String
+            currentReasoningEffort = detail.values["reasoningEffort"] as? String
             currentProviderId = (detail.values["provider"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             currentSpecialistId = detail.metadata["specialist"] as? String
             if currentSpecialistId != nil {

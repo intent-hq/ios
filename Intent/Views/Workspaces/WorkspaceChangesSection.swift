@@ -2,8 +2,9 @@ import SwiftUI
 
 struct WorkspaceChangesSection<Content: View>: View {
     let title: String
-    let count: Int
+    var count: Int?
     let identifier: String
+    var accessibilityPrefix = "changes"
     @Binding var isExpanded: Bool
     @ViewBuilder let content: () -> Content
     @Environment(\.colorScheme) private var colorScheme
@@ -20,7 +21,7 @@ struct WorkspaceChangesSection<Content: View>: View {
     private var header: some View {
         Button { isExpanded.toggle() } label: {
             HStack {
-                Text("\(title) (\(count))")
+                Text(count.map { "\(title) (\($0))" } ?? title)
                     .interFont(Constants.Typography.eyebrow)
                     .textCase(.uppercase)
                     .tracking(CreateWorkspaceRepoStyle.sectionTracking)
@@ -37,7 +38,7 @@ struct WorkspaceChangesSection<Content: View>: View {
             .contentShape(.rect)
         }
         .buttonStyle(IntentContentButtonStyle())
-        .accessibilityIdentifier("changes.section.\(identifier)")
+        .accessibilityIdentifier("\(accessibilityPrefix).section.\(identifier)")
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .accessibilityHint(isExpanded ? "Double-tap to collapse this section" : "Double-tap to expand this section")
         .accessibilityAddTraits(.isHeader)

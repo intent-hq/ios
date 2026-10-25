@@ -49,13 +49,13 @@ struct NoteDetailView: View {
 
     var body: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
+            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
             noteContentState
         }
         .navigationTitle(noteTitle)
         .toolbar(.visible, for: .navigationBar)
         .toolbarTitleDisplayMode(.inline)
-        .intentNavigationBackButton(showsBackButton, usesWorkspaceVerticalBar: true)
+        .intentNavigationBackButton(showsBackButton, usesWorkspaceVerticalBar: true, showsBackground: false)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
         .task {
             await loadNote()

@@ -41,7 +41,7 @@ struct WorkspaceSearchBar: View {
                     viewMode = mode
                 } label: {
                     Text(mode.rawValue)
-                        .interFont(isSidebar ? Constants.Typography.bodyXSEmphasized : Constants.Typography.bodySEmphasized)
+                        .interFont(Constants.Typography.bodySEmphasized)
                         .tracking(segmentTracking)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: controlHeight - segmentInset * 2)
@@ -116,6 +116,8 @@ struct WorkspaceSearchInput: View {
     var isFocused: FocusState<Bool>.Binding
     var placeholder: LocalizedStringKey = "Search workspaces"
     var identifierPrefix = "workspaces.search"
+    var surfaceColor: Color?
+    var horizontalPadding: CGFloat = Constants.WorkspaceSearch.contentSpacing
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
     var body: some View {
@@ -134,15 +136,16 @@ struct WorkspaceSearchInput: View {
                     .frame(width: Constants.WorkspaceSearch.iconSize, height: Constants.WorkspaceSearch.iconSize)
                     .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
                     .frame(width: Constants.WorkspaceSearch.expandedHeight, height: Constants.WorkspaceSearch.expandedHeight)
-                    .background { WorkspaceSearchSurface() }
+                    .background { WorkspaceSearchSurface(color: surfaceColor) }
                     .contentShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
                     .accessibilityHidden(true)
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Close search")
             .accessibilityIdentifier("\(identifierPrefix).cancel")
+            .keyboardShortcut(.cancelAction)
         }
-        .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
+        .padding(.horizontal, horizontalPadding)
         .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
     }
 
@@ -182,16 +185,17 @@ struct WorkspaceSearchInput: View {
         .padding(.trailing, Constants.WorkspaceSearch.inputTrailingInset)
         .padding(.vertical, Constants.WorkspaceSearch.inputVerticalInset)
         .frame(minHeight: Constants.WorkspaceSearch.expandedHeight)
-        .background { WorkspaceSearchSurface() }
+        .background { WorkspaceSearchSurface(color: surfaceColor) }
     }
 }
 
 private struct WorkspaceSearchSurface: View {
     @Environment(\.colorScheme) private var colorScheme
+    var color: Color?
 
     var body: some View {
         RoundedRectangle(cornerRadius: Constants.WorkspaceSearch.cornerRadius, style: .circular)
-            .fill(Constants.WorkspaceList.controlSurface(for: colorScheme))
+            .fill(color ?? Constants.WorkspaceList.controlSurface(for: colorScheme))
     }
 }
 

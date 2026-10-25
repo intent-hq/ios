@@ -20,6 +20,7 @@ struct MermaidDiagramView: View {
         .id(source)
         .fullScreenCover(isPresented: $isExpanded) {
             MermaidExpandedView(source: source)
+                .coversConversationComposers()
         }
     }
 }

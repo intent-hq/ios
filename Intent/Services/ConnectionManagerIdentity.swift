@@ -1,9 +1,12 @@
 import Foundation
 
 extension ConnectionManager {
-    func finishIdentityAdmission(_ principal: ConnectionPrincipal, token: String, fingerprint: String?) {
+    func finishIdentityAdmission(_ handshake: ConnectionHandshake, token: String, fingerprint: String?) {
+        let principal = handshake.principal
+        scriptMonitorsDisabledForConnection = false
         currentPrincipal = principal
         admission = ConnectionAdmission(id: UUID(), token: token, fingerprint: fingerprint, principal: principal)
+        capabilities = handshake.capabilities
         bindSavedIdentity(principal)
         connectionState = .connected
     }
@@ -11,10 +14,17 @@ extension ConnectionManager {
     func clearPrincipal() {
         currentPrincipal = nil
         admission = nil
+        capabilities = .unknown
+        scriptMonitorsDisabledForConnection = false
         authorityRefreshTask?.cancel()
         authorityRefreshTask = nil
         pendingAuthorityRevision = -1
         authorityBeforeRefresh = nil
+    }
+
+    func disableScriptMonitors() {
+        scriptMonitorsDisabledForConnection = true
+        capabilities = capabilities.disablingScriptMonitors()
     }
 
     /// A saved record can constrain identity, never supply current authority.
@@ -72,6 +82,7 @@ extension ConnectionManager {
 
     private func refreshPrincipal(after revision: Double, previous: ConnectionPrincipal?) {
         currentPrincipal = nil
+        capabilities = .unknown
         authorityRefreshTask?.cancel()
         let generation = connectionGeneration
         let currentSocket = socket
@@ -89,6 +100,8 @@ extension ConnectionManager {
                 if let previous = admission {
                     admission = ConnectionAdmission(id: previous.id, token: previous.token, fingerprint: previous.fingerprint, principal: principal)
                 }
+                let negotiated = ConnectionCapabilities(hello: hello)
+                capabilities = scriptMonitorsDisabledForConnection ? negotiated.disablingScriptMonitors() : negotiated
                 pendingAuthorityRevision = -1
                 authorityBeforeRefresh = nil
                 bindSavedIdentity(principal)
@@ -125,12 +138,12 @@ extension ConnectionManager {
         return false
     }
 
-    func admit(_ winner: RacedConnection, token: String, fingerprint: String?) async throws -> ConnectionPrincipal {
+    func admit(_ winner: RacedConnection, token: String, fingerprint: String?) async throws -> ConnectionHandshake {
         let observed = persistence.loadConnections().filter { $0.token == token && InvitedSyncKey.sameFingerprint($0.server.certFingerprint, fingerprint) }
         do {
-            let principal = try await admit(winner)
-            try validateIdentity(principal, token: token, fingerprint: fingerprint)
-            return principal
+            let handshake = try await admit(winner)
+            try validateIdentity(handshake.principal, token: token, fingerprint: fingerprint)
+            return handshake
         } catch {
             await winner.disconnect()
             if !Task.isCancelled { persistence.recordAuthoritativeRevocation(error, observed: observed) }

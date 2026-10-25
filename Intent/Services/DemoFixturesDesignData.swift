@@ -79,6 +79,7 @@ extension DemoDesignFixtures {
             "status": isStreaming ? "running" : "idle", "isResponding": isStreaming,
             "createdAt": Self.timestamp, "updatedAt": Self.timestamp, "lastActivity": Self.timestamp,
             "lastMessageRole": "assistant",
+            "model": modelId, "provider": providerId, "reasoningEffort": reasoningEffort as Any? ?? NSNull(),
             "metadata": [
                 "pendingQuestionsMessageId": pendingQuestionId,
                 "dismissedQuestionsMessageId": questionsDismissed ? Self.questionMessageId : "",
@@ -111,9 +112,10 @@ extension DemoDesignFixtures {
     }
 
     var monitor: [String: Any] {
-        [
+        let repo = ProcessInfo.processInfo.arguments.contains("--demo-long-pr-label") ? "intent-hq/intentd" : "intent-ha/ios"
+        return [
             "monitorId": Self.monitorId, "workspaceId": Self.workspaceId, "agentId": Self.agentId,
-            "repo": "intent-ha/ios", "prNumber": 56, "state": monitorCancelled ? "cancelled" : "active",
+            "repo": repo, "prNumber": 56, "state": monitorCancelled ? "cancelled" : "active",
             "title": "Use the attention circle icon", "createdAt": Self.timestamp, "updatedAt": Self.timestamp,
             "pendingChanges": [String](), "hasPendingChanges": false,
             "lastSnapshot": [
@@ -128,6 +130,18 @@ extension DemoDesignFixtures {
     var initialMessages: [[String: Any]] {
         if scenario == .empty { return [] }
         if scenario == .mermaidHistory { return Self.mermaidHistory }
+        if scenario == .claudeTools {
+            let blocks = [
+                DemoFixtures.toolUseBlock(id: "demo-claude-search", name: "ToolSearch", input: [
+                    "_acpTitle": "ToolSearch", "max_results": 1,
+                    "query": "select:mcp__workspace-mcp__workspace_api"
+                ]),
+                DemoFixtures.toolResultBlock(toolUseId: "demo-claude-search", output: "Loaded workspace_api"),
+                DemoFixtures.toolUseBlock(id: "demo-claude-glob", name: "Glob", input: ["pattern": "src/**/*.swift"]),
+                DemoFixtures.toolResultBlock(toolUseId: "demo-claude-glob", output: "src/main.swift")
+            ]
+            return [Self.message(id: "demo-claude-tools", role: "assistant", blocks: blocks)]
+        }
         var rows = [
             Self.message(id: "demo-design-assistant", role: "assistant", blocks: [DemoFixtures.textBlock(Self.assistantText)]),
             Self.message(id: "demo-design-user", role: "user", blocks: [DemoFixtures.textBlock(Self.userText)]),

@@ -4,8 +4,7 @@ import Foundation
 ///
 /// visionOS emits the notification sound from the source window's scene via
 /// RealityKit (`WindowFeedbackSoundEmitter`), which needs a loadable audio
-/// file — the non-spatial system sound id (1152) played elsewhere has no
-/// file API, and the bundle ships no audio assets. The chime (two decaying
+/// file, and the bundle ships no audio assets. The chime (two decaying
 /// sine tones) is generated once and cached in the temporary directory.
 enum NotificationChime {
     /// 16-bit mono PCM.

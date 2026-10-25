@@ -10,10 +10,14 @@ struct WorkspaceListSidebar: View {
     private let onCreateWorkspace: () -> Void
     private let onCollapse: (() -> Void)?
     private var isEmbedded: Bool { onCollapse != nil }
+    private var isFocusedSearch: Bool { isEmbedded && isSearching }
+    private var contentInset: CGFloat { isFocusedSearch ? IPadShellLayout.focusContentInset : IPadSidebarStyle.inset }
     private var surface: Color { isEmbedded ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme) }
     @State private var viewModel: WorkspaceListViewModel
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
+    @State private var pendingAction: PendingAction?
+    @State private var actionError: String?
     @Binding private var isSearching: Bool
     @FocusState private var searchFocused: Bool
 
@@ -32,42 +36,35 @@ struct WorkspaceListSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let onCollapse {
+            if isFocusedSearch {
+                IPadSidebarTitle(title: "Workspaces")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, contentInset)
+                    .padding(.top, IPadShellLayout.focusContentInset)
+            } else if let onCollapse {
                 sidebarHeader(onCollapse: onCollapse)
             }
-            if isEmbedded || !isSearching {
+            if !isSearching {
                 WorkspaceSearchBar(
                     viewMode: $viewModel.viewMode,
                     isSearching: $isSearching,
                     horizontalPadding: isEmbedded ? IPadSidebarStyle.inset : Constants.WorkspaceList.pickerHorizontalPadding,
                     isSidebar: isEmbedded
                 )
-                .padding(.bottom, isEmbedded ? IPadSidebarStyle.sectionSpacing : 0)
             }
 
-            ZStack {
-                surface
-
-                if viewModel.isLoading, viewModel.workspaces.isEmpty {
-                    ProgressView {
-                        Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
-                    }
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                } else if viewModel.filteredWorkspaces.isEmpty {
-                    if viewModel.hasSearchQuery {
-                        ContentUnavailableView.search
-                    } else {
-                        emptyState
-                    }
-                } else {
-                    workspaceList
-                }
-            }
+            workspaceResults
         }
         .background(surface)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
-                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
+                WorkspaceSearchInput(
+                    text: $viewModel.searchText,
+                    isSearching: $isSearching,
+                    isFocused: $searchFocused,
+                    surfaceColor: isFocusedSearch ? IPadShellStyle.panel(for: colorScheme) : nil,
+                    horizontalPadding: isFocusedSearch ? contentInset : Constants.WorkspaceSearch.contentSpacing
+                )
             }
         }
         .refreshable {
@@ -80,6 +77,28 @@ struct WorkspaceListSidebar: View {
                     .intentToolbarSurface()
             }
         }
+        .alert(pendingAction?.action.title ?? "Workspace", isPresented: confirmationPresented, presenting: pendingAction) { pending in
+            Button("Cancel", role: .cancel) {}
+            Button(pending.action.label, role: pending.action == .delete ? .destructive : nil) {
+                perform(pending)
+            }
+        } message: { pending in
+            Text(pending.action.message(workspaceTitle: pending.workspace.title))
+        }
+        .alert("Workspace action failed", isPresented: errorPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "Please try again.")
+        }
+        .onChange(of: isSearching) { _, searching in
+            revealedSwipeTarget = nil
+            if !searching {
+                searchFocused = false
+                viewModel.searchText = ""
+            }
+        }
+        .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
+        .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: viewModel.showArchived) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: isPaneVisible) { _, visible in
             if !visible { searchFocused = false }
@@ -92,6 +111,28 @@ struct WorkspaceListSidebar: View {
             }
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
+    }
+}
+
+extension WorkspaceListSidebar {
+    private var workspaceResults: some View {
+        ZStack {
+            surface
+            if viewModel.isLoading, viewModel.workspaces.isEmpty {
+                ProgressView {
+                    Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+                }
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            } else if viewModel.filteredWorkspaces.isEmpty {
+                if viewModel.hasSearchQuery {
+                    WorkspaceSearchEmptyState()
+                } else {
+                    emptyState
+                }
+            } else {
+                workspaceList
+            }
+        }
     }
 
     private var workspaceMenu: some View {
@@ -143,11 +184,12 @@ struct WorkspaceListSidebar: View {
                 // Sidebar list styling clips section edges to the system radius.
                 // The persistent sidebar uses the same custom radius for every row.
                 workspaceListContent.listStyle(.plain)
+                    .environment(\.defaultMinListRowHeight, 0)
             } else {
                 workspaceListContent.listStyle(.sidebar)
             }
         }
-        .environment(\.defaultMinListHeaderHeight, isEmbedded && viewModel.viewMode == .recent ? 0 : nil)
+        .environment(\.defaultMinListHeaderHeight, isEmbedded ? 0 : nil)
         .listRowSpacing(isEmbedded ? 0 : nil)
         #if !os(visionOS)
         // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
@@ -157,8 +199,11 @@ struct WorkspaceListSidebar: View {
         .focusEffectDisabled()
         #endif
         .scrollContentBackground(isEmbedded ? .hidden : .automatic)
-        .contentMargins(.horizontal, isEmbedded ? IPadSidebarStyle.inset : nil)
-        .contentMargins(.top, isEmbedded ? 0 : Constants.WorkspaceList.sidebarTopContentMargin)
+        .accessibilityIdentifier("workspaces.list")
+        .contentMargins(.horizontal, isEmbedded ? contentInset : nil, for: .scrollContent)
+        // Keep the filter gap scrollable so it cannot consume the reduced
+        // viewport above the keyboard; the final row retains bottom clearance.
+        .contentMargins(.top, isEmbedded ? (isFocusedSearch ? IPadShellLayout.focusContentInset : IPadSidebarStyle.filterListSpacing) : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)
         .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
     }
 
@@ -169,36 +214,37 @@ struct WorkspaceListSidebar: View {
                 searchFocused = false
                 if let id = newId {
                     coordinator.onSelectWorkspace(id)
-                } else {
+                } else if !isEmbedded {
                     coordinator.selectedWorkspaceId = nil
                 }
             }
         )) {
             switch viewModel.viewMode {
             case .recent:
-                recentWorkspaces
+                sidebarRows(viewModel.filteredWorkspaces)
             case .repo:
                 let groups = viewModel.groupedByRepo.map { repoName, workspaces in
-                    let content = Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
-                        RepoOwnerAvatarView(
-                            owner: workspaces.first?.repositoryOwner,
-                            size: Constants.WorkspaceList.sidebarSectionAvatarSize
-                        )
-                        Text(repoName)
-                            .interFont(Constants.Typography.eyebrow)
-                    }) {
-                        sidebarRows(workspaces, showRepo: false)
+                    let content = sidebarGroup(
+                        workspaces,
+                        isFirst: repoName == viewModel.groupedByRepo.first?.0,
+                        showRepo: false
+                    ) {
+                        HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
+                            RepoOwnerAvatarView(
+                                owner: workspaces.first?.repositoryOwner,
+                                size: Constants.WorkspaceList.sidebarSectionAvatarSize
+                            )
+                            Text(repoName).interFont(Constants.Typography.eyebrow)
+                        }
                     }
-                    .listSectionSeparator(isEmbedded ? .hidden : .automatic)
                     return (id: repoName, content: content)
                 }
                 ForEach(groups, id: \.id) { @Sendable group in group.content }
             case .status:
                 let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
-                    let content = Section(header: Text(statusLabel).interFont(Constants.Typography.eyebrow)) {
-                        sidebarRows(workspaces)
+                    let content = sidebarGroup(workspaces, isFirst: statusLabel == viewModel.groupedByStatus.first?.0) {
+                        Text(statusLabel).interFont(Constants.Typography.eyebrow)
                     }
-                    .listSectionSeparator(isEmbedded ? .hidden : .automatic)
                     return (id: statusLabel, content: content)
                 }
                 ForEach(groups, id: \.id) { @Sendable group in group.content }
@@ -207,18 +253,29 @@ struct WorkspaceListSidebar: View {
     }
 
     @ViewBuilder
-    private var recentWorkspaces: some View {
+    private func sidebarGroup<Header: View>(
+        _ workspaces: [Workspace],
+        isFirst: Bool,
+        showRepo: Bool = true,
+        @ViewBuilder header: () -> Header
+    ) -> some View {
         if isEmbedded {
-            Section {
-                sidebarRows(viewModel.filteredWorkspaces)
-            } header: {
-                Color.clear.frame(height: 0)
-                    .listRowInsets(EdgeInsets())
-                    .accessibilityHidden(true)
-            }
-            .listSectionSeparator(.hidden)
+            // Ordinary header rows avoid the List's implicit section padding.
+            // The scroll-content top margin is the entire filter-to-label gap.
+            header()
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, IPadSidebarStyle.rowInset)
+                .padding(.top, isFirst ? 0 : IPadSidebarStyle.sectionSpacing)
+                .padding(.bottom, IPadSidebarStyle.groupLabelSpacing)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .accessibilityAddTraits(.isHeader)
+            sidebarRows(workspaces, showRepo: showRepo)
         } else {
-            sidebarRows(viewModel.filteredWorkspaces)
+            Section(header: header()) { sidebarRows(workspaces, showRepo: showRepo) }
         }
     }
 
@@ -278,7 +335,6 @@ struct WorkspaceListSidebar: View {
             workspaceSwipeProgress: $workspaceSwipeProgress,
             nextWorkspaceId: nextWorkspaceId,
             spacious: false,
-            showsTrailingActions: false,
             isSidebar: isEmbedded,
             isSelected: coordinator.selectedWorkspaceId == workspace.id,
             isNextSelected: nextWorkspaceId != nil && coordinator.selectedWorkspaceId == nextWorkspaceId
@@ -288,11 +344,39 @@ struct WorkspaceListSidebar: View {
         } onOpenRecentAgent: {
             searchFocused = false
             coordinator.onOpenRecentWorkspaceAgent(workspace.id)
-        } onAction: { _ in }
+        } onAction: { action in
+            searchFocused = false
+            pendingAction = PendingAction(workspace: workspace, action: action)
+        }
         #endif
     }
 
     static func rowSelectionBackground(isSelected: Bool, colorScheme: ColorScheme) -> Color {
         isSelected ? Theme.sidebarSelection(for: colorScheme) : .clear
+    }
+}
+
+private extension WorkspaceListSidebar {
+    var confirmationPresented: Binding<Bool> {
+        Binding(get: { pendingAction != nil }, set: { if !$0 { pendingAction = nil } })
+    }
+
+    var errorPresented: Binding<Bool> {
+        Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })
+    }
+
+    func perform(_ pending: PendingAction) {
+        Task {
+            do {
+                try await workspaceStore.perform(pending.action, workspaceId: pending.workspace.id)
+            } catch {
+                actionError = error.localizedDescription
+            }
+        }
+    }
+
+    struct PendingAction {
+        let workspace: Workspace
+        let action: WorkspaceAction
     }
 }

@@ -66,11 +66,12 @@ final class LocalNotificationService: NSObject {
         let workspaceId: String?
         let agentName: String?
         let connectionId: UUID?
+        let foregroundPresentationHandled: Bool
     }
 
     static let shared = LocalNotificationService()
 
-    var onWillPresentNotification: ((Response) -> Void)?
+    var onWillPresentNotification: ((Response) -> UNNotificationPresentationOptions)?
     var onNotificationResponse: ((Response) -> Void)?
 
     private let center: any LocalNotificationCenter
@@ -93,17 +94,20 @@ final class LocalNotificationService: NSObject {
         workspaceId: String,
         agentName: String,
         workspaceName: String,
-        connectionId: UUID
+        connectionId: UUID,
+        foregroundPresentationHandled: Bool = false
     ) {
         let content = UNMutableNotificationContent()
         content.title = agentName
         content.body = "Finished in \(workspaceName)"
         content.sound = .default
+        content.interruptionLevel = .active
         content.userInfo = [
             "agentId": agentId,
             "workspaceId": workspaceId,
             "agentName": agentName,
-            "connectionId": connectionId.uuidString
+            "connectionId": connectionId.uuidString,
+            "foregroundPresentationHandled": foregroundPresentationHandled
         ]
 
         let request = UNNotificationRequest(
@@ -144,7 +148,8 @@ final class LocalNotificationService: NSObject {
             agentId: userInfo["agentId"] as? String,
             workspaceId: userInfo["workspaceId"] as? String,
             agentName: userInfo["agentName"] as? String,
-            connectionId: (userInfo["connectionId"] as? String).flatMap(UUID.init(uuidString:))
+            connectionId: (userInfo["connectionId"] as? String).flatMap(UUID.init(uuidString:)),
+            foregroundPresentationHandled: userInfo["foregroundPresentationHandled"] as? Bool ?? false
         )
     }
 
@@ -153,8 +158,8 @@ final class LocalNotificationService: NSObject {
         completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
     ) {
         Task { @MainActor [weak self] in
-            self?.onWillPresentNotification?(response)
-            completionHandler(Self.presentationOptionsForForegroundNotification())
+            let options = self?.onWillPresentNotification?(response) ?? []
+            completionHandler(options)
         }
     }
 
@@ -166,11 +171,6 @@ final class LocalNotificationService: NSObject {
             self?.onNotificationResponse?(response)
             completionHandler()
         }
-    }
-
-    nonisolated static func presentationOptionsForForegroundNotification()
-        -> UNNotificationPresentationOptions {
-        []
     }
 }
 

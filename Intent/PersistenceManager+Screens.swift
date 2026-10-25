@@ -79,6 +79,16 @@ extension PersistenceManager {
         defaults.removeObject(forKey: Self.lastNoteTitleKey)
     }
 
+    private static let workspaceListViewModeKey = "workspaceListViewMode"
+
+    func saveWorkspaceListViewMode(_ mode: ViewMode) {
+        defaults.set(mode.rawValue, forKey: Self.workspaceListViewModeKey)
+    }
+
+    func loadWorkspaceListViewMode() -> ViewMode {
+        defaults.string(forKey: Self.workspaceListViewModeKey).flatMap(ViewMode.init(rawValue:)) ?? .recent
+    }
+
     // MARK: - Per-Workspace Tab
 
     private static let workspaceTabsKey = "workspaceTabs"

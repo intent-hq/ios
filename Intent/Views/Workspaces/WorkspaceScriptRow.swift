@@ -8,8 +8,11 @@ struct WorkspaceScriptRow: View {
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .body) private var scaledActionSize = Constants.WorkspaceList.swipeButtonSize
+    @ScaledMetric(relativeTo: .body) private var actionIconSize = Constants.WorkspaceList.swipeButtonIconSize
 
     private var canUpdate: Bool { store.isConnected && !store.isUpdating(script) }
+    private var actionSize: CGFloat { max(Constants.Accessibility.minimumTapTarget, scaledActionSize) }
 
     private var status: String {
         guard store.isConnected else { return "Disconnected" }
@@ -29,7 +32,11 @@ struct WorkspaceScriptRow: View {
             target: .script(script.id),
             revealedTarget: $revealedTarget,
             actionCount: script.isActive ? 2 : 1,
-            horizontalInset: WorkspaceDetailStyle.pageInset
+            actionWidth: actionSize,
+            actionLeadingSpacing: Constants.WorkspaceList.swipeActionsLeadingSpacing,
+            horizontalInset: WorkspaceDetailStyle.pageInset,
+            swipeBackground: Constants.WorkspaceList.controlSurface(for: colorScheme),
+            isSwipeEnabled: canUpdate
         ) { progress in
             scriptButton(swipeProgress: progress)
         } actions: {
@@ -58,17 +65,25 @@ struct WorkspaceScriptRow: View {
     private var swipeActions: some View {
         Group {
             if script.isActive {
-                Button("Stop", action: stop)
-                    .buttonStyle(WorkspaceSwipeButtonStyle(color: .orange))
+                Button(action: stop) { actionIcon(.stopFill) }
+                    .buttonStyle(WorkspaceSwipeIconButtonStyle(size: actionSize))
                     .accessibilityLabel("Stop script")
                     .accessibilityIdentifier("workspace.script.stop.\(script.id)")
             }
-            Button("Delete", role: .destructive, action: remove)
-                .buttonStyle(WorkspaceSwipeButtonStyle(color: .red))
+            Button(role: .destructive, action: remove) { actionIcon(.delete) }
+                .buttonStyle(WorkspaceSwipeIconButtonStyle(size: actionSize))
                 .accessibilityLabel("Delete script")
                 .accessibilityIdentifier("workspace.script.delete.\(script.id)")
         }
         .disabled(!canUpdate)
+    }
+
+    private func actionIcon(_ image: ImageResource) -> some View {
+        Image(image)
+            .resizable()
+            .scaledToFit()
+            .frame(width: actionIconSize, height: actionIconSize)
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private var menuActions: some View {
@@ -104,7 +119,7 @@ struct WorkspaceScriptRow: View {
     }
 
     private func row(swipeProgress: CGFloat) -> some View {
-        HStack(spacing: WorkspaceDetailStyle.avatarSpacing) {
+        HStack(alignment: .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
             Image(.terminal)
                 .resizable()
                 .scaledToFit()

@@ -4,11 +4,40 @@ extension DemoFixtures {
     static let assistantAgentId = "demo-agent-assistant"
     private static let assistantHistoryCount = 30
     private static var createdAssistantAgents: [[String: Any]] = []
+    private static var deletedAssistantAgentIDs: Set<String> = []
     private static var proposalOutcome: String?
     private static var assistantListFailed = false
+    private static var assistantModelSettings: [String: [String: Any]] = [:]
+
+    static func assistantModelResponse(for method: String, params: [String: Any]) -> Any? {
+        guard params["workspaceId"] as? String == Workspace.chiefWorkspaceId,
+              let agentID = params["agentId"] as? String else { return nil }
+        switch method {
+        case "agent.setModel":
+            assistantModelSettings[agentID, default: [:]]["model"] = params["modelId"]
+            if let provider = params["providerId"] { assistantModelSettings[agentID, default: [:]]["provider"] = provider }
+        case "agent.update":
+            if let changes = params["changes"] as? [String: Any] {
+                assistantModelSettings[agentID, default: [:]].merge(changes) { _, updated in updated }
+            }
+        default:
+            return nil
+        }
+        return ["success": true]
+    }
+
+    static func assistantDetail(_ agent: [String: Any]) -> [String: Any] {
+        var detail = agent
+        detail["model"] = "default-model"
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-reasoning-high") { detail["reasoningEffort"] = "high" }
+        detail.merge(assistantModelSettings[agent["id"] as? String ?? ""] ?? [:]) { _, updated in updated }
+        return detail
+    }
 
     static var assistantAgents: [[String: Any]] {
-        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-empty") { return createdAssistantAgents }
+        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-empty") {
+            return createdAssistantAgents.filter { !deletedAssistantAgentIDs.contains($0["id"] as? String ?? "") }
+        }
         let history: [[String: Any]] = ProcessInfo.processInfo.arguments.contains("--demo-assistant-history")
             ? (0..<assistantHistoryCount).map { index in
                 [
@@ -19,7 +48,7 @@ extension DemoFixtures {
                     "updatedAt": "2026-09-23T10:00:00Z"
                 ]
             } : []
-        return [
+        let agents: [[String: Any]] = [
             [
                 "id": assistantAgentId,
                 "name": "Assistant",
@@ -29,6 +58,15 @@ extension DemoFixtures {
                 "metadata": assistantMetadata
             ]
         ] + history + createdAssistantAgents
+        return agents.filter { !deletedAssistantAgentIDs.contains($0["id"] as? String ?? "") }
+    }
+
+    static func deleteAssistantAgent(params: [String: Any]) -> [String: Any] {
+        if params["workspaceId"] as? String == Workspace.chiefWorkspaceId,
+           let id = params["agentId"] as? String {
+            deletedAssistantAgentIDs.insert(id)
+        }
+        return [:]
     }
 
     static func createAssistantAgent() -> [String: Any] {

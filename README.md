@@ -42,7 +42,7 @@ scripts/                       Build/test/lint wrappers and Mermaid vendoring to
 ci_scripts/                    Xcode Cloud dependency preparation
 ```
 
-The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport, **Textual** for Markdown, **SwiftTerm** for terminal emulation, and **Lottie** for bundled animations. Mermaid diagrams render in a `WKWebView` using bundled JavaScript, without a CDN or runtime Node dependency.
+The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport, **Textual** for Markdown, **SwiftTerm** for terminal emulation, and **Lottie** for bundled animations. Mermaid diagrams render through bundled **Pele** JavaScript in a `WKWebView`, without a CDN or runtime Node dependency.
 
 ## Pairing
 
@@ -76,7 +76,7 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 - note and comment reading and live state, plus task listing, status changes, and live state;
 - agent discovery and lifecycle plus conversation history, sending, queue management, questions, models, and streaming controls;
 - attachment upload, placement, and download;
-- repository, branch, provider, model, and specialist discovery;
+- repository, branch, provider, model, specialist, and workspace skill discovery;
 - Git status, diffs, and commit history across workspace repositories;
 - workspace transfer and mobile terminal lifecycle, input, output, and resizing; and
 - background-hook and pull-request-monitor status and controls.
@@ -84,6 +84,11 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 Live updates combine domain subscriptions for workspaces, notes, tasks, comments, and chats—delivered as `subscription.push` notifications—with filtered `events.subscribe` streams for agent, hook, and pull-request-monitor events.
 Browser previews use an auxiliary authenticated WebSocket tunnel rather than
 passing daemon credentials to web content.
+
+In an agent conversation, type `/` in the prompt to browse available workspace
+skills. Keep typing to filter by name or description, then tap a skill to insert
+its slash command. Hardware keyboards can use Up/Down to select, Tab to insert,
+and Escape to dismiss the suggestions.
 
 ## Quickstart
 
@@ -125,12 +130,30 @@ Direct dependencies managed via Swift Package Manager (integrated in Xcode):
 the resolved direct and transitive packages. The separate Go bridge pins its
 dependencies in `TailcatKit/go.mod` and `TailcatKit/go.sum`.
 
-### Offline Mermaid bundle
+### Offline Mermaid rendering with Pele
 
-`Intent/Resources/Mermaid/` contains the checked-in Mermaid **11.17.2** and ELK
-layout **0.2.3** bundle, renderer, licenses, and `vendor.json` provenance. Normal
-Xcode builds use those assets directly; Node/npm is only needed to regenerate
-them or run the renderer's tests.
+`Intent/Resources/Mermaid/` contains the checked-in Pele **1.8.0** engine in
+`pele.bundle.js`, the renderer, licenses, and `vendor.json` provenance. Pele
+replaces the Mermaid/ELK engine while retaining Mermaid source syntax and the
+existing resource and vendoring directories. Normal Xcode builds use those
+assets directly; Node/npm is only needed to regenerate them or run the
+renderer's tests.
+
+The engine exposes synchronous `window.intentPele.render(source, options)`.
+The app's `window.renderMermaid` bridge still prepares local Inter fonts,
+discards stale revisions, and reports height or errors to Swift. Diagrams keep
+their natural size and source direction, with horizontal scrolling and pinch
+zoom for wide content. Light and dark themes use Intent brand colors through
+Pele CSS variables, using the palette and radii from the
+[Intent Brand System](https://www.figma.com/design/yMkewdoHbGpIqVvZO09oA2/Intent-Brand---Working?node-id=2753-15362).
+Links and images are disabled; source is limited to 50,000 characters and
+flowchart/agentflow diagrams to 500 edges. Source directives and frontmatter
+cannot relax those restrictions. The page's CSP and native navigation policy
+continue to prevent external content access.
+
+Pele uses its own layout and SVG structure; Mermaid layout engines and
+`themeVariables` do not carry over. Labels support text formatting rather than
+arbitrary HTML. TeX labels show their source because no math typesetter is bundled.
 
 To regenerate the bundle from its locked dependencies:
 
@@ -140,18 +163,38 @@ npm ci
 npm run build
 ```
 
-Review the generated bundle, license notices, and `vendor.json` together. To test
+Review the lockfile, generated bundle, license notices, and `vendor.json` together. To test
 the shipped renderer from the same directory, run `npx playwright install chromium webkit`
-then `npm test`. Native coverage lives in `MermaidMarkdownContentTests`,
+then `npm test`. The browser suite covers flowchart, sequence, state, class, ER,
+pie, XY chart, Gantt, Git graph, and frontmatter fixtures in both themes, plus
+security, source and edge limits, stale requests during font loading, source directions,
+natural-size scrolling, fullscreen sizing, and completion without animation
+frames. Set `MERMAID_BROWSERS=chromium` or `MERMAID_BROWSERS=webkit` for a focused
+run. To capture all fixtures in both themes, set `MERMAID_SCREENSHOT_DIR` to a
+directory outside the checkout, for example:
+
+```bash
+MERMAID_SCREENSHOT_DIR=/tmp/intent-pele-screenshots npm test
+```
+
+Screenshot names include the engine, browser, fixture, and appearance. Review
+the images before claiming visual coverage; browser screenshots do not replace
+native device or simulator validation. Native coverage lives in `MermaidMarkdownContentTests`,
 `MermaidWebViewTests`, and `ConversationMermaidUITests`.
+The native Mermaid probes have a five-second JavaScript deadline and require a
+successful render before inspecting the page. `MermaidJavaScriptProbeTests`
+checks missing and late callbacks, error propagation, and cancellation without
+depending on a healthy WebKit process. CI retains unit results and console logs
+on cancellation as well as failure so interrupted renderer runs can be inspected.
 
 ## Development
 
 ### Clean-checkout prerequisites
 
 - For app builds: macOS with Xcode and its command-line tools. Tests require an available iPhone
-  simulator by default; use `SIM_UDID` to select an iPad. CI's self-hosted Macs
-  select Xcode 26.3 explicitly; hosted runners select their newest installed Xcode.
+  simulator by default; use `SIM_UDID` to select an iPad. Every CI Mac selects its
+  newest installed GA Xcode 26 (betas and release candidates are skipped); on
+  GitHub-hosted `macos-26-xlarge` that is Xcode 26.6 (the local iPhone pool runs 26.3).
 - Network access for the first Swift package resolution and pinned Go tool download.
 - A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
   automatically run `TailcatKit/build_xcframework.sh` when the gitignored framework
@@ -318,25 +361,56 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
-queue. The UI job also runs focused iPad sidebar regressions. Go tests, wrapper
-self-tests, and the strict SwiftLint gate run on Linux. The full UI bundle runs
+queue. Smoke coverage uses two balanced iPhone shards and an independent job for
+all seven focused iPad sidebar regressions. Each lane owns its build directory,
+disposable simulator, results, and evidence. All lanes prefer an idle
+self-hosted Mac; GitHub-hosted Macs handle overflow when the local pool is busy.
+Matrix fail-fast is
+disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
+Go tests, wrapper self-tests, and the strict SwiftLint gate run on Linux.
+The full UI bundle runs once in one iPhone job, alongside the iPad regressions,
 on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
 
 ```bash
 gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f ui_suite=full
+gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f pre_pr_gate=true
 gh workflow run ci.yml --repo intent-hq/ios --ref your-branch -f only_testing='IntentTests/DemoFixturesTests'
 ```
 
 Replace `your-branch` with the branch to test. Filtered dispatches are
 **non-gating** and do not replace the normal PR checks.
+
+Both workspace creation entry tests exercise light and dark appearances on every
+run, including ordinary PRs.
+
+Each selector in `scripts/ui-smoke-tests.txt` has a `# shard: 1` or `# shard: 2`
+annotation. Assign new selectors to a shard and keep suite members together when
+practical. `python3 scripts/ui_smoke_tests.py --shard 1` prints that shard's
+selection. Invalid annotations, duplicate selectors, or empty shards fail before
+native tests start. Run `python3 scripts/test_ui_smoke_tests.py` after changing
+selection logic and `python3 scripts/test_ci_simulator.py` after changing the
+workflow. Screenshot artifact names use `-iphone-1`, `-iphone-2`, and `-ipad`
+suffixes for smoke runs; full runs use `-iphone` and `-ipad`. Simulator and failure
+artifacts also include the lane name.
+
+`pre_pr_gate=true` runs the literal `scripts/xcodebuild.sh test-ios` gate,
+building once and running unit and UI tests together on an owned iPhone simulator.
+It replaces the separate build/unit/UI steps for that dispatch, keeps the visionOS
+build, and retains the xcresult, retry results, full gate log and allowlisted fixture
+screenshots. It rejects `only_testing` and iPad selection; `ui_suite` is ignored.
 For an iPad proof run, add `-f simulator_family=ipad` with 1–20
 `Target/Suite[/test]` selectors in `only_testing`; whole-bundle selectors are not
 accepted, and each selection must actually execute. This route creates and
-cleans up its own simulator and uploads `ios-ipad-execution-evidence`.
+cleans up its own simulator and uploads `ios-ipad-execution-evidence`. Like the
+iPhone route, it selects an available runtime matching the selected Xcode SDK's
+major version and fails before creation if no compatible iPad is available.
 
 The full UI bundle still excludes `AppStoreScreenshotTests` and honors runtime
-skips. Quarantined transcript cases in `ConversationTranscriptFullGateUITests`
-require `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run;
+skips. Quarantined transcript cases in
+[`ConversationTranscriptFullGateUITests.swift`](IntentUITests/ConversationTranscriptFullGateUITests.swift)
+extend `ConversationTranscriptScrollUITests`. Select
+`ONLY_TESTING='IntentUITests/ConversationTranscriptScrollUITests'` with
+`TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run;
 `ui_suite=full` alone does not opt into them.
 
 #### Mermaid UI quarantine
@@ -371,7 +445,9 @@ configurations with the original assertions and timeouts.
 CI uploads `ios-ui-review-evidence` for 14 days when allowlisted captures exist,
 on success or failure and for filtered UI runs. Open its PNGs directly;
 `manifest.json` records the tested revision, suite/test, source bundle, and retry
-origin. Captures include workspace creation, iPad sidebars and pairing, menus, changes, and connection-loss
+origin. Parallel iPad exports append `-ipad` to evidence artifact names, including
+`ios-ui-review-evidence-ipad`, to avoid collisions with the iPhone job. Captures
+include workspace creation, iPad sidebars and pairing, menus, changes, and connection-loss
 flows; `scripts/export_ui_evidence.py` is the complete allowlist. Missing images
 are not proof that a view was captured. `ios-agent-group-evidence` and
 `ios-transcript-recovery-evidence` remain separate artifacts. Run
@@ -379,6 +455,38 @@ are not proof that a view was captured. `ios-agent-group-evidence` and
 On macOS, use `TMPDIR=/private/tmp python3 scripts/test_export_ui_evidence.py`
 to avoid the fixture's symlinked temporary-path mismatch
 ([ios#671](https://github.com/intent-hq/ios/issues/671)).
+
+Final diagnostic attachments use XCTest teardown, since an assertion with
+`continueAfterFailure = false` can bypass Swift `defer`. The Linux CI job runs
+`python3 scripts/check_ui_attachment_lifecycle.py` and its mutation tests to
+reject attachment-producing defer blocks (including named helper calls);
+ordinary cleanup remains allowed. The source check is conservative by function
+name, not a Swift type checker: it includes parameter defaults but does not
+resolve dynamic dispatch, aliases, computed properties, or constructors.
+
+After `scripts/xcodebuild.sh build-for-testing-ui`, run
+`python3 scripts/verify_fixture_capture_lifecycle.py --output-root build/capture-contract`
+with the same simulator and derived-data settings. The output directory must be
+new. The first iPhone smoke shard, or the single full iPhone job, runs this contract
+separately from the smoke selection and uploads `ios-fixture-capture-lifecycle`,
+including the original failing xcresults,
+result JSON, logs, and compact PNG manifests. The isolated abort fixture opts in
+only for this verifier; ordinary test runs skip that intentional failure.
+The verifier requires exit 65, the original marked assertion recorded as Failed,
+a passing companion fixture, and every exact named final PNG under its owning
+test in each result bundle. The local verifier defaults to two result bundles.
+Ordinary PRs use `--repetitions 1`; capture fixture/exporter/tooling changes,
+scheduled runs, manual runs, and the merge queue retain two. If the changed-file
+lookup fails, CI keeps two. The selector checks the PR head, base, and file count
+before and after fetching files; stale reruns and changing PRs also keep two.
+`.github/scripts/select-fixture-capture-repetitions.sh`
+defines the relevant paths; its offline regression is
+`python3 scripts/test_select_fixture_capture_repetitions.py`. One repetition
+still requires repeated passing captures to remain distinct; the second also
+checks separation across result bundles. Changing the abort fixture's capture
+teardown back to defer must fail
+both the source check and this native contract after rebuilding; restore and
+rebuild afterward. XCTest teardown does not guarantee evidence after a process crash.
 
 Xcode Cloud uses `ci_scripts/ci_post_clone.sh` to prepare TailcatKit for iOS with
 a checksum-pinned Go toolchain; it skips that setup for visionOS. This is build
@@ -404,3 +512,27 @@ monorepo issue tracker.
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
+
+### GitHub Actions runners
+
+Script and Go jobs use GitHub-hosted `ubuntu-24.04`. All macOS jobs prefer
+self-hosted Macs: iOS builds and every iPhone/iPad UI lane use the `intent-ios`
+pool; visionOS builds and cache warming prefer `intent-ios-build`, then
+`intent-ios`. Each pool selects its installed Xcode independently.
+The 18 October 2026 validation used Xcode 26.5 on a Depot Mac (the hosted pool
+before the move to GitHub-hosted runners) for iPad and 26.3 on the local iPhone Mac.
+The pools do not guarantee the same toolchain or simulator runtime. Record the
+runner, Xcode, and runtime when comparing timings or investigating failures.
+Selectors use `RUNNER_STATUS_TOKEN` to inspect the pools and fall back to
+GitHub-hosted `macos-26-xlarge` (Apple Silicon) when every matching local runner is
+busy or offline, or runner status cannot be read. Selection uses a snapshot of
+runner availability. CI allocates each idle service once across builds and UI
+lanes, then sends remaining jobs to hosted Macs. Independent workflows can still
+race for the same capacity before GitHub assigns them.
+Each local registration must carry `intent-ios-runner-<id>`, using its GitHub
+runner ID. The selector verifies that label is unique and includes it in the
+job's routing labels, so GitHub schedules the service counted by the allocation.
+Missing or duplicate routing labels make that service ineligible for selection.
+The selected image needs Xcode 26;
+runtime and Metal provisioning run as needed. Go and Swift package caches and
+Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.

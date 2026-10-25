@@ -4,6 +4,7 @@ struct WorkspaceStatusSwipeBadge: View {
     let workspace: Workspace
     let progress: CGFloat
     let availableWidth: CGFloat
+    var dotSize: CGFloat = Constants.WorkspaceRow.statusIconSize
     let onSizeChanged: (CGSize) -> Void
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -11,7 +12,6 @@ struct WorkspaceStatusSwipeBadge: View {
 
     private var status: WorkspaceDisplayStatus { resolveDisplayStatus(for: workspace) }
     private var expansion: CGFloat { min(1, max(0, progress)) }
-    private var dotSize: CGFloat { Constants.WorkspaceRow.statusIconSize }
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: min(size.height / 2, Style.cornerRadius), style: .continuous)
     }
@@ -36,7 +36,7 @@ struct WorkspaceStatusSwipeBadge: View {
                 }
                 .opacity(Double(max(0, (expansion - Style.labelFadeStart) / (1 - Style.labelFadeStart))))
                 .mask(alignment: .leading) { shape.frame(width: size.width, height: size.height) }
-            WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
+            WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme, size: dotSize)
                 .opacity(Double(max(0, 1 - expansion / Style.dotFadeEnd)))
         }
         .frame(width: dotSize, height: dotSize, alignment: .leading)

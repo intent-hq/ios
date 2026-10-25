@@ -300,7 +300,7 @@ struct IntentFileAttachmentLoaderTests {
 
     // MARK: - Thumbnail sizing
 
-    @Test func attachmentSizeIsFixedSquare() {
+    @Test func mediaCardSizeIsFixedSquare() {
         let side = SquareImageThumbnail.transcriptSide
         #expect(
             IntentFileImageAttachment.thumbnailSize(proposedWidth: 1000)
@@ -317,6 +317,86 @@ struct IntentFileAttachmentLoaderTests {
             IntentFileImageAttachment.thumbnailSize(proposedWidth: 100)
                 == CGSize(width: 100, height: 100)
         )
+    }
+}
+
+extension IntentFileAttachmentLoaderTests {
+    @Test func inlineImageSizesFitTheFullImage() {
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 400, height: 200)) == CGSize(width: 160, height: 80))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 200, height: 400)) == CGSize(width: 80, height: 160))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 200, height: 200)) == CGSize(width: 160, height: 160))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 400, height: 200), proposedWidth: 60) == CGSize(width: 60, height: 30))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 200, height: 400), proposedWidth: 60) == CGSize(width: 60, height: 120))
+        #expect(InlineImageThumbnail.size(for: .zero) == CGSize(width: 160, height: 160))
+        #expect(InlineImageThumbnail.size(for: CGSize(width: 400, height: 200), proposedWidth: 0) == .zero)
+    }
+
+    @Test(arguments: [
+        CGSize(width: 400, height: 200),
+        CGSize(width: 200, height: 400),
+        CGSize(width: 200, height: 200)
+    ])
+    func imageSymbolShowsFullImageWhenScaledIntoText(_ sourceSize: CGSize) throws {
+        let source = UIGraphicsImageRenderer(size: sourceSize).image { context in
+            UIColor.blue.setFill()
+            context.fill(CGRect(origin: .zero, size: sourceSize))
+            UIColor.red.setFill()
+            context.fill(CGRect(
+                x: sourceSize.width / 2 - 50,
+                y: sourceSize.height / 2 - 50,
+                width: 100,
+                height: 100
+            ))
+        }
+        let attachment = IntentFileImageAttachment(image: source, altText: "Proportions fixture")
+        let symbol = try #require(ImageRenderer(content: attachment.body).uiImage)
+        #expect(max(symbol.size.width, symbol.size.height) == 160)
+        #expect(symbol.size.width / symbol.size.height == sourceSize.width / sourceSize.height)
+
+        for width: CGFloat in [160, 60] {
+            let bounds = CGRect(origin: .zero, size: attachment.sizeThatFits(
+                ProposedViewSize(width: width, height: nil), in: TextEnvironmentValues()
+            ))
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let rendered = UIGraphicsImageRenderer(bounds: bounds, format: format).image { _ in
+                symbol.draw(in: bounds)
+            }
+            let marker = try redMarkerSize(in: rendered)
+            let scale = min(width / sourceSize.width, 160 / sourceSize.height)
+            #expect(bounds.size == CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale))
+            #expect(abs(marker.width - 100 * scale) <= 1)
+            #expect(abs(marker.height - 100 * scale) <= 1)
+        }
+    }
+
+    private func redMarkerSize(in image: UIImage) throws -> CGSize {
+        let bitmap = try #require(image.cgImage)
+        let channels = 4
+        let bitsPerComponent = 8
+        let redThreshold: UInt8 = 200
+        let otherThreshold: UInt8 = 50
+        var pixels = [UInt8](repeating: 0, count: bitmap.width * bitmap.height * channels)
+        try pixels.withUnsafeMutableBytes { bytes in
+            let context = try #require(CGContext(
+                data: bytes.baseAddress,
+                width: bitmap.width,
+                height: bitmap.height,
+                bitsPerComponent: bitsPerComponent,
+                bytesPerRow: bitmap.width * channels,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(bitmap, in: CGRect(x: 0, y: 0, width: bitmap.width, height: bitmap.height))
+        }
+        func isRed(x: Int, y: Int) -> Bool {
+            let offset = (y * bitmap.width + x) * channels
+            return pixels[offset] > redThreshold
+                && pixels[offset + 1] < otherThreshold && pixels[offset + 2] < otherThreshold
+        }
+        let horizontal = (0..<bitmap.width).filter { isRed(x: $0, y: bitmap.height / 2) }.count
+        let vertical = (0..<bitmap.height).filter { isRed(x: bitmap.width / 2, y: $0) }.count
+        return CGSize(width: horizontal, height: vertical)
     }
 
     @Test(arguments: [nil, .regular, .bold] as [LegibilityWeight?])

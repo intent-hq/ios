@@ -74,16 +74,42 @@ struct ImageActionMenuItems: View {
     }
 }
 
-/// Fixed square, cropped, bordered, rounded chat-image thumbnail (FE
-/// parity: ChatImageBlock.svelte square thumbnails; user-row attachments
-/// keep their smaller side).
+struct InlineImageThumbnail: View {
+    let image: UIImage
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let size = Self.size(for: image.size)
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size.width, height: size.height)
+            .accessibilityLabel("Attached image")
+            .clipShape(.rect(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
+            .overlay {
+                RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius)
+                    .strokeBorder(Theme.border(for: colorScheme), lineWidth: Constants.Conversation.ImageThumbnail.borderWidth)
+            }
+    }
+
+    static func size(for imageSize: CGSize, proposedWidth: CGFloat? = nil) -> CGSize {
+        let limit = Constants.Conversation.ImageThumbnail.transcriptSide
+        let width = max(0, min(limit, proposedWidth ?? limit))
+        guard imageSize.width > 0, imageSize.height > 0 else {
+            return CGSize(width: width, height: width)
+        }
+        let scale = min(width / imageSize.width, limit / imageSize.height)
+        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    }
+}
+
+/// Compact cropped preview for attachment grids and video posters.
 struct SquareImageThumbnail: View {
     let image: UIImage
     let side: CGFloat
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Assistant transcript thumbnails (agent image blocks + markdown
-    /// images) — FE parity: 160px.
+    /// Maximum transcript preview side, also used by square media cards.
     nonisolated static let transcriptSide: CGFloat = Constants.Conversation.ImageThumbnail.transcriptSide
 
     var body: some View {

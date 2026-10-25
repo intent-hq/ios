@@ -5,6 +5,7 @@ struct NoteListView: View {
     let workspaceId: String
     @Environment(AppCoordinator.self) var coordinator
     var noteStore: NoteStore
+    var isEmbedded = false
     @Environment(\.colorScheme) var colorScheme
     @State private var collapsedIds: Set<String> = []
 
@@ -14,19 +15,25 @@ struct NoteListView: View {
                 Text("Loading notes...").interFont(Constants.Typography.bodyS)
             }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
+                .frame(maxWidth: .infinity, minHeight: isEmbedded ? 0 : Constants.WorkspaceList.emptyStateHeight)
         } else if noteStore.sortedNotes.isEmpty {
-            ContentUnavailableView {
-                Label {
-                    Text("No Notes").interFont(Constants.Typography.bodyM)
-                } icon: {
-                    Image(systemName: "doc.text")
+            if isEmbedded {
+                Text("No notes yet")
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            } else {
+                ContentUnavailableView {
+                    Label {
+                        Text("No Notes").interFont(Constants.Typography.bodyM)
+                    } icon: {
+                        Image(systemName: "doc.text")
+                    }
+                } description: {
+                    Text("Notes will appear here when created.")
+                        .interFont(Constants.Typography.bodyXS)
                 }
-            } description: {
-                Text("Notes will appear here when created.")
-                    .interFont(Constants.Typography.bodyXS)
+                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
             }
-            .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
         } else {
             LazyVStack(spacing: WorkspaceDetailStyle.sectionSpacing) {
                 ForEach(noteStore.rootNotes) { note in
@@ -41,8 +48,8 @@ struct NoteListView: View {
                     .environment(coordinator)
                 }
             }
-            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-            .padding(.bottom, WorkspaceDetailStyle.pageInset)
+            .padding(.horizontal, isEmbedded ? 0 : WorkspaceDetailStyle.pageInset)
+            .padding(.bottom, isEmbedded ? 0 : WorkspaceDetailStyle.pageInset)
         }
     }
 }

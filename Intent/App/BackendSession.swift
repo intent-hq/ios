@@ -93,6 +93,7 @@ final class BackendSession {
     /// Workspace final step; same reopen-instantly contract as the repo cache.
     let creationOptionsStore: CreationOptionsStore
     let hooksStore: WorkspaceStatusStore<BackgroundHook>
+    let scriptMonitorsStore: WorkspaceScriptMonitorsStore
     let prMonitorsStore: WorkspacePrMonitorsStore
     let mobileTerminalStore: MobileTerminalStore
     let browserStore: WorkspaceBrowserStore
@@ -130,6 +131,7 @@ final class BackendSession {
         self.creationOptionsStore = creationOptionsStore
         self.hooksStore = BackgroundHookStore.makeWorkspaceStore(connection: connection)
         self.prMonitorsStore = prMonitorsStore
+        self.scriptMonitorsStore = WorkspaceScriptMonitorsStore(connection: connection)
         mobileTerminalStore = MobileTerminalStore(
             connection: connection,
             persistence: MobileTerminalPersistence(backendID: backendID)
@@ -193,6 +195,7 @@ final class BackendSession {
         creationOptionsStore.reset()
         hooksStore.reset()
         prMonitorsStore.reset()
+        scriptMonitorsStore.reset()
         conversations.reset()
         agentDetails.reset()
         connection.disconnect()

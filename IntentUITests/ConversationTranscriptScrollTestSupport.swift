@@ -48,13 +48,18 @@ enum Fixture {
     // frame's bottom edge is that much above the row's.
     static let thinkingIndicatorLabel = "Thinking..."
     static let thinkingIndicatorLabelInset: CGFloat = 4
-    // Workspace iPhone: 32pt section gap plus the 8pt anchor and 12pt footer.
-    // The shared non-phone presentation retains the original 16pt section gap.
+    // Workspace iPhone uses a 32pt section gap; iPad uses 36pt.
+    // Each adds the 8pt anchor and 12pt footer.
     private static let workspaceEndRowGap: CGFloat = 52
+    private static let iPadEndRowGap: CGFloat = 56
     private static let legacyEndRowGap: CGFloat = 36
 
     @MainActor static var endRowGap: CGFloat {
-        UIDevice.current.userInterfaceIdiom == .phone ? workspaceEndRowGap : legacyEndRowGap
+        switch UIDevice.current.userInterfaceIdiom {
+        case .phone: workspaceEndRowGap
+        case .pad: iPadEndRowGap
+        default: legacyEndRowGap
+        }
     }
     // Slack on `endRowGap`: the follow lands within 1 pt
     // (Constants.Conversation.Transcript.followLandingTolerance) and

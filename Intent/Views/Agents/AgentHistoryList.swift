@@ -9,53 +9,39 @@ struct AgentHistoryList: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
-    /// Row content snapshotted in `body`. SwiftUI builds the ForEach rows on its
-    /// async render thread while measuring the ViewThatFits candidates, where a
-    /// MainActor-isolated store read trips a dispatch_assert_queue trap — so the
-    /// rows carry only value data captured on the main thread.
-    private struct HistoryRow: Identifiable, Equatable {
-        let entry: AgentHistoryEntry
-        let title: String
-        let subtitle: String
-        let timestamp: String
-        let isCurrent: Bool
-        var id: AgentHistoryEntry.ID { entry.id }
-    }
-
     private var secondaryForeground: Color {
         Constants.Connections.sectionForeground(for: colorScheme, contrast: contrast)
     }
 
     var body: some View {
         let rows = rowSnapshot
-        VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.headingSpacing) {
-            header(hasEntries: !rows.isEmpty)
+        ScrollView {
+            VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.headingSpacing) {
+                header(hasEntries: !rows.isEmpty)
 
-            if rows.isEmpty {
-                Text("Agents you open on any device appear here.")
-                    .interFont(Constants.Typography.bodyS)
-            } else {
-                // Short lists stay centered; longer ones fill the panel and scroll beneath the header.
-                ViewThatFits(in: .vertical) {
+                if rows.isEmpty {
+                    Text("Agents you open on any device appear here.")
+                        .interFont(Constants.Typography.bodyS)
+                } else {
                     rowList(rows)
-                    ScrollView { rowList(rows) }
-                        .scrollBounceBehavior(.basedOnSize)
+                        .padding(.horizontal, -ConnectionSwitcherStyle.rowInset)
                 }
-                // Row text aligns with the header; the selection fill bleeds into the margin.
-                .padding(.horizontal, -ConnectionSwitcherStyle.rowInset)
             }
+            .padding(.vertical, ConnectionSwitcherStyle.inset)
+            .padding(.horizontal, ConnectionSwitcherStyle.rowInset)
         }
-        .padding(.vertical, ConnectionSwitcherStyle.inset)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .scrollBounceBehavior(.basedOnSize)
+        .defaultScrollAnchor(.center, for: .alignment)
         .foregroundStyle(Constants.Connections.foreground(for: colorScheme))
-        .padding(.leading, ConnectionSwitcherStyle.trailingInset)
-        .padding(.trailing, ConnectionSwitcherStyle.inset)
+        .padding(.leading, ConnectionSwitcherStyle.trailingInset - ConnectionSwitcherStyle.rowInset)
+        .padding(.trailing, ConnectionSwitcherStyle.inset - ConnectionSwitcherStyle.rowInset)
+        .accessibilityIdentifier("agent-history.list")
     }
 
-    private var rowSnapshot: [HistoryRow] {
+    private var rowSnapshot: [AgentHistoryRowSnapshot] {
         coordinator.visibleAgentHistory.map { entry in
             let workspaceTitle = workspaceTitle(for: entry)
-            return HistoryRow(
+            return AgentHistoryRowSnapshot(
                 entry: entry,
                 title: workspaceTitle ?? entry.agentName,
                 subtitle: subtitle(for: entry, showsAgentName: workspaceTitle != nil),
@@ -65,11 +51,18 @@ struct AgentHistoryList: View {
         }
     }
 
-    private func rowList(_ rows: [HistoryRow]) -> some View {
+    private func rowList(_ rows: [AgentHistoryRowSnapshot]) -> some View {
         // Resolve environment values and actions before SwiftUI's async row callback.
-        let content = rows.map { (id: $0.id, content: rowView($0)) }
+        let content = rows.map { row in
+            let content = AgentHistoryRow(
+                snapshot: row,
+                colorScheme: colorScheme,
+                secondaryForeground: secondaryForeground
+            ) { onSelect(row.entry) }
+            return (id: row.id, content: content)
+        }
         return VStack(spacing: ConnectionSwitcherStyle.rowSpacing) {
-            ForEach(content, id: \.id) { @Sendable row in row.content }
+            ForEach(snapshots: content, id: \.id) { row in row.content }
         }
     }
 
@@ -95,39 +88,6 @@ struct AgentHistoryList: View {
                     .accessibilityIdentifier("agent-history.clear")
             }
         }
-    }
-
-    private func rowView(_ row: HistoryRow) -> some View {
-        Button { onSelect(row.entry) } label: {
-            HStack(spacing: ConnectionSwitcherStyle.rowInset) {
-                VStack(alignment: .leading, spacing: ConnectionSwitcherStyle.rowTextSpacing) {
-                    Text(row.title)
-                        .interFont(Constants.Typography.bodySEmphasized)
-                        .lineLimit(1)
-                    if !row.subtitle.isEmpty {
-                        Text(row.subtitle)
-                            .interFont(Constants.Typography.bodyXS)
-                            .foregroundStyle(secondaryForeground)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Text(row.timestamp)
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(secondaryForeground)
-            }
-            .padding(ConnectionSwitcherStyle.rowInset)
-            .frame(maxWidth: .infinity, minHeight: ConnectionSwitcherStyle.rowHeight, alignment: .leading)
-            .background(
-                row.isCurrent ? ConnectionSwitcherStyle.selection(for: colorScheme) : .clear,
-                in: .rect(cornerRadius: ConnectionSwitcherStyle.cornerRadius)
-            )
-            .contentShape(.rect(cornerRadius: ConnectionSwitcherStyle.cornerRadius))
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(row.isCurrent ? .isSelected : [])
-        .accessibilityIdentifier("agent-history.entry.\(row.id)")
     }
 
     /// The open device's workspace title is read live; others use the title from the visit.

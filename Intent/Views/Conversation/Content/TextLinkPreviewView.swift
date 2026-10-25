@@ -9,6 +9,7 @@ struct TextLinkPreviewView: View {
     }
 
     let link: Link
+    var loaderOverride: WorkspaceFileImageLoader?
     @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.dismiss) private var dismiss
     @State private var file: WorkspaceTextFile?
@@ -17,7 +18,7 @@ struct TextLinkPreviewView: View {
     @ScaledMetric(relativeTo: .body) private var closeIconSide: CGFloat = 17
 
     private var fileLoader: WorkspaceFileImageLoader {
-        session?.workspaceFileImageLoader ?? .shared
+        loaderOverride ?? session?.workspaceFileImageLoader ?? .shared
     }
 
     var body: some View {
@@ -72,7 +73,7 @@ struct TextLinkPreviewView: View {
             ContentUnavailableView {
                 Label("Text file unavailable", systemImage: "doc.text")
             } description: {
-                Text("Could not load this file. Check your connection and use a UTF-8 text file no larger than 5 MiB.")
+                Text("Could not open this file as text. This viewer supports UTF-8 text files up to 5 MiB, not binary files.")
             } actions: {
                 Button("Retry") {
                     fileLoader.forgetFailure(workspaceId: link.workspaceId, path: link.path)

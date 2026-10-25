@@ -276,7 +276,7 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     /// Map of method names to response values. If a method is not in this map, request() throws.
     var responseMap: [String: Any] = [
-        "client.hello": ["server": ["capabilities": [String: Int]()]],
+        "client.hello": ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": [String: Int]()]],
         "principal.me": ["id": "test-owner", "isAdministrator": true]
     ]
 

@@ -1,3 +1,4 @@
+import Vision
 import XCTest
 
 /// Guards intent-hq/ios#349 against the `--demo-data` fixtures: tapping a
@@ -114,7 +115,7 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     }
 
     @MainActor
-    func testCreateNewAgentMenuOpensAgentSetup() {
+    func testCreateNewAgentMenuOpensAgentSetup() throws {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
         if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
@@ -136,6 +137,45 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         add(screenshot)
         createAgent.tap()
         XCTAssertTrue(app.navigationBars["New Agent"].waitForExistence(timeout: Fixture.elementTimeout))
+        let specialist = app.staticTexts["Implementor"].firstMatch
+        XCTAssertTrue(specialist.waitForExistence(timeout: Fixture.elementTimeout))
+        specialist.tap()
+        let next = app.buttons["Next"]
+        XCTAssertTrue(next.isEnabled)
+        try assertToolbarLabel("Next", button: next, in: app, capture: "new-agent-next")
+        next.tap()
+        XCTAssertTrue(app.navigationBars["Provider & Model"].waitForExistence(timeout: Fixture.elementTimeout))
+        let create = app.buttons["Create"]
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Fixture.elementTimeout), .completed)
+        try assertToolbarLabel("Create", button: create, in: app, capture: "new-agent-create")
+        app.buttons["Back"].tap()
+        app.buttons["Close"].tap()
+        actions.tap()
+        app.buttons["New browser"].tap()
+        let address = app.textFields["Browser address"]
+        XCTAssertTrue(address.waitForExistence(timeout: Fixture.elementTimeout))
+        address.tap()
+        address.typeText("localhost:3000")
+        try assertToolbarLabel("Open", button: app.buttons["Open"], in: app, capture: "new-browser-open")
+    }
+
+    @MainActor
+    private func assertToolbarLabel(
+        _ label: String, button: XCUIElement, in app: XCUIApplication, capture: String
+    ) throws {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = capture
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertTrue(button.isHittable)
+        let image = try XCTUnwrap(button.screenshot().image.cgImage)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["en-US"]
+        try VNImageRequestHandler(cgImage: image).perform([request])
+        let renderedLabels = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        XCTAssertTrue(renderedLabels.contains(label), "Expected full toolbar label \(label), rendered \(renderedLabels)")
     }
 
     @MainActor
@@ -339,6 +379,10 @@ extension WorkspaceEntryUITests {
             .tap()
         let taskNavigation = app.navigationBars["Build the icon gallery interface"]
         XCTAssertTrue(taskNavigation.waitForExistence(timeout: 15))
+        let noteScreenshot = XCTAttachment(screenshot: app.screenshot())
+        noteScreenshot.name = "note-viewer-flat-back-button"
+        noteScreenshot.lifetime = .keepAlways
+        add(noteScreenshot)
         taskNavigation.buttons.element(boundBy: 0).tap()
         let spec = app.buttons["workspace.note.spec"]
         XCTAssertTrue(spec.waitForExistence(timeout: 15))

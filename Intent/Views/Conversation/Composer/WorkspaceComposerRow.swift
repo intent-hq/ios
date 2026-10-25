@@ -17,8 +17,7 @@ struct WorkspaceComposerRow: View {
     let onPhotos: () -> Void
     let onFiles: () -> Void
     var onPasteImages: (() -> Void)?
-
-    @Environment(\.colorScheme) private var colorScheme
+    var skillCompletion: ComposerSkillCompletion?
 
     private typealias Design = Constants.Conversation.Design
     private typealias Layout = Design.Composer
@@ -29,7 +28,7 @@ struct WorkspaceComposerRow: View {
 
     var body: some View {
         HStack(spacing: Layout.controlSpacing - controlInset) {
-            WorkspaceComposerEditor(text: $text, isFocused: $isFocused, onSend: onSend, onPasteImages: onPasteImages)
+            WorkspaceComposerEditor(text: $text, isFocused: $isFocused, onSend: onSend, onPasteImages: onPasteImages, skillCompletion: skillCompletion)
             WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles)
             if hasDraft {
                 WorkspaceComposerAction(isStop: false, action: onSend)
@@ -43,10 +42,7 @@ struct WorkspaceComposerRow: View {
         .padding(.trailing, hasDraft || isStreaming ? Layout.activeTrailingPadding : Layout.trailingPadding - controlInset)
         .padding(.vertical, (Layout.minimumHeight - Design.minimumTapTarget) / 2)
         .frame(minHeight: Layout.minimumHeight)
-        .background(
-            Design.Palette.surface(for: colorScheme),
-            in: RoundedRectangle(cornerRadius: hasDraft || isStreaming ? Layout.activeCornerRadius : Design.cornerRadius)
-        )
+        .background(WorkspaceComposerSurface(text: text, hasAttachments: hasAttachments, isStreaming: isStreaming))
     }
 
     // UITextView's existing container inset and default line-fragment padding
@@ -57,11 +53,31 @@ struct WorkspaceComposerRow: View {
     private var controlInset: CGFloat { (Design.minimumTapTarget - Design.iconSize) / 2 }
 }
 
+/// Shared shape for the composer row and any pending attachment rows above it.
+struct WorkspaceComposerSurface: View {
+    let text: String
+    let hasAttachments: Bool
+    let isStreaming: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    private typealias Design = Constants.Conversation.Design
+
+    private var isActive: Bool {
+        isStreaming || hasAttachments || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: isActive ? Design.Composer.activeCornerRadius : Design.cornerRadius)
+            .fill(Design.Palette.surface(for: colorScheme))
+    }
+}
+
 private struct WorkspaceComposerEditor: View {
     @Binding var text: String
     @Binding var isFocused: Bool
     let onSend: () -> Void
     let onPasteImages: (() -> Void)?
+    let skillCompletion: ComposerSkillCompletion?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -83,7 +99,8 @@ private struct WorkspaceComposerEditor: View {
                     )
                 },
                 accessibilityLabel: String(localized: "Message"),
-                textColor: UIColor(Design.Palette.foreground(for: colorScheme))
+                textColor: UIColor(Design.Palette.foreground(for: colorScheme)),
+                skillCompletion: skillCompletion
             )
             .frame(height: height)
             if text.isEmpty {
@@ -102,6 +119,7 @@ private struct WorkspaceComposerEditor: View {
 struct WorkspaceAttachmentMenu: View {
     let onPhotos: () -> Void
     let onFiles: () -> Void
+    var photosEnabled = true
     var glyphAlignment: Alignment = .center
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
@@ -112,6 +130,7 @@ struct WorkspaceAttachmentMenu: View {
     var body: some View {
         Menu {
             Button(action: onPhotos) { Label("Photos", systemImage: "photo.on.rectangle") }
+                .disabled(!photosEnabled)
             Button(action: onFiles) { Label("Files", image: "Folder") }
         } label: {
             Image(.paperclip)
