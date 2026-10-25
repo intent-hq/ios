@@ -27,7 +27,10 @@ struct PullRequestListContent: View {
                     ForEach(PullRequestListItem.groupedByProject(store.items)) { group in
                         groupHeading(group.title)
                         ForEach(group.items) { item in
+                            // Distinct from the flat list's ids so the lazy
+                            // stack cannot reuse a row that shows the repository.
                             row(item, linkedWorkspace: links[item.id], showsRepository: false)
+                                .id("grouped:\(item.id)")
                         }
                     }
                 } else {
@@ -128,7 +131,6 @@ struct PullRequestListContent: View {
             .foregroundStyle(Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: contrast))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, Constants.WorkspaceList.groupTopSpacing)
-            .padding(.bottom, Constants.WorkspaceList.groupBottomSpacing)
             .padding(.horizontal, Constants.WorkspaceList.pageInset)
             .accessibilityAddTraits(.isHeader)
     }

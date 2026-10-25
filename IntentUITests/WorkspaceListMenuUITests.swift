@@ -76,6 +76,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             app.buttons["workspaces.menu"].tap()
             app.buttons["workspaces.menu.pullRequestGrouping"].tap()
             XCTAssertTrue(app.staticTexts["CONSOLE"].waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(linked.staticTexts["#482"].waitForExistence(timeout: Self.timeout), "Grouped rows drop the repository")
             capture(app, named: "pull-requests-grouped-\(appearance)")
             app.buttons["workspaces.menu"].tap()
             app.buttons["workspaces.menu.pullRequestGrouping"].tap()
