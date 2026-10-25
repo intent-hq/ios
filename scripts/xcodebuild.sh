@@ -85,6 +85,11 @@
 #                         identities, used by the filtered iPad proof lane.
 #                         Unset leaves output and selection unchanged. A failed
 #                         requested export exits 83 before tests start.
+#   UI_TEST_SHARD         1 or 2: partition all built UI tests by measured suite
+#                         durations. Only test-without-building-ui, without a
+#                         narrower ONLY_TESTING, accepts this full-suite mode.
+#   UI_TEST_SHARD_PLAN_PATH
+#                         Optional JSON plan for cross-lane coverage verification.
 #   GITHUB_STEP_SUMMARY   When set (GitHub Actions does), the per-selector table
 #                         of a filtered run is also appended there as Markdown,
 #                         as is every test-process crash or restart (the crash
@@ -1003,6 +1008,20 @@ resolve_only_testing() {
 Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&2
     exit "$EXIT_SELECTION_UNVERIFIED"
   fi
+  if [ -n "${UI_TEST_SHARD:-}" ]; then
+    local shard_args=()
+    [ -z "${UI_TEST_SHARD_PLAN_PATH:-}" ] || shard_args+=(--plan "$UI_TEST_SHARD_PLAN_PATH")
+    ONLY_TESTING=$(python3 scripts/ui_full_tests.py --catalog "$catalog" --shard "$UI_TEST_SHARD" \
+      ${shard_args+"${shard_args[@]}"} 9>&-) || status=$?
+    if [ "$status" -eq 0 ]; then
+      parse_only_testing
+    else
+      rm -rf -- "$dir"
+      release_simulator_lock
+      echo "error: full UI shard selection failed; no tests started (exit $EXIT_SELECTION_UNVERIFIED)." >&2
+      exit "$EXIT_SELECTION_UNVERIFIED"
+    fi
+  fi
   ONLY_TESTING_RESOLVED=$(python3 -c "$ONLY_TESTING_MATCH_PY$ONLY_TESTING_RESOLVER_PY" "$catalog" "$@" "${ONLY_TESTING_IDS[@]}" 9>&-) || status=$?
   rm -rf -- "$dir"
   case "$status" in
@@ -1297,6 +1316,18 @@ case "${BUILD_CONFIGURATION:-}" in
   ''|Debug|Release) ;;
   *) die "BUILD_CONFIGURATION must be Debug or Release (or unset to preserve scheme defaults)" ;;
 esac
+
+if [ -n "${UI_TEST_SHARD:-}" ]; then
+  case "$UI_TEST_SHARD" in
+    1|2) ;;
+    *) die "UI_TEST_SHARD must be 1 or 2" ;;
+  esac
+  [ "$subcommand" = test-without-building-ui ] || die "UI_TEST_SHARD requires test-without-building-ui"
+  case "${ONLY_TESTING:-}" in
+    ''|IntentUITests) ;;
+    *) die "UI_TEST_SHARD cannot be combined with a narrower ONLY_TESTING selection" ;;
+  esac
+fi
 
 case "$subcommand" in
   build-for-testing-ui|test-without-building-ui)
