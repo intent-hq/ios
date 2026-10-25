@@ -423,7 +423,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Intent needs local network access to connect to the desktop app on your network.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Intent saves images from your conversations to your photo library when you choose Save Image.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -473,7 +472,6 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Intent needs local network access to connect to the desktop app on your network.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Intent saves images from your conversations to your photo library when you choose Save Image.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
