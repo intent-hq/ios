@@ -73,14 +73,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             XCTAssertTrue(linked.label.contains("Workspace Add usage analytics dashboard"))
             capture(app, named: "pull-requests-\(appearance)")
 
-            app.buttons["workspaces.menu"].tap()
-            app.buttons["workspaces.menu.pullRequestGrouping"].tap()
-            XCTAssertTrue(app.staticTexts["CONSOLE"].waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(linked.staticTexts["#482"].waitForExistence(timeout: Self.timeout), "Grouped rows drop the repository")
-            capture(app, named: "pull-requests-grouped-\(appearance)")
-            app.buttons["workspaces.menu"].tap()
-            app.buttons["workspaces.menu.pullRequestGrouping"].tap()
-            XCTAssertTrue(app.staticTexts["CONSOLE"].waitForNonExistence(timeout: Self.timeout))
+            checkPullRequestGrouping(in: app, row: linked, appearance: appearance)
 
             app.buttons["pullRequests.filter.Review"].tap()
             XCTAssertTrue(linked.waitForNonExistence(timeout: Self.timeout))
@@ -110,6 +103,18 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             XCTAssertFalse(linked.exists)
             app.terminate()
         }
+    }
+
+    @MainActor
+    private func checkPullRequestGrouping(in app: XCUIApplication, row: XCUIElement, appearance: String) {
+        app.buttons["workspaces.menu"].tap()
+        app.buttons["workspaces.menu.pullRequestGrouping"].tap()
+        XCTAssertTrue(app.staticTexts["CONSOLE"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.staticTexts["#482"].waitForExistence(timeout: Self.timeout), "Grouped rows drop the repository")
+        capture(app, named: "pull-requests-grouped-\(appearance)")
+        app.buttons["workspaces.menu"].tap()
+        app.buttons["workspaces.menu.pullRequestGrouping"].tap()
+        XCTAssertTrue(app.staticTexts["CONSOLE"].waitForNonExistence(timeout: Self.timeout))
     }
 
     @MainActor
