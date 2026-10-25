@@ -8,7 +8,7 @@ struct AssistantLauncherLayoutTests {
     func allMenuActionsFitWhenMinimumWidthsAreAvailable(actionCount: Int) {
         let count = CGFloat(actionCount)
         let spacing: CGFloat = 8
-        let minimumWidth: CGFloat = 160
+        let minimumWidth: CGFloat = 152
         let minimumRowWidth = count * minimumWidth + (count - 1) * spacing
         for width in stride(from: minimumRowWidth, through: 1400, by: 1) {
             let tile = HomeActionTiles.tileWidth(in: width, actionCount: actionCount, accessibility: false)

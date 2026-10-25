@@ -19,7 +19,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     @MainActor
     func testClosePreservesWorkspaceScrollAndAssistantIsFirst() {
         let app = launchHome()
-        let list = app.scrollViews["workspaces.list"]
+        let list = app.descendants(matching: .any).matching(identifier: "workspaces.list").firstMatch
         list.swipeUp()
         let visibleRow = list.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Workspace scroll fixture"))
             .allElementsBoundByIndex.first { $0.isHittable }
@@ -29,13 +29,13 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         openMenu(app)
         let assistant = app.buttons["intent.menu.assistant"]
         let workspace = app.buttons["intent.menu.workspace"]
-        XCTAssertTrue(assistant.isHittable)
-        XCTAssertTrue(workspace.isHittable)
+        XCTAssertTrue(waitUntilHittable(assistant))
+        XCTAssertTrue(waitUntilHittable(workspace))
         XCTAssertLessThan(assistant.frame.minX, workspace.frame.minX)
         let actions = ["assistant", "workspace", "connections", "appearance", "settings"]
         let viewport = app.scrollViews["intent.menu.tiles"].frame.intersection(app.frame)
         let contentWidth = viewport.width - 2 * max(0, assistant.frame.minX - viewport.minX)
-        let minimumRowWidth = CGFloat(actions.count) * 160 + CGFloat(actions.count - 1) * 8
+        let minimumRowWidth = CGFloat(actions.count) * 152 + CGFloat(actions.count - 1) * 8
         if contentWidth >= minimumRowWidth {
             for action in actions {
                 let tile = app.buttons["intent.menu.\(action)"]
@@ -58,7 +58,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(visibleRow?.frame.minY ?? 0, position, accuracy: Self.scrollTolerance)
         list.swipeDown()
-        XCTAssertTrue(app.staticTexts["workspaces.title"].isHittable)
+        XCTAssertTrue(app.buttons["workspace.row.demo-ws-reconnect"].isHittable)
     }
 
     @MainActor

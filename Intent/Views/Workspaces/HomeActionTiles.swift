@@ -31,6 +31,7 @@ struct HomeActionTiles: View {
         static let spacing: CGFloat = 8
         static let maximumTileWidth: CGFloat = 192
         static let minimumTileWidth: CGFloat = 160
+        static let minimumFittedTileWidth: CGFloat = 152
         static let minimumHeight: CGFloat = 240
         static let cornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 24
@@ -70,7 +71,7 @@ struct HomeActionTiles: View {
         if !accessibility, actionCount > 0 {
             let count = CGFloat(actionCount)
             let fittedWidth = (width - Layout.spacing * (count - 1)) / count
-            if fittedWidth >= Layout.minimumTileWidth {
+            if fittedWidth >= Layout.minimumFittedTileWidth {
                 return min(Layout.maximumTileWidth, fittedWidth)
             }
         }
