@@ -14,6 +14,9 @@ import Observation
         case created = "Mine"
         case reviewRequested = "Review"
 
+        /// Segment order: your own pull requests first.
+        static let allCases: [Self] = [.created, .reviewRequested, .all]
+
         var wireValue: String {
             switch self {
             case .all: "all"
@@ -33,7 +36,7 @@ import Observation
 
     struct Query: Equatable {
         var repositories: [PullRequestListRepository] = []
-        var filter: Filter = .all
+        var filter: Filter = .created
         var showsClosed = false
         var text = ""
     }

@@ -56,6 +56,18 @@ struct PullRequestListStoreTests {
         #expect(links["acme/app#7"] == nil)
     }
 
+    @Test func groupsByProjectInNewestFirstOrderAndQualifiesSharedNames() {
+        let items = [
+            PullRequestListItem(owner: "acme", repo: "api", number: 1, title: "a"),
+            PullRequestListItem(owner: "acme", repo: "web", number: 2, title: "b"),
+            PullRequestListItem(owner: "Acme", repo: "API", number: 3, title: "c"),
+            PullRequestListItem(owner: "fork", repo: "web", number: 4, title: "d")
+        ]
+        let groups = PullRequestListItem.groupedByProject(items)
+        #expect(groups.map(\.title) == ["api", "acme/web", "fork/web"])
+        #expect(groups[0].items.map(\.number) == [1, 3])
+    }
+
     @Test func scopeDeduplicatesRepositoriesCaseInsensitively() {
         let pairs: [(String?, String)] = [("Acme", "App"), ("acme", "app"), ("acme", "lib"), (nil, "local")]
         let workspaces = pairs.enumerated().map { index, repo in

@@ -7,6 +7,7 @@ struct PullRequestListContent: View {
     let store: PullRequestListStore
     let query: PullRequestListStore.Query
     let workspaces: [Workspace]
+    let groupsByProject: Bool
     let onOpenWorkspace: (String) -> Void
     let onOpenAgent: (String) -> Void
     let onCreateWorkspace: (PullRequestListItem) -> Void
@@ -22,8 +23,17 @@ struct PullRequestListContent: View {
             if store.items.isEmpty {
                 placeholder
             } else {
-                ForEach(store.items) { item in
-                    row(item, linkedWorkspace: links[item.id], showsRepository: showsRepository)
+                if groupsByProject {
+                    ForEach(PullRequestListItem.groupedByProject(store.items)) { group in
+                        groupHeading(group.title)
+                        ForEach(group.items) { item in
+                            row(item, linkedWorkspace: links[item.id], showsRepository: false)
+                        }
+                    }
+                } else {
+                    ForEach(store.items) { item in
+                        row(item, linkedWorkspace: links[item.id], showsRepository: showsRepository)
+                    }
                 }
                 if store.isLoadingMore {
                     ProgressView()
@@ -110,6 +120,17 @@ struct PullRequestListContent: View {
         .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
         .padding(.horizontal, Constants.WorkspaceList.pageInset)
         .accessibilityIdentifier("pullRequests.placeholder")
+    }
+
+    private func groupHeading(_ title: String) -> some View {
+        Text(title.uppercased())
+            .interFont(Constants.Typography.eyebrow)
+            .foregroundStyle(Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: contrast))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Constants.WorkspaceList.groupTopSpacing)
+            .padding(.bottom, Constants.WorkspaceList.groupBottomSpacing)
+            .padding(.horizontal, Constants.WorkspaceList.pageInset)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func message(_ text: String) -> some View {

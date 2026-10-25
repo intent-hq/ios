@@ -105,6 +105,34 @@ struct PullRequestListItem: Identifiable, Equatable {
     }
 }
 
+/// Pull requests of one repository, for the grouped list.
+struct PullRequestProjectGroup: Identifiable {
+    let id: String
+    let title: String
+    let items: [PullRequestListItem]
+}
+
+extension PullRequestListItem {
+    /// Groups by repository, keeping the incoming (newest-first) order, so
+    /// the most recently updated project leads. Titles name the owner only
+    /// when two groups share a repository name.
+    static func groupedByProject(_ items: [PullRequestListItem]) -> [PullRequestProjectGroup] {
+        var order: [String] = []
+        var buckets: [String: [PullRequestListItem]] = [:]
+        for item in items {
+            let key = "\(item.owner)/\(item.repo)".lowercased()
+            if buckets[key] == nil { order.append(key) }
+            buckets[key, default: []].append(item)
+        }
+        let names = order.compactMap { buckets[$0]?.first?.repo.lowercased() }
+        return order.compactMap { key in
+            guard let rows = buckets[key], let first = rows.first else { return nil }
+            let ambiguous = names.filter { $0 == first.repo.lowercased() }.count > 1
+            return PullRequestProjectGroup(id: key, title: ambiguous ? "\(first.owner)/\(first.repo)" : first.repo, items: rows)
+        }
+    }
+}
+
 /// A GitHub repository the list searches, from the known workspaces.
 struct PullRequestListRepository: Hashable {
     let owner: String

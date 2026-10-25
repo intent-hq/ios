@@ -23,7 +23,8 @@ struct WorkspaceListView: View {
     @State private var isFilterPinned = false
     @State private var pageHeaderHeight: CGFloat = 0
     @AppStorage("workspaceList.content") private var listContent: WorkspaceListContentKind = .workspaces
-    @AppStorage("pullRequests.filter") private var pullRequestFilter: PullRequestListStore.Filter = .all
+    @AppStorage("pullRequests.filter") private var pullRequestFilter: PullRequestListStore.Filter = .created
+    @AppStorage("pullRequests.groupsByProject") private var groupsPullRequestsByProject = false
     @State private var showsClosedPullRequests = false
     @State private var pullRequestSearchText = ""
     @State private var creationPullRequest: PullRequestListItem?
@@ -334,7 +335,8 @@ private extension WorkspaceListView {
                 showingConnectionSwitcher = true
             },
             content: $listContent,
-            showsClosedPullRequests: $showsClosedPullRequests
+            showsClosedPullRequests: $showsClosedPullRequests,
+            groupsPullRequestsByProject: $groupsPullRequestsByProject
         )
     }
 
@@ -391,7 +393,8 @@ private extension WorkspaceListView {
             PullRequestListContent(
                 store: session.pullRequestListStore,
                 query: pullRequestQuery,
-                workspaces: viewModel.workspaces
+                workspaces: viewModel.workspaces,
+                groupsByProject: groupsPullRequestsByProject
             ) { workspaceId in
                 searchFocused = false
                 coordinator.onSelectWorkspace(workspaceId)

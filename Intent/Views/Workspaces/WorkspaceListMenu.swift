@@ -17,6 +17,7 @@ struct WorkspaceListMenu: View {
     var showsSidebarTitle = false
     var content: Binding<WorkspaceListContentKind>?
     var showsClosedPullRequests: Binding<Bool>?
+    var groupsPullRequestsByProject: Binding<Bool>?
 
     private var showsPullRequests: Bool { content?.wrappedValue == .pullRequests }
 
@@ -43,8 +44,8 @@ struct WorkspaceListMenu: View {
                 }
             }
             .accessibilityIdentifier("workspaces.menu.recentConnections")
-            if showsPullRequests, let showsClosedPullRequests {
-                closedToggle(showsClosedPullRequests)
+            if showsPullRequests {
+                pullRequestOptions
             } else {
                 archivedToggle
             }
@@ -70,6 +71,25 @@ struct WorkspaceListMenu: View {
         }
         .disabled(!canCreateWorkspace)
         .accessibilityIdentifier("workspaces.menu.create")
+    }
+
+    @ViewBuilder private var pullRequestOptions: some View {
+        if let groupsPullRequestsByProject {
+            Button {
+                groupsPullRequestsByProject.wrappedValue.toggle()
+            } label: {
+                Label {
+                    Text(groupsPullRequestsByProject.wrappedValue ? "List by recent" : "Group by project")
+                        .interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(groupsPullRequestsByProject.wrappedValue ? ImageResource.list : ImageResource.folders)
+                }
+            }
+            .accessibilityIdentifier("workspaces.menu.pullRequestGrouping")
+        }
+        if let showsClosedPullRequests {
+            closedToggle(showsClosedPullRequests)
+        }
     }
 
     private func closedToggle(_ showsClosed: Binding<Bool>) -> some View {

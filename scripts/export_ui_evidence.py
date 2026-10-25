@@ -310,7 +310,7 @@ CAPTURES = {
         "testPullRequestsListSwitchesFromMenuInBothThemes": tuple(
             f"pull-requests{state}-{appearance}"
             for appearance in ("light", "dark")
-            for state in ("", "-review", "-new-workspace")
+            for state in ("", "-grouped", "-review", "-new-workspace")
         ),
         "testRecentAgentsOpensAndClosesExistingDrawer": (
             "workspace-list-menu", "workspace-menu-recent-agents",
