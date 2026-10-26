@@ -19,6 +19,8 @@ struct HomeActionTiles: View {
     var allowsAssistant = true
     var showsWorkspaceList = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var availableWidth: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
@@ -43,11 +45,37 @@ struct HomeActionTiles: View {
     }
 
     var body: some View {
+        Group {
+            if sizeClass == .compact || usesVerticalBar {
+                carousel
+            } else {
+                wrappedTiles
+            }
+        }
+        .accessibilityIdentifier("intent.menu.tiles")
+    }
+
+    private var carousel: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Layout.spacing) {
+                ForEach(actions, id: \.self) { action in
+                    tile(action, height: tileHeight)
+                        .frame(width: Layout.maximumTileWidth)
+                }
+            }
+            .padding(.horizontal, Layout.inset)
+        }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .frame(height: tileHeight)
+    }
+
+    private var wrappedTiles: some View {
         let columns = Self.columnCount(in: availableWidth, actionCount: actions.count, accessibility: dynamicTypeSize.isAccessibilitySize)
         let width = Self.tileWidth(in: availableWidth, actionCount: actions.count, accessibility: dynamicTypeSize.isAccessibilitySize)
         let rows = max(1, (actions.count + columns - 1) / columns)
         let height = rows == 1 ? tileHeight : tileHeight * Layout.wrappedHeight / Layout.minimumHeight
-        ScrollView(.vertical) {
+        return ScrollView(.vertical) {
             Grid(horizontalSpacing: Layout.spacing, verticalSpacing: Layout.spacing) {
                 ForEach(0..<rows, id: \.self) { row in
                     GridRow {
@@ -68,7 +96,6 @@ struct HomeActionTiles: View {
         .onGeometryChange(for: CGFloat.self) { geometry in
             max(0, geometry.size.width - 2 * Layout.inset)
         } action: { availableWidth = $0 }
-        .accessibilityIdentifier("intent.menu.tiles")
     }
 
     private var actions: [Action] {

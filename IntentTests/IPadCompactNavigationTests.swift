@@ -24,6 +24,25 @@ struct IPadCompactNavigationTests {
         #expect(portrait.usesSidebarOverlay)
     }
 
+    @Test(arguments: [false, true])
+    func oppositeRailEdgesPreserveContentAndNavigation(accessibility: Bool) {
+        for width: CGFloat in [480, 668, 932] {
+            let trailing = IPadShellLayout(width: width, isAccessibilitySize: accessibility, usesFoldableLayout: true)
+            let leading = IPadShellLayout(
+                width: width,
+                isAccessibilitySize: accessibility,
+                usesFoldableLayout: true,
+                usesLeadingVerticalBar: true
+            )
+            #expect(leading.leadingInset == trailing.trailingInset)
+            #expect(leading.trailingInset == trailing.leadingInset)
+            #expect(leading.contentWidth == trailing.contentWidth)
+            #expect(leading.sidebarWidth == trailing.sidebarWidth)
+            #expect(leading.usesSidebarOverlay == trailing.usesSidebarOverlay)
+            #expect(leading.usesCompactNavigation == trailing.usesCompactNavigation)
+        }
+    }
+
     @Test func breakpointReclaimsTheEntireRailAndGutter() {
         let threshold = IPadShellLayout.compactWindowWidth
         for accessibility in [false, true] {
@@ -49,6 +68,29 @@ struct IPadCompactNavigationTests {
         state.collapseSidebar()
         state.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true)
         #expect(!state.isSidebarVisible, "Ordinary width changes must not undo a manual drawer dismissal")
+    }
+
+    @Test(arguments: [false, true])
+    func connectionSwitcherPreservesPersistentSidebar(expanded: Bool) {
+        var state = IPadNavigationState()
+        state.updateLayout(usesOverlay: false)
+        if !expanded { state.collapseSidebar() }
+        state.prepareForConnectionSwitcher(showingWorkspaceList: false)
+        #expect(state.isSidebarVisible == expanded)
+        #expect(state.isSidebarExpanded == expanded)
+        #expect(state.section == .workspaces)
+    }
+
+    @Test func connectionSwitcherDismissesOnlyTheOverlaySidebar() {
+        var state = IPadNavigationState()
+        state.updateLayout(usesOverlay: true)
+        state.revealSidebar()
+        state.prepareForConnectionSwitcher(showingWorkspaceList: false)
+        #expect(!state.isDrawerPresented)
+        #expect(state.isSidebarExpanded)
+        state.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true)
+        state.prepareForConnectionSwitcher(showingWorkspaceList: true)
+        #expect(state.isSidebarVisible)
     }
 
     @Test(arguments: [IPadSidebarSection.settings, .connections])

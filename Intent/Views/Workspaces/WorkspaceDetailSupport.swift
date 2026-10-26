@@ -15,8 +15,14 @@ struct WorkspaceDetailHeading: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.usesDuoContextualRail) private var usesDuoContextualRail
 
     private var focusBinding: FocusState<Bool>.Binding { titleFocus ?? $titleFocused }
+
+    private var headingTopSpacing: CGFloat {
+        if dynamicTypeSize.isAccessibilitySize { return WorkspaceDetailStyle.headingSpacing }
+        return usesDuoContextualRail ? WorkspaceDetailStyle.pageInset : WorkspaceDetailStyle.headingTopSpacing
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: titleEditor.isEditing
@@ -37,7 +43,7 @@ struct WorkspaceDetailHeading: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-        .padding(.top, dynamicTypeSize.isAccessibilitySize ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTopSpacing)
+        .padding(.top, headingTopSpacing)
         .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
     }
 

@@ -224,7 +224,7 @@ private extension ConversationViewContent {
     }
 
     private var usesVerticalNavigation: Bool {
-        presentation != .iPad && usesVerticalBar && assistantStore == nil
+        usesVerticalBar && assistantStore == nil
     }
 
     private var usesWorkspaceDesign: Bool {
@@ -244,19 +244,24 @@ private extension ConversationViewContent {
         legacyConversationChrome
             .conversationReadableColumn()
             .navigationBarBackButtonHidden(assistantStore == nil)
-            .toolbarBackground(viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
+            .toolbarBackground(usesVerticalNavigation || viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
             #if os(iOS)
             .toolbar(usesWorkspaceDesign && !usesVerticalNavigation ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
-            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign && !usesVerticalNavigation) {
-                WorkspaceConversationHeader(
-                    title: viewModel.agentName,
-                    showsBackground: !viewModel.showsLoadingState,
-                    assistantStore: assistantStore,
-                    onBack: navigateBack
-                ) { agentMenu }
-                .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
+            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign) {
+                if usesVerticalNavigation, presentation != .iPad {
+                    WorkspaceVerticalConversationHeader(title: viewModel.agentName, workspaceId: viewModel.workspaceId)
+                } else {
+                    WorkspaceConversationHeader(
+                        title: viewModel.agentName,
+                        showsBackground: !viewModel.showsLoadingState,
+                        showsContextualActions: !usesVerticalNavigation,
+                        assistantStore: assistantStore,
+                        onBack: navigateBack
+                    ) { agentMenu }
+                    .animation(.easeInOut(duration: Constants.Conversation.Column.Loading.fadeDuration), value: viewModel.showsLoadingState)
+                }
             })
             .modifier(WorkspaceQuestionPresentation(
                 viewModel: viewModel,
@@ -271,18 +276,18 @@ private extension ConversationViewContent {
 
     private var legacyConversationChrome: some View {
         conversationColumn
-            .navigationTitle(viewModel.agentName)
+            .navigationTitle(usesVerticalNavigation ? "" : viewModel.agentName)
             .toolbarTitleDisplayMode(.inline)
             .workspaceNavigationSubtitle(
                 title: viewModel.agentName,
-                workspaceId: viewModel.workspaceId
+                workspaceId: usesVerticalNavigation ? "" : viewModel.workspaceId
             )
             .toolbar {
                 if usesVerticalNavigation {
                     WorkspaceVerticalNavigationToolbar(
                         isEnabled: true,
                         backIdentifier: "conversation.back",
-                        onBack: dismiss.callAsFunction
+                        onBack: navigateBack
                     ) { agentMenu }
                 } else if !usesWorkspaceDesign {
                     if assistantStore == nil {

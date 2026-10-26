@@ -15,14 +15,11 @@ extension HomeActionMenuUITests {
             for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
                 XCUIDevice.shared.orientation = orientation
                 let viewport = app.scrollViews["intent.menu.tiles"]
-                let fits = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                for action in ["assistant", "workspace", "connections", "appearance", "settings"] {
+                    let tile = app.revealHomeAction(action)
                     let bounds = viewport.frame.intersection(app.frame).insetBy(dx: -1, dy: -1)
-                    return ["assistant", "workspace", "connections", "appearance", "settings"].allSatisfy { action in
-                        let tile = app.buttons["intent.menu.\(action)"]
-                        return tile.exists && !tile.frame.isEmpty && bounds.contains(tile.frame)
-                    }
-                }, object: nil)
-                XCTAssertEqual(XCTWaiter.wait(for: [fits], timeout: HomeActionMenuTestSupport.timeout), .completed)
+                    XCTAssertTrue(bounds.contains(tile.frame))
+                }
                 XCTAssertTrue(app.frame.contains(app.buttons["intent.menu.close"].frame))
                 let capture = XCTAttachment(screenshot: app.screenshot())
                 capture.name = "Menu wrapping \(theme) \(orientation.rawValue)"
@@ -113,16 +110,19 @@ extension XCUIApplication {
         for _ in 0..<HomeActionMenuTestSupport.maximumSwipes {
             viewport = carousel.frame.intersection(frame)
             let target = tile.frame
-            if viewport.contains(CGPoint(x: target.midX, y: target.midY)) { break }
-            let limit = viewport.height / 2
-            let distance = min(max(viewport.midY - target.midY, -limit), limit)
+            let horizontal = target.minX < viewport.minX || target.maxX > viewport.maxX
+            if !horizontal, viewport.contains(CGPoint(x: target.midX, y: target.midY)) { break }
+            let limit = (horizontal ? viewport.width : viewport.height) / 2
+            let delta = horizontal ? viewport.midX - target.midX : viewport.midY - target.midY
+            let distance = min(max(delta, -limit), limit)
+            let drag = CGVector(dx: horizontal ? distance : 0, dy: horizontal ? 0 : distance)
             let start = coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-                dx: viewport.midX - frame.minX,
-                dy: viewport.midY - frame.minY - distance / 2
+                dx: viewport.midX - frame.minX - drag.dx / 2,
+                dy: viewport.midY - frame.minY - drag.dy / 2
             ))
             start.press(
                 forDuration: HomeActionMenuTestSupport.dragHoldDuration,
-                thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)),
+                thenDragTo: start.withOffset(drag),
                 withVelocity: .slow,
                 thenHoldForDuration: HomeActionMenuTestSupport.dragHoldDuration
             )
@@ -130,7 +130,7 @@ extension XCUIApplication {
         viewport = carousel.frame.intersection(frame)
         XCTAssertTrue(
             viewport.contains(CGPoint(x: tile.frame.midX, y: tile.frame.midY)),
-            "Vertical swipes must bring \(action) into view: tile \(tile.frame), viewport \(viewport)",
+            "Swipes must bring \(action) into view: tile \(tile.frame), viewport \(viewport)",
             file: file,
             line: line
         )
