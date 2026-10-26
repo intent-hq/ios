@@ -7,6 +7,7 @@ struct IPadShellView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     /// Nil until measured, so a zero first width never drives the navigation layout.
     @State private var width: CGFloat?
     @State private var topSafeArea: CGFloat = 0
@@ -17,7 +18,7 @@ struct IPadShellView: View {
 
     private var navigation: IPadNavigationState { coordinator.iPadNavigation }
     private var layout: IPadShellLayout {
-        IPadShellLayout(width: width ?? 0, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
+        IPadShellLayout(width: width ?? 0, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize, usesFoldableLayout: usesVerticalBar)
     }
     private var measuredLayout: IPadShellLayout? { width.map { _ in layout } }
     private var paneInsets: EdgeInsets {

@@ -422,3 +422,33 @@ extension IPadSidebarUITests {
         XCTAssertTrue(settled, "Rail button must stop moving before the physical tap")
     }
 }
+
+extension IPadSidebarUITests {
+    @MainActor
+    func testExpandedDuoUsesSharedShellAndChatHeader() throws {
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .pad || ProcessInfo.processInfo.environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires iPad or an unfolded Duo"
+        )
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance: appearance, extraArguments: ["--demo-ipad-pane-geometry"])
+            openConversation(in: app)
+            let header = app.buttons["conversation.back"]
+            XCTAssertTrue(header.waitForExistence(timeout: Self.timeout))
+            let transcript = app.scrollViews["transcript.scrollView"]
+            XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+            let headerFrame = header.frame
+            transcript.swipeDown()
+            XCTAssertEqual(header.frame, headerFrame)
+            XCTAssertTrue(header.isHittable)
+            XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+            capture(app, name: "Shared shell chat scrollback \(appearance)")
+            app.buttons["ipad.rail.settings"].tap()
+            app.buttons["ipad.rail.workspaces"].tap()
+            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+            app.terminate()
+        }
+    }
+}

@@ -125,6 +125,9 @@ CAPTURES = {
         ),
     },
     "IPadSidebarUITests": {
+        "testExpandedDuoUsesSharedShellAndChatHeader": (
+            "Shared shell chat scrollback light", "Shared shell chat scrollback dark",
+        ),
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"
             for appearance in ("light", "dark")

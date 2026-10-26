@@ -18,6 +18,7 @@ struct IPadShellLayout: Equatable {
     static let outerInset: CGFloat = 16
     static let largeSidebarWidth: CGFloat = 400
     static let smallSidebarWidth: CGFloat = 384
+    static let foldableSidebarDivisor: CGFloat = 3
     static let minimumDetailWidth: CGFloat = 480
     static let accessibleDetailWidth: CGFloat = 560
     static let shadowOpacity = 0.04
@@ -27,13 +28,19 @@ struct IPadShellLayout: Equatable {
 
     let width: CGFloat
     let isAccessibilitySize: Bool
+    var usesFoldableLayout = false
+
+    static func usesShell(isPad: Bool, hasVerticalBar: Bool, sizeClass: UserInterfaceSizeClass?) -> Bool {
+        isPad || (hasVerticalBar && sizeClass == .regular)
+    }
 
     var usesCompactNavigation: Bool { width < Self.compactWindowWidth }
     var inset: CGFloat { Self.outerInset }
     var gutter: CGFloat { inset }
     var railGutter: CGFloat { usesCompactNavigation ? 0 : gutter }
     var preferredSidebarWidth: CGFloat {
-        width >= Self.largeWindowWidth ? Self.largeSidebarWidth : Self.smallSidebarWidth
+        if usesFoldableLayout { return min(Self.smallSidebarWidth, contentWidth / Self.foldableSidebarDivisor) }
+        return width >= Self.largeWindowWidth ? Self.largeSidebarWidth : Self.smallSidebarWidth
     }
     var availableWidth: CGFloat { max(0, width - 2 * inset) }
     var railLeadingInset: CGFloat { usesCompactNavigation ? 0 : Self.railWidth + railGutter }

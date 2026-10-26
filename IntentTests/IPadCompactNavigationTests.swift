@@ -1,9 +1,29 @@
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
 
 @MainActor
 struct IPadCompactNavigationTests {
+    @Test func sharedShellRequiresAnIPadOrExpandedDuo() {
+        for sizeClass: UserInterfaceSizeClass? in [nil, .compact, .regular] {
+            #expect(IPadShellLayout.usesShell(isPad: true, hasVerticalBar: false, sizeClass: sizeClass))
+            #expect(!IPadShellLayout.usesShell(isPad: false, hasVerticalBar: false, sizeClass: sizeClass))
+            #expect(IPadShellLayout.usesShell(isPad: false, hasVerticalBar: true, sizeClass: sizeClass) == (sizeClass == .regular))
+        }
+    }
+
+    @Test func unfoldedSidebarLeavesRoomForTheConversation() {
+        for width: CGFloat in [932, 1024, 1300] {
+            let layout = IPadShellLayout(width: width, isAccessibilitySize: false, usesFoldableLayout: true)
+            #expect(!layout.usesSidebarOverlay)
+            #expect(layout.sidebarWidth <= IPadShellLayout.smallSidebarWidth)
+            #expect(layout.contentWidth - layout.sidebarWidth - layout.gutter >= IPadShellLayout.minimumDetailWidth)
+        }
+        let portrait = IPadShellLayout(width: 668, isAccessibilitySize: true, usesFoldableLayout: true)
+        #expect(portrait.usesSidebarOverlay)
+    }
+
     @Test func breakpointReclaimsTheEntireRailAndGutter() {
         let threshold = IPadShellLayout.compactWindowWidth
         for accessibility in [false, true] {
@@ -68,6 +88,22 @@ struct IPadCompactNavigationTests {
 }
 
 extension AppCoordinatorTests {
+    @Test @MainActor func switchingShellsKeepsTheSelectedConversationAndRequest() {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [Self.makeWorkspace(id: "available")]
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
+        coordinator.onSelectAgent("agent", workspaceId: "available", agentName: "Agent")
+        let route = coordinator.currentScreenDescription
+        let request = coordinator.conversationRequestId
+        for enabled in [true, false, true] {
+            coordinator.updateShellPresentation(enabled)
+            #expect(coordinator.usesIPadShell == enabled)
+            #expect(coordinator.currentScreenDescription == route)
+            #expect(coordinator.conversationRequestId == request)
+            #expect(coordinator.selectedWorkspaceId == "available")
+        }
+    }
+
     @Test @MainActor func iPadWideLayoutSelectsWorkspaceAfterMeasurementAndLoading() {
         let store = WorkspaceStore(forTesting: true)
         let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
