@@ -347,6 +347,8 @@ CAPTURES = {
         "testBackThenForwardPreservesProviderAndNamedModelThroughRefresh": (
             "selected-repository", "selected-branch", "branch-search-opened", "branch-search-results",
             "selected-before-back", "draft-after-source-edit",
+            "refresh-pending-light", "refresh-pending-dark",
+            "selected-after-refresh-light", "selected-after-refresh-dark",
         ),
     },
     "CreateWorkspacePreferencesUITests": {
