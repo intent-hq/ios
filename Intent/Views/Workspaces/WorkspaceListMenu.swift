@@ -45,6 +45,7 @@ struct WorkspaceListMenu: View {
             }
             .accessibilityIdentifier("workspaces.menu.recentConnections")
             if showsPullRequests {
+                Divider()
                 pullRequestOptions
             } else {
                 archivedToggle
