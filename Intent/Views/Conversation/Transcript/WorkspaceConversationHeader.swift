@@ -227,7 +227,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                     .accessibilityIdentifier(backIdentifier)
             }
             actions()
-                .frame(width: IPadShellLayout.railWidth, height: IPadShellLayout.railWidth)
+                .frame(width: IPadShellLayout.railWidth)
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
         .accessibilityIdentifier("duo.contextual.rail")

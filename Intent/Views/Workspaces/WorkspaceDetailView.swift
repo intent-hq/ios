@@ -268,7 +268,7 @@ struct WorkspaceDetailView: View {
             } else {
                 #if os(visionOS)
                 // The workspace picker lives in the top toolbar on visionOS.
-                ToolbarItem(placement: .topBarTrailing) { toolbarWorkspacePicker }
+                ToolbarItem(placement: .topBarTrailing) { WorkspaceDetailToolbarPicker(selection: $selectedTab) }
                 #else
                 if showsBackButton {
                     ToolbarItem(placement: .topBarLeading) {
@@ -278,7 +278,9 @@ struct WorkspaceDetailView: View {
                     .intentToolbarSurface()
                 }
                 #endif
-                ToolbarItem(placement: .principal) { toolbarTitle }
+                ToolbarItem(placement: .principal) {
+                    WorkspaceDetailToolbarTitle(title: workspaceTitle, createdAt: workspace?.createdAt)
+                }
                 ToolbarItem(placement: .primaryAction) { workspaceActions }
                 .intentToolbarSurface()
             }
@@ -310,21 +312,20 @@ private extension WorkspaceDetailView {
         }
     }
 
-    var toolbarTitle: some View {
-        VStack(spacing: WorkspaceDetailStyle.tabInset) {
-            WorkspaceTitle(title: workspaceTitle, createdAt: workspace?.createdAt) { title in
-                Text(title)
-                    .interFont(Constants.Typography.bodyXSEmphasized)
+    var workspaceActions: some View {
+        VStack(spacing: IPadShellLayout.contextualRailSpacing) {
+            workspaceActionsMenu
+            if usesVerticalBar {
+                WorkspaceRailShortcuts(
+                    isTerminalDisabled: !terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId),
+                    onTerminal: { presentTerminal(reusingExisting: true) },
+                    onBrowser: openBrowser
+                )
             }
-            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-            Text("Workspace")
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))
         }
-        .lineLimit(1)
     }
 
-    var workspaceActions: some View {
+    var workspaceActionsMenu: some View {
         WorkspaceActionsMenu(
             workspaceId: workspaceId,
             scriptStore: scriptStore,
@@ -340,12 +341,28 @@ private extension WorkspaceDetailView {
     }
 
     func createTerminal() {
+        presentTerminal(reusingExisting: false)
+    }
+
+    func presentTerminal(reusingExisting: Bool) {
         let requestedWorkspace = workspaceId
         let request = UUID()
         terminalCreationRequest = request
         Task {
-            let terminal = await terminalStore.create(workspaceId: requestedWorkspace)
+            let terminal = if reusingExisting {
+                await terminalStore.openOrCreate(workspaceId: requestedWorkspace)
+            } else {
+                await terminalStore.create(workspaceId: requestedWorkspace)
+            }
             if terminalCreationRequest == request { selectedTerminal = terminal }
+        }
+    }
+
+    func openBrowser() {
+        if let browser = browserStore.browsers(workspaceId: workspaceId).first {
+            selectedBrowser = browser
+        } else {
+            showNewBrowser = true
         }
     }
 
@@ -418,18 +435,6 @@ private extension WorkspaceDetailView {
             || browserStore.errorMessage(workspaceId: workspaceId) != nil
             || !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
             || scriptStore.errorMessage(workspaceId: workspaceId) != nil
-    }
-
-    var toolbarWorkspacePicker: some View {
-        Picker("Workspace Content", selection: $selectedTab) {
-            Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(.agents) }
-            .tag(WorkspaceTab.agents)
-            Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(.file) }
-            .tag(WorkspaceTab.context)
-            Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(.gitDiff) }
-            .tag(WorkspaceTab.changes)
-        }
-        .pickerStyle(.segmented)
     }
 
     @ViewBuilder
