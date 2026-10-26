@@ -4,6 +4,38 @@ import XCTest
 /// Run the owning Home test in light/dark and actual Reduce Transparency modes.
 extension ConnectionLossUITests {
     @MainActor
+    func testDemoRelaunchAfterReturningHomeStartsAtWorkspaces() throws {
+        let timeout: TimeInterval = 15
+        let directory = try makeTriggerDirectory()
+        let app = launch(directory: directory)
+        try trigger("loss", in: directory)
+        let home = app.buttons["connection-loss.home"]
+        XCTAssertTrue(home.waitForExistence(timeout: timeout))
+        home.tap()
+        let saved = app.buttons["pairing.saved-connections"]
+        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+
+        // Backgrounding saves the scene's Home state. Foregrounding the same
+        // process must keep that explicit navigation, even in demo mode.
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.buttons["workspaces.search.open"].exists)
+        capture(app, named: "demo-home-before-relaunch")
+        XCUIDevice.shared.press(.home)
+        app.terminate()
+
+        // A fresh ordinary demo has no saved machines. Its old scene must
+        // reach demo loading/connection instead of restoring pairing again.
+        app.launchArguments = ["--demo-data"]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Deflake payment integration tests"].firstMatch.waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons["workspaces.search.open"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.buttons["pairing.saved-connections"].exists)
+        capture(app, named: "demo-workspaces-after-relaunch")
+    }
+
+    @MainActor
     func testLaunchHidesBackButSelectedMachineCanReturnHome() throws {
         let timeout: TimeInterval = 15
         let directory = try makeTriggerDirectory()

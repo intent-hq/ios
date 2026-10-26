@@ -280,8 +280,15 @@ CAPTURES = {
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",
         ),
+        "testTitleDraftSurvivesScrollingOffscreenAndBack": (
+            "Workspace title draft offscreen light", "Workspace title draft offscreen dark",
+            "Workspace title draft restored light", "Workspace title draft restored dark",
+        ),
     },
     "ConnectionLossUITests": {
+        "testDemoRelaunchAfterReturningHomeStartsAtWorkspaces": (
+            "connection-loss-demo-home-before-relaunch", "connection-loss-demo-workspaces-after-relaunch",
+        ),
         "testDifferentServerAllowsSameMachineReselection": (
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
@@ -347,6 +354,8 @@ CAPTURES = {
         "testBackThenForwardPreservesProviderAndNamedModelThroughRefresh": (
             "selected-repository", "selected-branch", "branch-search-opened", "branch-search-results",
             "selected-before-back", "draft-after-source-edit",
+            "refresh-pending-light", "refresh-pending-dark",
+            "selected-after-refresh-light", "selected-after-refresh-dark",
         ),
     },
     "CreateWorkspacePreferencesUITests": {

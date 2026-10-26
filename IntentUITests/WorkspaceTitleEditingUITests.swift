@@ -36,9 +36,18 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
     @MainActor
     func testTitleDraftSurvivesScrollingOffscreenAndBack() {
         continueAfterFailure = false
+        for appearance in ["light", "dark"] {
+            verifyTitleDraftSurvivesScrolling(appearance: appearance)
+        }
+    }
+
+    @MainActor
+    private func verifyTitleDraftSurvivesScrolling(appearance: String) {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=agent-groups-large"]
+        app.launchArguments += ["-appThemePreference", appearance]
         app.launch()
+        defer { app.terminate() }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
         workspace.tap()
@@ -56,12 +65,15 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
         scrollTitleEditor(scroll, app: app, towardTop: false)
         scrollTitleEditor(scroll, app: app, towardTop: false)
         XCTAssertFalse(field.isHittable)
+        XCTAssertTrue(app.keyboards.firstMatch.exists)
+        capture(app, name: "Workspace title draft offscreen \(appearance)")
         for _ in 0..<6 where !field.isHittable { scrollTitleEditor(scroll, app: app, towardTop: true) }
         XCTAssertTrue(field.isHittable)
         XCTAssertEqual(field.value as? String, draft)
         XCTAssertTrue(app.keyboards.firstMatch.exists)
         field.typeText(" again")
         XCTAssertEqual(field.value as? String, draft + " again")
+        capture(app, name: "Workspace title draft restored \(appearance)")
         app.buttons["workspace.title.cancel"].tap()
         XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
         XCTAssertEqual(heading.label, "Workspace agent design")

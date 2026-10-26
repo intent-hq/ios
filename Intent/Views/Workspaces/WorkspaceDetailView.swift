@@ -361,20 +361,19 @@ private extension WorkspaceDetailView {
 
     var detailContent: some View {
         ScrollView {
-            if selectedTab == .agents {
-                LazyVStack(spacing: 0) {
-                    detailHeader
+            // Keep the focused title mounted while the agent rows scroll lazily.
+            VStack(spacing: 0) {
+                detailHeader
+                if selectedTab == .agents {
+                    LazyVStack(spacing: 0) {
+                        tabContent
+                    }
+                    .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
+                } else {
                     tabContent
                 }
-                .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
-                .iPadDetailColumn()
-            } else {
-                VStack(spacing: 0) {
-                    detailHeader
-                    tabContent
-                }
-                .iPadDetailColumn()
             }
+            .iPadDetailColumn()
         }
         .accessibilityIdentifier("workspace.detail.scroll")
         .refreshable {

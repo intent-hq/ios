@@ -44,7 +44,7 @@
 - Both workspace creation entry tests in [WorkspaceListMenuUITests](IntentUITests/WorkspaceListMenuUITests.swift) must exercise light and dark appearances on every run.
 - Transcript quarantine: [ConversationTranscriptFullGateUITests.swift](IntentUITests/ConversationTranscriptFullGateUITests.swift) extends `ConversationTranscriptScrollUITests`; select `ONLY_TESTING='IntentUITests/ConversationTranscriptScrollUITests'` with `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run.
 - Full runs still honor skips and quarantines; keep `AppStoreScreenshotTests` excluded from both schemes and follow the separate [Mermaid quarantine](README.md#mermaid-ui-quarantine).
-- Preserve the [screenshot-retention contract](README.md#ui-evidence-artifacts); only the first iPhone shard or single full iPhone job owns it.
+- Preserve full-suite inventory partitioning and cross-lane coverage verification; only the first iPhone shard owns the [screenshot-retention contract](README.md#ui-evidence-artifacts).
 - Extend the explicit allowlist in [export_ui_evidence.py](scripts/export_ui_evidence.py); review the exported PNGs before claiming visual coverage and keep screenshots outside git.
 - Keep evidence exports separate per lane, record runner/toolchain details for timings, and retain failure/cancellation results and logs with `pipefail`.
 
@@ -56,7 +56,7 @@ Run the matching checks after changing tooling:
 | --- | --- |
 | Xcode wrapper | `scripts/test_xcodebuild.sh` |
 | Source-input generator | `scripts/test-generate-test-inputs.sh` |
-| CI / smoke selection | `python3 scripts/test_ci_simulator.py`; `python3 scripts/test_ui_smoke_tests.py` |
+| CI / test selection | `python3 scripts/test_ci_simulator.py`; `python3 scripts/test_ui_smoke_tests.py`; `python3 scripts/test_ui_full_tests.py` |
 | Runner / capture selection | `python3 scripts/test_select_macos_runner.py`; `python3 scripts/test_select_fixture_capture_repetitions.py` |
 | Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`) |
 | SwiftLint wrapper / input checker | `scripts/test-swiftlint.sh`; `scripts/test-check-swiftlint-inputs.sh`; Linux setup/runtime checks are in the [lint guide](README.md#strict-lint-on-linux) |

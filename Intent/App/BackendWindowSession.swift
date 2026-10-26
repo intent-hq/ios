@@ -10,6 +10,7 @@ import SwiftUI
 final class BackendWindowSession {
     private(set) var session: BackendSession?
     private(set) var isShowingSavedMachines = false
+    private var hasRestoredSavedMachines = false
     private let registry: BackendSessionRegistry
     private let persistence: PersistenceManager
     private var savedDisplayName: String?
@@ -88,6 +89,16 @@ final class BackendWindowSession {
         release()
         isShowingSavedMachines = true
         bind(to: nil)
+    }
+
+    /// SceneStorage survives the demo's ephemeral persistence. Ignore its
+    /// Home flag on a fresh demo launch, but honor explicit Home navigation
+    /// for the rest of this window's lifetime, including reappearances.
+    func restoreSavedMachines(_ restored: Bool, isDemo: Bool = DemoMode.isEnabled) -> Bool {
+        guard !hasRestoredSavedMachines else { return isShowingSavedMachines }
+        hasRestoredSavedMachines = true
+        if restored, !isDemo { returnToSavedMachines() }
+        return isShowingSavedMachines
     }
 
     /// Hand the explicit selection to a new coordinator, but not an existing
