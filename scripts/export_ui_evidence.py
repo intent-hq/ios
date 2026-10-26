@@ -287,7 +287,7 @@ CAPTURES = {
     },
     "ConnectionLossUITests": {
         "testDemoRelaunchAfterReturningHomeStartsAtWorkspaces": (
-            "demo-home-before-relaunch", "demo-workspaces-after-relaunch",
+            "connection-loss-demo-home-before-relaunch", "connection-loss-demo-workspaces-after-relaunch",
         ),
         "testDifferentServerAllowsSameMachineReselection": (
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
