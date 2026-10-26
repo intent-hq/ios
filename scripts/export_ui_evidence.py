@@ -280,8 +280,15 @@ CAPTURES = {
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",
         ),
+        "testTitleDraftSurvivesScrollingOffscreenAndBack": (
+            "Workspace title draft offscreen light", "Workspace title draft offscreen dark",
+            "Workspace title draft restored light", "Workspace title draft restored dark",
+        ),
     },
     "ConnectionLossUITests": {
+        "testDemoRelaunchAfterReturningHomeStartsAtWorkspaces": (
+            "demo-home-before-relaunch", "demo-workspaces-after-relaunch",
+        ),
         "testDifferentServerAllowsSameMachineReselection": (
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
