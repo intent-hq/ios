@@ -10,6 +10,7 @@ struct WorkspaceChangesStoreTests {
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
         fake.responseMap["gitRoot.list"] = ["gitRoots": [] as [[String: Any]]]
         fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot()
+        fake.responseMap["git.status"] = ["files": [] as [[String: Any]]]
         fake.responseMap["file-tracking.loadCommits"] = WorkspaceChangesFixture.page()
         return fake
     }
@@ -37,11 +38,18 @@ struct WorkspaceChangesStoreTests {
             truncated: true
         )
         fake.responseMap["file-tracking.loadCommits"] = WorkspaceChangesFixture.page(["first"], nextToken: "page-2")
+        fake.responseMap["git.status"] = [
+            "files": [
+                ["path": "src/main.swift", "status": "M", "staged": true],
+                ["path": "src/main.swift", "status": "M", "staged": false]
+            ],
+            "filesTruncated": true
+        ]
         let store = WorkspaceChangesStore(connectionManager: fake)
         await store.refresh(workspaceId: "workspace-1")
 
-        #expect(store.stagedChanges.map(\.id) == ["staged-row"])
-        #expect(store.unstagedChanges.map(\.id) == ["unstaged-row"])
+        #expect(store.stagedChanges.map(\.id) == ["primary:staged:src/main.swift"])
+        #expect(store.unstagedChanges.map(\.id) == ["primary:unstaged:src/main.swift"])
         #expect(store.stagedChanges.first?.path == store.unstagedChanges.first?.path)
         #expect(store.commits.map(\.hash) == ["first"])
         #expect(store.isTruncated && store.hasMoreCommits && store.hasLoaded)
@@ -74,6 +82,65 @@ struct WorkspaceChangesStoreTests {
         #expect(params["includeOlder"] as? Bool == false)
     }
 
+    @Test func gitStatusReconcilesStaleTrackingAcrossStageChangesAndReverts() async throws {
+        let fake = makeFake()
+        fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot([
+            WorkspaceChangesFixture.change(path: "restaged.swift"),
+            WorkspaceChangesFixture.change(path: "reverted.swift", stage: "staged")
+        ], truncated: true)
+        fake.responseMap["git.status"] = [
+            "files": [
+                ["path": "restaged.swift", "status": "M", "staged": true],
+                ["path": "manual.swift", "status": "?", "staged": false]
+            ]
+        ]
+        let store = WorkspaceChangesStore(connectionManager: fake)
+        await store.startObserving(workspaceId: "workspace-1")
+
+        #expect(store.stagedChanges.map(\.path) == ["restaged.swift"])
+        #expect(store.unstagedChanges.map(\.path) == ["manual.swift"])
+        #expect(store.unstagedChanges.first?.status == "untracked")
+        #expect(store.stagedChanges.first?.hasLineStats == false)
+        #expect(store.isTruncated == false)
+        let params = try #require(fake.paramsForMethod("git.status").first)
+        #expect(params["workspaceId"] as? String == "workspace-1")
+        #expect(params["gitRootId"] == nil)
+        #expect(params["forceRefresh"] as? Bool == true)
+
+        fake.responseMap["git.status"] = [
+            "files": [["path": "restaged.swift", "status": "M", "staged": false]]
+        ]
+        deliverChange(fake, type: "changes:git-status")
+        try await waitUntil("unstaging updates despite unchanged attribution") {
+            store.stagedChanges.isEmpty && store.unstagedChanges.map(\.path) == ["restaged.swift"]
+        }
+        #expect(store.unstagedChanges.first?.agentName == "Implementor")
+
+        fake.responseMap["git.status"] = ["files": [] as [[String: Any]]]
+        deliverChange(fake, type: "changes:git-status")
+        try await waitUntil("revert removes tracked rows from Changes") {
+            store.stagedChanges.isEmpty && store.unstagedChanges.isEmpty
+        }
+        store.stopObserving()
+    }
+
+    @Test func gitStatusFailureKeepsLastSnapshotAndReportsError() async {
+        let fake = makeFake()
+        fake.responseMap["git.status"] = ["files": [["path": "manual.swift", "status": "?", "staged": false]]]
+        let store = WorkspaceChangesStore(connectionManager: fake)
+        await store.refresh(workspaceId: "workspace-1")
+        fake.errorMap["git.status"] = URLError(.timedOut)
+        await store.refresh(workspaceId: "workspace-1")
+        #expect(store.unstagedChanges.map(\.path) == ["manual.swift"])
+        #expect(store.errorMessage != nil)
+        #expect(store.isLoading == false)
+        fake.errorMap.removeValue(forKey: "git.status")
+        fake.responseMap["git.status"] = ["files": [] as [[String: Any]]]
+        await store.refresh(workspaceId: "workspace-1")
+        #expect(store.unstagedChanges.isEmpty)
+        #expect(store.errorMessage == nil)
+    }
+
     @Test func changedBoundaryRestartsHistoryWithoutAppendingAnotherRange() async {
         let fake = makeFake()
         fake.responseQueueMap["file-tracking.loadCommits"] = [
@@ -92,6 +159,7 @@ struct WorkspaceChangesStoreTests {
     @Test func errorsKeepPreviousSnapshotAndRetryClearsError() async {
         let fake = makeFake()
         fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot([WorkspaceChangesFixture.change()])
+        fake.responseMap["git.status"] = ["files": [["path": "src/main.swift", "status": "M", "staged": false]]]
         let store = WorkspaceChangesStore(connectionManager: fake)
         await store.refresh(workspaceId: "workspace-1")
         fake.responseMap["file-tracking.getChanges"] = ["invalid": true]
@@ -102,6 +170,7 @@ struct WorkspaceChangesStoreTests {
         #expect(store.errorMessage != nil)
         #expect(store.isLoading == false)
         fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot()
+        fake.responseMap["git.status"] = ["files": [] as [[String: Any]]]
         await store.refresh(workspaceId: "workspace-1")
         #expect(store.unstagedChanges.isEmpty)
         #expect(store.errorMessage == nil)
