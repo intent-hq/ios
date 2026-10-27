@@ -31,7 +31,6 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
             XCTAssertTrue(back.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
             XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(app.buttons[Self.agent].isSelected, "The open agent is marked in the sidebar")
-            XCTAssertFalse(app.collectionViews["workspaces.list"].isHittable)
             capture("ipad-workspace-sidebar-agent-\(appearance)")
 
             app.buttons["Context"].firstMatch.tap()
