@@ -292,6 +292,7 @@ struct IPadShellView: View {
     }
 
     /// The list stays mounted under a sidebar workspace, keeping its scroll position and search.
+    /// The two swap with a crossfade; nothing moves, so a slow first frame cannot read as a jump.
     private var workspacesSidebar: some View {
         ZStack {
             RetainedIPadPane(isVisible: workspaceSidebarContent == .workspaceList) {
@@ -302,8 +303,6 @@ struct IPadShellView: View {
                     onCollapse: collapseSidebar
                 )
             }
-            // The list steps back under an opening workspace and returns from the leading edge.
-            .offset(x: workspaceSidebarContent == .workspaceList ? 0 : -Self.pageParallax)
             if case let .workspace(workspaceId) = workspaceSidebarContent {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
@@ -311,7 +310,7 @@ struct IPadShellView: View {
                     sidebar: WorkspaceDetailSidebar(onCollapse: collapseSidebar)
                 )
                 .id(workspaceId)
-                .transition(.opacity.combined(with: .offset(x: Self.pageParallax)))
+                .transition(.opacity)
             }
         }
         .clipped()
