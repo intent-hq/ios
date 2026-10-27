@@ -1085,6 +1085,7 @@ $(SRCROOT)/IntentUITests/ScriptMonitorsUITests.swift
 $(SRCROOT)/IntentUITests/SettingsUITests.swift
 $(SRCROOT)/IntentUITests/SkillAutocompleteUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
+$(SRCROOT)/IntentUITests/ToastUITests.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
 $(SRCROOT)/IntentUITests/WatcherMessageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceAgentGroupsUITests.swift

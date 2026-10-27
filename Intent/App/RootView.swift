@@ -135,6 +135,7 @@ struct RootView: View {
         }
         #if DEBUG
         .modifier(DemoIPadProducerEntry())
+        .modifier(DemoToastOverlay())
         #endif
     }
 
