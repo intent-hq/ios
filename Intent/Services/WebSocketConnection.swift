@@ -2,7 +2,11 @@ import Foundation
 import Network
 import os
 
-/// WebSocket transport built on Network.framework (NWConnection + NWProtocolWebSocket).
+/// WebSocket transport over a Network.framework TLS byte stream. The RFC 6455
+/// handshake and framing, and RFC 7692 permessage-deflate, run in Swift
+/// (`WebSocketHandshake`, `WebSocketFrameCodec`, `PerMessageDeflate`) because
+/// `NWProtocolWebSocket` aborts any handshake in which the server accepts an
+/// extension, so it cannot compress.
 /// URLSession is deliberately not used: App Transport Security applies to URLSession
 /// connections and blocks pinned self-signed wss connections to non-local hosts
 /// (public IPs, Tailscale), while Network.framework leaves trust to the verify block
@@ -10,12 +14,24 @@ import os
 actor WebSocketConnection {
     nonisolated let host: String
     nonisolated let pathObservation: SocketPathObservation
+    /// The extension the server accepted, for logs and tests; nil when the
+    /// connection is uncompressed.
+    nonisolated let negotiatedDeflate: PerMessageDeflateParameters?
     private let connection: NWConnection
     private let queue: DispatchQueue
-    private let didOpen: OSAllocatedUnfairLock<Bool>
+    private let lifecycle: Lifecycle
+    private let deflate: PerMessageDeflate?
+    private var inbound: InboundStream
+    private var pendingPings: [Data: WebSocketPingSupport.PendingPing] = [:]
+    private var nextPingID: UInt64 = 0
+
+    /// Offer permessage-deflate on every connection. Setting this to false
+    /// restores a plain RFC 6455 connection (no extension header), the
+    /// rollback path for compression.
+    nonisolated static let offersPermessageDeflate = true
 
     /// Connect handshake deadline, matching the URLRequest.timeoutInterval the
-    /// URLSession-based transport used.
+    /// URLSession-based transport used. Covers TCP, TLS, and the HTTP upgrade.
     private static let connectTimeoutSeconds: Int = 4
     static let connectTimeout: Duration = .seconds(connectTimeoutSeconds)
     private static let maximumMessageSizeMebibytes: Int = 40
@@ -23,92 +39,90 @@ actor WebSocketConnection {
     private static let bytesPerKibibyte: Int = 1024
     static let maximumMessageSize =
         maximumMessageSizeMebibytes * kibibytesPerMebibyte * bytesPerKibibyte
-    private static let abnormalClosureCode = 1006
-    private static let invalidFramePayloadCode = 1007
-    private static let missingCloseStatusCode = 1005
+    static let readChunkSize = 65_536
+
+    /// Socket lifecycle shared with nonisolated teardown paths: a close frame
+    /// is sent only once, and only after the upgrade completed.
+    nonisolated enum SocketState: Sendable {
+        case connecting
+        case open
+        case closing
+    }
+
+    typealias Lifecycle = OSAllocatedUnfairLock<SocketState>
 
     private init(
         host: String,
         connection: NWConnection,
         queue: DispatchQueue,
-        didOpen: OSAllocatedUnfairLock<Bool>,
-        pathObservation: SocketPathObservation
-    ) {
+        lifecycle: Lifecycle,
+        pathObservation: SocketPathObservation,
+        endpoint: Endpoint,
+        upgrade: Upgrade
+    ) throws {
         self.host = host
         self.connection = connection
         self.queue = queue
-        self.didOpen = didOpen
+        self.lifecycle = lifecycle
         self.pathObservation = pathObservation
+        negotiatedDeflate = upgrade.deflate
+        let deflate = try upgrade.deflate.map { try PerMessageDeflate(parameters: $0) }
+        self.deflate = deflate
+        inbound = InboundStream(maximumMessageSize: endpoint.maximumMessageSize, deflate: deflate)
+        inbound.append(upgrade.leftover)
     }
 
     deinit {
         pathObservation.stop()
-        Self.close(connection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
+        Self.close(connection, lifecycle: lifecycle, code: WebSocketCloseCode.goingAway, queue: queue)
     }
 
     // MARK: - Connection setup
     // TLS verification needs the endpoint, credentials, result locks, and callback queue independently.
-    // swiftlint:disable:next function_parameter_count
     nonisolated private static func makeParameters(
         host: String,
-        token: String,
         certFingerprint: String?,
         mismatchFingerprint: OSAllocatedUnfairLock<String?>,
         missingCertificate: OSAllocatedUnfairLock<Bool>,
-        verifyQueue: DispatchQueue,
-        endpoint: Endpoint
+        verifyQueue: DispatchQueue
     ) -> NWParameters {
-        let parameters: NWParameters
-        if let pinned = trustedPin(certFingerprint) {
-            let tlsOptions = NWProtocolTLS.Options()
-            // Fingerprint pinning is the sole trust decision: the verify block
-            // replaces default chain evaluation entirely (the daemon's cert is
-            // self-signed), so SecTrustEvaluate is deliberately not called.
-            sec_protocol_options_set_verify_block(
-                tlsOptions.securityProtocolOptions,
-                { @Sendable _, trustRef, complete in
-                    let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
-                    guard SecTrustGetCertificateCount(serverTrust) > 0,
-                          let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
-                          let serverCert = certChain.first else {
-                        AppLog.connection.error("[CertPinning] \(host): no server certificate presented")
-                        missingCertificate.withLock { $0 = true }
-                        complete(false)
-                        return
-                    }
-                    let certData = SecCertificateCopyData(serverCert) as Data
-                    let received = fingerprint(ofCertificate: certData)
-                    if fingerprintMatches(received, pinned: pinned) {
-                        complete(true)
-                    } else {
-                        AppLog.connection.error("[CertPinning] Fingerprint mismatch!")
-                        AppLog.connection.error("[CertPinning] Expected: \(pinned)")
-                        AppLog.connection.error("[CertPinning] Got:      \(received)")
-                        mismatchFingerprint.withLock { $0 = received }
-                        complete(false)
-                    }
-                },
-                verifyQueue
-            )
-            parameters = NWParameters(tls: tlsOptions)
-        } else {
-            parameters = NWParameters.tcp
-        }
-        let wsOptions = NWProtocolWebSocket.Options()
-        // Reply to daemon pings automatically (URLSessionWebSocketTask did the
-        // same); the app's own liveness pings stay explicit via sendPing().
-        wsOptions.autoReplyPing = true
-        // The binary tunnel has its own smaller message cap (docs/protocol §1.4).
-        wsOptions.maximumMessageSize = endpoint.maximumMessageSize
-        wsOptions.setAdditionalHeaders(additionalHeaders(token: token))
-        parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
-        return parameters
+        guard let pinned = trustedPin(certFingerprint) else { return NWParameters.tcp }
+        let tlsOptions = NWProtocolTLS.Options()
+        // Fingerprint pinning is the sole trust decision: the verify block
+        // replaces default chain evaluation entirely (the daemon's cert is
+        // self-signed), so SecTrustEvaluate is deliberately not called.
+        sec_protocol_options_set_verify_block(
+            tlsOptions.securityProtocolOptions,
+            { @Sendable _, trustRef, complete in
+                let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
+                guard SecTrustGetCertificateCount(serverTrust) > 0,
+                      let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
+                      let serverCert = certChain.first else {
+                    AppLog.connection.error("[CertPinning] \(host): no server certificate presented")
+                    missingCertificate.withLock { $0 = true }
+                    complete(false)
+                    return
+                }
+                let certData = SecCertificateCopyData(serverCert) as Data
+                let received = fingerprint(ofCertificate: certData)
+                if fingerprintMatches(received, pinned: pinned) {
+                    complete(true)
+                } else {
+                    AppLog.connection.error("[CertPinning] Fingerprint mismatch!")
+                    AppLog.connection.error("[CertPinning] Expected: \(pinned)")
+                    AppLog.connection.error("[CertPinning] Got:      \(received)")
+                    mismatchFingerprint.withLock { $0 = received }
+                    complete(false)
+                }
+            },
+            verifyQueue
+        )
+        return NWParameters(tls: tlsOptions)
     }
 
     nonisolated private static func configureStateHandler(
         _ connection: NWConnection,
         host: String,
-        didOpen: OSAllocatedUnfairLock<Bool>,
         pathObservation: SocketPathObservation,
         continuation: AsyncThrowingStream<Void, Error>.Continuation
     ) {
@@ -124,9 +138,8 @@ actor WebSocketConnection {
             case .setup, .preparing:
                 AppLog.connection.debug("[WebSocket] \(host): \(String(describing: state))")
             case .ready:
-                AppLog.connection.debug("[WebSocket] \(host): ready")
+                AppLog.connection.debug("[WebSocket] \(host): transport ready")
                 pathObservation.ready(path: connection?.currentPath.map { NetworkPathSnapshot($0) })
-                didOpen.withLock { $0 = true }
                 continuation.yield()
                 continuation.finish()
             case .waiting, .failed:
@@ -167,18 +180,23 @@ actor WebSocketConnection {
         ))
     }
 
+    // Starts the connection and, once TCP/TLS is ready, runs `upgrade`, all
+    // within `connectTimeout`. Teardown on cancellation needs the connection,
+    // lifecycle, and queue independently.
+    // swiftlint:disable:next function_parameter_count
     nonisolated private static func awaitOpening(
         _ connection: NWConnection,
-        didOpen: OSAllocatedUnfairLock<Bool>,
+        lifecycle: Lifecycle,
         queue: DispatchQueue,
         lifecycleEvents: AsyncThrowingStream<Void, Error>,
-        host: String
-    ) async throws {
+        host: String,
+        upgrade: @escaping @Sendable () async throws -> Upgrade
+    ) async throws -> Upgrade {
         try await withTaskCancellationHandler {
             connection.start(queue: queue)
-            try await withThrowingTaskGroup(of: Void.self) { group in
+            return try await withThrowingTaskGroup(of: Upgrade.self) { group in
                 group.addTask {
-                    for try await _ in lifecycleEvents { return }
+                    for try await _ in lifecycleEvents { return try await upgrade() }
                     throw WebSocketTransportError.failed(
                         host: host,
                         message: "Handshake ended before the socket opened"
@@ -189,61 +207,89 @@ actor WebSocketConnection {
                     throw WebSocketTransportError.timedOut(host: host)
                 }
                 do {
-                    guard try await group.next() != nil else {
+                    guard let result = try await group.next() else {
                         throw WebSocketTransportError.failed(
                             host: host,
                             message: "Handshake produced no result"
                         )
                     }
                     group.cancelAll()
+                    return result
                 } catch {
+                    // The upgrade child may be parked in a raw read or write,
+                    // which ignores task cancellation, and the group waits for
+                    // every child before returning. Cancelling the connection
+                    // completes that I/O so the timeout is honoured.
+                    connection.cancel()
                     group.cancelAll()
                     throw error
                 }
             }
         } onCancel: {
-            close(connection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
+            close(connection, lifecycle: lifecycle, code: WebSocketCloseCode.goingAway, queue: queue)
         }
     }
 
+    // The public entry point keeps its long-standing parameter list; the
+    // compression flag defaults to the kill switch.
+    // swiftlint:disable:next function_body_length
     nonisolated static func connect(
         host: String,
         port: Int,
         token: String,
         certFingerprint: String?,
-        endpoint: Endpoint = .rpc
+        endpoint: Endpoint = .rpc,
+        offersCompression: Bool = offersPermessageDeflate
     ) async throws -> WebSocketConnection {
         let url = try makeURL(host: host, port: port, certFingerprint: certFingerprint, endpoint: endpoint)
         let mismatchFingerprint = OSAllocatedUnfairLock<String?>(initialState: nil)
         let missingCertificate = OSAllocatedUnfairLock(initialState: false)
-        let didOpen = OSAllocatedUnfairLock(initialState: false)
+        let lifecycle = Lifecycle(initialState: .connecting)
         let pathObservation = SocketPathObservation()
         let queue = DispatchQueue(label: "WebSocketConnection.\(host)")
         let (lifecycleEvents, lifecycleContinuation) = AsyncThrowingStream<Void, Error>.makeStream()
         let parameters = makeParameters(
             host: host,
-            token: token,
             certFingerprint: certFingerprint,
             mismatchFingerprint: mismatchFingerprint,
             missingCertificate: missingCertificate,
-            verifyQueue: queue,
-            endpoint: endpoint
+            verifyQueue: queue
         )
         let nwConnection = NWConnection(to: .url(url), using: parameters)
         configureStateHandler(
             nwConnection,
             host: host,
-            didOpen: didOpen,
             pathObservation: pathObservation,
             continuation: lifecycleContinuation
         )
         do {
-            try await awaitOpening(nwConnection, didOpen: didOpen, queue: queue, lifecycleEvents: lifecycleEvents, host: host)
+            let upgrade = try await awaitOpening(
+                nwConnection,
+                lifecycle: lifecycle,
+                queue: queue,
+                lifecycleEvents: lifecycleEvents,
+                host: host
+            ) {
+                try await performUpgrade(nwConnection, url: url, token: token, offersCompression: offersCompression, host: host)
+            }
             try Task.checkCancellation()
-            return WebSocketConnection(host: host, connection: nwConnection, queue: queue, didOpen: didOpen, pathObservation: pathObservation)
+            let socket = try WebSocketConnection(
+                host: host,
+                connection: nwConnection,
+                queue: queue,
+                lifecycle: lifecycle,
+                pathObservation: pathObservation,
+                endpoint: endpoint,
+                upgrade: upgrade
+            )
+            lifecycle.withLock { $0 = .open }
+            AppLog.connection.debug(
+                "[WebSocket] \(host): open (\(upgrade.deflate == nil ? "uncompressed" : "permessage-deflate"))"
+            )
+            return socket
         } catch {
             pathObservation.stop()
-            Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
+            Self.close(nwConnection, lifecycle: lifecycle, code: WebSocketCloseCode.goingAway, queue: queue)
             throw mapConnectFailure(
                 error, host: host, missingCertificate: missingCertificate, mismatchFingerprint: mismatchFingerprint
             )
@@ -269,132 +315,65 @@ actor WebSocketConnection {
 extension WebSocketConnection {
     // MARK: - Messaging
 
-    /// A received websocket frame, classified off the NWConnection callback so
-    /// only Sendable payloads cross back into the actor.
-    private enum Frame: Sendable {
-        case fragment(kind: FragmentKind, data: Data, isComplete: Bool)
-        case closed(code: Int, reason: String)
-        case control
-        case ended
-    }
-
     func receive() async throws -> URLSessionWebSocketTask.Message {
         let connection = connection
-        let didOpen = didOpen
+        let lifecycle = lifecycle
         let queue = queue
         let host = host
-        var assembler = MessageAssembler()
         while true {
-            let frame: Frame = try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    connection.receiveMessage { content, context, isComplete, error in
-                        if let error {
-                            continuation.resume(throwing: WebSocketTransportError.failed(
-                                host: host,
-                                message: String(describing: error),
-                                diagnosticFailure: TransportDiagnosticFailure.classify(error)
-                            ))
-                            return
-                        }
-                        continuation.resume(returning: Self.classifyFrame(
-                            content: content,
-                            context: context,
-                            isComplete: isComplete
-                        ))
-                    }
-                }
-            } onCancel: {
-                Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure), queue: queue)
-            }
-            switch frame {
-            case let .fragment(kind, data, isComplete):
-                if let message = try assembledMessage(
-                    kind: kind,
-                    data: data,
-                    isComplete: isComplete,
-                    assembler: &assembler
-                ) {
+            if let event = try nextInboundEvent() {
+                switch event {
+                case .message(let message):
                     return message
+                case .ping(let payload):
+                    // Reply to daemon pings automatically; the app's own
+                    // liveness pings stay explicit via sendPing().
+                    _ = Self.enqueueWhileOpen(Self.encodeControl(.pong, payload: payload), to: connection, lifecycle: lifecycle) { _ in }
+                case .pong(let payload):
+                    resolvePong(payload)
+                case let .close(code, reason):
+                    AppLog.connection.debug("[WebSocket] \(host): remote close code=\(code) reason=\(reason)")
+                    Self.close(connection, lifecycle: lifecycle, code: Self.echoedCloseCode(code), queue: queue)
+                    throw WebSocketTransportError.disconnected(host: host, code: code, reason: reason)
                 }
-            case let .closed(code, reason):
-                AppLog.connection.debug("[WebSocket] \(host): remote close code=\(code) reason=\(reason)")
-                throw WebSocketTransportError.disconnected(host: host, code: code, reason: reason)
-            case .ended:
-                // No error and no websocket metadata: the connection ended
-                // without a close frame (RFC 6455 abnormal closure).
-                throw WebSocketTransportError.disconnected(
-                    host: host,
-                    code: Self.abnormalClosureCode,
-                    reason: "Connection closed"
-                )
-            case .control:
                 continue
             }
+            let chunk = try await withTaskCancellationHandler {
+                try await Self.read(connection, host: host)
+            } onCancel: {
+                Self.close(connection, lifecycle: lifecycle, code: WebSocketCloseCode.normalClosure, queue: queue)
+            }
+            guard let chunk else {
+                // The stream ended without a close frame (RFC 6455 abnormal
+                // closure).
+                throw WebSocketTransportError.disconnected(
+                    host: host,
+                    code: Int(WebSocketCloseCode.abnormalClosure),
+                    reason: "Connection closed"
+                )
+            }
+            inbound.append(chunk)
         }
     }
 
-    private func assembledMessage(
-        kind: FragmentKind,
-        data: Data,
-        isComplete: Bool,
-        assembler: inout MessageAssembler
-    ) throws -> URLSessionWebSocketTask.Message? {
+    /// The next decoded event; protocol violations fail the connection with
+    /// the matching close code (1002, 1007, or 1009).
+    private func nextInboundEvent() throws -> InboundEvent? {
         do {
-            return try assembler.consume(kind: kind, data: data, isComplete: isComplete)
-        } catch MessageAssemblyError.invalidTextEncoding {
-            Self.close(
-                connection,
-                didOpen: didOpen,
-                code: .protocolCode(.invalidFramePayloadData),
-                queue: queue
-            )
-            throw WebSocketTransportError.disconnected(
-                host: host,
-                code: Self.invalidFramePayloadCode,
-                reason: "Invalid UTF-8 text payload"
-            )
-        }
-    }
-
-    nonisolated private static func classifyFrame(
-        content: Data?,
-        context: NWConnection.ContentContext?,
-        isComplete: Bool
-    ) -> Frame {
-        guard let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition)
-            as? NWProtocolWebSocket.Metadata else {
-            return .ended
-        }
-        switch metadata.opcode {
-        case .text:
-            return .fragment(kind: .text, data: content ?? Data(), isComplete: isComplete)
-        case .binary:
-            return .fragment(kind: .binary, data: content ?? Data(), isComplete: isComplete)
-        case .cont:
-            return .fragment(kind: .continuation, data: content ?? Data(), isComplete: isComplete)
-        case .close:
-            let reason = content
-                .flatMap { String(data: $0, encoding: .utf8) }
-                .flatMap { $0.isEmpty ? nil : $0 }
-                ?? "Connection closed"
-            return .closed(code: closeCodeValue(metadata.closeCode), reason: reason)
-        case .ping, .pong:
-            return .control
-        @unknown default:
-            return .control
-        }
-    }
-
-    nonisolated private static func closeCodeValue(_ code: NWProtocolWebSocket.CloseCode) -> Int {
-        switch code {
-        case .protocolCode(let definition):
-            return Int(definition.rawValue)
-        case .applicationCode(let value):
-            return Int(value)
-        case .privateCode(let value):
-            return Int(value)
-        @unknown default:
-            return missingCloseStatusCode
+            return try inbound.nextEvent()
+        } catch let error as MessageAssemblyError {
+            let code: UInt16
+            let reason: String
+            switch error {
+            case .invalidTextEncoding:
+                code = WebSocketCloseCode.invalidFramePayloadData
+                reason = "Invalid UTF-8 text payload"
+            case .protocolViolation(let violation):
+                code = violation.closeCode
+                reason = "WebSocket protocol violation: \(violation)"
+            }
+            Self.close(connection, lifecycle: lifecycle, code: code, queue: queue)
+            throw WebSocketTransportError.disconnected(host: host, code: Int(code), reason: reason)
         }
     }
 
@@ -406,33 +385,26 @@ extension WebSocketConnection {
         try await sendPayload(data, opcode: .binary)
     }
 
-    private func sendPayload(_ data: Data, opcode: NWProtocolWebSocket.Opcode) async throws {
-        let connection = connection
-        let host = host
-        let metadata = NWProtocolWebSocket.Metadata(opcode: opcode)
-        let context = NWConnection.ContentContext(identifier: "message", metadata: [metadata])
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(
-                content: data,
-                contentContext: context,
-                isComplete: true,
-                completion: .contentProcessed { error in
-                    if let error {
-                        continuation.resume(throwing: WebSocketTransportError.failed(
-                            host: host,
-                            message: String(describing: error),
-                            diagnosticFailure: TransportDiagnosticFailure.classify(error)
-                        ))
-                    } else {
-                        continuation.resume(returning: ())
-                    }
-                }
-            )
-        }
+    /// Compresses (when negotiated and worthwhile) and writes one unfragmented
+    /// message. Compression and the enqueue happen before the first
+    /// suspension, so deflate context order always matches wire order.
+    private func sendPayload(_ data: Data, opcode: WebSocketOpcode) async throws {
+        let compressed = deflate?.compressIfWorthwhile(data)
+        let frame = WebSocketFrame(opcode: opcode, payload: compressed ?? data, isCompressed: compressed != nil)
+        try await Self.writeWhileOpen(
+            WebSocketFrameEncoder.encode(frame, maskingKey: .random()),
+            to: connection,
+            lifecycle: lifecycle,
+            host: host
+        )
     }
 
     func sendPing() async throws {
         let pending = WebSocketPingSupport.PendingPing(initialState: nil)
+        nextPingID &+= 1
+        let payload = withUnsafeBytes(of: nextPingID.bigEndian) { Data($0) }
+        pendingPings[payload] = pending
+        defer { pendingPings[payload] = nil }
         let timeoutTask = Task { [host] in
             do {
                 try await Task.sleep(for: Constants.WebSocket.pingTimeout)
@@ -446,55 +418,39 @@ extension WebSocketConnection {
         defer { timeoutTask.cancel() }
 
         let connection = connection
-        let queue = queue
+        let lifecycle = lifecycle
         let host = host
+        let frame = Self.encodeControl(.ping, payload: payload)
         try await withTaskCancellationHandler {
-            try await WebSocketPingSupport.performPing(
-                connection: connection,
-                pending: pending,
-                queue: queue,
-                host: host
-            )
+            try await WebSocketPingSupport.performPing(pending: pending) {
+                let queued = Self.enqueueWhileOpen(frame, to: connection, lifecycle: lifecycle) { error in
+                    guard let error else { return }
+                    WebSocketPingSupport.takePending(pending)?.resume(throwing: WebSocketTransportError.failed(
+                        host: host,
+                        message: String(describing: error)
+                    ))
+                }
+                if !queued {
+                    WebSocketPingSupport.takePending(pending)?.resume(throwing: WebSocketTransportError.failed(
+                        host: host,
+                        message: "Connection closed"
+                    ))
+                }
+            }
         } onCancel: {
             WebSocketPingSupport.takePending(pending)?.resume(throwing: CancellationError())
         }
     }
 
-    func disconnect() {
-        pathObservation.stop()
-        Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure), queue: queue)
+    /// Completes the `sendPing()` waiting for this payload; unsolicited pongs
+    /// are ignored (RFC 6455 §5.5.3).
+    private func resolvePong(_ payload: Data) {
+        guard let pending = pendingPings.removeValue(forKey: payload) else { return }
+        WebSocketPingSupport.takePending(pending)?.resume(returning: ())
     }
 
-    /// Sends a websocket close frame (when the socket opened) and cancels the
-    /// underlying connection. Safe to call repeatedly and from any context:
-    /// once the connection is cancelled, further sends complete with an error
-    /// and cancel() is idempotent.
-    nonisolated private static func close(
-        _ connection: NWConnection,
-        didOpen: OSAllocatedUnfairLock<Bool>,
-        code: NWProtocolWebSocket.CloseCode,
-        queue: DispatchQueue
-    ) {
-        connection.pathUpdateHandler = nil
-        connection.viabilityUpdateHandler = nil
-        guard didOpen.withLock({ $0 }) else {
-            connection.cancel()
-            return
-        }
-        let metadata = NWProtocolWebSocket.Metadata(opcode: .close)
-        metadata.closeCode = code
-        let context = NWConnection.ContentContext(identifier: "close", metadata: [metadata])
-        connection.send(
-            content: nil,
-            contentContext: context,
-            isComplete: true,
-            completion: .contentProcessed { _ in connection.cancel() }
-        )
-        // An unresponsive peer or dead path can leave the close-frame send
-        // pending forever; guarantee teardown with a fallback cancel after a
-        // grace period (cancel() is idempotent).
-        queue.asyncAfter(
-            deadline: .now() + Constants.WebSocket.closeCancellationGracePeriod
-        ) { connection.cancel() }
+    func disconnect() {
+        pathObservation.stop()
+        Self.close(connection, lifecycle: lifecycle, code: WebSocketCloseCode.normalClosure, queue: queue)
     }
 }

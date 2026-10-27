@@ -1,5 +1,4 @@
 import Foundation
-import Network
 import os
 
 nonisolated enum WebSocketPingSupport {
@@ -32,53 +31,11 @@ nonisolated enum WebSocketPingSupport {
         }
     }
 
-    private static func pingMetadata(
-        pending: PendingPing,
-        queue: DispatchQueue,
-        host: String
-    ) -> NWProtocolWebSocket.Metadata {
-        let metadata = NWProtocolWebSocket.Metadata(opcode: .ping)
-        metadata.setPongHandler(queue) { error in
-            let continuation = takePending(pending)
-            if let error {
-                continuation?.resume(throwing: WebSocketTransportError.failed(
-                    host: host,
-                    message: String(describing: error)
-                ))
-            } else {
-                continuation?.resume(returning: ())
-            }
-        }
-        return metadata
-    }
-
-    private static func sendPingFrame(
-        connection: NWConnection,
-        metadata: NWProtocolWebSocket.Metadata,
-        pending: PendingPing,
-        host: String
-    ) {
-        let context = NWConnection.ContentContext(identifier: "ping", metadata: [metadata])
-        connection.send(
-            content: nil,
-            contentContext: context,
-            isComplete: true,
-            completion: .contentProcessed { error in
-                guard let error else { return }
-                takePending(pending)?.resume(throwing: WebSocketTransportError.failed(
-                    host: host,
-                    message: String(describing: error)
-                ))
-            }
-        )
-    }
-
-    static func performPing(
-        connection: NWConnection,
-        pending: PendingPing,
-        queue: DispatchQueue,
-        host: String
-    ) async throws {
+    /// Installs the continuation `sendPing()` waits on, then runs `send`,
+    /// which writes the ping frame. The receive path resumes the continuation
+    /// when the matching pong arrives; send errors, the ping timeout, and
+    /// cancellation resume it through `takePending`.
+    static func performPing(pending: PendingPing, send: () -> Void) async throws {
         try await withCheckedThrowingContinuation { continuation in
             let installed = pending.withLock { state in
                 guard !Task.isCancelled else { return false }
@@ -89,12 +46,7 @@ nonisolated enum WebSocketPingSupport {
                 continuation.resume(throwing: CancellationError())
                 return
             }
-            sendPingFrame(
-                connection: connection,
-                metadata: pingMetadata(pending: pending, queue: queue, host: host),
-                pending: pending,
-                host: host
-            )
+            send()
         }
     }
 }
