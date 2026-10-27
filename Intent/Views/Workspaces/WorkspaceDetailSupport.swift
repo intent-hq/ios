@@ -271,11 +271,14 @@ struct WorkspaceDetailToolbarPicker: View {
 
 struct WorkspaceRailShortcuts: View {
     let isTerminalDisabled: Bool
+    let onCreateAgent: () -> Void
     let onTerminal: () -> Void
     let onBrowser: () -> Void
 
     var body: some View {
         VStack(spacing: IPadShellLayout.contextualRailSpacing) {
+            IntentIconButton(icon: .addCircle, label: "Create New Agent", showsBackground: false, action: onCreateAgent)
+                .accessibilityIdentifier("workspace.shortcut.createAgent")
             IntentIconButton(icon: .terminal, label: "Open terminal", showsBackground: false, action: onTerminal)
                 .disabled(isTerminalDisabled)
                 .accessibilityIdentifier("workspace.shortcut.terminal")

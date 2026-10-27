@@ -384,10 +384,6 @@ private extension WorkspaceDetailView {
     var workspaceActions: some View {
         WorkspaceResourceActions(workspaceId: workspaceId) {
             workspaceActionsMenu
-            if usesVerticalBar {
-                IntentIconButton(icon: .addCircle, label: "Create New Agent", showsBackground: false) { showSpecialistPicker = true }
-                    .accessibilityIdentifier("workspace.rail.createAgent")
-            }
         }
     }
 
