@@ -930,6 +930,15 @@ status=$(run_filtered defaultbuild "" build-ios)
 assert_eq "default iOS build exits 0" "$status" 0
 assert_eq "default iOS build keeps its exact destination and signing argv" "$(argv_line defaultbuild 1)" \
   'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [generic/platform=iOS Simulator] [CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO]'
+status=$(run_filtered devicebuild "" build-ios-device DEVICE_UDID=00008160-000925E83EC0000A)
+assert_eq "device build exits 0" "$status" 0
+assert_eq "device build pins its destination and preserves project signing" "$(argv_line devicebuild 1)" \
+  'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS,id=00008160-000925E83EC0000A]'
+status=$(run_filtered missingdevice "" build-ios-device DEVICE_UDID=)
+assert_eq "device build refuses missing identifier" "$status" 1
+assert_eq "missing device never invokes Xcode" "$(wc -l < "$work/missingdevice.args" | tr -d ' ')" 0
+status=$(run_filtered invaliddevice "" build-ios-device 'DEVICE_UDID=device,platform=iOS Simulator')
+assert_eq "device build refuses destination injection" "$status" 1
 status=$(run_filtered emptyconfig "" build-ios BUILD_CONFIGURATION=)
 assert_eq "empty configuration keeps the default argv" "$(argv_line emptyconfig 1)" "$(argv_line defaultbuild 1)"
 status=$(run_filtered debugbuild "" build-ios BUILD_CONFIGURATION=Debug)

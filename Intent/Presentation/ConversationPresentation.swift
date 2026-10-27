@@ -13,3 +13,20 @@ extension EnvironmentValues {
     /// Hidden iPad panes retain state but must relinquish keyboard focus.
     @Entry var isIPadPaneVisible = true
 }
+
+struct ConversationScrollEdgeEffect: ViewModifier {
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectHidden(usesVerticalBar, for: .top)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}

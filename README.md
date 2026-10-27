@@ -301,6 +301,7 @@ The Xcode wrapper supports these subcommands:
 | --- | --- |
 | `resolve` | Resolve Swift package dependencies. |
 | `build-ios` | Build for the generic iOS Simulator destination. |
+| `build-ios-device` | Build for physical `DEVICE_UDID` using project signing; does not install, upload, or change provisioning. |
 | `build-visionos` | Build for the generic visionOS Simulator destination. |
 | `build-for-testing` | Build the iOS test bundles for a later test-only run. |
 | `build-for-testing-ui` | Build the app and UI tests using the `IntentUI` scheme, without compiling the unit-test bundle. |

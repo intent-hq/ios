@@ -23,6 +23,7 @@
 | Task | Command |
 | --- | --- |
 | iOS / visionOS build | `scripts/xcodebuild.sh build-ios` / `scripts/xcodebuild.sh build-visionos` |
+| Physical iOS build | `DEVICE_UDID=<device-id> scripts/xcodebuild.sh build-ios-device` (project signing; build only) |
 | Full pre-PR test gate | `scripts/xcodebuild.sh test-ios` |
 | Pre-PR lint gate | `scripts/swiftlint.sh` |
 | Focused unit iteration | `ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-ios-unit` |

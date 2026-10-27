@@ -1,6 +1,9 @@
 import Foundation
 @testable import Intent
+import Observation
+import SwiftUI
 import Testing
+import UIKit
 
 @MainActor
 struct WorkspaceSubtitleResolverTests {
@@ -51,5 +54,78 @@ struct WorkspaceSubtitleResolverTests {
             forWorkspaceId: "ws-1",
             in: store.workspaces
         ) == "My Workspace")
+    }
+
+    @Test func subtitleVisibilityChangesRetainFocusedEditor() async throws {
+        let session = WorkspaceDetailViewTests().makePinnedSession(connection: FakeConnectionManager())
+        session.workspaceStore.publishFetchedWorkspaces([try makeWorkspace(id: "ws-1", title: "Workspace")])
+        let state = SubtitleEditorState()
+        let content = SubtitleEditorHost(state: state)
+            .environment(session)
+            .transaction { $0.disablesAnimations = true }
+        try await SyntheticBadgeHost.render(content, width: 600, height: 800) { host, window in
+            let previousKey = window.windowScene?.keyWindow
+            window.makeKey()
+            defer {
+                window.endEditing(true)
+                previousKey?.makeKey()
+            }
+            try await waitUntil("the editor appears") { subtitleEditor(in: host) != nil }
+            let editor = try #require(subtitleEditor(in: host))
+            let draft = "Keep this selected draft"
+            let selection = NSRange(location: 5, length: 4)
+            editor.text = draft
+            editor.selectedRange = selection
+            try #require(editor.becomeFirstResponder())
+
+            for workspaceId in ["ws-1", "", "ws-1"] {
+                state.workspaceId = workspaceId
+                state.revision += 1
+                try await waitUntil("the subtitle change reaches the native editor") {
+                    subtitleEditor(in: host)?.accessibilityValue == String(state.revision)
+                }
+                let updatedEditor = try #require(subtitleEditor(in: host))
+                #expect(updatedEditor === editor)
+                #expect(updatedEditor.isFirstResponder)
+                #expect(updatedEditor.text == draft)
+                #expect(updatedEditor.selectedRange == selection)
+            }
+        }
+    }
+
+    private func subtitleEditor(in view: UIView) -> UITextView? {
+        if let editor = view as? UITextView, editor.accessibilityIdentifier == "subtitle.editor" { return editor }
+        return view.subviews.lazy.compactMap { subtitleEditor(in: $0) }.first
+    }
+}
+
+@MainActor @Observable
+private final class SubtitleEditorState {
+    var workspaceId = ""
+    var revision = 0
+}
+
+private struct SubtitleEditorHost: View {
+    let state: SubtitleEditorState
+
+    var body: some View {
+        NavigationStack {
+            SubtitleEditor(revision: state.revision)
+                .workspaceNavigationSubtitle(title: "Agent", workspaceId: state.workspaceId)
+        }
+    }
+}
+
+private struct SubtitleEditor: UIViewRepresentable {
+    let revision: Int
+
+    func makeUIView(context _: Context) -> UITextView {
+        let editor = UITextView()
+        editor.accessibilityIdentifier = "subtitle.editor"
+        return editor
+    }
+
+    func updateUIView(_ editor: UITextView, context _: Context) {
+        editor.accessibilityValue = String(revision)
     }
 }
