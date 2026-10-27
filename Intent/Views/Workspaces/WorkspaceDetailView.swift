@@ -75,6 +75,11 @@ struct WorkspaceDetailView: View {
         return coordinator.usesIPadShell ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme)
     }
 
+    /// The persistent iPad sidebar already names the workspace above its list selection.
+    private var isBesideIPadSidebar: Bool {
+        coordinator.usesIPadShell && coordinator.iPadNavigation.isSidebarVisible && !coordinator.iPadNavigation.usesSidebarOverlay
+    }
+
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
     private var lifecycleContent: some View {
         ZStack {
@@ -317,6 +322,7 @@ struct WorkspaceDetailView: View {
             title: workspaceTitle,
             createdAt: workspace?.createdAt,
             showsBackButton: showsBackButton,
+            showsTitle: !isBesideIPadSidebar,
             onBack: coordinator.onBackToWorkspaceList
         ) { workspaceActions }
         #endif

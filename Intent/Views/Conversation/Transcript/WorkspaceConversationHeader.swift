@@ -7,11 +7,14 @@ extension View {
         title: String,
         createdAt: String?,
         showsBackButton: Bool = true,
+        showsTitle: Bool = true,
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
         #if os(iOS)
-        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, showsBackButton: showsBackButton, onBack: onBack, actions: actions))
+        modifier(WorkspacePhoneNavigationModifier(
+            title: title, createdAt: createdAt, showsBackButton: showsBackButton, showsTitle: showsTitle, onBack: onBack, actions: actions
+        ))
         #else
         self
         #endif
@@ -23,6 +26,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let title: String
     let createdAt: String?
     let showsBackButton: Bool
+    let showsTitle: Bool
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -40,10 +44,11 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
                 if usesCustomHeader {
                     WorkspaceNavigationHeader(
                         title: title,
-                        subtitle: "Workspace",
+                        subtitle: showsTitle ? "Workspace" : nil,
                         backLabel: "Back to workspaces",
                         backIdentifier: "workspaceDetail.back",
-                        showsWorkspacePlaceholder: true,
+                        showsTitle: showsTitle,
+                        showsWorkspacePlaceholder: showsTitle,
                         workspaceCreatedAt: createdAt,
                         usesConversationLayout: presentation == .iPad,
                         onBack: showsBackButton ? onBack : nil,

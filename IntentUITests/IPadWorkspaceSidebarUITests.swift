@@ -73,6 +73,13 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         app.buttons["Agents"].firstMatch.tap()
         let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
         XCTAssertTrue(overview.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        capture("ipad-overview-beside-sidebar")
+        app.buttons["ipad.sidebar.collapse"].tap()
+        let expand = app.buttons["ipad.sidebar.expand"]
+        XCTAssertTrue(expand.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        capture("ipad-overview-sidebar-collapsed")
+        expand.tap()
+        XCTAssertTrue(app.collectionViews["workspaces.list"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
 
         overview.swipeLeft()
         let firstAgent = app.buttons[Self.firstAgent]
