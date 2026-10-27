@@ -37,21 +37,24 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
         content
             .toolbar(usesCustomHeader && !usesVerticalBar ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if usesCustomHeader {
-                    WorkspaceNavigationHeader(
-                        title: title,
-                        subtitle: "Workspace",
-                        backLabel: "Back to workspaces",
-                        backIdentifier: "workspaceDetail.back",
-                        showsWorkspacePlaceholder: true,
-                        workspaceCreatedAt: createdAt,
-                        usesConversationLayout: presentation == .iPad,
-                        showsContextualActions: !usesVerticalBar,
-                        onBack: showsBackButton ? onBack : nil,
-                        actions: actions
-                    )
-                }
+                if usesCustomHeader { navigationHeader }
             }
+    }
+
+    private var navigationHeader: some View {
+        WorkspaceNavigationHeader(
+            title: title,
+            subtitle: presentation == .iPad ? nil : "Workspace",
+            backLabel: "Back to workspaces",
+            backIdentifier: "workspaceDetail.back",
+            showsTitle: presentation != .iPad,
+            showsWorkspacePlaceholder: presentation != .iPad,
+            workspaceCreatedAt: createdAt,
+            usesConversationLayout: presentation == .iPad,
+            showsContextualActions: !usesVerticalBar,
+            onBack: showsBackButton ? onBack : nil,
+            actions: actions
+        )
     }
 }
 #endif
@@ -150,6 +153,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
 
     private var showsInlineActions: Bool { showsContextualActions && !usesDuoContextualRail }
+    private var showsHeaderCopy: Bool { showsTitle || showsWorkspacePlaceholder || subtitle != nil }
 
     private var usesIPadDesign: Bool {
         usesConversationLayout && presentation == .iPad
@@ -205,7 +209,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                     .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                     .accessibilityHidden(true)
             }
-            titleCopy
+            headerCopy
             if showsInlineActions {
                 actions()
                     .buttonStyle(IntentContentButtonStyle())
@@ -216,6 +220,14 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         .padding(.horizontal, Design.horizontalInset)
         .padding(.top, usesIPadDesign ? Design.IPad.headerTopInset : Design.Header.verticalPadding)
         .padding(.bottom, usesIPadDesign ? Design.IPad.headerBottomInset : Design.Header.verticalPadding)
+    }
+
+    @ViewBuilder private var headerCopy: some View {
+        if showsHeaderCopy {
+            titleCopy
+        } else {
+            Spacer(minLength: 0)
+        }
     }
 
     private var railControls: some View {

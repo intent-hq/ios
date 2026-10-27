@@ -69,6 +69,7 @@ struct WorkspaceDetailView: View {
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
 
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
+    private var showsNavigationTitle: Bool { !coordinator.usesIPadShell && !usesVerticalBar }
     private var lifecycleContent: some View {
         ZStack {
             WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
@@ -248,7 +249,7 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
-        .navigationTitle(workspaceName)
+        .navigationTitle(showsNavigationTitle ? workspaceName : "")
         .toolbar(removing: usesVerticalBar ? .title : nil)
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
@@ -278,8 +279,10 @@ struct WorkspaceDetailView: View {
                     .intentToolbarSurface()
                 }
                 #endif
-                ToolbarItem(placement: .principal) {
-                    WorkspaceDetailToolbarTitle(title: workspaceTitle, createdAt: workspace?.createdAt)
+                if showsNavigationTitle {
+                    ToolbarItem(placement: .principal) {
+                        WorkspaceDetailToolbarTitle(title: workspaceTitle, createdAt: workspace?.createdAt)
+                    }
                 }
                 ToolbarItem(placement: .primaryAction) { workspaceActions }
                 .intentToolbarSurface()
