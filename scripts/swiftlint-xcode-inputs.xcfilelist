@@ -18,6 +18,7 @@ $(SRCROOT)/Intent/App/NavigationDestinations.swift
 $(SRCROOT)/Intent/App/RootCompactNavigationView.swift
 $(SRCROOT)/Intent/App/RootDetailContentView.swift
 $(SRCROOT)/Intent/App/RootView.swift
+$(SRCROOT)/Intent/App/WindowSceneActivator.swift
 $(SRCROOT)/Intent/App/WindowSceneTitle.swift
 $(SRCROOT)/Intent/ConnectionRegistryReadResult.swift
 $(SRCROOT)/Intent/Constants.swift

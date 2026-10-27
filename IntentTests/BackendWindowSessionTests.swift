@@ -305,4 +305,35 @@ extension BackendSessionRegistryTests {
         #expect(pairingConnection.disconnectCallCount == 1)
         #expect(registry.attachmentCount(for: originalBackend) == 0)
     }
+
+    /// Pairing B from one of two windows on A rebinds that window, so the
+    /// window that stays on A must re-dial the hijacked shared connection.
+    @Test(arguments: [false, true])
+    func pairingAnotherBackendRedialsTheWindowThatStays(hasSurvivingWindow: Bool) throws {
+        let registry = makeRegistry()
+        let own = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
+        let paired = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 5252))
+        let backend = BackendID(own.id)
+        let session = registry.attach(backend)
+        let leaving = session.makeCoordinator()
+        leaving.currentScreen = .workspaceList
+        var staying: AppCoordinator?
+        if hasSurvivingWindow {
+            _ = registry.attach(backend)
+            staying = session.makeCoordinator()
+            staying?.currentScreen = .workspaceList
+        }
+        var retargeted: BackendID?
+        leaving.retargetWindow = { retargeted = $0 }
+
+        leaving.onPaired(paired)
+
+        let fake = try #require(session.connection as? FakeConnectionManager)
+        #expect(retargeted == BackendID(paired.id))
+        #expect(fake.disconnectCallCount == (hasSurvivingWindow ? 1 : 0))
+        #expect(leaving.currentScreenDescription == "workspaceList")
+        if let staying {
+            #expect(staying.currentScreenDescription == "connecting")
+        }
+    }
 }
