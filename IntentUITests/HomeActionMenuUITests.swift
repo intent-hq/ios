@@ -321,8 +321,8 @@ extension HomeActionMenuUITests {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-long-workspace-list", "-appThemePreference", themePreference]
         app.launch()
-        let usesShell = UIDevice.current.userInterfaceIdiom == .pad || ProcessInfo.processInfo.environment["INTENT_UITEST_UNFOLDED_DUO"] == "1"
-        let navigation = usesShell ? "ipad.rail.workspaces" : "intent.menu.open"
+        // Only the ordinary iPad shell keeps the global rail; the unfolded Duo uses the launcher.
+        let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
         XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
         return app
     }
@@ -451,8 +451,8 @@ extension HomeActionMenuUITests {
         let rootActions = app.buttons["Workspace actions"]
         XCTAssertTrue(waitUntilHittable(rootActions))
         XCTAssertLessThan(rootActions.frame.maxY, window.frame.midY)
-        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
-        XCTAssertFalse(app.buttons["intent.menu.open"].exists)
+        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists, "The unfolded Duo replaces the global rail with its launcher")
+        XCTAssertTrue(app.buttons["intent.menu.open"].isHittable)
         attachScreenshot(app.screenshot(), named: "Unfolded Duo workspace split")
 
         let sidebarFrame = sidebar.frame
@@ -468,7 +468,8 @@ extension HomeActionMenuUITests {
         XCTAssertLessThanOrEqual(sidebar.frame.maxX, composer.frame.minX)
         XCTAssertEqual(back.frame.midY, actions.frame.midY, accuracy: Self.scrollTolerance)
         XCTAssertLessThan(actions.frame.maxY, window.frame.midY)
-        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
+        XCTAssertTrue(app.buttons["intent.menu.open"].isHittable)
         attachScreenshot(app.screenshot(), named: "Unfolded Duo conversation split")
         back.tap()
         XCTAssertTrue(waitUntilHittable(agent))

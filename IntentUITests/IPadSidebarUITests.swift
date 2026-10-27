@@ -443,10 +443,18 @@ extension IPadSidebarUITests {
             transcript.swipeDown()
             XCTAssertEqual(header.frame, headerFrame)
             XCTAssertTrue(header.isHittable)
-            XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+            let usesDuoLauncher = UIDevice.current.userInterfaceIdiom != .pad
+            XCTAssertEqual(app.buttons["ipad.rail.workspaces"].exists, !usesDuoLauncher)
+            XCTAssertEqual(app.buttons["intent.menu.open"].exists, usesDuoLauncher)
             capture(app, name: "Shared shell chat scrollback \(appearance)")
-            app.buttons["ipad.rail.settings"].tap()
-            app.buttons["ipad.rail.workspaces"].tap()
+            if usesDuoLauncher {
+                // The unfolded Duo reaches sections through the launcher instead of the rail.
+                app.openHomeAction("settings")
+                app.openHomeAction("workspaces")
+            } else {
+                app.buttons["ipad.rail.settings"].tap()
+                app.buttons["ipad.rail.workspaces"].tap()
+            }
             XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
             app.terminate()
         }
