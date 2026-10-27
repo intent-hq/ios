@@ -191,6 +191,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 
     @MainActor
     private func verifyPopulatedHistory(in app: XCUIApplication) {
+        showWorkspaceList(in: app)
         app.buttons["workspaces.menu"].tap()
         app.buttons["workspaces.menu.recentAgents"].tap()
         let entry = app.buttons.matching(NSPredicate(
@@ -221,6 +222,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     @MainActor
     private func captureMainScreens(in app: XCUIApplication, appearance: String) {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        showWorkspaceList(in: app)
         for mode in ["Repo", "Status", "Recent"] {
             let control = app.buttons["workspaces.viewMode.\(mode)"]
             control.tap()
@@ -308,6 +310,14 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
     }
 
+    /// An open conversation moves its workspace into the persistent sidebar; Back restores the list.
+    @MainActor
+    private func showWorkspaceList(in app: XCUIApplication) {
+        let back = app.buttons["workspaceSidebar.back"]
+        if back.exists { back.tap() }
+        XCTAssertTrue(app.collectionViews["workspaces.list"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+    }
+
     @MainActor
     private func capture(_: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -320,6 +330,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 extension IPadSidebarUITests {
     @MainActor
     private func verifyComposerAfterSearch(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, appearance: String) {
+        showWorkspaceList(in: app)
         app.buttons["workspaces.search.open"].tap()
         let search = app.textFields["workspaces.search.field"]
         XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
@@ -357,6 +368,7 @@ extension IPadSidebarUITests {
         XCTAssertTrue(app.buttons["saved-connections.scan"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         app.buttons["ipad.rail.workspaces"].tap()
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        showWorkspaceList(in: app)
         try controls.workspace.activate(in: app)
         XCTAssertTrue(app.staticTexts["workspace.title.heading"].wait(for: \.label, toEqual: "Fix websocket reconnect storm", timeout: Self.timeout))
         openConversation(in: app)

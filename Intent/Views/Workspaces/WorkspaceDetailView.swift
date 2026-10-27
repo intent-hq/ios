@@ -4,6 +4,7 @@ struct WorkspaceDetailView: View {
     let workspaceId: String
     private let persistence: PersistenceManager
     private let isSidebarVisible: Bool
+    let sidebar: WorkspaceDetailSidebar?
     @Environment(AppCoordinator.self) var coordinator
     @State private var storedAgentStore: AgentStore
     @State private var storedViewModel: AgentListViewModel
@@ -31,10 +32,11 @@ struct WorkspaceDetailView: View {
     @FocusState private var titleFocused: Bool
     @Environment(BackendSession.self) private var session
 
-    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false) {
+    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false, sidebar: WorkspaceDetailSidebar? = nil) {
         self.workspaceId = workspaceId
         self.persistence = persistence
         self.isSidebarVisible = isSidebarVisible
+        self.sidebar = sidebar
         _selectedTab = State(initialValue: WorkspaceTab.restored(
             persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
             fallback: .agents
@@ -68,11 +70,21 @@ struct WorkspaceDetailView: View {
 
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
 
+    private var surface: Color {
+        guard sidebar != nil else { return WorkspaceDetailStyle.background(for: colorScheme) }
+        return coordinator.usesIPadShell ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme)
+    }
+
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
     private var lifecycleContent: some View {
         ZStack {
-            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
-            detailContent
+            surface.ignoresSafeArea()
+            VStack(spacing: 0) {
+                if let sidebar, let onCollapse = sidebar.onCollapse {
+                    WorkspaceSidebarHeader(onBack: sidebar.onBack, onCollapse: onCollapse) { workspaceActions }
+                }
+                detailContent
+            }
         }
         .onAppear {
             if let connectionId = session.backendID?.connectionID {
@@ -154,6 +166,14 @@ struct WorkspaceDetailView: View {
     }
 
     var body: some View {
+        if let sidebar {
+            presentedContent.workspaceSidebarNavigation(sidebar) { workspaceActions }
+        } else {
+            pageContent
+        }
+    }
+
+    private var presentedContent: some View {
         lifecycleContent
         .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
             if titleEditor.isEditing {
@@ -248,6 +268,10 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
+    }
+
+    private var pageContent: some View {
+        presentedContent
         .navigationTitle(workspaceName)
         .toolbar(removing: usesVerticalBar ? .title : nil)
         .toolbarTitleDisplayMode(.inline)
@@ -367,13 +391,13 @@ private extension WorkspaceDetailView {
                     tabContent
                 }
                 .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
-                .iPadDetailColumn()
+                .iPadDetailColumn(isEnabled: sidebar == nil)
             } else {
                 VStack(spacing: 0) {
                     detailHeader
                     tabContent
                 }
-                .iPadDetailColumn()
+                .iPadDetailColumn(isEnabled: sidebar == nil)
             }
         }
         .accessibilityIdentifier("workspace.detail.scroll")
@@ -401,6 +425,7 @@ private extension WorkspaceDetailView {
                 selection: $selectedTab,
                 titleEditor: titleEditor,
                 titleFocus: $titleFocused,
+                headingTopSpacing: sidebar?.headingTopSpacing,
                 onSaveTitle: saveTitle
             )
         }

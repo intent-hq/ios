@@ -13,6 +13,7 @@ struct IPadShellView: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnectionSwitcher = false
     @State private var connectionSwitcherOpen = false
+    @State private var workspaceSidebar = WorkspaceSidebarState()
     @AccessibilityFocusState private var detailFocused: Bool
 
     private var navigation: IPadNavigationState { coordinator.iPadNavigation }
@@ -53,6 +54,14 @@ struct IPadShellView: View {
     }
     private var workspaceSearchVisible: Bool {
         navigation.focusPresentation == .workspaceSearch
+    }
+    /// A persistent sidebar beside the detail pane; drawers and compact windows keep the list.
+    private var workspaceSidebarContent: WorkspaceSidebarContent {
+        workspaceSidebar.content(
+            for: coordinator.currentScreen,
+            route: coordinator.workspaceSidebarRoute,
+            isPersistent: width != nil && !layout.usesCompactNavigation && !layout.usesSidebarOverlay && !workspaceSearchVisible
+        )
     }
 
     var body: some View {
@@ -228,12 +237,7 @@ struct IPadShellView: View {
     private var sidebars: some View {
         ZStack {
             RetainedIPadPane(isVisible: navigation.section == .workspaces, keepsCoveredContentVisible: true) {
-                WorkspaceListSidebar(
-                    workspaceStore: session.workspaceStore,
-                    isSearching: isSearchingWorkspaces,
-                    onCreateWorkspace: createWorkspace,
-                    onCollapse: collapseSidebar
-                )
+                workspacesSidebar
             }
             if navigation.hasOpenedAssistant {
                 RetainedIPadPane(isVisible: navigation.section == .assistant, keepsCoveredContentVisible: true) {
@@ -258,6 +262,35 @@ struct IPadShellView: View {
                 )
             }
         }
+    }
+
+    /// The list stays mounted under a sidebar workspace, keeping its scroll position and search.
+    private var workspacesSidebar: some View {
+        ZStack {
+            RetainedIPadPane(isVisible: workspaceSidebarContent == .workspaceList) {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace,
+                    onCollapse: collapseSidebar
+                )
+            }
+            if case let .workspace(workspaceId) = workspaceSidebarContent {
+                WorkspaceDetailView(
+                    workspaceId: workspaceId,
+                    session: session,
+                    sidebar: WorkspaceDetailSidebar(onBack: showWorkspaceList, onCollapse: collapseSidebar)
+                )
+                .id(workspaceId)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .clipped()
+        .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration), value: workspaceSidebarContent)
+    }
+
+    private func showWorkspaceList() {
+        workspaceSidebar.showList(for: coordinator.workspaceSidebarRoute)
     }
 
     @ViewBuilder private var drawerBackdrop: some View {

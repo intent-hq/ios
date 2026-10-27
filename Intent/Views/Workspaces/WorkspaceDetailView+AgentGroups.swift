@@ -94,11 +94,18 @@ extension WorkspaceDetailView {
         return .ready
     }
 
+    /// The conversation open beside this sidebar workspace.
+    private var sidebarAgentId: String? {
+        guard sidebar != nil, case let .agentConversation(agentId, _, _) = coordinator.currentScreen else { return nil }
+        return agentId
+    }
+
     func agentButton(_ agent: AgentSession, indented: Bool = false) -> WorkspaceAgentButton {
         WorkspaceAgentButton(
             agent: agent,
             colorScheme: colorScheme,
             indented: indented,
+            isSelected: sidebarAgentId == agent.id,
             onSelect: { coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name) },
             onMute: { toggleNotificationsMuted(agent) }
         )

@@ -10,6 +10,7 @@ struct WorkspaceDetailHeading: View {
     var statusMessage: String?
     @Bindable var titleEditor: WorkspaceTitleEditor
     var titleFocus: FocusState<Bool>.Binding?
+    var topSpacing: CGFloat?
     let onSaveTitle: () -> Void
     @FocusState private var titleFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -37,7 +38,8 @@ struct WorkspaceDetailHeading: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-        .padding(.top, dynamicTypeSize.isAccessibilitySize ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTopSpacing)
+        .padding(.top, topSpacing
+            ?? (dynamicTypeSize.isAccessibilitySize ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTopSpacing))
         .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
     }
 
@@ -273,6 +275,7 @@ struct WorkspaceDetailHeader: View {
     @Binding var selection: WorkspaceTab
     let titleEditor: WorkspaceTitleEditor
     let titleFocus: FocusState<Bool>.Binding
+    var headingTopSpacing: CGFloat?
     let onSaveTitle: () -> Void
 
     var body: some View {
@@ -285,6 +288,7 @@ struct WorkspaceDetailHeader: View {
             statusMessage: workspace?.statusMessage,
             titleEditor: titleEditor,
             titleFocus: titleFocus,
+            topSpacing: headingTopSpacing,
             onSaveTitle: onSaveTitle
         )
         if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {

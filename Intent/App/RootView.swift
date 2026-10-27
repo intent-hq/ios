@@ -57,6 +57,7 @@ struct RootView: View {
     @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
     // The unfolded Duo divides the window at its midpoint, including the trailing rail.
     @State private var duoSidebarWidth = Constants.Root.sidebarIdealWidth
+    @State private var duoWorkspaceSidebar = WorkspaceSidebarState()
 
     var conversationDestination: some View {
         ConversationDestinationView(
@@ -446,11 +447,7 @@ private extension RootView {
     @ViewBuilder var workspaceSplitView: some View {
         if usesVerticalBar {
             NavigationSplitView(columnVisibility: .constant(.all)) {
-                WorkspaceListSidebar(
-                    workspaceStore: session.workspaceStore,
-                    isSearching: $isSearchingWorkspaces,
-                    onCreateWorkspace: createWorkspace
-                )
+                duoSidebar
                 .navigationSplitViewColumnWidth(duoSidebarWidth)
                 .toolbar(removing: .sidebarToggle)
             } detail: {
@@ -481,6 +478,40 @@ private extension RootView {
             }
             .navigationSplitViewStyle(.automatic)
         }
+    }
+
+    var duoSidebarContent: WorkspaceSidebarContent {
+        duoWorkspaceSidebar.content(
+            for: coordinator.currentScreen,
+            route: coordinator.workspaceSidebarRoute,
+            isPersistent: !isSearchingWorkspaces
+        )
+    }
+
+    /// Both views share the column's navigation bar, so only one is mounted.
+    var duoSidebar: some View {
+        ZStack {
+            if case let .workspace(workspaceId) = duoSidebarContent {
+                WorkspaceDetailView(
+                    workspaceId: workspaceId,
+                    session: session,
+                    sidebar: WorkspaceDetailSidebar(onBack: {
+                        duoWorkspaceSidebar.showList(for: coordinator.workspaceSidebarRoute)
+                    })
+                )
+                .id(workspaceId)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace
+                )
+                .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+        }
+        .clipped()
+        .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration), value: duoSidebarContent)
     }
 
     func prepareConnectionSwitcher() {
