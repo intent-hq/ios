@@ -440,6 +440,8 @@ private extension WorkspaceDetailView {
             // Page children own the 24 pt page inset; on the Duo they line up with the list's 8 pt.
             .padding(.horizontal, isDuoSidebar ? IPadSidebarStyle.compactInset - WorkspaceDetailStyle.pageInset : 0)
         }
+        // The Duo pane has no top bar for content to fade under, as in conversations.
+        .modifier(ConversationScrollEdgeEffect())
         .accessibilityIdentifier("workspace.detail.scroll")
         .refreshable {
             if selectedTab == .agents {
