@@ -199,10 +199,16 @@ extension WebSocketConnection {
                 throw MessageAssemblyError.protocolViolation(.invalidCloseFrame)
             }
             let start = payload.startIndex
-            let code = Int(payload[start]) << WebSocketFrameLayout.bitsPerByte | Int(payload[start + 1])
-            let reason = String(bytes: payload.dropFirst(closeCodeSize), encoding: .utf8)
-                .flatMap { $0.isEmpty ? nil : $0 } ?? "Connection closed"
-            return .close(code: code, reason: reason)
+            let code = UInt16(payload[start]) << WebSocketFrameLayout.bitsPerByte | UInt16(payload[start + 1])
+            // Network.framework used to enforce these; the peer must not send
+            // reserved or out-of-range codes (RFC 6455 §7.4.1, §7.4.2).
+            guard WebSocketCloseCode.isSendable(code) else {
+                throw MessageAssemblyError.protocolViolation(.invalidCloseFrame)
+            }
+            guard let reason = String(bytes: payload.dropFirst(closeCodeSize), encoding: .utf8) else {
+                throw MessageAssemblyError.invalidTextEncoding
+            }
+            return .close(code: Int(code), reason: reason.isEmpty ? "Connection closed" : reason)
         }
     }
 }

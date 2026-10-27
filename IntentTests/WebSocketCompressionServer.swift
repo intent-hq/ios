@@ -19,6 +19,8 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
         case compressedFrameWithoutNegotiation
         /// Accept, then send one compressed message inflating past `bytes`.
         case inflationBomb(bytes: Int)
+        /// Read the upgrade request and never answer it.
+        case neverUpgrade
     }
 
     private struct State {
@@ -27,6 +29,8 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
         var bytesWritten = 0
         var clientFrameCompression: [Bool] = []
         var pongs: [Data] = []
+        var closeReceived = false
+        var framesAfterClose = 0
         var connections: [NWConnection] = []
     }
 
@@ -43,6 +47,8 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
     var requestHeaders: [String] { state.withLock { $0.requestHeaders } }
     var clientFrameCompression: [Bool] { state.withLock { $0.clientFrameCompression } }
     var pongs: [Data] { state.withLock { $0.pongs } }
+    var closeReceived: Bool { state.withLock { $0.closeReceived } }
+    var framesAfterClose: Int { state.withLock { $0.framesAfterClose } }
 
     private init(mode: Mode) throws {
         self.mode = mode
@@ -140,6 +146,7 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
     private func respond(to head: String, on connection: NWConnection, leftover: Data) {
         let headers = Array(head.components(separatedBy: "\r\n").dropFirst())
         state.withLock { $0.requestHeaders = headers }
+        if case .neverUpgrade = mode { return }
         let value = { (name: String) in
             headers.first { $0.lowercased().hasPrefix(name.lowercased() + ":") }
                 .map { String($0.drop { $0 != ":" }.dropFirst()).trimmingCharacters(in: .whitespaces) }
@@ -149,7 +156,7 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
         switch mode {
         case .acceptDeflate, .inflationBomb:
             extensionHeader = offered ? "permessage-deflate" : nil
-        case .decline, .compressedFrameWithoutNegotiation:
+        case .decline, .compressedFrameWithoutNegotiation, .neverUpgrade:
             extensionHeader = nil
         case .respondWith(let header):
             extensionHeader = header
@@ -183,7 +190,7 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
             guard let payload = deflate?.compress(Data(count: bytes)) else { return }
             let frame = WebSocketFrame(opcode: .binary, payload: payload, isCompressed: true)
             write(WebSocketFrameEncoder.encode(frame, maskingKey: nil), on: connection)
-        case .acceptDeflate, .decline, .respondWith:
+        case .acceptDeflate, .decline, .respondWith, .neverUpgrade:
             break
         }
     }
@@ -205,9 +212,16 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
                 case .pong:
                     state.withLock { $0.pongs.append(frame.payload) }
                 case .close:
+                    // Keep reading so data frames sent after the close frame
+                    // (an RFC 6455 §5.5.1 violation) are observable.
                     write(WebSocketFrameEncoder.encode(WebSocketFrame(opcode: .close, payload: frame.payload), maskingKey: nil), on: connection)
-                    return
+                    state.withLock { $0.closeReceived = true }
                 case .text, .binary:
+                    let afterClose = state.withLock { state in
+                        if state.closeReceived { state.framesAfterClose += 1 }
+                        return state.closeReceived
+                    }
+                    if afterClose { continue }
                     state.withLock { $0.clientFrameCompression.append(frame.isCompressed) }
                     message = PartialMessage(opcode: frame.opcode, compressed: frame.isCompressed, payload: frame.payload)
                 case .continuation:

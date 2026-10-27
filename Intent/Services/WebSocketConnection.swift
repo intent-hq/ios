@@ -216,6 +216,11 @@ actor WebSocketConnection {
                     group.cancelAll()
                     return result
                 } catch {
+                    // The upgrade child may be parked in a raw read or write,
+                    // which ignores task cancellation, and the group waits for
+                    // every child before returning. Cancelling the connection
+                    // completes that I/O so the timeout is honoured.
+                    connection.cancel()
                     group.cancelAll()
                     throw error
                 }
@@ -323,7 +328,7 @@ extension WebSocketConnection {
                 case .ping(let payload):
                     // Reply to daemon pings automatically; the app's own
                     // liveness pings stay explicit via sendPing().
-                    Self.enqueue(Self.encodeControl(.pong, payload: payload), to: connection) { _ in }
+                    _ = Self.enqueueWhileOpen(Self.encodeControl(.pong, payload: payload), to: connection, lifecycle: lifecycle) { _ in }
                 case .pong(let payload):
                     resolvePong(payload)
                 case let .close(code, reason):
@@ -386,7 +391,12 @@ extension WebSocketConnection {
     private func sendPayload(_ data: Data, opcode: WebSocketOpcode) async throws {
         let compressed = deflate?.compressIfWorthwhile(data)
         let frame = WebSocketFrame(opcode: opcode, payload: compressed ?? data, isCompressed: compressed != nil)
-        try await Self.write(WebSocketFrameEncoder.encode(frame, maskingKey: .random()), to: connection, host: host)
+        try await Self.writeWhileOpen(
+            WebSocketFrameEncoder.encode(frame, maskingKey: .random()),
+            to: connection,
+            lifecycle: lifecycle,
+            host: host
+        )
     }
 
     func sendPing() async throws {
@@ -408,15 +418,22 @@ extension WebSocketConnection {
         defer { timeoutTask.cancel() }
 
         let connection = connection
+        let lifecycle = lifecycle
         let host = host
         let frame = Self.encodeControl(.ping, payload: payload)
         try await withTaskCancellationHandler {
             try await WebSocketPingSupport.performPing(pending: pending) {
-                Self.enqueue(frame, to: connection) { error in
+                let queued = Self.enqueueWhileOpen(frame, to: connection, lifecycle: lifecycle) { error in
                     guard let error else { return }
                     WebSocketPingSupport.takePending(pending)?.resume(throwing: WebSocketTransportError.failed(
                         host: host,
                         message: String(describing: error)
+                    ))
+                }
+                if !queued {
+                    WebSocketPingSupport.takePending(pending)?.resume(throwing: WebSocketTransportError.failed(
+                        host: host,
+                        message: "Connection closed"
                     ))
                 }
             }

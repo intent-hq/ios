@@ -8,6 +8,19 @@ struct WebSocketFrameCodecTests {
     private static let rfcMaskingKey = WebSocketMaskingKey(0x37, 0xFA, 0x21, 0x3D)
     private static let largeCap = 1 << 20
 
+    @Test func wordwiseMaskingMatchesBytewiseDefinition() {
+        let key = Self.rfcMaskingKey
+        for length in 0..<70 {
+            let original = (0..<length).map { UInt8(truncatingIfNeeded: $0 &* 37 &+ 11) }
+            var masked = original
+            masked.withUnsafeMutableBytes { key.apply(to: $0) }
+            let expected = original.enumerated().map { $0.element ^ key.bytes[$0.offset % key.bytes.count] }
+            #expect(masked == expected, "length \(length)")
+            masked.withUnsafeMutableBytes { key.apply(to: $0) }
+            #expect(masked == original, "length \(length) round trip")
+        }
+    }
+
     private func decodeAll(_ bytes: [UInt8], role: WebSocketFrameDecoder.Role = .client, compressed: Bool = false) throws -> [WebSocketFrame] {
         var decoder = WebSocketFrameDecoder(role: role, maximumFrameSize: Self.largeCap, allowsCompressedFrames: compressed)
         decoder.append(Data(bytes))

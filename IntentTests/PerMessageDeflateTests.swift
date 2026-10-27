@@ -47,6 +47,26 @@ struct PerMessageDeflateTests {
         #expect(try inflater.decompress(Data(Self.compressedHello), maximumSize: Self.cap) == Self.hello)
     }
 
+    @Test func finalBlockKeepsWindowUnderContextTakeover() throws {
+        let finalHello = Data([0xF3, 0x48, 0xCD, 0xC9, 0xC9, 0x07, 0x00])
+        // After a BFINAL message the server may still refer back to it
+        // (RFC 7692 §7.2.3.4); the RFC's shared-context "Hello" does so.
+        // Both the bare final block and the RFC's padded form must work.
+        for message in [finalHello, finalHello + [0x00]] {
+            let inflater = try codec()
+            #expect(try inflater.decompress(message, maximumSize: Self.cap) == Self.hello)
+            #expect(try inflater.decompress(Data(Self.sharedContextHello), maximumSize: Self.cap) == Self.hello)
+            #expect(try inflater.decompress(Data(Self.sharedContextHello), maximumSize: Self.cap) == Self.hello)
+        }
+
+        // Without context takeover there is no window to refer back to.
+        let isolated = try codec { $0.serverNoContextTakeover = true }
+        #expect(try isolated.decompress(finalHello, maximumSize: Self.cap) == Self.hello)
+        #expect(throws: WebSocketProtocolViolation.self) {
+            try isolated.decompress(Data(Self.sharedContextHello), maximumSize: Self.cap)
+        }
+    }
+
     @Test func clientNoContextTakeoverResetsPerMessage() throws {
         let deflate = try codec { $0.clientNoContextTakeover = true }
         #expect(try Array(#require(deflate.compress(Self.hello))) == Self.compressedHello)

@@ -119,6 +119,53 @@ extension ConnectionManagerTests {
             }
         }
 
+        @Test func unansweredUpgradeTimesOutWithinConnectDeadline() async throws {
+            let previous = ConnectionManagerTests.enablePlaintextLoopback()
+            defer { ConnectionManagerTests.restorePlaintextLoopback(previous) }
+            let server = try await CompressionWebSocketServer.start(mode: .neverUpgrade)
+            defer { server.stop() }
+
+            let clock = ContinuousClock()
+            let started = clock.now
+            let outcome = Task {
+                do {
+                    let socket = try await connect(to: server)
+                    await socket.disconnect()
+                    return "connected"
+                } catch WebSocketTransportError.timedOut {
+                    return "timedOut"
+                } catch {
+                    return "\(error)"
+                }
+            }
+            let watchdog = Task {
+                try await Task.sleep(for: WebSocketConnection.connectTimeout * 3)
+                outcome.cancel()
+            }
+            defer { watchdog.cancel() }
+            #expect(await outcome.value == "timedOut")
+            #expect(clock.now - started < WebSocketConnection.connectTimeout * 2)
+        }
+
+        @Test func sendAfterDisconnectFailsAndNeverFollowsTheCloseFrame() async throws {
+            let previous = ConnectionManagerTests.enablePlaintextLoopback()
+            defer { ConnectionManagerTests.restorePlaintextLoopback(previous) }
+            let server = try await CompressionWebSocketServer.start(mode: .acceptDeflate)
+            defer { server.stop() }
+
+            let socket = try await connect(to: server)
+            await socket.disconnect()
+            await #expect(throws: WebSocketTransportError.self) { try await socket.send(Self.payload) }
+            await #expect(throws: WebSocketTransportError.self) { try await socket.sendPing() }
+            let deadline = ContinuousClock.now + .seconds(2)
+            while !server.closeReceived, ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            try await Task.sleep(for: .milliseconds(200))
+            #expect(server.closeReceived)
+            #expect(server.framesAfterClose == 0)
+        }
+
         @Test func compressedFrameWithoutNegotiationFailsWithProtocolError() async throws {
             let previous = ConnectionManagerTests.enablePlaintextLoopback()
             defer { ConnectionManagerTests.restorePlaintextLoopback(previous) }

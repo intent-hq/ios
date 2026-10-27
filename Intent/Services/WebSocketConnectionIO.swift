@@ -83,21 +83,57 @@ extension WebSocketConnection {
     }
 
     /// Enqueues `data` and waits until Network.framework has processed it.
-    /// The enqueue happens synchronously, before the caller suspends.
+    /// The enqueue happens synchronously, before the caller suspends. Used
+    /// for the upgrade request, before the socket is open.
     nonisolated static func write(_ data: Data, to connection: NWConnection, host: String) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             enqueue(data, to: connection) { error in
-                if let error {
-                    continuation.resume(throwing: WebSocketTransportError.failed(
-                        host: host,
-                        message: String(describing: error),
-                        diagnosticFailure: TransportDiagnosticFailure.classify(error)
-                    ))
-                } else {
-                    continuation.resume(returning: ())
-                }
+                continuation.resume(with: writeResult(error, host: host))
             }
         }
+    }
+
+    /// `write` for frames after the upgrade: refuses once a close frame has
+    /// been queued, so no data ever follows it on the wire (RFC 6455 §5.5.1).
+    nonisolated static func writeWhileOpen(
+        _ data: Data,
+        to connection: NWConnection,
+        lifecycle: Lifecycle,
+        host: String
+    ) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let queued = enqueueWhileOpen(data, to: connection, lifecycle: lifecycle) { error in
+                continuation.resume(with: writeResult(error, host: host))
+            }
+            if !queued {
+                continuation.resume(throwing: WebSocketTransportError.failed(host: host, message: "Connection closed"))
+            }
+        }
+    }
+
+    /// Enqueues while holding the lifecycle lock, the same lock `close`
+    /// holds while queuing the close frame, so the two can never reorder.
+    /// Returns false once the socket is closing.
+    nonisolated static func enqueueWhileOpen(
+        _ data: Data,
+        to connection: NWConnection,
+        lifecycle: Lifecycle,
+        completion: @escaping @Sendable (NWError?) -> Void
+    ) -> Bool {
+        lifecycle.withLock { state in
+            guard state == .open else { return false }
+            enqueue(data, to: connection, completion: completion)
+            return true
+        }
+    }
+
+    nonisolated private static func writeResult(_ error: NWError?, host: String) -> Result<Void, Error> {
+        guard let error else { return .success(()) }
+        return .failure(WebSocketTransportError.failed(
+            host: host,
+            message: String(describing: error),
+            diagnosticFailure: TransportDiagnosticFailure.classify(error)
+        ))
     }
 
     nonisolated static func enqueue(
@@ -115,10 +151,7 @@ extension WebSocketConnection {
     /// The status to answer a peer's close with (RFC 6455 §5.5.1): its own
     /// code when that code may be sent on the wire, otherwise 1000.
     nonisolated static func echoedCloseCode(_ code: Int) -> UInt16 {
-        let reserved: Set<UInt16> = [WebSocketCloseCode.missingStatus, WebSocketCloseCode.abnormalClosure, WebSocketCloseCode.tlsHandshake]
-        guard let value = UInt16(exactly: code),
-              (WebSocketCloseCode.normalClosure...WebSocketCloseCode.maximumApplication).contains(value),
-              !reserved.contains(value) else {
+        guard let value = UInt16(exactly: code), WebSocketCloseCode.isSendable(value) else {
             return WebSocketCloseCode.normalClosure
         }
         return value
@@ -136,9 +169,15 @@ extension WebSocketConnection {
     ) {
         connection.pathUpdateHandler = nil
         connection.viabilityUpdateHandler = nil
+        let payload = Data([UInt8(code >> WebSocketFrameLayout.bitsPerByte), UInt8(truncatingIfNeeded: code)])
+        let closeFrame = encodeControl(.close, payload: payload)
         let previous = lifecycle.withLock { state in
-            defer { if state == .open { state = .closing } }
-            return state
+            let previous = state
+            if state == .open {
+                state = .closing
+                enqueue(closeFrame, to: connection) { _ in connection.cancel() }
+            }
+            return previous
         }
         switch previous {
         case .connecting:
@@ -150,8 +189,6 @@ extension WebSocketConnection {
         case .open:
             break
         }
-        let payload = Data([UInt8(code >> WebSocketFrameLayout.bitsPerByte), UInt8(truncatingIfNeeded: code)])
-        enqueue(encodeControl(.close, payload: payload), to: connection) { _ in connection.cancel() }
         // An unresponsive peer or dead path can leave the close-frame send
         // pending forever; guarantee teardown with a fallback cancel after a
         // grace period (cancel() is idempotent).

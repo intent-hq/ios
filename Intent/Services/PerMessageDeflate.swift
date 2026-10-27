@@ -70,6 +70,8 @@ nonisolated final class PerMessageDeflate {
     static let defaultCompressionThreshold = 1024
     private static let syncFlushTail: [UInt8] = [0, 0, .max, .max]
     private static let chunkSize = 16_384
+    /// The largest LZ77 window (2^15 bytes, RFC 1951 §2).
+    private static let maximumWindowSize = 32_768
     private static let memoryLevel: Int32 = 8
     /// zlib cannot produce raw deflate with an 8-bit window (it silently
     /// widens to 9), so a peer limiting the client to 8 bits gets
@@ -80,6 +82,8 @@ nonisolated final class PerMessageDeflate {
     let compressionThreshold: Int
     private let deflater: UnsafeMutablePointer<z_stream>?
     private let inflater: UnsafeMutablePointer<z_stream>
+    /// Set when the current message's DEFLATE stream ended with a final block.
+    private var streamEnded = false
 
     init(
         parameters: PerMessageDeflateParameters,
@@ -151,7 +155,13 @@ nonisolated final class PerMessageDeflate {
             return Self.drain(deflater, into: &output, limit: nil, exceeded: &exceeded) { deflate($0, Z_SYNC_FLUSH) }
         }
         deflater.pointee.next_in = nil
-        guard succeeded else { return nil }
+        guard succeeded else {
+            // A failed deflate may already hold part of this payload in its
+            // window. The message goes out uncompressed, so the peer never
+            // sees those bytes; reset so later messages cannot refer to them.
+            deflateReset(deflater)
+            return nil
+        }
         if output.suffix(Self.syncFlushTail.count).elementsEqual(Self.syncFlushTail) {
             output.removeLast(Self.syncFlushTail.count)
         }
@@ -163,18 +173,16 @@ nonisolated final class PerMessageDeflate {
     /// `.messageTooLarge` as soon as the output would exceed `maximumSize`,
     /// so a small compressed frame cannot expand past the endpoint cap.
     func decompress(_ payload: Data, maximumSize: Int) throws -> Data {
-        var input = payload
-        input.append(contentsOf: Self.syncFlushTail)
         var output = Data()
         var exceeded = false
-        let succeeded = input.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
-            inflater.pointee.next_in = raw.bindMemory(to: Bytef.self).baseAddress.map { UnsafeMutablePointer(mutating: $0) }
-            inflater.pointee.avail_in = uInt(raw.count)
-            return Self.drain(inflater, into: &output, limit: maximumSize, exceeded: &exceeded) { stream in
-                inflate(stream, Z_SYNC_FLUSH)
-            }
+        streamEnded = false
+        // Inflate the payload, then the sync-flush tail the sender stripped
+        // (RFC 7692 §7.2.2), without copying the payload to append it. After
+        // a final block the tail must not reach the restarted stream.
+        var succeeded = inflate(payload, into: &output, limit: maximumSize, exceeded: &exceeded)
+        if succeeded, !streamEnded {
+            succeeded = inflate(Self.syncFlushTail, into: &output, limit: maximumSize, exceeded: &exceeded)
         }
-        inflater.pointee.next_in = nil
         if exceeded {
             inflateReset(inflater)
             throw WebSocketProtocolViolation.messageTooLarge
@@ -187,6 +195,38 @@ nonisolated final class PerMessageDeflate {
         return output
     }
 
+    private func inflate(_ input: some ContiguousBytes, into output: inout Data, limit: Int, exceeded: inout Bool) -> Bool {
+        let inflater = inflater
+        let succeeded = input.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Bool in
+            inflater.pointee.next_in = raw.bindMemory(to: Bytef.self).baseAddress.map { UnsafeMutablePointer(mutating: $0) }
+            inflater.pointee.avail_in = uInt(raw.count)
+            return Self.drain(
+                inflater,
+                into: &output,
+                limit: limit,
+                exceeded: &exceeded,
+                onStreamEnd: { [self] stream in restartInflater(stream) },
+                step: { zlib.inflate($0, Z_SYNC_FLUSH) }
+            )
+        }
+        inflater.pointee.next_in = nil
+        return succeeded
+    }
+
+    /// A final block (BFINAL, §7.2.3.4) ends the DEFLATE stream; the next
+    /// message starts a new one. Restart the inflater, keeping the LZ77
+    /// window when context takeover is in effect, because the server may
+    /// still refer back to earlier messages.
+    private func restartInflater(_ stream: UnsafeMutablePointer<z_stream>) -> Bool {
+        streamEnded = true
+        var window = [Bytef](repeating: 0, count: Self.maximumWindowSize)
+        var length = uInt(0)
+        guard inflateGetDictionary(stream, &window, &length) == Z_OK,
+              inflateReset(stream) == Z_OK else { return false }
+        guard !parameters.serverNoContextTakeover, length > 0 else { return true }
+        return inflateSetDictionary(stream, window, length) == Z_OK
+    }
+
     /// Runs `step` until all input is consumed and zlib stops filling the
     /// output chunk. Returns false on a zlib error or when `limit` is hit.
     private static func drain(
@@ -194,6 +234,7 @@ nonisolated final class PerMessageDeflate {
         into output: inout Data,
         limit: Int?,
         exceeded: inout Bool,
+        onStreamEnd: (UnsafeMutablePointer<z_stream>) -> Bool = { _ in false },
         step: (UnsafeMutablePointer<z_stream>) -> Int32
     ) -> Bool {
         var chunk = [Bytef](repeating: 0, count: chunkSize)
@@ -217,10 +258,9 @@ nonisolated final class PerMessageDeflate {
                 // No progress possible: all input consumed and output flushed.
                 return stream.pointee.avail_in == 0
             case Z_STREAM_END:
-                // A final block (BFINAL) ends the stream (§7.2.3.4); anything
-                // left is the appended sync-flush tail. The next message
-                // starts a fresh stream, so reset to accept it.
-                return inflateReset(stream) == Z_OK
+                // The stream is over; any input left in this message is the
+                // appended sync-flush tail or padding, never more data.
+                return onStreamEnd(stream)
             default:
                 return false
             }

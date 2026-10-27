@@ -48,9 +48,10 @@ nonisolated enum WebSocketHandshake {
     }
 
     /// The `Host` header for a ws/wss URL: the authority, with IPv6
-    /// literals bracketed and the port always explicit.
+    /// literals bracketed and the port always explicit. The host stays
+    /// percent-encoded so an IPv6 zone ID is sent as `%25` (RFC 6874).
     static func hostHeaderValue(for url: URL) -> String {
-        let host = url.host(percentEncoded: false) ?? ""
+        let host = url.host(percentEncoded: true) ?? ""
         let bracketed = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
         guard let port = url.port else { return bracketed }
         return "\(bracketed):\(port)"
@@ -80,9 +81,9 @@ nonisolated enum WebSocketHandshake {
             return nil
         }
         let headerSize = terminator.upperBound - buffer.startIndex
-        guard headerSize <= maximumResponseHeaderSize,
-              let head = String(data: buffer[buffer.startIndex..<terminator.lowerBound], encoding: .utf8) else {
-            throw WebSocketHandshakeError.responseTooLarge
+        guard headerSize <= maximumResponseHeaderSize else { throw WebSocketHandshakeError.responseTooLarge }
+        guard let head = String(bytes: buffer[buffer.startIndex..<terminator.lowerBound], encoding: .utf8) else {
+            throw WebSocketHandshakeError.malformedResponse
         }
         var lines = head.components(separatedBy: "\r\n")
         let statusParts = lines.removeFirst().split(separator: " ", maxSplits: 2)

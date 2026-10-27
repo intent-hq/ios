@@ -110,6 +110,22 @@ struct WebSocketInboundStreamTests {
         #expect(try violation([WebSocketFrame(opcode: .close, payload: Data([0x03]))]) == .protocolViolation(.invalidCloseFrame))
     }
 
+    @Test func rejectsCloseFramesWithUnsendableCodesOrInvalidReasons() throws {
+        func close(_ code: Int, _ reason: [UInt8] = []) -> [WebSocketFrame] {
+            [WebSocketFrame(opcode: .close, payload: Data([UInt8(code >> 8), UInt8(code & 0xFF)] + reason))]
+        }
+        // Codes that must never appear on the wire (RFC 6455 §7.4.1, §7.4.2).
+        for code in [0, 999, 1004, 1005, 1006, 1015, 1016, 2999, 5000] {
+            #expect(try violation(close(code)) == .protocolViolation(.invalidCloseFrame), "code \(code)")
+        }
+        // A reason that is not valid UTF-8 fails with 1007, not a clean close.
+        #expect(try violation(close(1000, [0xFF])) == .invalidTextEncoding)
+        for code in [1000, 1003, 1007, 1014, 3000, 4999] {
+            var stream = try stream()
+            #expect(try events(close(code), in: &stream) == ["close:\(code):Connection closed"], "code \(code)")
+        }
+    }
+
     @Test func echoesOnlySendableCloseCodes() {
         #expect(WebSocketConnection.echoedCloseCode(1001) == 1001)
         #expect(WebSocketConnection.echoedCloseCode(4000) == 4000)
@@ -117,5 +133,7 @@ struct WebSocketInboundStreamTests {
         #expect(WebSocketConnection.echoedCloseCode(1006) == 1000)
         #expect(WebSocketConnection.echoedCloseCode(1015) == 1000)
         #expect(WebSocketConnection.echoedCloseCode(5000) == 1000)
+        #expect(WebSocketConnection.echoedCloseCode(1004) == 1000)
+        #expect(WebSocketConnection.echoedCloseCode(2000) == 1000)
     }
 }

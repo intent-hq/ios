@@ -57,6 +57,15 @@ struct WebSocketHandshakeTests {
     @Test func bracketsIPv6HostHeader() throws {
         let url = try WebSocketConnection.makeURL(host: "fd7a:115c::1", port: 4242, certFingerprint: "aa:bb")
         #expect(WebSocketHandshake.hostHeaderValue(for: url) == "[fd7a:115c::1]:4242")
+        let zoned = try WebSocketConnection.makeURL(host: "fe80::1%en0", port: 4242, certFingerprint: "aa:bb")
+        #expect(WebSocketHandshake.hostHeaderValue(for: zoned) == "[fe80::1%25en0]:4242")
+    }
+
+    @Test func nonUTF8ResponseHeadIsMalformedNotOversized() {
+        var head = Data("HTTP/1.1 101 Switching Protocols\r\nX-Note: ".utf8)
+        head.append(0xFF)
+        head.append(contentsOf: Data("\r\n\r\n".utf8))
+        #expect(throws: WebSocketHandshakeError.malformedResponse) { try WebSocketHandshake.parseResponse(head) }
     }
 
     @Test func parsesResponseAndReportsTrailingFrameBytes() throws {

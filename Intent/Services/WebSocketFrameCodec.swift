@@ -64,12 +64,26 @@ nonisolated enum WebSocketCloseCode {
     static let normalClosure: UInt16 = 1000
     static let goingAway: UInt16 = 1001
     static let protocolError: UInt16 = 1002
+    static let unsupportedData: UInt16 = 1003
     static let missingStatus: UInt16 = 1005
     static let abnormalClosure: UInt16 = 1006
     static let invalidFramePayloadData: UInt16 = 1007
     static let messageTooBig: UInt16 = 1009
-    static let tlsHandshake: UInt16 = 1015
     static let maximumApplication: UInt16 = 4999
+    static let firstRegistered: UInt16 = 3000
+    static let lastIANAProtocol: UInt16 = 1014
+
+    /// Whether `code` may appear in a close frame on the wire: the defined
+    /// protocol codes (excluding 1004 and the local-only 1005, 1006 and 1015)
+    /// and the registered/private ranges 3000–4999.
+    static func isSendable(_ code: UInt16) -> Bool {
+        switch code {
+        case normalClosure...unsupportedData, invalidFramePayloadData...lastIANAProtocol, firstRegistered...maximumApplication:
+            true
+        default:
+            false
+        }
+    }
 }
 
 /// Bit layout of the RFC 6455 §5.2 base framing protocol.
@@ -118,8 +132,25 @@ nonisolated struct WebSocketMaskingKey: Equatable, Sendable {
     /// XORs `buffer` with the repeating key. Masking and unmasking are the
     /// same operation.
     func apply(to buffer: UnsafeMutableRawBufferPointer) {
-        for index in buffer.indices {
-            buffer[index] ^= bytes[index % WebSocketFrameLayout.maskingKeySize]
+        typealias Word = UInt64
+        let wordSize = MemoryLayout<Word>.size
+        var offset = 0
+        if let base = buffer.baseAddress, buffer.count >= wordSize {
+            // The key repeated across a word; the word size is a multiple of
+            // the key size, so the key phase stays aligned with `offset`.
+            var pattern = Word.zero
+            withUnsafeMutableBytes(of: &pattern) { raw in
+                for index in raw.indices { raw[index] = bytes[index % WebSocketFrameLayout.maskingKeySize] }
+            }
+            while offset + wordSize <= buffer.count {
+                let word = base.loadUnaligned(fromByteOffset: offset, as: Word.self)
+                base.storeBytes(of: word ^ pattern, toByteOffset: offset, as: Word.self)
+                offset += wordSize
+            }
+        }
+        while offset < buffer.count {
+            buffer[offset] ^= bytes[offset % WebSocketFrameLayout.maskingKeySize]
+            offset += 1
         }
     }
 }
