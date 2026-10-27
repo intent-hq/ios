@@ -393,7 +393,7 @@ $(SRCROOT)/Intent/Presentation/WatcherMessagePresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceAgentSelection.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
-$(SRCROOT)/Intent/Presentation/WorkspaceSidebarState.swift
+$(SRCROOT)/Intent/Presentation/WorkspaceSidebarContent.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceSwipePolicy.swift
 $(SRCROOT)/Intent/Resources
 $(SRCROOT)/Intent/Resources/Fonts
@@ -1287,7 +1287,7 @@ $(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreRecoveryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptRepositoryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptStoreTests.swift
-$(SRCROOT)/IntentTests/WorkspaceSidebarStateTests.swift
+$(SRCROOT)/IntentTests/WorkspaceSidebarContentTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusImageViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusMessageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusTestSupport.swift

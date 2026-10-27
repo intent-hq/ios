@@ -57,7 +57,6 @@ struct RootView: View {
     @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
     // The unfolded Duo divides the window at its midpoint, including the trailing rail.
     @State private var duoSidebarWidth = Constants.Root.sidebarIdealWidth
-    @State private var duoWorkspaceSidebar = WorkspaceSidebarState()
 
     var conversationDestination: some View {
         ConversationDestinationView(
@@ -481,11 +480,7 @@ private extension RootView {
     }
 
     var duoSidebarContent: WorkspaceSidebarContent {
-        duoWorkspaceSidebar.content(
-            for: coordinator.currentScreen,
-            route: coordinator.workspaceSidebarRoute,
-            isPersistent: !isSearchingWorkspaces
-        )
+        WorkspaceSidebarContent.resolve(screen: coordinator.currentScreen, isPersistent: !isSearchingWorkspaces)
     }
 
     /// Both views share the column's navigation bar, so only one is mounted.
@@ -495,9 +490,7 @@ private extension RootView {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
                     session: session,
-                    sidebar: WorkspaceDetailSidebar(onBack: {
-                        duoWorkspaceSidebar.showList(for: coordinator.workspaceSidebarRoute)
-                    })
+                    sidebar: WorkspaceDetailSidebar()
                 )
                 .id(workspaceId)
                 .transition(.move(edge: .trailing).combined(with: .opacity))

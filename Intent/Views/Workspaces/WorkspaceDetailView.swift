@@ -81,7 +81,7 @@ struct WorkspaceDetailView: View {
             surface.ignoresSafeArea()
             VStack(spacing: 0) {
                 if let sidebar, let onCollapse = sidebar.onCollapse {
-                    WorkspaceSidebarHeader(onBack: sidebar.onBack, onCollapse: onCollapse) { workspaceActions }
+                    WorkspaceSidebarHeader(onCollapse: onCollapse) { workspaceActions }
                 }
                 detailContent
             }

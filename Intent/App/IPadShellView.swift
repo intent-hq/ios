@@ -3,6 +3,8 @@ import SwiftUI
 /// One view hierarchy spans expanded, collapsed and drawer layouts. In particular,
 /// the workspace and Assistant detail subtrees never move between containers.
 struct IPadShellView: View {
+    private static let sidebarListParallax: CGFloat = 48
+
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
@@ -13,7 +15,6 @@ struct IPadShellView: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnectionSwitcher = false
     @State private var connectionSwitcherOpen = false
-    @State private var workspaceSidebar = WorkspaceSidebarState()
     @AccessibilityFocusState private var detailFocused: Bool
 
     private var navigation: IPadNavigationState { coordinator.iPadNavigation }
@@ -57,9 +58,8 @@ struct IPadShellView: View {
     }
     /// A persistent sidebar beside the detail pane; drawers and compact windows keep the list.
     private var workspaceSidebarContent: WorkspaceSidebarContent {
-        workspaceSidebar.content(
-            for: coordinator.currentScreen,
-            route: coordinator.workspaceSidebarRoute,
+        WorkspaceSidebarContent.resolve(
+            screen: coordinator.currentScreen,
             isPersistent: width != nil && !layout.usesCompactNavigation && !layout.usesSidebarOverlay && !workspaceSearchVisible
         )
     }
@@ -275,11 +275,13 @@ struct IPadShellView: View {
                     onCollapse: collapseSidebar
                 )
             }
+            // The list steps back under an opening workspace and returns from the leading edge.
+            .offset(x: workspaceSidebarContent == .workspaceList ? 0 : -Self.sidebarListParallax)
             if case let .workspace(workspaceId) = workspaceSidebarContent {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
                     session: session,
-                    sidebar: WorkspaceDetailSidebar(onBack: showWorkspaceList, onCollapse: collapseSidebar)
+                    sidebar: WorkspaceDetailSidebar(onCollapse: collapseSidebar)
                 )
                 .id(workspaceId)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -287,10 +289,6 @@ struct IPadShellView: View {
         }
         .clipped()
         .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration), value: workspaceSidebarContent)
-    }
-
-    private func showWorkspaceList() {
-        workspaceSidebar.showList(for: coordinator.workspaceSidebarRoute)
     }
 
     @ViewBuilder private var drawerBackdrop: some View {

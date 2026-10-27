@@ -1,37 +1,36 @@
 import SwiftUI
 
 /// Chrome for the workspace overview while it sits in a persistent sidebar
-/// beside one of its agents or notes.
+/// beside one of its agents or notes. The main view's Back leaves it.
 struct WorkspaceDetailSidebar {
-    let onBack: () -> Void
     /// The iPad shell draws its own header; the Duo split view uses the column's navigation bar.
     var onCollapse: (() -> Void)?
 
     var headingTopSpacing: CGFloat { onCollapse == nil ? WorkspaceDetailStyle.headingSpacing : 0 }
 }
 
+/// Collapse leads, where the list's title would be; workspace actions trail.
 struct WorkspaceSidebarHeader<Actions: View>: View {
-    let onBack: () -> Void
     let onCollapse: () -> Void
     @ViewBuilder let actions: () -> Actions
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
 
     var body: some View {
-        IPadSidebarHeader(onCollapse: onCollapse) {
-            WorkspaceSidebarBackButton(action: onBack)
-                // Align the arrow, not its tap target, with the sidebar's content edge.
+        HStack(spacing: 0) {
+            IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: onCollapse)
+                .accessibilityIdentifier("ipad.sidebar.collapse")
+                .accessibilityAction(.escape, onCollapse)
+                // Align the icon, not its tap target, with the sidebar's content edge.
                 .padding(.leading, (WorkspaceDetailStyle.iconSize - WorkspaceDetailStyle.controlSize) / 2)
-        } actions: {
+            Spacer(minLength: 0)
             actions()
         }
-    }
-}
-
-private struct WorkspaceSidebarBackButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", showsBackground: false, action: action)
-            .accessibilityIdentifier("workspaceSidebar.back")
+        .opacity(isPaneVisible ? 1 : 0)
+        .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
+        .padding(.horizontal, IPadSidebarStyle.inset)
+        .padding(.top, IPadSidebarStyle.topInset)
+        .padding(.bottom, IPadSidebarStyle.sectionSpacing)
     }
 }
 
@@ -45,8 +44,6 @@ extension View {
             toolbarTitleDisplayMode(.inline)
                 .navigationBarBackButtonHidden()
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) { WorkspaceSidebarBackButton(action: sidebar.onBack) }
-                        .intentToolbarSurface()
                     ToolbarItem(placement: .topBarTrailing) { actions() }
                         .intentToolbarSurface()
                 }

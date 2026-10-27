@@ -147,7 +147,8 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             expand.tap()
         }
         XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        XCTAssertEqual(composer.value as? String, Self.draft)
+        // History reopened the conversation, so resolve its composer again.
+        XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         verifyPopulatedHistory(in: app)
     }
 
@@ -191,7 +192,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 
     @MainActor
     private func verifyPopulatedHistory(in app: XCUIApplication) {
-        showWorkspaceList(in: app)
+        let reopensConversation = showWorkspaceList(in: app)
         app.buttons["workspaces.menu"].tap()
         app.buttons["workspaces.menu.recentAgents"].tap()
         let entry = app.buttons.matching(NSPredicate(
@@ -203,6 +204,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let close = app.buttons["agent-history.close"]
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        if reopensConversation { openConversation(in: app) }
     }
 
     @MainActor
@@ -310,12 +312,23 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
     }
 
-    /// An open conversation moves its workspace into the persistent sidebar; Back restores the list.
+    /// An open conversation moves its workspace into the persistent sidebar; the
+    /// conversation's Back restores the list. Returns whether a conversation was closed.
     @MainActor
-    private func showWorkspaceList(in app: XCUIApplication) {
-        let back = app.buttons["workspaceSidebar.back"]
-        if back.exists { back.tap() }
+    @discardableResult
+    private func showWorkspaceList(in app: XCUIApplication) -> Bool {
+        let back = app.buttons["conversation.back"]
+        let closesConversation = back.exists && back.isHittable
+        if closesConversation { back.tap() }
         XCTAssertTrue(app.collectionViews["workspaces.list"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        return closesConversation
+    }
+
+    @MainActor
+    private func waitForHittableComposer(in app: XCUIApplication) -> Bool {
+        waitUntil(timeout: Self.timeout) {
+            app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.contains(where: \.isHittable)
+        }
     }
 
     @MainActor
@@ -330,20 +343,24 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 extension IPadSidebarUITests {
     @MainActor
     private func verifyComposerAfterSearch(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, appearance: String) {
-        showWorkspaceList(in: app)
+        let reopensConversation = showWorkspaceList(in: app)
         app.buttons["workspaces.search.open"].tap()
         let search = app.textFields["workspaces.search.field"]
         XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
         search.typeText("payment")
         app.buttons["workspaces.search.cancel"].tap()
-        let restored = composer.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout)
+        if reopensConversation { openConversation(in: app) }
+        let restored = reopensConversation
+            ? waitForHittableComposer(in: app)
+            : composer.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout)
         if !restored {
             composerTap.recordRestorationFailure(in: app, name: "iPad composer search restoration failure \(appearance)") {
                 app.buttons["ipad.focus.close"].exists && app.keyboards.firstMatch.exists
             }
         }
         XCTAssertTrue(restored, "The original post-search composer restoration must pass before any diagnostic gesture")
-        XCTAssertEqual(composer.value as? String, Self.draft, "Search cancellation must retain the current conversation draft")
+        let current = reopensConversation ? try? app.textViews.matching(identifier: "composer.textView").singleHittableElement() : composer
+        XCTAssertEqual(current?.value as? String, Self.draft, "Search cancellation must retain the current conversation draft")
     }
 
     private struct TypingBackgroundControls {
