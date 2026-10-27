@@ -80,17 +80,21 @@ struct WorkspaceDetailView: View {
     private static let iPadHeadingTopSpacing = IPadSidebarStyle.sectionSpacing - Constants.Conversation.Design.IPad.headerBottomInset
 
     /// The persistent iPad sidebar already names the workspace above its list selection.
+    /// The iPad main pane's title follows the iPad comp; the unfolded Duo keeps its rail layout.
+    private var usesIPadPaneTitle: Bool { coordinator.usesIPadShell && !usesVerticalBar }
+
     private var isBesideIPadSidebar: Bool {
         coordinator.usesIPadShell && coordinator.iPadNavigation.isSidebarVisible && !coordinator.iPadNavigation.usesSidebarOverlay
     }
 
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
+    private var showsNavigationTitle: Bool { !coordinator.usesIPadShell && !usesVerticalBar }
     private var lifecycleContent: some View {
         ZStack {
             surface.ignoresSafeArea()
             VStack(spacing: 0) {
-                if let sidebar, let onCollapse = sidebar.onCollapse {
-                    WorkspaceSidebarHeader(onCollapse: onCollapse) { workspaceActions }
+                if let sidebar {
+                    WorkspaceSidebarHeader(onCollapse: sidebar.onCollapse) { workspaceActions }
                 }
                 detailContent
             }
@@ -175,8 +179,8 @@ struct WorkspaceDetailView: View {
     }
 
     var body: some View {
-        if let sidebar {
-            presentedContent.workspaceSidebarNavigation(sidebar) { workspaceActions }
+        if sidebar != nil {
+            presentedContent
         } else {
             pageContent
         }
@@ -286,7 +290,7 @@ struct WorkspaceDetailView: View {
     private var pageContent: some View {
         presentedContent
         .preference(key: WorkspaceFirstAgentPreference.self, value: firstAgent)
-        .navigationTitle(workspaceName)
+        .navigationTitle(showsNavigationTitle ? workspaceName : "")
         .toolbar(removing: usesVerticalBar ? .title : nil)
         .toolbarTitleDisplayMode(.inline)
         #if !os(visionOS)
@@ -306,7 +310,7 @@ struct WorkspaceDetailView: View {
             } else {
                 #if os(visionOS)
                 // The workspace picker lives in the top toolbar on visionOS.
-                ToolbarItem(placement: .topBarTrailing) { toolbarWorkspacePicker }
+                ToolbarItem(placement: .topBarTrailing) { WorkspaceDetailToolbarPicker(selection: $selectedTab) }
                 #else
                 if showsBackButton {
                     ToolbarItem(placement: .topBarLeading) {
@@ -316,7 +320,11 @@ struct WorkspaceDetailView: View {
                     .intentToolbarSurface()
                 }
                 #endif
-                ToolbarItem(placement: .principal) { toolbarTitle }
+                if showsNavigationTitle {
+                    ToolbarItem(placement: .principal) {
+                        WorkspaceDetailToolbarTitle(title: workspaceTitle, createdAt: workspace?.createdAt)
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) { workspaceActions }
                 .intentToolbarSurface()
             }
@@ -349,21 +357,13 @@ private extension WorkspaceDetailView {
         }
     }
 
-    var toolbarTitle: some View {
-        VStack(spacing: WorkspaceDetailStyle.tabInset) {
-            WorkspaceTitle(title: workspaceTitle, createdAt: workspace?.createdAt) { title in
-                Text(title)
-                    .interFont(Constants.Typography.bodyXSEmphasized)
-            }
-            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-            Text("Workspace")
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))
+    var workspaceActions: some View {
+        WorkspaceResourceActions(workspaceId: workspaceId) {
+            workspaceActionsMenu
         }
-        .lineLimit(1)
     }
 
-    var workspaceActions: some View {
+    var workspaceActionsMenu: some View {
         WorkspaceActionsMenu(
             workspaceId: workspaceId,
             scriptStore: scriptStore,
@@ -400,20 +400,19 @@ private extension WorkspaceDetailView {
 
     var detailContent: some View {
         ScrollView {
-            if selectedTab == .agents {
-                LazyVStack(spacing: 0) {
-                    detailHeader
+            // Keep the focused title mounted while the agent rows scroll lazily.
+            VStack(spacing: 0) {
+                detailHeader
+                if selectedTab == .agents {
+                    LazyVStack(spacing: 0) {
+                        tabContent
+                    }
+                    .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
+                } else {
                     tabContent
                 }
-                .padding(.bottom, showsAgentList ? WorkspaceDetailStyle.pageInset : 0)
-                .iPadDetailColumn(isEnabled: sidebar == nil)
-            } else {
-                VStack(spacing: 0) {
-                    detailHeader
-                    tabContent
-                }
-                .iPadDetailColumn(isEnabled: sidebar == nil)
             }
+            .iPadDetailColumn(isEnabled: sidebar == nil)
         }
         .accessibilityIdentifier("workspace.detail.scroll")
         .refreshable {
@@ -440,8 +439,8 @@ private extension WorkspaceDetailView {
                 selection: $selectedTab,
                 titleEditor: titleEditor,
                 titleFocus: $titleFocused,
-                headingTopSpacing: sidebar?.headingTopSpacing ?? (coordinator.usesIPadShell ? Self.iPadHeadingTopSpacing : nil),
-                usesLargeTitle: sidebar == nil && coordinator.usesIPadShell,
+                headingTopSpacing: sidebar != nil ? 0 : (usesIPadPaneTitle ? Self.iPadHeadingTopSpacing : nil),
+                usesLargeTitle: sidebar == nil && usesIPadPaneTitle,
                 onSaveTitle: saveTitle
             )
         }
@@ -459,18 +458,6 @@ private extension WorkspaceDetailView {
             || browserStore.errorMessage(workspaceId: workspaceId) != nil
             || !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
             || scriptStore.errorMessage(workspaceId: workspaceId) != nil
-    }
-
-    var toolbarWorkspacePicker: some View {
-        Picker("Workspace Content", selection: $selectedTab) {
-            Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(.agents) }
-            .tag(WorkspaceTab.agents)
-            Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(.file) }
-            .tag(WorkspaceTab.context)
-            Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(.gitDiff) }
-            .tag(WorkspaceTab.changes)
-        }
-        .pickerStyle(.segmented)
     }
 
     @ViewBuilder

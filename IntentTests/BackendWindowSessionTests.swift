@@ -221,13 +221,56 @@ extension BackendSessionRegistryTests {
         #expect(registry.session(for: backend) == nil)
     }
 
+    @Test(arguments: [false, true])
+    func restoredHomeRespectsDemoLaunchWithoutChangingProductionRouting(isDemo: Bool) throws {
+        let registry = makeRegistry()
+        let stored = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
+        let nativeBackend = BackendID(stored.id)
+        let restored = BackendWindowSession(registry: registry, persistence: persistence)
+        let showsSavedMachines = restored.restoreSavedMachines(true, isDemo: isDemo)
+        restored.bind(to: nativeBackend)
+        defer { restored.release() }
+
+        let coordinator = try #require(restored.session).makeCoordinator(startingAtSavedMachines: showsSavedMachines)
+        #expect(showsSavedMachines == !isDemo)
+        #expect(coordinator.routingState.hasLoadCompleted == !isDemo)
+        #expect(coordinator.currentScreenDescription == (isDemo ? "loading" : "pairing"))
+        #expect(restored.session?.backendID == (isDemo ? nativeBackend : nil))
+        #expect(registry.attachmentCount(for: nativeBackend) == (isDemo ? 1 : 0))
+        #expect(persistence.loadConnections().map(\.id) == [stored.id])
+    }
+
+    @Test func demoHomeNavigationSurvivesReappearanceAfterIgnoringRestoration() throws {
+        let registry = makeRegistry()
+        let window = BackendWindowSession(registry: registry, persistence: persistence)
+        #expect(!window.restoreSavedMachines(true, isDemo: true))
+        window.bind(to: nil)
+        let coordinator = try #require(window.session).makeCoordinator()
+        coordinator.onConnectionSuccess()
+        #expect(coordinator.currentScreenDescription == "workspaceList")
+        coordinator.returnWindowToSavedMachines = window.returnToSavedMachines
+        coordinator.onReturnToSavedMachines()
+        let homeSession = try #require(window.session)
+
+        #expect(window.restoreSavedMachines(true, isDemo: true))
+        #expect(window.session === homeSession)
+        window.release()
+        #expect(window.restoreSavedMachines(true, isDemo: true))
+        window.bind(to: nil)
+        defer { window.release() }
+        let home = try #require(window.session).makeCoordinator(startingAtSavedMachines: window.isShowingSavedMachines)
+        home.onScenePhaseActive()
+        #expect(home.currentScreenDescription == "pairing")
+        #expect(registry.liveBackendIDs.isEmpty)
+    }
+
     @Test func restoredHomeDoesNotAttachItsNativeBackend() throws {
         let registry = makeRegistry()
         let nativeBackend = BackendID(UUID())
         let restored = BackendWindowSession(registry: registry)
         // BackendWindowRoot restores its per-scene Home flag before binding
         // the native BackendID. This must never attach, even momentarily.
-        restored.returnToSavedMachines()
+        #expect(restored.restoreSavedMachines(true, isDemo: false))
         restored.bind(to: nativeBackend)
         defer { restored.release() }
 

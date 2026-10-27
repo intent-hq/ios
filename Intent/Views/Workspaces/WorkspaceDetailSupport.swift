@@ -17,6 +17,7 @@ struct WorkspaceDetailHeading: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.usesDuoContextualRail) private var usesDuoContextualRail
 
     private var focusBinding: FocusState<Bool>.Binding { titleFocus ?? $titleFocused }
     private var titleStyle: Constants.Typography.Style {
@@ -24,6 +25,11 @@ struct WorkspaceDetailHeading: View {
     }
     private var titleTracking: CGFloat {
         usesLargeTitle ? WorkspaceDetailStyle.largeTitleTracking : WorkspaceDetailStyle.titleTracking
+    }
+
+    private var headingTopSpacing: CGFloat {
+        if dynamicTypeSize.isAccessibilitySize { return WorkspaceDetailStyle.headingSpacing }
+        return usesDuoContextualRail ? WorkspaceDetailStyle.pageInset : WorkspaceDetailStyle.headingTopSpacing
     }
 
     var body: some View {
@@ -45,8 +51,7 @@ struct WorkspaceDetailHeading: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-        .padding(.top, topSpacing
-            ?? (dynamicTypeSize.isAccessibilitySize ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTopSpacing))
+        .padding(.top, topSpacing ?? headingTopSpacing)
         .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
     }
 
@@ -225,6 +230,57 @@ struct WorkspaceTaskProgressView: View {
 enum WorkspaceDetailHeaderLayout {
     static func tabTopPadding(hasTaskProgress: Bool) -> CGFloat {
         hasTaskProgress ? 0 : Constants.WorkspaceDetail.tabVerticalPadding
+    }
+}
+
+struct WorkspaceDetailToolbarTitle: View {
+    let title: String
+    let createdAt: String?
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(spacing: WorkspaceDetailStyle.tabInset) {
+            WorkspaceTitle(title: title, createdAt: createdAt) { title in
+                Text(title).interFont(Constants.Typography.bodyXSEmphasized)
+            }
+            .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+            Text("Workspace")
+                .interFont(Constants.Typography.bodyXS)
+                .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme))
+        }
+        .lineLimit(1)
+    }
+}
+
+struct WorkspaceDetailToolbarPicker: View {
+    @Binding var selection: WorkspaceTab
+
+    var body: some View {
+        Picker("Workspace Content", selection: $selection) {
+            Label { Text("Agents").interFont(Constants.Typography.bodyXS) } icon: { Image(.agents) }
+                .tag(WorkspaceTab.agents)
+            Label { Text("Context").interFont(Constants.Typography.bodyXS) } icon: { Image(.file) }
+                .tag(WorkspaceTab.context)
+            Label { Text("Changes").interFont(Constants.Typography.bodyXS) } icon: { Image(.gitDiff) }
+                .tag(WorkspaceTab.changes)
+        }
+        .pickerStyle(.segmented)
+    }
+}
+
+struct WorkspaceRailShortcuts: View {
+    let isTerminalDisabled: Bool
+    let onTerminal: () -> Void
+    let onBrowser: () -> Void
+
+    var body: some View {
+        VStack(spacing: IPadShellLayout.contextualRailSpacing) {
+            IntentIconButton(icon: .terminal, label: "Open terminal", showsBackground: false, action: onTerminal)
+                .disabled(isTerminalDisabled)
+                .accessibilityIdentifier("workspace.shortcut.terminal")
+            IntentIconButton(icon: .globe, label: "Open browser", showsBackground: false, action: onBrowser)
+                .accessibilityIdentifier("workspace.shortcut.browser")
+        }
     }
 }
 

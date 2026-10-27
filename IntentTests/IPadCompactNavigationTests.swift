@@ -1,9 +1,48 @@
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
 
 @MainActor
 struct IPadCompactNavigationTests {
+    @Test func sharedShellRequiresAnIPadOrExpandedDuo() {
+        for sizeClass: UserInterfaceSizeClass? in [nil, .compact, .regular] {
+            #expect(IPadShellLayout.usesShell(isPad: true, hasVerticalBar: false, sizeClass: sizeClass))
+            #expect(!IPadShellLayout.usesShell(isPad: false, hasVerticalBar: false, sizeClass: sizeClass))
+            #expect(IPadShellLayout.usesShell(isPad: false, hasVerticalBar: true, sizeClass: sizeClass) == (sizeClass == .regular))
+        }
+    }
+
+    @Test func unfoldedSidebarLeavesRoomForTheConversation() {
+        for width: CGFloat in [932, 1024, 1300] {
+            let layout = IPadShellLayout(width: width, isAccessibilitySize: false, usesFoldableLayout: true)
+            #expect(!layout.usesSidebarOverlay)
+            #expect(layout.sidebarWidth <= IPadShellLayout.smallSidebarWidth)
+            #expect(layout.contentWidth - layout.sidebarWidth - layout.gutter >= IPadShellLayout.minimumDetailWidth)
+        }
+        let portrait = IPadShellLayout(width: 668, isAccessibilitySize: true, usesFoldableLayout: true)
+        #expect(portrait.usesSidebarOverlay)
+    }
+
+    @Test(arguments: [false, true])
+    func oppositeRailEdgesPreserveContentAndNavigation(accessibility: Bool) {
+        for width: CGFloat in [480, 668, 932] {
+            let trailing = IPadShellLayout(width: width, isAccessibilitySize: accessibility, usesFoldableLayout: true)
+            let leading = IPadShellLayout(
+                width: width,
+                isAccessibilitySize: accessibility,
+                usesFoldableLayout: true,
+                usesLeadingVerticalBar: true
+            )
+            #expect(leading.leadingInset == trailing.trailingInset)
+            #expect(leading.trailingInset == trailing.leadingInset)
+            #expect(leading.contentWidth == trailing.contentWidth)
+            #expect(leading.sidebarWidth == trailing.sidebarWidth)
+            #expect(leading.usesSidebarOverlay == trailing.usesSidebarOverlay)
+            #expect(leading.usesCompactNavigation == trailing.usesCompactNavigation)
+        }
+    }
+
     @Test func breakpointReclaimsTheEntireRailAndGutter() {
         let threshold = IPadShellLayout.compactWindowWidth
         for accessibility in [false, true] {
@@ -29,6 +68,29 @@ struct IPadCompactNavigationTests {
         state.collapseSidebar()
         state.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true)
         #expect(!state.isSidebarVisible, "Ordinary width changes must not undo a manual drawer dismissal")
+    }
+
+    @Test(arguments: [false, true])
+    func connectionSwitcherPreservesPersistentSidebar(expanded: Bool) {
+        var state = IPadNavigationState()
+        state.updateLayout(usesOverlay: false)
+        if !expanded { state.collapseSidebar() }
+        state.prepareForConnectionSwitcher(showingWorkspaceList: false)
+        #expect(state.isSidebarVisible == expanded)
+        #expect(state.isSidebarExpanded == expanded)
+        #expect(state.section == .workspaces)
+    }
+
+    @Test func connectionSwitcherDismissesOnlyTheOverlaySidebar() {
+        var state = IPadNavigationState()
+        state.updateLayout(usesOverlay: true)
+        state.revealSidebar()
+        state.prepareForConnectionSwitcher(showingWorkspaceList: false)
+        #expect(!state.isDrawerPresented)
+        #expect(state.isSidebarExpanded)
+        state.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true)
+        state.prepareForConnectionSwitcher(showingWorkspaceList: true)
+        #expect(state.isSidebarVisible)
     }
 
     @Test(arguments: [IPadSidebarSection.settings, .connections])
@@ -68,6 +130,22 @@ struct IPadCompactNavigationTests {
 }
 
 extension AppCoordinatorTests {
+    @Test @MainActor func switchingShellsKeepsTheSelectedConversationAndRequest() {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [Self.makeWorkspace(id: "available")]
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
+        coordinator.onSelectAgent("agent", workspaceId: "available", agentName: "Agent")
+        let route = coordinator.currentScreenDescription
+        let request = coordinator.conversationRequestId
+        for enabled in [true, false, true] {
+            coordinator.updateShellPresentation(enabled)
+            #expect(coordinator.usesIPadShell == enabled)
+            #expect(coordinator.currentScreenDescription == route)
+            #expect(coordinator.conversationRequestId == request)
+            #expect(coordinator.selectedWorkspaceId == "available")
+        }
+    }
+
     @Test @MainActor func iPadWideLayoutSelectsWorkspaceAfterMeasurementAndLoading() {
         let store = WorkspaceStore(forTesting: true)
         let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)

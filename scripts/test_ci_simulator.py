@@ -504,7 +504,7 @@ class OrdinaryCITests(unittest.TestCase):
                     state = json.loads((root / "host.json").read_text())
                     self.assertEqual({device["udid"] for _, device in route.device_rows(state["document"])}, remaining)
 
-    def test_ui_matrix_uses_two_smoke_shards_or_one_full_iphone_and_one_capture_contract(self):
+    def test_ui_matrix_uses_two_iphone_shards_and_one_capture_contract(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
         section = workflow.split("      - name: Select UI test lanes\n", 1)[1].split("\n  go-test:", 1)[0]
         command = textwrap.dedent(section.split("        run: |\n", 1)[1])
@@ -521,7 +521,7 @@ class OrdinaryCITests(unittest.TestCase):
                 self.assertTrue(all(lane["runs-on"] == "macos-26-xlarge" for lane in lanes))
                 self.assertEqual(len({lane["lane"] for lane in lanes}), len(lanes))
                 phones = [lane for lane in lanes if lane["family"] == "iphone"]
-                self.assertEqual(sorted(lane["shard"] for lane in phones), [0] if full else [1, 2])
+                self.assertEqual(sorted(lane["shard"] for lane in phones), [1, 2])
                 ipads = [lane for lane in lanes if lane["family"] == "ipad"]
                 self.assertEqual(len(ipads), 1)
                 capture = [lane for lane in lanes if lane["capture"]]
@@ -605,7 +605,7 @@ class OrdinaryCITests(unittest.TestCase):
         for full in (False, True):
             for exit_code in (0, 65):
                 selected = []
-                for shard in ([0] if full else [1, 2]):
+                for shard in (1, 2):
                     with self.subTest(full=full, shard=shard, exit_code=exit_code), tempfile.TemporaryDirectory() as temporary:
                         root = Path(temporary)
                         (root / "scripts").mkdir()
@@ -618,6 +618,8 @@ class OrdinaryCITests(unittest.TestCase):
                             Path('calls.json').write_text(json.dumps({
                                 'args': sys.argv[1:],
                                 'selectors': os.environ['ONLY_TESTING'].split(),
+                                'fullShard': os.environ.get('UI_TEST_SHARD'),
+                                'plan': os.environ.get('UI_TEST_SHARD_PLAN_PATH'),
                             }))
                             sys.exit(int(os.environ['TEST_EXIT']))
                             """))
@@ -632,8 +634,12 @@ class OrdinaryCITests(unittest.TestCase):
                         self.assertTrue(call["selectors"])
                         if full:
                             self.assertEqual(call["selectors"], ["IntentUITests"])
+                            self.assertEqual(call["fullShard"], str(shard))
+                            self.assertEqual(call["plan"], "ui-test-shard-plan.json")
                         else:
+                            self.assertIsNone(call["fullShard"])
                             selected.extend(call["selectors"])
+                        self.assertTrue((root / "ui-tests.log").exists())
                         if not full and shard == 1 and exit_code == 0:
                             (root / "calls.json").unlink()
                             (root / "scripts/ui-smoke-tests.txt").write_text("IntentUITests/Suite/testMissingShard\n")
@@ -644,6 +650,18 @@ class OrdinaryCITests(unittest.TestCase):
                 if not full:
                     self.assertCountEqual(selected, smoke)
                     self.assertEqual(len(selected), len(set(selected)))
+
+    def test_full_ui_aggregate_requires_both_selection_artifacts_and_verification(self):
+        workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        aggregate = workflow.split("  ios-ui-tests:\n", 1)[1].split("  visionos-build:\n", 1)[0]
+        self.assertIn("needs: ios-ui-test-lanes", aggregate)
+        self.assertIn("--name ios-iphone-1-ui-selection --name ios-iphone-2-ui-selection", aggregate)
+        self.assertIn("scripts/ui_full_tests.py --verify-plans full-ui-selection", aggregate)
+        self.assertLess(aggregate.index("Require all iPhone"), aggregate.index("Verify full UI coverage"))
+        lanes = workflow.split("  ios-ui-test-lanes:\n", 1)[1].split("  ios-ui-tests:\n", 1)[0]
+        self.assertIn("name: Upload UI selection and logs\n        if: always()", lanes)
+        self.assertIn("name: Upload UI test results\n        if: failure() || cancelled()", lanes)
+        self.assertIn("2>&1 | tee ui-tests.log", lanes)
 
     def test_unit_console_retention_preserves_native_exit_status(self):
         workflow = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
@@ -685,7 +703,7 @@ class OrdinaryCITests(unittest.TestCase):
         self.assertIn("needs: ios-ui-test-lanes", job)
         self.assertIn("always()", job)
         self.assertIn("UI_RESULT: ${{ needs.ios-ui-test-lanes.result }}", job)
-        command = textwrap.dedent(job.split("        run: |\n", 1)[1])
+        command = textwrap.dedent(job.split("        run: |\n", 1)[1].split("\n      - name:", 1)[0])
         for result in ("success", "failure", "cancelled", "skipped", ""):
             with self.subTest(result=result):
                 process = subprocess.run(["bash", "-e", "-c", command],

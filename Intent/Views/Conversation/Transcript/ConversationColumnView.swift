@@ -34,7 +34,7 @@ struct ConversationColumnView: View {
 
     var body: some View {
         VStack(spacing: 0) { columnContent }
-        .ignoresSafeArea(.container, edges: usesWorkspaceDesign && usesVerticalBar && !keyboardVisible ? .bottom : [])
+        .ignoresSafeArea(.container, edges: usesWorkspaceDesign && presentation != .iPad && usesVerticalBar && !keyboardVisible ? .bottom : [])
         .environment(\.conversationComposerFocus, $composerFocused)
         .modifier(QuestionAttachmentLifecycle(viewModel: viewModel))
         .modifier(IPadTypingFocus(isFocused: $composerFocused, composerVisible: composerVisible))
@@ -337,7 +337,7 @@ extension ConversationColumnView {
     }
 
     private var composerBottomInset: CGFloat {
-        if usesVerticalBar, !keyboardVisible { return Design.Composer.verticalBarBottomSpacing }
+        if presentation != .iPad, usesVerticalBar, !keyboardVisible { return Design.Composer.verticalBarBottomSpacing }
         return presentation == .iPad && !keyboardVisible ? Design.IPad.composerBottomInset : Design.Composer.keyboardBottomSpacing
     }
 

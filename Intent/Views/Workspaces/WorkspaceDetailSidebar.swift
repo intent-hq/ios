@@ -1,12 +1,9 @@
 import SwiftUI
 
-/// Chrome for the workspace overview while it sits in a persistent sidebar
+/// Chrome for the workspace overview while it sits in the iPad shell's sidebar
 /// beside one of its agents or notes. The main view's Back leaves it.
 struct WorkspaceDetailSidebar {
-    /// The iPad shell draws its own header; the Duo split view uses the column's navigation bar.
-    var onCollapse: (() -> Void)?
-
-    var headingTopSpacing: CGFloat { onCollapse == nil ? WorkspaceDetailStyle.headingSpacing : 0 }
+    let onCollapse: () -> Void
 }
 
 /// Collapse leads, where the list's title would be; workspace actions trail.
@@ -35,23 +32,6 @@ struct WorkspaceSidebarHeader<Actions: View>: View {
 }
 
 extension View {
-    @ViewBuilder
-    func workspaceSidebarNavigation<Actions: View>(
-        _ sidebar: WorkspaceDetailSidebar,
-        @ViewBuilder actions: @escaping () -> Actions
-    ) -> some View {
-        if sidebar.onCollapse == nil {
-            toolbarTitleDisplayMode(.inline)
-                .navigationBarBackButtonHidden()
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) { actions() }
-                        .intentToolbarSurface()
-                }
-        } else {
-            self
-        }
-    }
-
     /// Marks the open agent or note in a sidebar workspace with the sidebar's selection surface.
     func workspaceSidebarSelection(_ isSelected: Bool) -> some View {
         modifier(WorkspaceSidebarSelection(isSelected: isSelected))

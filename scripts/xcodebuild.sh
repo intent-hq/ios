@@ -15,6 +15,7 @@
 #
 #   resolve                 Resolve SPM package dependencies
 #   build-ios               Build for the generic iOS Simulator destination
+#   build-ios-device        Build for DEVICE_UDID using project signing
 #   build-visionos          Build for the generic visionOS Simulator destination
 #   build-for-testing       Build the iOS test bundle (CI split step)
 #   build-for-testing-ui    Build the app and UI tests, skipping IntentTests
@@ -43,6 +44,8 @@
 #                         commands enable @testable access (ENABLE_TESTABILITY=YES)
 #                         but never define DEBUG or change optimization. Plain
 #                         build-ios/build-visionos keep production testability.
+#   DEVICE_UDID           Required physical iOS device for build-ios-device;
+#                         preserves project signing and never installs or uploads.
 #   SIM_UDID              Simulator UDID for test destinations; when unset the
 #                         newest available iPhone simulator is picked automatically.
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
@@ -85,6 +88,11 @@
 #                         identities, used by the filtered iPad proof lane.
 #                         Unset leaves output and selection unchanged. A failed
 #                         requested export exits 83 before tests start.
+#   UI_TEST_SHARD         1 or 2: partition all built UI tests by measured suite
+#                         durations. Only test-without-building-ui, without a
+#                         narrower ONLY_TESTING, accepts this full-suite mode.
+#   UI_TEST_SHARD_PLAN_PATH
+#                         Optional JSON plan for cross-lane coverage verification.
 #   GITHUB_STEP_SUMMARY   When set (GitHub Actions does), the per-selector table
 #                         of a filtered run is also appended there as Markdown,
 #                         as is every test-process crash or restart (the crash
@@ -222,6 +230,7 @@ Usage: scripts/xcodebuild.sh <subcommand>
 
   resolve                 Resolve SPM package dependencies
   build-ios               Build for the generic iOS Simulator destination
+  build-ios-device        Build for DEVICE_UDID using project signing
   build-visionos          Build for the generic visionOS Simulator destination
   build-for-testing       Build the iOS test bundle (CI split step)
   build-for-testing-ui    Build the app and UI tests, skipping IntentTests
@@ -235,7 +244,7 @@ Usage: scripts/xcodebuild.sh <subcommand>
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
 Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults),
-SIM_UDID, SPM_CLONE_DIR, DERIVED_DATA_DIR, RESULT_BUNDLE, ONLY_TESTING,
+SIM_UDID, DEVICE_UDID, SPM_CLONE_DIR, DERIVED_DATA_DIR, RESULT_BUNDLE, ONLY_TESTING,
 TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
 script header).
 Release tests enable @testable access, not DEBUG. Use focused release-compatible
@@ -773,6 +782,14 @@ cmd_build_ios() {
     -destination 'generic/platform=iOS Simulator' "${SIGNING_ARGS[@]}"
 }
 
+cmd_build_ios_device() {
+  [ -n "${DEVICE_UDID:-}" ] || die "DEVICE_UDID is required for build-ios-device"
+  [[ "$DEVICE_UDID" =~ ^[[:alnum:]-]+$ ]] || die "DEVICE_UDID must be a device identifier"
+  ensure_tailcatkit
+  run_xcodebuild build "${PROJECT_ARGS[@]}" \
+    -destination "platform=iOS,id=$DEVICE_UDID"
+}
+
 cmd_build_visionos() {
   ensure_visionos_sdk
   run_xcodebuild build "${PROJECT_ARGS[@]}" \
@@ -1002,6 +1019,20 @@ resolve_only_testing() {
     echo "error: could not verify the ONLY_TESTING selection: xcodebuild -enumerate-tests exited $status (see its output above).
 Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&2
     exit "$EXIT_SELECTION_UNVERIFIED"
+  fi
+  if [ -n "${UI_TEST_SHARD:-}" ]; then
+    local shard_args=()
+    [ -z "${UI_TEST_SHARD_PLAN_PATH:-}" ] || shard_args+=(--plan "$UI_TEST_SHARD_PLAN_PATH")
+    ONLY_TESTING=$(python3 scripts/ui_full_tests.py --catalog "$catalog" --shard "$UI_TEST_SHARD" \
+      ${shard_args+"${shard_args[@]}"} 9>&-) || status=$?
+    if [ "$status" -eq 0 ]; then
+      parse_only_testing
+    else
+      rm -rf -- "$dir"
+      release_simulator_lock
+      echo "error: full UI shard selection failed; no tests started (exit $EXIT_SELECTION_UNVERIFIED)." >&2
+      exit "$EXIT_SELECTION_UNVERIFIED"
+    fi
   fi
   ONLY_TESTING_RESOLVED=$(python3 -c "$ONLY_TESTING_MATCH_PY$ONLY_TESTING_RESOLVER_PY" "$catalog" "$@" "${ONLY_TESTING_IDS[@]}" 9>&-) || status=$?
   rm -rf -- "$dir"
@@ -1298,6 +1329,18 @@ case "${BUILD_CONFIGURATION:-}" in
   *) die "BUILD_CONFIGURATION must be Debug or Release (or unset to preserve scheme defaults)" ;;
 esac
 
+if [ -n "${UI_TEST_SHARD:-}" ]; then
+  case "$UI_TEST_SHARD" in
+    1|2) ;;
+    *) die "UI_TEST_SHARD must be 1 or 2" ;;
+  esac
+  [ "$subcommand" = test-without-building-ui ] || die "UI_TEST_SHARD requires test-without-building-ui"
+  case "${ONLY_TESTING:-}" in
+    ''|IntentUITests) ;;
+    *) die "UI_TEST_SHARD cannot be combined with a narrower ONLY_TESTING selection" ;;
+  esac
+fi
+
 case "$subcommand" in
   build-for-testing-ui|test-without-building-ui)
     PROJECT_ARGS=(-project Intent.xcodeproj -scheme IntentUI) ;;
@@ -1306,6 +1349,7 @@ esac
 case "$subcommand" in
   resolve)               cmd_resolve ;;
   build-ios)             cmd_build_ios ;;
+  build-ios-device)      cmd_build_ios_device ;;
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
   build-for-testing-ui)  cmd_build_for_testing ;;

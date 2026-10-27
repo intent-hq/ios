@@ -89,11 +89,12 @@ extension WorkspaceChangesStoreTests {
         try await fake.waitForPendingRequests("file-tracking.getChanges")
         #expect(store.selectedRootId == nil)
         #expect(store.stagedChanges.isEmpty && store.unstagedChanges.isEmpty)
+        fake.responseMap["git.status"] = ["files": [["path": "main.swift", "status": "M", "staged": false]]]
         fake.resolvePending("file-tracking.getChanges", with: WorkspaceChangesFixture.snapshot([
             WorkspaceChangesFixture.change(id: "main-after-removal")
         ]))
         try await waitUntil("primary repository refresh after removing the selected root") {
-            store.unstagedChanges.first?.id == "main-after-removal" && !store.isLoading
+            store.unstagedChanges.first?.path == "main.swift" && !store.isLoading
         }
         store.stopObserving()
     }

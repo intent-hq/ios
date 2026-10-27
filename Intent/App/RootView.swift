@@ -55,8 +55,6 @@ struct RootView: View {
     @State var handledConversationRequestId = 0 // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var duoFirstAgent: WorkspaceFirstAgent? // swiftlint:disable:this private_swiftui_state
     // The unfolded Duo divides the window at its midpoint, including the trailing rail.
     @State private var duoSidebarWidth = Constants.Root.sidebarIdealWidth
 
@@ -325,11 +323,10 @@ struct RootView: View {
             DeepLinkPairingView(payload: request.payload)
                 .coversConversationComposers()
         }
+        .onChange(of: usesIPadShell, initial: true) { _, enabled in
+            coordinator.updateShellPresentation(enabled)
+        }
         .onAppear {
-            coordinator.usesIPadShell = usesIPadShell
-            if usesIPadShell, coordinator.selectedSection == .assistant {
-                coordinator.iPadNavigation.showAssistantDetail()
-            }
             updateWorkspaceStatusLease(isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil)
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
@@ -389,7 +386,7 @@ private extension RootView {
 
     var usesIPadShell: Bool {
         #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad
+        IPadShellLayout.usesShell(isPad: UIDevice.current.userInterfaceIdiom == .pad, hasVerticalBar: usesVerticalBar, sizeClass: sizeClass)
         #else
         false
         #endif
@@ -448,7 +445,11 @@ private extension RootView {
     @ViewBuilder var workspaceSplitView: some View {
         if usesVerticalBar {
             NavigationSplitView(columnVisibility: .constant(.all)) {
-                duoSidebar
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: $isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace
+                )
                 .navigationSplitViewColumnWidth(duoSidebarWidth)
                 .toolbar(removing: .sidebarToggle)
             } detail: {
@@ -479,34 +480,6 @@ private extension RootView {
             }
             .navigationSplitViewStyle(.automatic)
         }
-    }
-
-    var duoSidebarContent: WorkspaceSidebarContent {
-        WorkspaceSidebarContent.resolve(screen: coordinator.currentScreen, isPersistent: !isSearchingWorkspaces)
-    }
-
-    /// Both views share the column's navigation bar, so only one is mounted.
-    var duoSidebar: some View {
-        ZStack {
-            if case let .workspace(workspaceId) = duoSidebarContent {
-                WorkspaceDetailView(
-                    workspaceId: workspaceId,
-                    session: session,
-                    sidebar: WorkspaceDetailSidebar()
-                )
-                .id(workspaceId)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
-            } else {
-                WorkspaceListSidebar(
-                    workspaceStore: session.workspaceStore,
-                    isSearching: $isSearchingWorkspaces,
-                    onCreateWorkspace: createWorkspace
-                )
-                .transition(.move(edge: .leading).combined(with: .opacity))
-            }
-        }
-        .clipped()
-        .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration), value: duoSidebarContent)
     }
 
     func prepareConnectionSwitcher() {
