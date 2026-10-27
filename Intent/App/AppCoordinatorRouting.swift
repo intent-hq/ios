@@ -107,13 +107,10 @@ extension AppCoordinator {
             let target = BackendID(connection.id)
             retargetWindow(target)
             // The pairing dialed the new backend over THIS window's live
-            // session connection. Where multiple windows are supported the
-            // retarget opened/raised the target's own window and this window
-            // keeps its binding — re-dial its own backend or it keeps showing
-            // the newly paired daemon's data over the hijacked socket. On
-            // single-window platforms the retarget rebinds this window in
-            // place (session torn down and replaced), so the repair state is
-            // discarded with the old session.
+            // session connection. The retarget rebinds this window in place,
+            // but other windows may still share the old backend's session —
+            // re-dial it or they keep showing the newly paired daemon's data
+            // over the hijacked socket.
             if let bound = backendID, bound != target {
                 redialWindowBackend()
             }

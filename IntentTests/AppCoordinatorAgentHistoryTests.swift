@@ -61,7 +61,7 @@ extension AppCoordinatorTests {
         #expect(delivered?.connectionId == laptop.connectionID)
     }
 
-    @Test @MainActor func historyEntryOnAnotherDeviceOpensItsOwnWindowWhereSupported() {
+    @Test @MainActor func historyEntryOnAnotherDeviceSwitchesTheWindowWhereMultipleWindowsAreSupported() {
         let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
         var retargeted: BackendID?
         coordinator.retargetWindow = { retargeted = $0 }
@@ -69,11 +69,31 @@ extension AppCoordinatorTests {
         manager.supportsMultipleWindows = true
         var opened: BackendID?
         manager.openBackendWindow = { opened = $0 }
+        manager.registerAgentSelectionHandler(for: Self.windowBackend) { _, _, _, _ in }
         let laptop = BackendID(UUID())
 
         coordinator.onSelectHistoryEntry(historyEntry(on: laptop.connectionID), notifications: manager)
 
-        #expect(opened == laptop)
+        #expect(opened == nil)
+        #expect(retargeted == laptop)
+        var delivered: String?
+        manager.registerAgentSelectionHandler(for: laptop) { agentId, _, _, _ in delivered = agentId }
+        #expect(delivered == "agent-1")
+    }
+
+    @Test @MainActor func historyEntryOnAnotherDeviceRaisesItsOpenWindow() {
+        let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
+        var retargeted: BackendID?
+        coordinator.retargetWindow = { retargeted = $0 }
+        let manager = makeHistoryNotificationManager()
+        manager.supportsMultipleWindows = true
+        let laptop = BackendID(UUID())
+        var delivered: String?
+        manager.registerAgentSelectionHandler(for: laptop) { agentId, _, _, _ in delivered = agentId }
+
+        coordinator.onSelectHistoryEntry(historyEntry(on: laptop.connectionID), notifications: manager)
+
+        #expect(delivered == "agent-1")
         #expect(retargeted == nil)
     }
 

@@ -107,7 +107,7 @@ final class BackendWindowSession {
         switch route {
         case .rebindInPlace:
             guard session?.backendID != target else { return }
-        case .openTargetWindow, .replaceWindow:
+        case .replaceWindow:
             // Raising an attached window creates no coordinator to consume a
             // token. Do not let that selection leak into later restoration.
             guard registry.attachmentCount(for: target) == 0 else { return }

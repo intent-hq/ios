@@ -1054,6 +1054,7 @@ $(SRCROOT)/IntentUITests/FixtureCaptureLifecycleUITests.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuTestSupport.swift
 $(SRCROOT)/IntentUITests/HomeActionMenuUITests.swift
 $(SRCROOT)/IntentUITests/IPadAssistantSwipeUITests.swift
+$(SRCROOT)/IntentUITests/IPadConnectionWindowUITests.swift
 $(SRCROOT)/IntentUITests/IPadFocusInteractionTestSupport.swift
 $(SRCROOT)/IntentUITests/IPadProducerVisibilityUITests.swift
 $(SRCROOT)/IntentUITests/IPadSidebarUITests.swift

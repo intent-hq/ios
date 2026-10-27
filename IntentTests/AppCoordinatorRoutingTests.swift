@@ -11,7 +11,6 @@ extension AppCoordinatorTests {
         #expect(
             WindowRetargetRoute.route(
                 currentBackendID: nil,
-                target: BackendID(UUID()),
                 supportsMultipleWindows: true
             ) == .replaceWindow,
             "An unbound (pairing) window on a multi-window platform is replaced by the target's own window so the scene value is set at creation and stays raisable by openWindow(value:)"
@@ -19,19 +18,15 @@ extension AppCoordinatorTests {
     }
 
     @Test func retargetRouteRebindsInPlaceOnSingleWindowPlatforms() {
-        let current = BackendID(UUID())
-        let target = BackendID(UUID())
         #expect(
             WindowRetargetRoute.route(
-                currentBackendID: current,
-                target: target,
+                currentBackendID: BackendID(UUID()),
                 supportsMultipleWindows: false
             ) == .rebindInPlace,
             "iPhone (single-window) always rebinds the one window in place"
         )
         #expect(WindowRetargetRoute.route(
             currentBackendID: nil,
-            target: target,
             supportsMultipleWindows: false
         ) == .rebindInPlace)
     }

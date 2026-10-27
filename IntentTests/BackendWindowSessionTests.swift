@@ -5,7 +5,7 @@ import SwiftUI
 import Testing
 
 extension BackendSessionRegistryTests {
-    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .openTargetWindow, .replaceWindow])
+    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .replaceWindow])
     func raisingExistingBackendDoesNotLeaveSelectionForLaterRestoration(route: WindowRetargetRoute) {
         let registry = makeRegistry()
         let stored = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
@@ -181,7 +181,7 @@ extension BackendSessionRegistryTests {
         home.onSwitchConnection(id: backend.connectionID)
         #expect(selected == backend)
         #expect(WindowRetargetRoute.route(
-            currentBackendID: backend, target: backend, supportsMultipleWindows: true
+            currentBackendID: backend, supportsMultipleWindows: true
         ) == .rebindInPlace)
 
         // The root must call rebind for the unchanged scene value, not wait
@@ -282,7 +282,7 @@ extension BackendSessionRegistryTests {
     }
 
     @Test(arguments: [false, true])
-    func differentMachineSelectionFromHomeKeepsExistingWindowPolicy(supportsMultipleWindows: Bool) throws {
+    func differentMachineSelectionFromHomeSwitchesTheWindowInPlace(supportsMultipleWindows: Bool) throws {
         let registry = makeRegistry()
         let originalBackend = BackendID(UUID())
         let target = BackendID(UUID())
@@ -294,24 +294,14 @@ extension BackendSessionRegistryTests {
         // A new pairing can have connected over the transient Home session.
         pairingConnection.simulateConnect()
         defer { window.release() }
-        let route = WindowRetargetRoute.route(
-            currentBackendID: originalBackend, target: target, supportsMultipleWindows: supportsMultipleWindows
-        )
 
-        if supportsMultipleWindows {
-            #expect(route == .openTargetWindow)
-            window.release()
-            window.bind(to: nil)
-            #expect(window.session !== home)
-            #expect(window.isShowingSavedMachines)
-            #expect(window.session?.connection.connectionState == .disconnected)
-        } else {
-            #expect(route == .rebindInPlace)
-            window.prepareToRebind()
-            window.bind(to: target)
-            #expect(window.session?.backendID == target)
-            #expect(!window.isShowingSavedMachines)
-        }
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: originalBackend, supportsMultipleWindows: supportsMultipleWindows
+        ) == .rebindInPlace)
+        window.prepareToRebind()
+        window.bind(to: target)
+        #expect(window.session?.backendID == target)
+        #expect(!window.isShowingSavedMachines)
         #expect(pairingConnection.disconnectCallCount == 1)
         #expect(registry.attachmentCount(for: originalBackend) == 0)
     }
