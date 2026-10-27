@@ -11,6 +11,11 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    override func tearDownWithError() throws {
+        continueAfterFailure = true
+        try super.tearDownWithError()
+    }
+
     @MainActor
     func testOpenAgentAndNoteMoveTheWorkspaceIntoTheSidebarInBothThemes() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent sidebar")
@@ -92,6 +97,33 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         XCTAssertTrue(firstAgent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), "Right returns to the overview")
         XCTAssertFalse(firstAgent.isSelected)
         capture("ipad-swipe-back-overview")
+    }
+
+    @MainActor
+    func testUnfoldedDuoDetailSwipesBetweenOverviewAndFirstAgent() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires a user-configured unfolded Duo; this test never changes display mode"
+        )
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "-appThemePreference", "light"]
+        app.launch()
+        defer { app.terminate() }
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        workspace.tap()
+        app.buttons["Agents"].firstMatch.tap()
+        let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
+        XCTAssertTrue(overview.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        overview.swipeLeft()
+        let firstAgent = app.buttons[Self.firstAgent]
+        XCTAssertTrue(firstAgent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout), "Left opens the first agent")
+        capture("duo-swipe-first-agent")
+        app.scrollViews["transcript.scrollView"].firstMatch.swipeRight()
+        XCTAssertTrue(app.textViews["composer.textView"].waitForNonExistence(timeout: Self.timeout), "Right returns to the overview")
+        XCTAssertTrue(firstAgent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertFalse(firstAgent.isSelected)
+        capture("duo-swipe-back-overview")
     }
 
     @MainActor

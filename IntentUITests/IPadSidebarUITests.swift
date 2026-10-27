@@ -314,6 +314,16 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
     }
 
+    @MainActor
+    private func capture(_: XCUIApplication, name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}
+
+extension IPadSidebarUITests {
     /// An open conversation moves its workspace into the persistent sidebar; the
     /// conversation's Back restores the list. Returns whether a conversation was closed.
     @MainActor
@@ -333,16 +343,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         }
     }
 
-    @MainActor
-    private func capture(_: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
-    }
-}
-
-extension IPadSidebarUITests {
     @MainActor
     private func verifyComposerAfterSearch(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, appearance: String) {
         let reopensConversation = showWorkspaceList(in: app)

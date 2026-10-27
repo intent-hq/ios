@@ -5,7 +5,7 @@ nonisolated final class ToastUITests: XCTestCase {
     private static let maximumWidth: CGFloat = 560
 
     @MainActor
-    func testCompletionToastInBothThemes() throws {
+    func testCompletionToastInBothThemes() {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
         defer { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {

@@ -1,4 +1,3 @@
-import CoreText
 import SwiftUI
 
 struct WorkspaceDetailView: View {
@@ -11,7 +10,7 @@ struct WorkspaceDetailView: View {
     @State private var storedViewModel: AgentListViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.workspaceUsesVerticalBar) var usesVerticalBar
     @State private var showDeleteConfirmation = false
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
@@ -31,7 +30,7 @@ struct WorkspaceDetailView: View {
     @State private var filesExpanded = true
     @State private var titleEditor = WorkspaceTitleEditor()
     @FocusState private var titleFocused: Bool
-    @Environment(BackendSession.self) private var session
+    @Environment(BackendSession.self) var session
 
     init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false, sidebar: WorkspaceDetailSidebar? = nil) {
         self.workspaceId = workspaceId
@@ -58,7 +57,7 @@ struct WorkspaceDetailView: View {
     var noteStoreConnectionID: ObjectIdentifier { ObjectIdentifier(noteStore.connectionManager) }
     var changesStoreConnectionID: ObjectIdentifier { ObjectIdentifier(changesStore.connectionManager) }
 
-    private var workspaceStore: WorkspaceStore { session.workspaceStore }
+    var workspaceStore: WorkspaceStore { session.workspaceStore }
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
     private var browserStore: WorkspaceBrowserStore { session.browserStore }
 
@@ -70,41 +69,6 @@ struct WorkspaceDetailView: View {
     }
 
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
-
-    private var surface: Color {
-        guard sidebar != nil else { return WorkspaceDetailStyle.background(for: colorScheme) }
-        return coordinator.usesIPadShell ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme)
-    }
-
-    /// Below the iPad pane header, the title's cap top meets the sidebar's filter control and the
-    /// repository line starts at the control's bottom edge.
-    private static let iPadHeadingTopSpacing = IPadSidebarStyle.sectionSpacing - Constants.Conversation.Design.IPad.headerBottomInset
-
-    /// The persistent iPad sidebar already names the workspace above its list selection.
-    private var sidebarHeadingTopSpacing: CGFloat? { sidebar != nil ? 0 : nil }
-
-    /// The Duo sidebar page shows its title in the fixed header and sits on the list's inset.
-    private var isDuoSidebar: Bool { sidebar != nil && usesVerticalBar }
-
-    private var pageHeadingTopSpacing: CGFloat? {
-        if usesIPadPaneTitle { return Self.iPadHeadingTopSpacing }
-        return coordinator.usesIPadShell && usesVerticalBar ? Self.duoHeadingTopSpacing : nil
-    }
-
-    /// The Duo overview has no header band, so its title's first line sits on the sidebar
-    /// header row, where "Workspaces" is centered.
-    private static var duoHeadingTopSpacing: CGFloat {
-        let style = Constants.Typography.heading2
-        let capHeight = CTFontGetCapHeight(CTFontCreateWithName(style.face.rawValue as CFString, style.size, nil))
-        return IPadSidebarStyle.topInset + (Constants.WorkspaceSearch.compactHeight - capHeight) / 2
-    }
-
-    /// The iPad main pane's title follows the iPad comp; the unfolded Duo keeps its rail layout.
-    private var usesIPadPaneTitle: Bool { coordinator.usesIPadShell && !usesVerticalBar }
-
-    private var isBesideIPadSidebar: Bool {
-        coordinator.usesIPadShell && coordinator.iPadNavigation.isSidebarVisible && !coordinator.iPadNavigation.usesSidebarOverlay
-    }
 
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
     private var showsNavigationTitle: Bool { !coordinator.usesIPadShell && !usesVerticalBar }
@@ -306,12 +270,10 @@ struct WorkspaceDetailView: View {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
     }
+}
 
-    private var firstAgent: WorkspaceFirstAgent? {
-        viewModel.foregroundAgents.first.map { WorkspaceFirstAgent(id: $0.id, workspaceId: workspaceId, name: $0.name) }
-    }
-
-    private var pageContent: some View {
+private extension WorkspaceDetailView {
+    var pageContent: some View {
         presentedContent
         .preference(key: WorkspaceFirstAgentPreference.self, value: firstAgent)
         .navigationTitle(showsNavigationTitle ? workspaceName : "")
@@ -365,9 +327,7 @@ struct WorkspaceDetailView: View {
         ) { workspaceActions }
         #endif
     }
-}
 
-private extension WorkspaceDetailView {
     func saveTitle() {
         Task { await titleEditor.save(connection: session.connection, store: workspaceStore) }
     }
@@ -533,22 +493,6 @@ private extension WorkspaceDetailView {
                 onSelectTerminal: { selectedTerminal = $0 },
                 onSelectBrowser: { selectedBrowser = $0 }
             )
-        }
-    }
-
-    private func deleteWorkspace() { changeWorkspace("workspace.delete") }
-
-    private func archiveWorkspace() { changeWorkspace("workspace.archive") }
-
-    private func changeWorkspace(_ method: String) {
-        Task {
-            do {
-                _ = try await session.connection.request(method, params: ["workspaceId": workspaceId])
-                coordinator.onBackToWorkspaceList()
-                await workspaceStore.fetchAll()
-            } catch {
-                AppLog.workspace.error("[WorkspaceDetail] \(method) failed: \(error)")
-            }
         }
     }
 }

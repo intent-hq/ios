@@ -36,8 +36,11 @@ struct WorkspaceSidebarHeader<Actions: View>: View {
 struct WorkspaceSidebarTitleHeader: View {
     let title: String
 
+    /// The Duo header shows no collapse control, so its action is never invoked.
+    private static func ignoreCollapse() {}
+
     var body: some View {
-        IPadSidebarHeader(onCollapse: {}) {
+        IPadSidebarHeader(onCollapse: Self.ignoreCollapse) {
             Text(title)
                 .interFont(IPadSidebarStyle.titleStyle)
                 .tracking(IPadSidebarStyle.titleTracking)

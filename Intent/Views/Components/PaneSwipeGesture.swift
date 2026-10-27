@@ -40,7 +40,10 @@ private struct PaneSwipeGesture: ViewModifier {
         case .forward: onForward
         case .none: nil
         }
-        guard let action else { return settle() }
+        guard let action else {
+            settle()
+            return
+        }
         withAnimation(PaneSwipePolicy.animation) {
             offset = 0
             action()

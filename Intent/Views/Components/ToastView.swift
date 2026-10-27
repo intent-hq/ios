@@ -87,12 +87,14 @@ struct ToastView: View {
                         .scaledToFit()
                         .frame(width: WorkspaceDetailStyle.checkmarkSize, height: WorkspaceDetailStyle.checkmarkSize)
                         .foregroundStyle(WorkspaceDetailStyle.onAccent)
+                        .accessibilityHidden(true)
                 }
         } else {
             Image(.checkCircle)
                 .resizable()
                 .scaledToFit()
                 .foregroundStyle(Constants.Pairing.accent)
+                .accessibilityHidden(true)
         }
     }
 }
