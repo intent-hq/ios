@@ -75,6 +75,9 @@ struct WorkspaceDetailView: View {
         return coordinator.usesIPadShell ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme)
     }
 
+    /// Below the iPad pane header, the heading lines up with a sidebar workspace's heading.
+    private static let iPadHeadingTopSpacing = IPadSidebarStyle.sectionSpacing - Constants.Conversation.Design.IPad.headerBottomInset
+
     /// The persistent iPad sidebar already names the workspace above its list selection.
     private var isBesideIPadSidebar: Bool {
         coordinator.usesIPadShell && coordinator.iPadNavigation.isSidebarVisible && !coordinator.iPadNavigation.usesSidebarOverlay
@@ -436,7 +439,7 @@ private extension WorkspaceDetailView {
                 selection: $selectedTab,
                 titleEditor: titleEditor,
                 titleFocus: $titleFocused,
-                headingTopSpacing: sidebar?.headingTopSpacing,
+                headingTopSpacing: sidebar?.headingTopSpacing ?? (coordinator.usesIPadShell ? Self.iPadHeadingTopSpacing : nil),
                 onSaveTitle: saveTitle
             )
         }
