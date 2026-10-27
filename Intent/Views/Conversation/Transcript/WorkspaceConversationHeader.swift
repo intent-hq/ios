@@ -39,7 +39,8 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .toolbar(usesCustomHeader && !usesVerticalBar ? .hidden : .automatic, for: .navigationBar)
+            // Outside the shell the Duo's vertical toolbar needs the bar; inside it the rail replaces it.
+            .toolbar(usesCustomHeader && (!usesVerticalBar || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if usesCustomHeader { navigationHeader }
             }

@@ -323,7 +323,9 @@ struct WorkspaceDetailView: View {
         .toolbarBackground(WorkspaceDetailStyle.background(for: colorScheme), for: .navigationBar)
         #endif
         .toolbar {
-            if usesVerticalBar {
+            // In the Duo shell the rail carries these actions, as for conversations; a system
+            // vertical toolbar would add an opaque navigation bar over the top of the pane.
+            if usesVerticalBar, !coordinator.usesIPadShell {
                 WorkspaceVerticalNavigationToolbar(
                     isEnabled: true,
                     showsBackButton: showsBackButton && !isSidebarVisible,
@@ -331,7 +333,7 @@ struct WorkspaceDetailView: View {
                     backIdentifier: "workspaceDetail.back",
                     onBack: coordinator.onBackToWorkspaceList
                 ) { workspaceActions }
-            } else {
+            } else if !usesVerticalBar {
                 #if os(visionOS)
                 // The workspace picker lives in the top toolbar on visionOS.
                 ToolbarItem(placement: .topBarTrailing) { WorkspaceDetailToolbarPicker(selection: $selectedTab) }
