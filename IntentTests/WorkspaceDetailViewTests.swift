@@ -6,6 +6,33 @@ import Testing
 import UIKit
 
 struct WorkspaceDetailViewTests {
+    @Test(.enabled("The host must publish accessible controls") {
+        await SyntheticBadgeHost.publishesAccessibilityTree()
+    }, arguments: [false, true])
+    @MainActor func resourceBrowserShortcutReusesOrCreates(hasBrowser: Bool) async throws {
+        let session = makePinnedSession(connection: FakeConnectionManager())
+        if hasBrowser { _ = try session.browserStore.create(workspaceId: "workspace", url: "localhost:3000") }
+        let shortcuts = WorkspaceResourceShortcuts(workspaceId: "workspace").environment(session)
+        try await SyntheticBadgeHost.render(shortcuts, width: 386, height: 600) { host, window in
+            let browser = try #require(SyntheticBadgeHost.accessibilityElements(in: host).first { element in
+                SyntheticBadgeHost.accessibilityIdentifier(of: element) == "workspace.shortcut.browser"
+            })
+            #expect(browser.accessibilityActivate())
+            try await waitUntil("the browser shortcut presents its destination") {
+                window.rootViewController?.presentedViewController != nil
+            }
+            let destination = try #require(window.rootViewController?.presentedViewController)
+            let expectedLabel = hasBrowser ? "Browser URL" : "Browser address"
+            try await waitUntil("the shortcut opens the existing browser or the creation form") {
+                SyntheticBadgeHost.accessibilityElements(in: destination.view).contains { element in
+                    element.accessibilityLabel == expectedLabel
+                }
+            }
+            #expect(session.browserStore.browsers(workspaceId: "workspace").count == (hasBrowser ? 1 : 0))
+            await destination.dismiss(animated: false)
+        }
+    }
+
     @MainActor
     @Test(arguments: [WorkspaceTab.agents, .context, .changes, .unsupportedPersistedValue(42)])
     func savedTabIsSelectedBeforeWorkspaceAppears(tab: WorkspaceTab) throws {

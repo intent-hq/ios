@@ -35,22 +35,26 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .toolbar(usesCustomHeader ? .hidden : .automatic, for: .navigationBar)
+            .toolbar(usesCustomHeader && !usesVerticalBar ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if usesCustomHeader {
-                    WorkspaceNavigationHeader(
-                        title: title,
-                        subtitle: "Workspace",
-                        backLabel: "Back to workspaces",
-                        backIdentifier: "workspaceDetail.back",
-                        showsWorkspacePlaceholder: true,
-                        workspaceCreatedAt: createdAt,
-                        usesConversationLayout: presentation == .iPad,
-                        onBack: showsBackButton ? onBack : nil,
-                        actions: actions
-                    )
-                }
+                if usesCustomHeader { navigationHeader }
             }
+    }
+
+    private var navigationHeader: some View {
+        WorkspaceNavigationHeader(
+            title: title,
+            subtitle: presentation == .iPad ? nil : "Workspace",
+            backLabel: "Back to workspaces",
+            backIdentifier: "workspaceDetail.back",
+            showsTitle: presentation != .iPad,
+            showsWorkspacePlaceholder: presentation != .iPad,
+            workspaceCreatedAt: createdAt,
+            usesConversationLayout: presentation == .iPad,
+            showsContextualActions: !usesVerticalBar,
+            onBack: showsBackButton ? onBack : nil,
+            actions: actions
+        )
     }
 }
 #endif
@@ -58,6 +62,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
     var showsBackground = true
+    var showsContextualActions = true
     var assistantStore: AssistantStore?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
@@ -86,6 +91,7 @@ struct WorkspaceConversationHeader<Actions: View>: View {
                 backIdentifier: "conversation.back",
                 showsBackground: showsBackground,
                 usesConversationLayout: true,
+                showsContextualActions: showsContextualActions,
                 onBack: onBack,
                 actions: actions
             )
@@ -133,6 +139,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
     var usesConversationLayout = false
+    var showsContextualActions = true
     var onBack: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
@@ -142,6 +149,12 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
 
     private typealias Design = Constants.Conversation.Design
 
+    @Environment(\.usesDuoContextualRail) private var usesDuoContextualRail
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
+
+    private var showsInlineActions: Bool { showsContextualActions && !usesDuoContextualRail }
+    private var showsHeaderCopy: Bool { showsTitle || showsWorkspacePlaceholder || subtitle != nil }
+
     private var usesIPadDesign: Bool {
         usesConversationLayout && presentation == .iPad
     }
@@ -149,6 +162,10 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var body: some View {
         windowAdaptedControls
             .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+            .preference(
+                key: DuoContextualRailPreference.self,
+                value: usesDuoContextualRail && isPaneVisible ? AnyView(railControls) : nil
+            )
     }
 
     @ViewBuilder
@@ -170,7 +187,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
 
     private var controls: some View {
         HStack(spacing: 0) {
-            if let onBack {
+            if let onBack, showsInlineActions {
                 Button(action: onBack) {
                     Image(leadingIcon)
                         .resizable()
@@ -186,21 +203,46 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 .disabled(!isLeadingActionEnabled)
                 .accessibilityLabel(backLabel)
                 .accessibilityIdentifier(backIdentifier)
-            } else if usesIPadDesign {
+            } else if usesIPadDesign, showsInlineActions {
                 // Balance the trailing menu so Assistant titles share the agent alignment.
                 Color.clear
                     .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                     .accessibilityHidden(true)
             }
-            titleCopy
-            actions()
-                .buttonStyle(IntentContentButtonStyle())
-                .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
+            headerCopy
+            if showsInlineActions {
+                actions()
+                    .buttonStyle(IntentContentButtonStyle())
+                    .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
+            }
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
         .padding(.horizontal, Design.horizontalInset)
         .padding(.top, usesIPadDesign ? Design.IPad.headerTopInset : Design.Header.verticalPadding)
         .padding(.bottom, usesIPadDesign ? Design.IPad.headerBottomInset : Design.Header.verticalPadding)
+    }
+
+    @ViewBuilder private var headerCopy: some View {
+        if showsHeaderCopy {
+            titleCopy
+        } else {
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var railControls: some View {
+        VStack(spacing: IPadShellLayout.contextualRailSpacing) {
+            if let onBack {
+                IntentIconButton(icon: leadingIcon, label: backLabel, showsBackground: false, action: onBack)
+                    .frame(width: IPadShellLayout.railWidth, height: IPadShellLayout.railWidth)
+                    .disabled(!isLeadingActionEnabled)
+                    .accessibilityIdentifier(backIdentifier)
+            }
+            actions()
+                .frame(width: IPadShellLayout.railWidth)
+        }
+        .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+        .accessibilityIdentifier("duo.contextual.rail")
     }
 
     private var titleCopy: some View {
@@ -303,4 +345,45 @@ struct WorkspaceGoToEndLabel: View {
         .frame(minHeight: Design.minimumTapTarget)
         .contentShape(Rectangle())
     }
+}
+
+/// The outer display keeps native rail actions, while its title owns the top inset.
+struct WorkspaceVerticalConversationHeader: View {
+    let title: String
+    let workspaceId: String
+    @Environment(BackendSession.self) private var session
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .lineLimit(1)
+            if let subtitle = WorkspaceSubtitleResolver.subtitle(forWorkspaceId: workspaceId, in: session.workspaceStore.workspaces) {
+                Text(subtitle)
+                    .interFont(Constants.Typography.subtextXXS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+        .padding(.vertical, IPadShellLayout.outerInset)
+        .background(Constants.Conversation.Design.Palette.background(for: colorScheme).ignoresSafeArea(edges: .top))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("conversation.outer.header")
+    }
+}
+
+struct DuoContextualRailPreference: PreferenceKey {
+    static var defaultValue: AnyView? { nil }
+
+    static func reduce(value: inout AnyView?, nextValue: () -> AnyView?) {
+        if let next = nextValue() { value = next }
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var usesDuoContextualRail = false
 }

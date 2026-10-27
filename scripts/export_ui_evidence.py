@@ -125,6 +125,9 @@ CAPTURES = {
         ),
     },
     "IPadSidebarUITests": {
+        "testExpandedDuoUsesSharedShellAndChatHeader": (
+            "Shared shell chat scrollback light", "Shared shell chat scrollback dark",
+        ),
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"
             for appearance in ("light", "dark")
@@ -163,6 +166,7 @@ CAPTURES = {
             "iPad focused multiline draft",
         ),
         "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
+        "testMenuCardsStayReachableWithLargestText": ("Menu largest text",),
     },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),

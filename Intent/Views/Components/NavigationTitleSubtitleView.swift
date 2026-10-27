@@ -74,14 +74,11 @@ struct WorkspaceNavigationSubtitleModifier: ViewModifier {
         fallbackBody(content: content)
         #else
         if #available(iOS 26.0, *) {
-            Group {
-                if let subtitle {
-                    content.navigationSubtitle(subtitle)
-                } else {
-                    content
-                }
-            }
-            .task { await fetchWorkspacesIfNeeded() }
+            // Never branch on the subtitle: the unfolded Duo's vertical-bar trait flips
+            // while typing, and swapping branches would remount the focused composer.
+            content
+                .navigationSubtitle(subtitle ?? "")
+                .task { await fetchWorkspacesIfNeeded() }
         } else {
             fallbackBody(content: content)
         }

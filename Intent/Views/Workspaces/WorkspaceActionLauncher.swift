@@ -7,6 +7,8 @@ struct WorkspaceActionLauncher: ViewModifier {
     var alignment: HorizontalAlignment = .trailing
     var avoidsConversationInput = true
     var hostsVerticalBarButton = true
+    var floatingVerticalBarButtonOffset: CGFloat?
+    var floatingVerticalBarButtonEdge: HorizontalEdge = .trailing
     var onWorkspaces: (() -> Void)?
     var onAssistant: (() -> Void)?
     let onCreateWorkspace: () -> Void
@@ -15,6 +17,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.workspaceVerticalBarEdge) private var verticalBarEdge
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
@@ -38,7 +41,9 @@ struct WorkspaceActionLauncher: ViewModifier {
                 .onChange(of: isOpen) { _, open in
                     if open { connectionCount = PersistenceManager.shared.loadConnections().count }
                 }
-                .modifier(WorkspaceActionLauncherToolbar(isEnabled: isEnabled && hostsVerticalBarButton && !isSearching))
+                .modifier(WorkspaceActionLauncherToolbar(
+                    isEnabled: isEnabled && hostsVerticalBarButton && floatingVerticalBarButtonOffset == nil && !isSearching
+                ))
                 .environment(\.workspaceActionMenuPresented, $isOpen)
         } else {
             floatingMenu(content: content)
@@ -135,11 +140,8 @@ struct WorkspaceActionLauncher: ViewModifier {
             }
             if usesVerticalBar {
                 // Keep the close control inside the modal overlay's accessibility boundary.
-                if isOpen {
-                    AssistantLaunchButton(isOpen: isOpen) { isOpen.toggle() }
-                        // Extend through Duo's rail safe area, retaining the button's trailing inset.
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                        .ignoresSafeArea(.container, edges: .trailing)
+                if isOpen || floatingVerticalBarButtonOffset != nil {
+                    verticalBarButton
                 }
             } else {
                 AssistantLaunchButton(isOpen: isOpen) {
@@ -151,12 +153,33 @@ struct WorkspaceActionLauncher: ViewModifier {
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .bottom))
     }
 
+    private var verticalBarButton: some View {
+        AssistantLaunchButton(
+            isOpen: isOpen,
+            isInVerticalBar: floatingVerticalBarButtonOffset != nil,
+            action: toggleMenu
+        )
+        .frame(maxWidth: .infinity, alignment: buttonRailEdge == .leading ? .leading : .trailing)
+        .offset(x: (floatingVerticalBarButtonOffset ?? 0) * (floatingVerticalBarButtonEdge == .leading ? -1 : 1))
+        .ignoresSafeArea(.container, edges: floatingVerticalBarButtonOffset == nil ? nativeRailEdges : [])
+    }
+
+    private var nativeRailEdges: Edge.Set { verticalBarEdge == .leading ? .leading : .trailing }
+    private var buttonRailEdge: HorizontalEdge {
+        floatingVerticalBarButtonOffset == nil ? verticalBarEdge ?? .trailing : floatingVerticalBarButtonEdge
+    }
+
     private var appearanceTitle: String {
         switch themePreference {
         case "light": "Light Mode"
         case "dark": "Dark Mode"
         default: "System"
         }
+    }
+
+    private func toggleMenu() {
+        if !isOpen { connectionCount = PersistenceManager.shared.loadConnections().count }
+        isOpen.toggle()
     }
 
     private func select(_ action: HomeActionTiles.Action) {
@@ -258,23 +281,32 @@ extension EnvironmentValues {
     @Entry var workspaceActionMenuPresented: Binding<Bool>?
 
     var workspaceUsesVerticalBar: Bool {
+        workspaceVerticalBarEdge != nil
+    }
+
+    var workspaceVerticalBarEdge: HorizontalEdge? {
         #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
         if #available(iOS 27.1, *) { return self[WorkspaceVerticalBarKey.self] }
         #endif
-        return false
+        return nil
     }
 }
 
 #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
 @available(iOS 27.1, *)
 private struct WorkspaceVerticalBarKey: UITraitBridgedEnvironmentKey {
-    nonisolated static let defaultValue = false
+    nonisolated static let defaultValue: HorizontalEdge? = nil
 
-    static func read(from traitCollection: UITraitCollection) -> Bool {
-        traitCollection.userInterfaceIdiom == .phone && traitCollection.verticalBarEdge == .trailing
+    static func read(from traitCollection: UITraitCollection) -> HorizontalEdge? {
+        guard traitCollection.userInterfaceIdiom == .phone else { return nil }
+        switch traitCollection.verticalBarEdge {
+        case .leading: return .leading
+        case .trailing: return .trailing
+        default: return nil
+        }
     }
 
     // This observes a system-owned trait; the app must not override its placement.
-    static func write(to _: inout any UIMutableTraits, value _: Bool) {}
+    static func write(to _: inout any UIMutableTraits, value _: HorizontalEdge?) {}
 }
 #endif
