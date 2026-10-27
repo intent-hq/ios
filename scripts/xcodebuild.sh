@@ -15,6 +15,7 @@
 #
 #   resolve                 Resolve SPM package dependencies
 #   build-ios               Build for the generic iOS Simulator destination
+#   build-ios-device        Build for DEVICE_UDID using project signing
 #   build-visionos          Build for the generic visionOS Simulator destination
 #   build-for-testing       Build the iOS test bundle (CI split step)
 #   build-for-testing-ui    Build the app and UI tests, skipping IntentTests
@@ -43,6 +44,8 @@
 #                         commands enable @testable access (ENABLE_TESTABILITY=YES)
 #                         but never define DEBUG or change optimization. Plain
 #                         build-ios/build-visionos keep production testability.
+#   DEVICE_UDID           Required physical iOS device for build-ios-device;
+#                         preserves project signing and never installs or uploads.
 #   SIM_UDID              Simulator UDID for test destinations; when unset the
 #                         newest available iPhone simulator is picked automatically.
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
@@ -222,6 +225,7 @@ Usage: scripts/xcodebuild.sh <subcommand>
 
   resolve                 Resolve SPM package dependencies
   build-ios               Build for the generic iOS Simulator destination
+  build-ios-device        Build for DEVICE_UDID using project signing
   build-visionos          Build for the generic visionOS Simulator destination
   build-for-testing       Build the iOS test bundle (CI split step)
   build-for-testing-ui    Build the app and UI tests, skipping IntentTests
@@ -235,7 +239,7 @@ Usage: scripts/xcodebuild.sh <subcommand>
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
 Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults),
-SIM_UDID, SPM_CLONE_DIR, DERIVED_DATA_DIR, RESULT_BUNDLE, ONLY_TESTING,
+SIM_UDID, DEVICE_UDID, SPM_CLONE_DIR, DERIVED_DATA_DIR, RESULT_BUNDLE, ONLY_TESTING,
 TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
 script header).
 Release tests enable @testable access, not DEBUG. Use focused release-compatible
@@ -773,6 +777,14 @@ cmd_build_ios() {
     -destination 'generic/platform=iOS Simulator' "${SIGNING_ARGS[@]}"
 }
 
+cmd_build_ios_device() {
+  [ -n "${DEVICE_UDID:-}" ] || die "DEVICE_UDID is required for build-ios-device"
+  [[ "$DEVICE_UDID" =~ ^[[:alnum:]-]+$ ]] || die "DEVICE_UDID must be a device identifier"
+  ensure_tailcatkit
+  run_xcodebuild build "${PROJECT_ARGS[@]}" \
+    -destination "platform=iOS,id=$DEVICE_UDID"
+}
+
 cmd_build_visionos() {
   ensure_visionos_sdk
   run_xcodebuild build "${PROJECT_ARGS[@]}" \
@@ -1306,6 +1318,7 @@ esac
 case "$subcommand" in
   resolve)               cmd_resolve ;;
   build-ios)             cmd_build_ios ;;
+  build-ios-device)      cmd_build_ios_device ;;
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
   build-for-testing-ui)  cmd_build_for_testing ;;
