@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 struct WorkspaceDetailView: View {
@@ -80,6 +81,19 @@ struct WorkspaceDetailView: View {
     private static let iPadHeadingTopSpacing = IPadSidebarStyle.sectionSpacing - Constants.Conversation.Design.IPad.headerBottomInset
 
     /// The persistent iPad sidebar already names the workspace above its list selection.
+    /// Without a header row on the Duo, the title's first line sits on the list header's row,
+    /// where "Workspaces" is centered.
+    private static var duoSidebarHeadingTopSpacing: CGFloat {
+        let style = Constants.Typography.heading2
+        let capHeight = CTFontGetCapHeight(CTFontCreateWithName(style.face.rawValue as CFString, style.size, nil))
+        return IPadSidebarStyle.topInset + (Constants.WorkspaceSearch.compactHeight - capHeight) / 2
+    }
+
+    private var sidebarHeadingTopSpacing: CGFloat? {
+        guard sidebar != nil else { return nil }
+        return usesVerticalBar ? Self.duoSidebarHeadingTopSpacing : 0
+    }
+
     /// The iPad main pane's title follows the iPad comp; the unfolded Duo keeps its rail layout.
     private var usesIPadPaneTitle: Bool { coordinator.usesIPadShell && !usesVerticalBar }
 
@@ -93,8 +107,8 @@ struct WorkspaceDetailView: View {
         ZStack {
             surface.ignoresSafeArea()
             VStack(spacing: 0) {
-                if let sidebar {
-                    // Resource shortcuts live in the Duo rail beside the open page, not this header row.
+                // The Duo sidebar has no collapse control and its rail carries the page actions.
+                if let sidebar, !usesVerticalBar {
                     WorkspaceSidebarHeader(onCollapse: sidebar.onCollapse) { workspaceActionsMenu }
                 }
                 detailContent
@@ -440,7 +454,7 @@ private extension WorkspaceDetailView {
                 selection: $selectedTab,
                 titleEditor: titleEditor,
                 titleFocus: $titleFocused,
-                headingTopSpacing: sidebar != nil ? 0 : (usesIPadPaneTitle ? Self.iPadHeadingTopSpacing : nil),
+                headingTopSpacing: sidebarHeadingTopSpacing ?? (usesIPadPaneTitle ? Self.iPadHeadingTopSpacing : nil),
                 usesLargeTitle: sidebar == nil && usesIPadPaneTitle,
                 onSaveTitle: saveTitle
             )
