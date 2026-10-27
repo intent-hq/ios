@@ -60,10 +60,11 @@ struct IPadWorkspaceDetailView: View {
         }
     }
 
-    /// A swipe slides the overview off the leading edge and its pages off the trailing edge;
-    /// other navigation keeps the default crossfade.
+    /// A swipe shifts the overview toward the leading edge and its pages toward the trailing edge
+    /// while they fade; other navigation keeps the plain crossfade.
     private func pageTransition(isOverview: Bool) -> AnyTransition {
-        isSwiping ? .move(edge: isOverview ? .leading : .trailing) : .opacity
+        guard isSwiping else { return .opacity }
+        return .opacity.combined(with: .offset(x: isOverview ? -IPadShellView.pageParallax : IPadShellView.pageParallax))
     }
 
     private var canSwipe: Bool { coordinator.iPadNavigation.focusPresentation == .normal && notePath.isEmpty }

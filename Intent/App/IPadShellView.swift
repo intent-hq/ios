@@ -3,7 +3,8 @@ import SwiftUI
 /// One view hierarchy spans expanded, collapsed and drawer layouts. In particular,
 /// the workspace and Assistant detail subtrees never move between containers.
 struct IPadShellView: View {
-    private static let sidebarListParallax: CGFloat = 48
+    /// Pages shift this far while fading, so a slow first frame cannot turn into a visible jump.
+    static let pageParallax: CGFloat = 48
 
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
@@ -302,7 +303,7 @@ struct IPadShellView: View {
                 )
             }
             // The list steps back under an opening workspace and returns from the leading edge.
-            .offset(x: workspaceSidebarContent == .workspaceList ? 0 : -Self.sidebarListParallax)
+            .offset(x: workspaceSidebarContent == .workspaceList ? 0 : -Self.pageParallax)
             if case let .workspace(workspaceId) = workspaceSidebarContent {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
@@ -310,7 +311,7 @@ struct IPadShellView: View {
                     sidebar: WorkspaceDetailSidebar(onCollapse: collapseSidebar)
                 )
                 .id(workspaceId)
-                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .transition(.opacity.combined(with: .offset(x: Self.pageParallax)))
             }
         }
         .clipped()
