@@ -293,7 +293,9 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
-        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].waitForExistence(timeout: Self.timeout))
+        // Only the ordinary iPad shell keeps the global rail; the unfolded Duo uses the launcher.
+        let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
+        XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
         return app
     }
 
