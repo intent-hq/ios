@@ -136,11 +136,13 @@ private struct PanePan: UIGestureRecognizerRepresentable {
             return velocity.x > 0 ? allowsBack : allowsForward
         }
 
-        /// Row swipe actions and sideways-scrolling content inside the pane win.
+        /// Edge pops, row swipe actions and sideways-scrolling content inside the pane win.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
+            // The navigation stack's interactive edge pop keeps its own edge.
+            if otherGestureRecognizer is UIScreenEdgePanGestureRecognizer { return true }
             guard let view = gestureRecognizer.view, let otherView = otherGestureRecognizer.view,
                   otherView !== view, otherView.isDescendant(of: view) else { return false }
             if let scrollView = otherView as? UIScrollView, otherGestureRecognizer === scrollView.panGestureRecognizer {

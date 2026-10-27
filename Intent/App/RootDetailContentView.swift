@@ -10,8 +10,11 @@ extension RootView {
                     session: session,
                     isSidebarVisible: usesVerticalBar
                 )
+                    .paneSwipe(isSwiping: .constant(false), onBack: nil, onForward: duoSwipeToFirstAgent(workspaceId: workspaceId))
+                    .onPreferenceChange(WorkspaceFirstAgentPreference.self) { duoFirstAgent = $0 }
                     .navigationDestination(isPresented: $showingConversation) {
                         conversationDestination
+                            .paneSwipe(isSwiping: .constant(false), onBack: duoSwipeBack(coordinator.onBackToWorkspaceDetail), onForward: nil)
                     }
                     .navigationDestination(for: NoteDestination.self) { dest in
                         NoteDetailView(
@@ -22,6 +25,7 @@ extension RootView {
                         ) { noteId, workspaceId, title in
                             noteStack.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
                         }
+                        .paneSwipe(isSwiping: .constant(false), onBack: duoSwipeBack { if !noteStack.isEmpty { noteStack.removeLast() } }, onForward: nil)
                     }
             }
             .onAppear {
@@ -65,6 +69,17 @@ extension RootView {
         } else {
             emptyDetailPlaceholder
         }
+    }
+
+    /// The unfolded Duo's detail column swipes like the iPad main pane; the stack still animates each step.
+    func duoSwipeBack(_ action: @escaping () -> Void) -> (() -> Void)? {
+        usesVerticalBar ? action : nil
+    }
+
+    func duoSwipeToFirstAgent(workspaceId: String) -> (() -> Void)? {
+        guard usesVerticalBar, case .workspaceDetail = coordinator.currentScreen,
+              let agent = duoFirstAgent, agent.workspaceId == workspaceId else { return nil }
+        return { coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name) }
     }
 
     /// iPad split-view detail placeholder shown when no workspace is selected.

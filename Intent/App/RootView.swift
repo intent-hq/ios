@@ -55,6 +55,8 @@ struct RootView: View {
     @State var handledConversationRequestId = 0 // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var duoFirstAgent: WorkspaceFirstAgent? // swiftlint:disable:this private_swiftui_state
     // The unfolded Duo divides the window at its midpoint, including the trailing rail.
     @State private var duoSidebarWidth = Constants.Root.sidebarIdealWidth
 

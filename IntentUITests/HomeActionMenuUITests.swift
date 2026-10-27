@@ -458,9 +458,9 @@ extension HomeActionMenuUITests {
         let actions = app.buttons["conversation.actions.open"]
         XCTAssertTrue(waitUntilHittable(back))
         XCTAssertTrue(actions.isHittable)
-        XCTAssertTrue(workspace.isHittable)
-        XCTAssertEqual(sidebar.frame, sidebarFrame)
-        XCTAssertLessThanOrEqual(sidebar.frame.maxX, composer.frame.minX)
+        // The open agent's workspace replaces the list in the sidebar.
+        XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        XCTAssertLessThanOrEqual(agent.frame.maxX, composer.frame.minX)
         XCTAssertLessThanOrEqual(back.frame.maxY, actions.frame.minY)
         XCTAssertLessThan(actions.frame.maxY, window.frame.midY)
         XCTAssertGreaterThan(launcher.frame.minX, composer.frame.maxX)
@@ -474,5 +474,29 @@ extension HomeActionMenuUITests {
         XCTAssertEqual(sidebar.frame, sidebarFrame)
         XCTAssertFalse(app.buttons["workspaceDetail.back"].exists)
         attachScreenshot(app.screenshot(), named: "Unfolded Duo after back")
+    }
+
+    @MainActor
+    func testUnfoldedDuoDetailSwipesBetweenOverviewAndFirstAgent() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires a user-configured unfolded Duo; this test never changes display mode"
+        )
+        let app = launchHome(themePreference: "light")
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(waitUntilHittable(workspace))
+        workspace.tap()
+        app.buttons["Agents"].firstMatch.tap()
+        let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
+        XCTAssertTrue(waitUntilHittable(overview))
+        overview.swipeLeft()
+        let firstAgent = app.buttons["workspace.agent.demo-agent-reviewer"]
+        XCTAssertTrue(firstAgent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout), "Left opens the first agent")
+        attachScreenshot(app.screenshot(), named: "Unfolded Duo swipe to first agent")
+        app.scrollViews["transcript.scrollView"].firstMatch.swipeRight()
+        XCTAssertTrue(app.textViews["composer.textView"].waitForNonExistence(timeout: Self.timeout), "Right returns to the overview")
+        XCTAssertTrue(waitUntilHittable(firstAgent))
+        XCTAssertFalse(firstAgent.isSelected)
+        attachScreenshot(app.screenshot(), named: "Unfolded Duo swipe back to overview")
     }
 }
