@@ -266,7 +266,7 @@ struct WorkspaceRailShortcuts: View {
     let onBrowser: () -> Void
 
     var body: some View {
-        Group {
+        VStack(spacing: IPadShellLayout.contextualRailSpacing) {
             IntentIconButton(icon: .terminal, label: "Open terminal", showsBackground: false, action: onTerminal)
                 .disabled(isTerminalDisabled)
                 .accessibilityIdentifier("workspace.shortcut.terminal")

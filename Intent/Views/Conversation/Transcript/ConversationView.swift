@@ -341,7 +341,8 @@ private extension ConversationViewContent {
 
     /// The native menu owns its container shape and dismissal on every device.
     private var agentMenu: some View {
-        nativeAgentMenu
+        WorkspaceResourceActions(workspaceId: viewModel.workspaceId, isEnabled: assistantStore == nil) {
+            nativeAgentMenu
             .confirmationDialog(
                 "Delete Agent?",
                 isPresented: $showDeleteConfirmation,
@@ -352,6 +353,7 @@ private extension ConversationViewContent {
             } message: {
                 Text("This will permanently delete this agent and its conversation history.")
             }
+        }
     }
 
     private enum AgentAction {

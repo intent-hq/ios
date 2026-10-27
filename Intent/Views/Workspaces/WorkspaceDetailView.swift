@@ -313,15 +313,8 @@ private extension WorkspaceDetailView {
     }
 
     var workspaceActions: some View {
-        VStack(spacing: IPadShellLayout.contextualRailSpacing) {
+        WorkspaceResourceActions(workspaceId: workspaceId) {
             workspaceActionsMenu
-            if usesVerticalBar {
-                WorkspaceRailShortcuts(
-                    isTerminalDisabled: !terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId),
-                    onTerminal: { presentTerminal(reusingExisting: true) },
-                    onBrowser: openBrowser
-                )
-            }
         }
     }
 
@@ -341,28 +334,12 @@ private extension WorkspaceDetailView {
     }
 
     func createTerminal() {
-        presentTerminal(reusingExisting: false)
-    }
-
-    func presentTerminal(reusingExisting: Bool) {
         let requestedWorkspace = workspaceId
         let request = UUID()
         terminalCreationRequest = request
         Task {
-            let terminal = if reusingExisting {
-                await terminalStore.openOrCreate(workspaceId: requestedWorkspace)
-            } else {
-                await terminalStore.create(workspaceId: requestedWorkspace)
-            }
+            let terminal = await terminalStore.create(workspaceId: requestedWorkspace)
             if terminalCreationRequest == request { selectedTerminal = terminal }
-        }
-    }
-
-    func openBrowser() {
-        if let browser = browserStore.browsers(workspaceId: workspaceId).first {
-            selectedBrowser = browser
-        } else {
-            showNewBrowser = true
         }
     }
 
