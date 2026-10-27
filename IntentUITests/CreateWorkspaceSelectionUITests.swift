@@ -178,14 +178,22 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     @MainActor
     func testBackThenForwardPreservesProviderAndNamedModelThroughRefresh() throws {
         continueAfterFailure = false
+        for appearance in ["light", "dark"] {
+            try assertProviderRefreshPreservesSelection(appearance: appearance)
+        }
+    }
+
+    @MainActor
+    private func assertProviderRefreshPreservesSelection(appearance: String) throws {
         let gate = FileManager.default.temporaryDirectory
             .appendingPathComponent("workspace-provider-\(UUID().uuidString).trigger")
         defer { try? FileManager.default.removeItem(at: gate) }
         try Data().write(to: gate)
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-workspace-provider-trigger-file=" + gate.path]
-        app.launchArguments += ["-appThemePreference", ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
+        app.launchArguments += ["-appThemePreference", appearance]
         app.launch()
+        defer { app.terminate() }
         openCreationForm(in: app)
 
         let provider = app.buttons["creation.providerPicker"]
@@ -196,6 +204,9 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(model.waitForExistence(timeout: Self.elementTimeout))
         model.tap()
         app.buttons["Named Model"].tap()
+        let reasoning = app.buttons["creation.reasoningPicker"]
+        reasoning.tap()
+        app.buttons["high"].tap()
         attachEvidence(in: app, name: "selected-before-back")
         assertSelections(in: app)
 
@@ -206,13 +217,15 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Loading providers..."].waitForExistence(timeout: Self.elementTimeout))
         XCTAssertFalse(provider.exists)
         XCTAssertFalse(model.exists)
+        XCTAssertFalse(reasoning.exists)
         XCTAssertFalse(app.buttons["Create"].isEnabled)
-        attachEvidence(in: app, name: "refresh-pending")
+        attachEvidence(in: app, name: "refresh-pending-\(appearance)")
 
         try Data().write(to: gate)
         XCTAssertTrue(provider.waitForExistence(timeout: Self.elementTimeout))
-        attachEvidence(in: app, name: "selected-after-refresh")
         assertSelections(in: app)
+        XCTAssertEqual(reasoning.value as? String, "high")
+        attachEvidence(in: app, name: "selected-after-refresh-\(appearance)")
         XCTAssertTrue(app.buttons["Create"].isEnabled)
         editSourceAndCheckDraft(in: app)
         // Never tap Create: this check only navigates and edits a draft.

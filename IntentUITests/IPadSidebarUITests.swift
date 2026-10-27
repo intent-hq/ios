@@ -293,7 +293,9 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
-        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].waitForExistence(timeout: Self.timeout))
+        // Only the ordinary iPad shell keeps the global rail; the unfolded Duo uses the launcher.
+        let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
+        XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
         return app
     }
 
@@ -420,5 +422,43 @@ extension IPadSidebarUITests {
             return Date().timeIntervalSince(stableSince) >= Self.railSettleDuration
         }
         XCTAssertTrue(settled, "Rail button must stop moving before the physical tap")
+    }
+}
+
+extension IPadSidebarUITests {
+    @MainActor
+    func testExpandedDuoUsesSharedShellAndChatHeader() throws {
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .pad || ProcessInfo.processInfo.environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires iPad or an unfolded Duo"
+        )
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance: appearance, extraArguments: ["--demo-ipad-pane-geometry"])
+            openConversation(in: app)
+            let header = app.buttons["conversation.back"]
+            XCTAssertTrue(header.waitForExistence(timeout: Self.timeout))
+            let transcript = app.scrollViews["transcript.scrollView"]
+            XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+            let headerFrame = header.frame
+            transcript.swipeDown()
+            XCTAssertEqual(header.frame, headerFrame)
+            XCTAssertTrue(header.isHittable)
+            let usesDuoLauncher = UIDevice.current.userInterfaceIdiom != .pad
+            XCTAssertEqual(app.buttons["ipad.rail.workspaces"].exists, !usesDuoLauncher)
+            XCTAssertEqual(app.buttons["intent.menu.open"].exists, usesDuoLauncher)
+            capture(app, name: "Shared shell chat scrollback \(appearance)")
+            if usesDuoLauncher {
+                // The unfolded Duo reaches sections through the launcher instead of the rail.
+                app.openHomeAction("settings")
+                app.openHomeAction("workspaces")
+            } else {
+                app.buttons["ipad.rail.settings"].tap()
+                app.buttons["ipad.rail.workspaces"].tap()
+            }
+            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+            app.terminate()
+        }
     }
 }

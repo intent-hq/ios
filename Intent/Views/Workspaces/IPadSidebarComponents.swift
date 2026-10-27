@@ -3,6 +3,8 @@ import SwiftUI
 /// Section chrome shared by the persistent iPad sidebars.
 enum IPadSidebarStyle {
     static let inset: CGFloat = 24
+    static let compactInset: CGFloat = 8
+    static let compactSectionSpacing: CGFloat = 16
     static let topInset = IPadShellLayout.headerInset
     static let sectionSpacing: CGFloat = 48
     static let filterListSpacing: CGFloat = 56
@@ -42,6 +44,7 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
     let onCollapse: () -> Void
     @ViewBuilder let title: () -> Title
     @ViewBuilder let actions: () -> Actions
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
@@ -61,9 +64,9 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
             }
         }
         .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-        .padding(.horizontal, IPadSidebarStyle.inset)
+        .padding(.horizontal, usesVerticalBar ? IPadSidebarStyle.compactInset : IPadSidebarStyle.inset)
         .padding(.top, IPadSidebarStyle.topInset)
-        .padding(.bottom, IPadSidebarStyle.sectionSpacing)
+        .padding(.bottom, usesVerticalBar ? IPadSidebarStyle.compactSectionSpacing : IPadSidebarStyle.sectionSpacing)
     }
 
     private var stackedHeader: some View {
@@ -77,9 +80,11 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
         HStack(spacing: 0) {
             if isPaneVisible {
                 actions()
-                IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: onCollapse)
-                    .accessibilityIdentifier("ipad.sidebar.collapse")
-                    .accessibilityAction(.escape, onCollapse)
+                if !usesVerticalBar {
+                    IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: onCollapse)
+                        .accessibilityIdentifier("ipad.sidebar.collapse")
+                        .accessibilityAction(.escape, onCollapse)
+                }
             } else {
                 Color.clear.frame(width: Constants.WorkspaceSearch.compactHeight, height: Constants.WorkspaceSearch.compactHeight)
             }

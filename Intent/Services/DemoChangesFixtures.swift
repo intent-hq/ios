@@ -6,6 +6,14 @@ enum DemoChangesFixtures {
     static func response(for method: String, params: [String: Any]) -> Any? {
         if let response = DemoChangesRootFixtures.response(for: method, params: params) { return response }
         switch method {
+        case "git.status":
+            return [
+                "files": [
+                    ["path": "Sources/Analytics.swift", "status": "M", "staged": false],
+                    ["path": "Sources/Analytics/Events.swift", "status": "M", "staged": false],
+                    ["path": "Tests/AnalyticsTests.swift", "status": "M", "staged": true]
+                ]
+            ]
         case "file-tracking.getChanges":
             let changes = [
                 change(path: "Sources/Analytics.swift", stage: "unstaged"),

@@ -323,11 +323,10 @@ struct RootView: View {
             DeepLinkPairingView(payload: request.payload)
                 .coversConversationComposers()
         }
+        .onChange(of: usesIPadShell, initial: true) { _, enabled in
+            coordinator.updateShellPresentation(enabled)
+        }
         .onAppear {
-            coordinator.usesIPadShell = usesIPadShell
-            if usesIPadShell, coordinator.selectedSection == .assistant {
-                coordinator.iPadNavigation.showAssistantDetail()
-            }
             updateWorkspaceStatusLease(isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil)
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
@@ -387,7 +386,7 @@ private extension RootView {
 
     var usesIPadShell: Bool {
         #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad
+        IPadShellLayout.usesShell(isPad: UIDevice.current.userInterfaceIdiom == .pad, hasVerticalBar: usesVerticalBar, sizeClass: sizeClass)
         #else
         false
         #endif
