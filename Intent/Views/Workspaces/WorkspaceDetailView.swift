@@ -75,7 +75,8 @@ struct WorkspaceDetailView: View {
         return coordinator.usesIPadShell ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme)
     }
 
-    /// Below the iPad pane header, the heading lines up with a sidebar workspace's heading.
+    /// Below the iPad pane header, the title's cap top meets the sidebar's filter control and the
+    /// repository line starts at the control's bottom edge.
     private static let iPadHeadingTopSpacing = IPadSidebarStyle.sectionSpacing - Constants.Conversation.Design.IPad.headerBottomInset
 
     /// The persistent iPad sidebar already names the workspace above its list selection.
@@ -440,6 +441,7 @@ private extension WorkspaceDetailView {
                 titleEditor: titleEditor,
                 titleFocus: $titleFocused,
                 headingTopSpacing: sidebar?.headingTopSpacing ?? (coordinator.usesIPadShell ? Self.iPadHeadingTopSpacing : nil),
+                usesLargeTitle: sidebar == nil && coordinator.usesIPadShell,
                 onSaveTitle: saveTitle
             )
         }

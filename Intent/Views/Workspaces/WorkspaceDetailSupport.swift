@@ -11,6 +11,7 @@ struct WorkspaceDetailHeading: View {
     @Bindable var titleEditor: WorkspaceTitleEditor
     var titleFocus: FocusState<Bool>.Binding?
     var topSpacing: CGFloat?
+    var usesLargeTitle = false
     let onSaveTitle: () -> Void
     @FocusState private var titleFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -18,6 +19,12 @@ struct WorkspaceDetailHeading: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var focusBinding: FocusState<Bool>.Binding { titleFocus ?? $titleFocused }
+    private var titleStyle: Constants.Typography.Style {
+        usesLargeTitle ? Constants.Typography.heading1 : Constants.Typography.heading2
+    }
+    private var titleTracking: CGFloat {
+        usesLargeTitle ? WorkspaceDetailStyle.largeTitleTracking : WorkspaceDetailStyle.titleTracking
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: titleEditor.isEditing
@@ -48,8 +55,8 @@ struct WorkspaceDetailHeading: View {
         if titleEditor.isEditing {
             TextField("New Workspace", text: $titleEditor.draft)
                 .textFieldStyle(.plain)
-                .interFont(Constants.Typography.heading2)
-                .tracking(WorkspaceDetailStyle.titleTracking)
+                .interFont(titleStyle)
+                .tracking(titleTracking)
                 .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
                 .submitLabel(.done)
                 .focused(focusBinding)
@@ -69,8 +76,8 @@ struct WorkspaceDetailHeading: View {
             }
         } else {
             WorkspaceTitle(title: title, createdAt: createdAt) { title in
-                WorkspaceDetailHeadingText(title, style: Constants.Typography.heading2)
-                    .tracking(WorkspaceDetailStyle.titleTracking)
+                WorkspaceDetailHeadingText(title, style: titleStyle)
+                    .tracking(titleTracking)
             }
             .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
             .contentShape(Rectangle())
@@ -276,6 +283,7 @@ struct WorkspaceDetailHeader: View {
     let titleEditor: WorkspaceTitleEditor
     let titleFocus: FocusState<Bool>.Binding
     var headingTopSpacing: CGFloat?
+    var usesLargeTitle = false
     let onSaveTitle: () -> Void
 
     var body: some View {
@@ -289,6 +297,7 @@ struct WorkspaceDetailHeader: View {
             titleEditor: titleEditor,
             titleFocus: titleFocus,
             topSpacing: headingTopSpacing,
+            usesLargeTitle: usesLargeTitle,
             onSaveTitle: onSaveTitle
         )
         if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
