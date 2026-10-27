@@ -257,7 +257,8 @@ private extension ConversationViewContent {
             .toolbarBackground(usesVerticalNavigation || viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
             #if os(iOS)
-            .toolbar(usesWorkspaceDesign && !usesVerticalNavigation ? .hidden : .automatic, for: .navigationBar)
+            // In the Duo shell the rail replaces the vertical toolbar, so no bar sits over the transcript top.
+            .toolbar(usesWorkspaceDesign && (!usesVerticalNavigation || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
             .modifier(ConversationFocusHeaderInset(
                 isEnabled: usesWorkspaceDesign,
@@ -297,7 +298,7 @@ private extension ConversationViewContent {
                 workspaceId: usesVerticalNavigation ? "" : viewModel.workspaceId
             )
             .toolbar {
-                if usesVerticalNavigation {
+                if usesVerticalNavigation, presentation != .iPad {
                     WorkspaceVerticalNavigationToolbar(
                         isEnabled: true,
                         backIdentifier: "conversation.back",
