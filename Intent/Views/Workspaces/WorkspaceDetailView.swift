@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 struct WorkspaceDetailView: View {
@@ -84,6 +85,19 @@ struct WorkspaceDetailView: View {
 
     /// The Duo sidebar page shows its title in the fixed header and sits on the list's inset.
     private var isDuoSidebar: Bool { sidebar != nil && usesVerticalBar }
+
+    private var pageHeadingTopSpacing: CGFloat? {
+        if usesIPadPaneTitle { return Self.iPadHeadingTopSpacing }
+        return coordinator.usesIPadShell && usesVerticalBar ? Self.duoHeadingTopSpacing : nil
+    }
+
+    /// The Duo overview has no header band, so its title's first line sits on the sidebar
+    /// header row, where "Workspaces" is centered.
+    private static var duoHeadingTopSpacing: CGFloat {
+        let style = Constants.Typography.heading2
+        let capHeight = CTFontGetCapHeight(CTFontCreateWithName(style.face.rawValue as CFString, style.size, nil))
+        return IPadSidebarStyle.topInset + (Constants.WorkspaceSearch.compactHeight - capHeight) / 2
+    }
 
     /// The iPad main pane's title follows the iPad comp; the unfolded Duo keeps its rail layout.
     private var usesIPadPaneTitle: Bool { coordinator.usesIPadShell && !usesVerticalBar }
@@ -370,6 +384,10 @@ private extension WorkspaceDetailView {
     var workspaceActions: some View {
         WorkspaceResourceActions(workspaceId: workspaceId) {
             workspaceActionsMenu
+            if usesVerticalBar {
+                IntentIconButton(icon: .addCircle, label: "Create New Agent", showsBackground: false) { showSpecialistPicker = true }
+                    .accessibilityIdentifier("workspace.rail.createAgent")
+            }
         }
     }
 
@@ -451,7 +469,7 @@ private extension WorkspaceDetailView {
                 selection: $selectedTab,
                 titleEditor: titleEditor,
                 titleFocus: $titleFocused,
-                headingTopSpacing: sidebarHeadingTopSpacing ?? (usesIPadPaneTitle ? Self.iPadHeadingTopSpacing : nil),
+                headingTopSpacing: sidebarHeadingTopSpacing ?? pageHeadingTopSpacing,
                 usesLargeTitle: sidebar == nil && usesIPadPaneTitle,
                 showsTitle: !isDuoSidebar,
                 onSaveTitle: saveTitle

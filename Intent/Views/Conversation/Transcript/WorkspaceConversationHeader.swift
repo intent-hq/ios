@@ -61,6 +61,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
             workspaceCreatedAt: createdAt,
             usesConversationLayout: presentation == .iPad,
             showsContextualActions: !usesVerticalBar,
+            collapsesWhenEmptyOnRail: true,
             onBack: showsBackButton ? onBack : nil,
             actions: actions
         )
@@ -149,6 +150,8 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var workspaceCreatedAt: String?
     var usesConversationLayout = false
     var showsContextualActions = true
+    /// The workspace overview drops its empty band on the Duo; conversations keep their spacing.
+    var collapsesWhenEmptyOnRail = false
     var onBack: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
@@ -168,9 +171,18 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         usesConversationLayout && presentation == .iPad
     }
 
+    /// With its controls on the Duo rail and no copy, the header would only be an empty band over the content.
+    private var collapsesOnRail: Bool { collapsesWhenEmptyOnRail && usesDuoContextualRail && !showsHeaderCopy }
+
     var body: some View {
-        windowAdaptedControls
-            .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+        Group {
+            if collapsesOnRail {
+                Color.clear.frame(height: 0)
+            } else {
+                windowAdaptedControls
+                    .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+            }
+        }
             .preference(
                 key: DuoContextualRailPreference.self,
                 value: usesDuoContextualRail && isPaneVisible ? AnyView(railControls) : nil
