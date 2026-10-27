@@ -74,6 +74,8 @@ struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
     var showsBackground = true
     var showsContextualActions = true
+    /// The sidebar names the open agent while its workspace sits there, so the header drops its title.
+    var showsTitle = true
     var assistantStore: AssistantStore?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
@@ -97,12 +99,14 @@ struct WorkspaceConversationHeader<Actions: View>: View {
         } else {
             WorkspaceNavigationHeader(
                 title: title,
-                subtitle: "Agent",
+                subtitle: showsTitle ? "Agent" : nil,
                 backLabel: "Back",
                 backIdentifier: "conversation.back",
                 showsBackground: showsBackground,
+                showsTitle: showsTitle,
                 usesConversationLayout: true,
                 showsContextualActions: showsContextualActions,
+                collapsesWhenEmptyOnRail: true,
                 onBack: onBack,
                 actions: actions
             )

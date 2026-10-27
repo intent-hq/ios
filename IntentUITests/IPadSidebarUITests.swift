@@ -117,9 +117,9 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         app.buttons["ipad.rail.workspaces"].tap()
         XCTAssertTrue(childTitle.isHittable, "Section changes must retain the pushed conversation")
         try Data().write(to: trigger)
-        let parentTitle = app.staticTexts["Test Stabilizer, Agent"]
-        XCTAssertTrue(parentTitle.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        // The reselected parent is named by its highlighted sidebar row rather than a header title.
         XCTAssertTrue(childTitle.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
     }
@@ -185,7 +185,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
         capture(app, name: "iPad typing restored \(appearance)")
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
-        XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, Self.draft)
         verifyComposerAfterSearch(in: app, composer: composer, composerTap: composerTap, appearance: appearance)
     }
@@ -391,7 +391,7 @@ extension IPadSidebarUITests {
         try controls.workspace.activate(in: app)
         XCTAssertTrue(app.staticTexts["workspace.title.heading"].wait(for: \.label, toEqual: "Fix websocket reconnect storm", timeout: Self.timeout))
         openConversation(in: app)
-        XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
     }
 
     @MainActor

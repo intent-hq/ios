@@ -223,6 +223,16 @@ private extension ConversationViewContent {
         viewModel.scenePhaseChanged(isActive: visible && scenePhase == .active)
     }
 
+    /// The persistent shell sidebar shows this agent selected inside its workspace. A child agent
+    /// opened from the transcript is not the sidebar's selection, so it keeps its title.
+    private var isNamedBySidebar: Bool {
+        guard assistantStore == nil, coordinator.usesIPadShell,
+              case let .agentConversation(agentId, _, _) = coordinator.currentScreen,
+              agentId == viewModel.agentId else { return false }
+        let navigation = coordinator.iPadNavigation
+        return navigation.isSidebarVisible && !navigation.usesSidebarOverlay && !navigation.usesCompactNavigation
+    }
+
     private var usesVerticalNavigation: Bool {
         usesVerticalBar && assistantStore == nil
     }
@@ -249,14 +259,18 @@ private extension ConversationViewContent {
             #if os(iOS)
             .toolbar(usesWorkspaceDesign && !usesVerticalNavigation ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
-            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign) {
+            .modifier(ConversationFocusHeaderInset(
+                isEnabled: usesWorkspaceDesign,
+                floats: isNamedBySidebar && !usesVerticalNavigation
+            ) {
                 if usesVerticalNavigation, presentation != .iPad {
                     WorkspaceVerticalConversationHeader(title: viewModel.agentName, workspaceId: viewModel.workspaceId)
                 } else {
                     WorkspaceConversationHeader(
                         title: viewModel.agentName,
-                        showsBackground: !viewModel.showsLoadingState,
+                        showsBackground: !viewModel.showsLoadingState && !isNamedBySidebar,
                         showsContextualActions: !usesVerticalNavigation,
+                        showsTitle: !isNamedBySidebar,
                         assistantStore: assistantStore,
                         onBack: navigateBack
                     ) { agentMenu }
