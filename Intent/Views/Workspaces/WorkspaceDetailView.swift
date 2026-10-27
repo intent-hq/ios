@@ -94,7 +94,8 @@ struct WorkspaceDetailView: View {
             surface.ignoresSafeArea()
             VStack(spacing: 0) {
                 if let sidebar {
-                    WorkspaceSidebarHeader(onCollapse: sidebar.onCollapse) { workspaceActions }
+                    // Resource shortcuts live in the Duo rail beside the open page, not this header row.
+                    WorkspaceSidebarHeader(onCollapse: sidebar.onCollapse) { workspaceActionsMenu }
                 }
                 detailContent
             }
