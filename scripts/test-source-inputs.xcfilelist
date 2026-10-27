@@ -616,6 +616,7 @@ $(SRCROOT)/Intent/Views/Components/IntentLoadingIndicator.swift
 $(SRCROOT)/Intent/Views/Components/NavigationBackGesture.swift
 $(SRCROOT)/Intent/Views/Components/NavigationPopObserver.swift
 $(SRCROOT)/Intent/Views/Components/NavigationTitleSubtitleView.swift
+$(SRCROOT)/Intent/Views/Components/PaneSwipeGesture.swift
 $(SRCROOT)/Intent/Views/Components/RepoOwnerAvatarView.swift
 $(SRCROOT)/Intent/Views/Components/TaskProgressRingView.swift
 $(SRCROOT)/Intent/Views/Components/TaskStatusIconView.swift
@@ -1139,6 +1140,7 @@ $(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
 $(SRCROOT)/IntentTests/PairingOptionTests.swift
 $(SRCROOT)/IntentTests/PairingPayloadTests.swift
 $(SRCROOT)/IntentTests/PairingReconnectOwnershipTests.swift
+$(SRCROOT)/IntentTests/PaneSwipePolicyTests.swift
 $(SRCROOT)/IntentTests/PendingQuestionDerivationTests.swift
 $(SRCROOT)/IntentTests/PersistenceBackendSyncTests.swift
 $(SRCROOT)/IntentTests/PersistenceEphemeralTests.swift

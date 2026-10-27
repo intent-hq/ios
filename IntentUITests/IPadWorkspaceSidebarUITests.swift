@@ -4,6 +4,7 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
     private static let timeout: TimeInterval = 30
     private static let agent = "workspace.agent.demo-agent-implementor"
     private static let note = "workspace.note.demo-note-spec"
+    private static let firstAgent = "workspace.agent.demo-agent-reviewer"
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -55,6 +56,35 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
             app.buttons["Agents"].firstMatch.tap()
             app.terminate()
         }
+    }
+
+    @MainActor
+    func testPaneSwipesMoveBetweenOverviewAndFirstAgent() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad main pane swipes")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "-appThemePreference", "light"]
+        app.launch()
+        defer { app.terminate() }
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        app.buttons["Agents"].firstMatch.tap()
+        let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
+        XCTAssertTrue(overview.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+
+        overview.swipeLeft()
+        let firstAgent = app.buttons[Self.firstAgent]
+        XCTAssertTrue(firstAgent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout), "Left opens the first agent")
+        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+        capture("ipad-swipe-first-agent")
+
+        app.scrollViews["transcript.scrollView"].firstMatch.swipeRight()
+        XCTAssertTrue(app.collectionViews["workspaces.list"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(firstAgent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), "Right returns to the overview")
+        XCTAssertFalse(firstAgent.isSelected)
+        capture("ipad-swipe-back-overview")
     }
 
     @MainActor

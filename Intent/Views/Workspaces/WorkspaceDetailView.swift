@@ -270,8 +270,13 @@ struct WorkspaceDetailView: View {
         }
     }
 
+    private var firstAgent: WorkspaceFirstAgent? {
+        viewModel.foregroundAgents.first.map { WorkspaceFirstAgent(id: $0.id, workspaceId: workspaceId, name: $0.name) }
+    }
+
     private var pageContent: some View {
         presentedContent
+        .preference(key: WorkspaceFirstAgentPreference.self, value: firstAgent)
         .navigationTitle(workspaceName)
         .toolbar(removing: usesVerticalBar ? .title : nil)
         .toolbarTitleDisplayMode(.inline)
