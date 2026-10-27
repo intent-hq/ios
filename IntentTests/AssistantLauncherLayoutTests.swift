@@ -20,6 +20,14 @@ struct AssistantLauncherLayoutTests {
         #expect(HomeActionTiles.columnCount(in: minimumRowWidth - 1, actionCount: actionCount, accessibility: false) == actionCount - 1)
     }
 
+    @Test func carouselCapsHeightAndWidensCardsForAccessibilityText() {
+        #expect(HomeActionTiles.carouselHeight(content: 240, container: 800) == 240)
+        #expect(HomeActionTiles.carouselHeight(content: 760, container: 400) == 300)
+        #expect(HomeActionTiles.carouselTileWidth(in: 354, accessibility: false) == 192)
+        #expect(HomeActionTiles.carouselTileWidth(in: 354, accessibility: true) == 354)
+        #expect(HomeActionTiles.carouselTileWidth(in: 0, accessibility: true) == 192)
+    }
+
     @Test func menuWrapsCardsOnNarrowScreensAndUsesOneColumnForAccessibilityText() {
         #expect(HomeActionTiles.tileWidth(in: 352, actionCount: 5, accessibility: false) == 172)
         #expect(HomeActionTiles.tileWidth(in: 320, actionCount: 5, accessibility: false) == 156)

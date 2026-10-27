@@ -22,6 +22,7 @@ struct HomeActionTiles: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var availableWidth: CGFloat = 0
+    @State private var carouselContentHeight: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var tileHeight = Layout.minimumHeight
@@ -55,19 +56,41 @@ struct HomeActionTiles: View {
         .accessibilityIdentifier("intent.menu.tiles")
     }
 
+    /// Large text can make cards taller than a short landscape window, so the
+    /// viewport is capped like the wrapped grid and scrolls vertically when needed.
     private var carousel: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Layout.spacing) {
+        ScrollView([.horizontal, .vertical]) {
+            HStack(alignment: .top, spacing: Layout.spacing) {
                 ForEach(actions, id: \.self) { action in
-                    tile(action, height: tileHeight)
-                        .frame(width: Layout.maximumTileWidth)
+                    tile(action, height: tileHeight, fillsHeight: true)
+                        .frame(width: carouselTileWidth)
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, Layout.inset)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { carouselContentHeight = $0 }
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-        .frame(height: tileHeight)
+        .scrollIndicators(.hidden, axes: .horizontal)
+        .scrollBounceBehavior(.basedOnSize, axes: [.horizontal, .vertical])
+        .containerRelativeFrame(.vertical) { containerHeight, _ in
+            Self.carouselHeight(content: max(tileHeight, carouselContentHeight), container: containerHeight)
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            max(0, geometry.size.width - 2 * Layout.inset)
+        } action: { availableWidth = $0 }
+    }
+
+    /// Accessibility text gets one card per viewport so titles wrap at word boundaries.
+    private var carouselTileWidth: CGFloat {
+        Self.carouselTileWidth(in: availableWidth, accessibility: dynamicTypeSize.isAccessibilitySize)
+    }
+
+    static func carouselTileWidth(in width: CGFloat, accessibility: Bool) -> CGFloat {
+        accessibility ? max(Layout.maximumTileWidth, width) : Layout.maximumTileWidth
+    }
+
+    static func carouselHeight(content: CGFloat, container: CGFloat) -> CGFloat {
+        min(content, container * Layout.maximumHeightFraction)
     }
 
     private var wrappedTiles: some View {
@@ -117,7 +140,7 @@ struct HomeActionTiles: View {
         return max(1, min(actionCount, columns))
     }
 
-    private func tile(_ action: Action, height: CGFloat) -> some View {
+    private func tile(_ action: Action, height: CGFloat, fillsHeight: Bool = false) -> some View {
         Button { onSelect(action) } label: {
             VStack(alignment: .leading) {
                 icon(action)
@@ -127,7 +150,7 @@ struct HomeActionTiles: View {
                 tileTitle(action)
             }
             .padding(Layout.inset)
-            .frame(maxWidth: .infinity, minHeight: height, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: fillsHeight ? .infinity : nil, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
             .homeActionTileSurface(cornerRadius: Layout.cornerRadius, fill: Constants.WorkspaceList.controlSurface(for: colorScheme))
         }

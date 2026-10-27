@@ -29,6 +29,43 @@ extension HomeActionMenuUITests {
             app.terminate()
         }
     }
+
+    /// Largest accessibility text makes cards taller than the capped menu viewport
+    /// (iPhone stays portrait; an unfolded Duo rotates to a short landscape window).
+    /// Every card's label and the close control must stay reachable.
+    @MainActor
+    func testMenuCardsStayReachableWithLargestText() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "iPad opens sections from its rail, not the floating carousel")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "--demo-data", "-appThemePreference", "light",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        defer { app.terminate() }
+        let launcher = app.buttons["intent.menu.open"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: HomeActionMenuTestSupport.timeout))
+        launcher.tap()
+        let viewport = app.scrollViews["intent.menu.tiles"]
+        XCTAssertTrue(viewport.waitForExistence(timeout: HomeActionMenuTestSupport.timeout))
+        let close = app.buttons["intent.menu.close"]
+        XCTAssertTrue(close.isHittable)
+        XCTAssertTrue(app.frame.contains(close.frame))
+        XCTAssertLessThanOrEqual(viewport.frame.maxY, close.frame.minY + 1, "Cards must not overlap the close control")
+        for action in ["assistant", "workspace", "connections", "appearance", "settings"] {
+            let tile = app.revealHomeAction(action)
+            // Titles sit at the bottom of each card, so its bottom edge must be reachable.
+            app.scrollHomeActionBottomIntoView(tile, in: viewport)
+            XCTAssertLessThanOrEqual(tile.frame.maxY, viewport.frame.intersection(app.frame).maxY + 1, "\(action) label must be reachable")
+            XCTAssertTrue(close.isHittable)
+        }
+        let capture = XCTAttachment(screenshot: app.screenshot())
+        capture.name = "Menu largest text"
+        capture.lifetime = .keepAlways
+        add(capture)
+    }
 }
 
 extension XCUIElementQuery {
@@ -59,6 +96,7 @@ extension XCUIElementQuery {
 private enum HomeActionMenuTestSupport {
     static let timeout: TimeInterval = 30
     static let maximumSwipes = 12
+    static let minimumScrollDrag: CGFloat = 60
     static let dragHoldDuration: TimeInterval = 0.1
     static let bytesPerPixel = 4
     static let bitsPerChannel = 8
@@ -99,6 +137,26 @@ extension XCUIApplication {
         XCTAssertTrue(launcher.waitForExistence(timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
         launcher.tap()
         revealHomeAction(action, file: file, line: line).tap()
+    }
+
+    @MainActor
+    func scrollHomeActionBottomIntoView(_ tile: XCUIElement, in carousel: XCUIElement) {
+        for _ in 0..<HomeActionMenuTestSupport.maximumSwipes {
+            let viewport = carousel.frame.intersection(frame)
+            guard tile.frame.maxY > viewport.maxY + 1 else { return }
+            // Short drags fall under the scroll slop; overshooting stops at the content end.
+            let distance = min(max(tile.frame.maxY - viewport.maxY, HomeActionMenuTestSupport.minimumScrollDrag), viewport.height / 2)
+            let start = coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+                dx: tile.frame.midX - frame.minX,
+                dy: viewport.midY - frame.minY + distance / 2
+            ))
+            start.press(
+                forDuration: HomeActionMenuTestSupport.dragHoldDuration,
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: -distance)),
+                withVelocity: .slow,
+                thenHoldForDuration: HomeActionMenuTestSupport.dragHoldDuration
+            )
+        }
     }
 
     @MainActor
