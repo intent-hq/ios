@@ -1,4 +1,3 @@
-import CoreText
 import SwiftUI
 
 struct WorkspaceDetailView: View {
@@ -81,18 +80,10 @@ struct WorkspaceDetailView: View {
     private static let iPadHeadingTopSpacing = IPadSidebarStyle.sectionSpacing - Constants.Conversation.Design.IPad.headerBottomInset
 
     /// The persistent iPad sidebar already names the workspace above its list selection.
-    /// Without a header row on the Duo, the title's first line sits on the list header's row,
-    /// where "Workspaces" is centered.
-    private static var duoSidebarHeadingTopSpacing: CGFloat {
-        let style = Constants.Typography.heading2
-        let capHeight = CTFontGetCapHeight(CTFontCreateWithName(style.face.rawValue as CFString, style.size, nil))
-        return IPadSidebarStyle.topInset + (Constants.WorkspaceSearch.compactHeight - capHeight) / 2
-    }
+    private var sidebarHeadingTopSpacing: CGFloat? { sidebar != nil ? 0 : nil }
 
-    private var sidebarHeadingTopSpacing: CGFloat? {
-        guard sidebar != nil else { return nil }
-        return usesVerticalBar ? Self.duoSidebarHeadingTopSpacing : 0
-    }
+    /// The Duo sidebar page shows its title in the fixed header and sits on the list's inset.
+    private var isDuoSidebar: Bool { sidebar != nil && usesVerticalBar }
 
     /// The iPad main pane's title follows the iPad comp; the unfolded Duo keeps its rail layout.
     private var usesIPadPaneTitle: Bool { coordinator.usesIPadShell && !usesVerticalBar }
@@ -107,9 +98,13 @@ struct WorkspaceDetailView: View {
         ZStack {
             surface.ignoresSafeArea()
             VStack(spacing: 0) {
-                // The Duo sidebar has no collapse control and its rail carries the page actions.
-                if let sidebar, !usesVerticalBar {
-                    WorkspaceSidebarHeader(onCollapse: sidebar.onCollapse) { workspaceActionsMenu }
+                if let sidebar {
+                    // The Duo sidebar has no collapse control and its rail carries the page actions.
+                    if usesVerticalBar {
+                        WorkspaceSidebarTitleHeader(title: workspaceName)
+                    } else {
+                        WorkspaceSidebarHeader(onCollapse: sidebar.onCollapse) { workspaceActionsMenu }
+                    }
                 }
                 detailContent
             }
@@ -428,6 +423,8 @@ private extension WorkspaceDetailView {
                 }
             }
             .iPadDetailColumn(isEnabled: sidebar == nil)
+            // Page children own the 24 pt page inset; on the Duo they line up with the list's 8 pt.
+            .padding(.horizontal, isDuoSidebar ? IPadSidebarStyle.compactInset - WorkspaceDetailStyle.pageInset : 0)
         }
         .accessibilityIdentifier("workspace.detail.scroll")
         .refreshable {
@@ -456,6 +453,7 @@ private extension WorkspaceDetailView {
                 titleFocus: $titleFocused,
                 headingTopSpacing: sidebarHeadingTopSpacing ?? (usesIPadPaneTitle ? Self.iPadHeadingTopSpacing : nil),
                 usesLargeTitle: sidebar == nil && usesIPadPaneTitle,
+                showsTitle: !isDuoSidebar,
                 onSaveTitle: saveTitle
             )
         }

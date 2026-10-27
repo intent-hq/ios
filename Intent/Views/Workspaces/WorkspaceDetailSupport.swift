@@ -12,6 +12,7 @@ struct WorkspaceDetailHeading: View {
     var titleFocus: FocusState<Bool>.Binding?
     var topSpacing: CGFloat?
     var usesLargeTitle = false
+    var showsTitle = true
     let onSaveTitle: () -> Void
     @FocusState private var titleFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -35,7 +36,7 @@ struct WorkspaceDetailHeading: View {
     var body: some View {
         VStack(alignment: .leading, spacing: titleEditor.isEditing
             ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTextSpacing) {
-            editableTitle
+            if showsTitle { editableTitle }
             if let repositoryOwner, let repositoryName {
                 WorkspaceDetailHeadingText("\(repositoryOwner)/\(repositoryName)", style: Constants.Typography.subtextXXS)
                     .foregroundStyle(colorScheme == .light && colorSchemeContrast == .standard
@@ -340,6 +341,7 @@ struct WorkspaceDetailHeader: View {
     let titleFocus: FocusState<Bool>.Binding
     var headingTopSpacing: CGFloat?
     var usesLargeTitle = false
+    var showsTitle = true
     let onSaveTitle: () -> Void
 
     var body: some View {
@@ -354,6 +356,7 @@ struct WorkspaceDetailHeader: View {
             titleFocus: titleFocus,
             topSpacing: headingTopSpacing,
             usesLargeTitle: usesLargeTitle,
+            showsTitle: showsTitle,
             onSaveTitle: onSaveTitle
         )
         if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {

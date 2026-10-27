@@ -31,6 +31,26 @@ struct WorkspaceSidebarHeader<Actions: View>: View {
     }
 }
 
+/// The Duo's sidebar workspace names itself in the list header's slot: same component,
+/// type and insets as "Workspaces", fixed above the scrolling page.
+struct WorkspaceSidebarTitleHeader: View {
+    let title: String
+
+    var body: some View {
+        IPadSidebarHeader(onCollapse: {}) {
+            Text(title)
+                .interFont(IPadSidebarStyle.titleStyle)
+                .tracking(IPadSidebarStyle.titleTracking)
+                .fixedSize(horizontal: false, vertical: true)
+                // The list's row is as tall as its controls; this one has none.
+                .frame(minHeight: Constants.WorkspaceSearch.compactHeight)
+                .accessibilityAddTraits(.isHeader)
+        } actions: {
+            EmptyView()
+        }
+    }
+}
+
 extension View {
     /// Marks the open agent or note in a sidebar workspace with the sidebar's selection surface.
     func workspaceSidebarSelection(_ isSelected: Bool) -> some View {
@@ -42,6 +62,7 @@ private struct WorkspaceSidebarSelection: ViewModifier {
     private static let outset: CGFloat = 12
 
     let isSelected: Bool
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
 
@@ -53,7 +74,9 @@ private struct WorkspaceSidebarSelection: ViewModifier {
                         .fill(presentation == .iPad
                             ? IPadSidebarStyle.selection(for: colorScheme)
                             : Theme.sidebarSelection(for: colorScheme))
-                        .padding(-Self.outset)
+                        .padding(.vertical, -Self.outset)
+                        // The Duo page sits on the list's 8 pt inset, so the fill stops at the column edge.
+                        .padding(.horizontal, -(usesVerticalBar ? IPadSidebarStyle.compactInset : Self.outset))
                 }
             }
             .accessibilityAddTraits(isSelected ? .isSelected : [])
