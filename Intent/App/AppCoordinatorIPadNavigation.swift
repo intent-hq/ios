@@ -38,10 +38,19 @@ extension AppCoordinator {
             guard canUseAssistant else { return }
             onSelectAssistant()
         } else if section == .workspaces {
+            if showsIPadSidebarWorkspace { onBackToWorkspaceDetail() }
             selectedSection = .workspaces
         }
         iPadNavigation.selectSection(section)
         ensureIPadWorkspaceSelection()
+    }
+
+    /// Reselecting Workspaces while the sidebar shows the open workspace leaves it, like the main view's Back.
+    private var showsIPadSidebarWorkspace: Bool {
+        let navigation = iPadNavigation
+        guard usesIPadShell, navigation.section == .workspaces, navigation.isSidebarVisible else { return false }
+        let isPersistent = !navigation.usesSidebarOverlay && !navigation.usesCompactNavigation
+        return WorkspaceSidebarContent.resolve(screen: currentScreen, isPersistent: isPersistent) != .workspaceList
     }
 
     /// Wide windows keep a detail selected; compact windows start with the list.

@@ -4,7 +4,9 @@ struct IPadNavigationRail: View {
     let section: IPadSidebarSection
     let isSidebarVisible: Bool
     let canUseAssistant: Bool
+    let canCreateWorkspace: Bool
     let onSelect: (IPadSidebarSection) -> Void
+    let onCreateWorkspace: () -> Void
     let onExpand: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("appThemePreference") private var themePreference = "system"
@@ -25,6 +27,8 @@ struct IPadNavigationRail: View {
                 .accessibilityValue(appearanceTitle)
                 .accessibilityHint("Changes appearance")
                 destination(.settings, asset: .settings2, label: "Settings")
+                railButton(asset: .addIcon, label: "New workspace", identifier: "ipad.rail.createWorkspace", action: onCreateWorkspace)
+                    .disabled(!canCreateWorkspace)
             }
             .padding(.top, IPadShellLayout.railTopInset)
         }

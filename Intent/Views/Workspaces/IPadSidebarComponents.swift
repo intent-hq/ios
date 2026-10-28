@@ -8,6 +8,7 @@ enum IPadSidebarStyle {
     static let topInset = IPadShellLayout.headerInset
     static let sectionSpacing: CGFloat = 48
     static let filterListSpacing: CGFloat = 56
+    static let scrollFadeHeight: CGFloat = 32
     static let groupLabelSpacing: CGFloat = 16
     static let settingsSpacing: CGFloat = 40
     static let rowHeight: CGFloat = 64
