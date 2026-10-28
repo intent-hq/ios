@@ -192,6 +192,10 @@ extension AppCoordinatorTests {
         #expect(coordinator.conversationRequestId == request)
         await IPadVisibilityDiagnostics.record("typing-closed", in: host, coordinator: coordinator, trace: trace)
         if detail == .workspace {
+            // A wide window shows the open agent's workspace in the sidebar; the list and its
+            // search stay reachable from the drawer layout.
+            size.width = CompactShellSize.drawer
+            try await waitUntil("the sidebar becomes a drawer", timeout: timeout) { coordinator.iPadNavigation.usesSidebarOverlay }
             try await recordFocusedSearch(in: host, coordinator: coordinator, trace: trace)
             #expect(compactEditor(in: host) === editor)
             #expect(editor.text == draft)
@@ -386,6 +390,8 @@ private extension AppCoordinatorTests {
     static let draftSelection = NSRange(location: selectionLocation, length: selectionLength)
     static let narrow: CGFloat = 320
     static let wide: CGFloat = 1210
+    /// Wide enough for the regular shell, too narrow for a sidebar beside the detail.
+    static let drawer: CGFloat = 800
     static let height: CGFloat = 900
     static let timeout: TimeInterval = 5
     static let pollInterval: TimeInterval = 0.01
