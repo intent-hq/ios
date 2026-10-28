@@ -1,17 +1,5 @@
 import SwiftUI
 
-/// Zero-height anchor above the composer: its content draws upward over the transcript
-/// without taking layout space, so showing it never shifts the conversation.
-struct ComposerFloatingRow<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        Color.clear
-            .frame(height: 0)
-            .overlay(alignment: .bottom) { content.fixedSize(horizontal: false, vertical: true) }
-    }
-}
-
 /// Slash-command skill picker: a horizontally scrolling row of chips above the composer.
 /// The highlighted chip uses the accent; Return or a tap inserts it.
 struct SkillSuggestionsView: View {

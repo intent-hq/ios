@@ -57,7 +57,7 @@ struct MessageInputView: View {
     var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
 
     var body: some View {
-        IPadTypingFocusRow(isFocused: focusBinding) { VStack(spacing: 0) { ComposerFloatingRow { skillChips }; inputContent } }
+        IPadTypingFocusRow(isFocused: focusBinding) { VStack(spacing: 0) { skillChips; inputContent } }
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
