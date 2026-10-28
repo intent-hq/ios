@@ -20,6 +20,8 @@ struct IPadNavigationRail: View {
                 destination(.assistant, asset: .dandelion, label: "Assistant")
                     .disabled(!canUseAssistant)
                 destination(.workspaces, asset: .agentGeneral1, label: "Workspaces")
+                railButton(asset: .addIcon, label: "New workspace", identifier: "ipad.rail.createWorkspace", action: onCreateWorkspace)
+                    .disabled(!canCreateWorkspace)
                 destination(.connections, asset: .connectionLaptop, label: "Connections")
                 railButton(asset: appearanceAsset, label: "Appearance", identifier: "ipad.rail.appearance") {
                     themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
@@ -27,8 +29,6 @@ struct IPadNavigationRail: View {
                 .accessibilityValue(appearanceTitle)
                 .accessibilityHint("Changes appearance")
                 destination(.settings, asset: .settings2, label: "Settings")
-                railButton(asset: .addIcon, label: "New workspace", identifier: "ipad.rail.createWorkspace", action: onCreateWorkspace)
-                    .disabled(!canCreateWorkspace)
             }
             .padding(.top, IPadShellLayout.railTopInset)
         }
