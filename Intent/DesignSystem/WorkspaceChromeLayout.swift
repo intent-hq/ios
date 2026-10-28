@@ -28,11 +28,6 @@ extension Constants.WorkspaceRow {
     static let pillOutlineOpacity = 0.1
 }
 
-extension Constants.WorkspaceDetail {
-    static let increasedRemainingOpacity: Double = 0.55
-    static let increasedContrastProgressBorderWidth: CGFloat = 1.5
-}
-
 extension WorkspaceStatusImageLayout {
     /// Detail banner cap — the desktop card's `max-h-48`.
     nonisolated static let detailMaxHeight: CGFloat = 192
