@@ -210,6 +210,17 @@ extension WorkspaceListSidebar {
         // viewport above the keyboard; the final row retains bottom clearance.
         .contentMargins(.top, isEmbedded ? filterListSpacing : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)
         .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
+        .mask(alignment: .top) { scrollFadeMask }
+    }
+
+    /// Rows dissolve under the filter control instead of clipping. The fade fits inside the
+    /// list's top margin, so resting rows stay fully opaque.
+    private var scrollFadeMask: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: isEmbedded ? min(IPadSidebarStyle.scrollFadeHeight, filterListSpacing) : 0)
+            Color.black
+        }
     }
 
     private var workspaceListContent: some View {
