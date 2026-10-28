@@ -236,6 +236,12 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                     .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                     .accessibilityHidden(true)
             }
+            if sidebarCollapse != nil, showsInlineActions {
+                // Balance the sidebar control so the title stays centered.
+                Color.clear
+                    .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
+                    .accessibilityHidden(true)
+            }
             headerCopy
             if showsInlineActions {
                 IPadSidebarCollapseActions(collapse: sidebarCollapse) {
