@@ -7,11 +7,14 @@ extension View {
         title: String,
         createdAt: String?,
         showsBackButton: Bool = true,
+        showsTitle: Bool = true,
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
         #if os(iOS)
-        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, showsBackButton: showsBackButton, onBack: onBack, actions: actions))
+        modifier(WorkspacePhoneNavigationModifier(
+            title: title, createdAt: createdAt, showsBackButton: showsBackButton, showsTitle: showsTitle, onBack: onBack, actions: actions
+        ))
         #else
         self
         #endif
@@ -23,6 +26,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let title: String
     let createdAt: String?
     let showsBackButton: Bool
+    let showsTitle: Bool
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -35,23 +39,30 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .toolbar(usesCustomHeader && !usesVerticalBar ? .hidden : .automatic, for: .navigationBar)
+            // Outside the shell the Duo's vertical toolbar needs the bar; inside it the rail replaces it.
+            .toolbar(usesCustomHeader && (!usesVerticalBar || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if usesCustomHeader { navigationHeader }
             }
     }
 
+    /// The iPad shell names the workspace in its sidebar; the header repeats it only while that sidebar is collapsed.
+    private var showsHeaderTitle: Bool {
+        presentation != .iPad || (showsTitle && !usesVerticalBar)
+    }
+
     private var navigationHeader: some View {
         WorkspaceNavigationHeader(
             title: title,
-            subtitle: presentation == .iPad ? nil : "Workspace",
+            subtitle: showsHeaderTitle ? "Workspace" : nil,
             backLabel: "Back to workspaces",
             backIdentifier: "workspaceDetail.back",
-            showsTitle: presentation != .iPad,
-            showsWorkspacePlaceholder: presentation != .iPad,
+            showsTitle: showsHeaderTitle,
+            showsWorkspacePlaceholder: showsHeaderTitle,
             workspaceCreatedAt: createdAt,
             usesConversationLayout: presentation == .iPad,
             showsContextualActions: !usesVerticalBar,
+            collapsesWhenEmptyOnRail: true,
             onBack: showsBackButton ? onBack : nil,
             actions: actions
         )
@@ -63,6 +74,8 @@ struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
     var showsBackground = true
     var showsContextualActions = true
+    /// The sidebar names the open agent while its workspace sits there, so the header drops its title.
+    var showsTitle = true
     var assistantStore: AssistantStore?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
@@ -86,12 +99,14 @@ struct WorkspaceConversationHeader<Actions: View>: View {
         } else {
             WorkspaceNavigationHeader(
                 title: title,
-                subtitle: "Agent",
+                subtitle: showsTitle ? "Agent" : nil,
                 backLabel: "Back",
                 backIdentifier: "conversation.back",
                 showsBackground: showsBackground,
+                showsTitle: showsTitle,
                 usesConversationLayout: true,
                 showsContextualActions: showsContextualActions,
+                collapsesWhenEmptyOnRail: true,
                 onBack: onBack,
                 actions: actions
             )
@@ -140,6 +155,8 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var workspaceCreatedAt: String?
     var usesConversationLayout = false
     var showsContextualActions = true
+    /// The workspace overview drops its empty band on the Duo; conversations keep their spacing.
+    var collapsesWhenEmptyOnRail = false
     var onBack: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
@@ -159,9 +176,18 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         usesConversationLayout && presentation == .iPad
     }
 
+    /// With its controls on the Duo rail and no copy, the header would only be an empty band over the content.
+    private var collapsesOnRail: Bool { collapsesWhenEmptyOnRail && usesDuoContextualRail && !showsHeaderCopy }
+
     var body: some View {
-        windowAdaptedControls
-            .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+        Group {
+            if collapsesOnRail {
+                Color.clear.frame(height: 0)
+            } else {
+                windowAdaptedControls
+                    .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+            }
+        }
             .preference(
                 key: DuoContextualRailPreference.self,
                 value: usesDuoContextualRail && isPaneVisible ? AnyView(railControls) : nil
@@ -263,6 +289,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         .tracking(Design.Typography.smallTracking)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(showsTitle ? "conversation.header.title" : "")
     }
 
     @ViewBuilder private var subtitleText: some View {

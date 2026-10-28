@@ -3,6 +3,9 @@ import SwiftUI
 /// One view hierarchy spans expanded, collapsed and drawer layouts. In particular,
 /// the workspace and Assistant detail subtrees never move between containers.
 struct IPadShellView: View {
+    /// Pages shift this far while fading, so a slow first frame cannot turn into a visible jump.
+    static let pageParallax: CGFloat = 48
+
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
@@ -65,7 +68,6 @@ struct IPadShellView: View {
     private var workspaceSearchVisible: Bool {
         navigation.focusPresentation == .workspaceSearch
     }
-
     var body: some View {
         AgentHistoryDrawer(isEnabled: workspaceActionsEnabled && !connectionSwitcherOpen) {
             WorkspaceConnectionSwitcher(
@@ -254,12 +256,7 @@ struct IPadShellView: View {
     private var sidebars: some View {
         ZStack {
             RetainedIPadPane(isVisible: navigation.section == .workspaces, keepsCoveredContentVisible: true) {
-                WorkspaceListSidebar(
-                    workspaceStore: session.workspaceStore,
-                    isSearching: isSearchingWorkspaces,
-                    onCreateWorkspace: createWorkspace,
-                    onCollapse: collapseSidebar
-                )
+                workspacesSidebar
             }
             if navigation.hasOpenedAssistant {
                 RetainedIPadPane(isVisible: navigation.section == .assistant, keepsCoveredContentVisible: true) {
@@ -317,6 +314,43 @@ struct IPadShellView: View {
 private extension IPadShellView {
     func prepareConnectionSwitcher() {
         coordinator.iPadNavigation.prepareForConnectionSwitcher(showingWorkspaceList: showsWorkspaceList)
+    }
+}
+
+/// The workspaces sidebar swaps between the list and the open agent's or note's workspace page.
+extension IPadShellView {
+    /// A persistent sidebar beside the detail pane; drawers and compact windows keep the list.
+    private var workspaceSidebarContent: WorkspaceSidebarContent {
+        WorkspaceSidebarContent.resolve(
+            screen: coordinator.currentScreen,
+            isPersistent: width != nil && !layout.usesCompactNavigation && !layout.usesSidebarOverlay && !workspaceSearchVisible
+        )
+    }
+
+    /// The list stays mounted under a sidebar workspace, keeping its scroll position and search.
+    /// The two swap with a crossfade; nothing moves, so a slow first frame cannot read as a jump.
+    private var workspacesSidebar: some View {
+        ZStack {
+            RetainedIPadPane(isVisible: workspaceSidebarContent == .workspaceList) {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace,
+                    onCollapse: collapseSidebar
+                )
+            }
+            if case let .workspace(workspaceId) = workspaceSidebarContent {
+                WorkspaceDetailView(
+                    workspaceId: workspaceId,
+                    session: session,
+                    sidebar: WorkspaceDetailSidebar(onCollapse: collapseSidebar)
+                )
+                .id(workspaceId)
+                .transition(.opacity)
+            }
+        }
+        .clipped()
+        .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration), value: workspaceSidebarContent)
     }
 }
 

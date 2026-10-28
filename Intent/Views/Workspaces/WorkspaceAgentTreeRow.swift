@@ -91,12 +91,13 @@ struct WorkspaceAgentButton: View {
     let agent: AgentSession
     let colorScheme: ColorScheme
     let indented: Bool
+    var isSelected = false
     let onSelect: @MainActor () -> Void
     let onMute: @MainActor () -> Void
 
     var body: some View {
         Button(action: onSelect) {
-            AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented)
+            AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented, isSelected: isSelected)
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("workspace.agent.\(agent.id)")

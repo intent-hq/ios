@@ -10,6 +10,9 @@ struct WorkspaceDetailHeading: View {
     var statusMessage: String?
     @Bindable var titleEditor: WorkspaceTitleEditor
     var titleFocus: FocusState<Bool>.Binding?
+    var topSpacing: CGFloat?
+    var usesLargeTitle = false
+    var showsTitle = true
     let onSaveTitle: () -> Void
     @FocusState private var titleFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -18,6 +21,12 @@ struct WorkspaceDetailHeading: View {
     @Environment(\.usesDuoContextualRail) private var usesDuoContextualRail
 
     private var focusBinding: FocusState<Bool>.Binding { titleFocus ?? $titleFocused }
+    private var titleStyle: Constants.Typography.Style {
+        usesLargeTitle ? Constants.Typography.heading1 : Constants.Typography.heading2
+    }
+    private var titleTracking: CGFloat {
+        usesLargeTitle ? WorkspaceDetailStyle.largeTitleTracking : WorkspaceDetailStyle.titleTracking
+    }
 
     private var headingTopSpacing: CGFloat {
         if dynamicTypeSize.isAccessibilitySize { return WorkspaceDetailStyle.headingSpacing }
@@ -27,7 +36,7 @@ struct WorkspaceDetailHeading: View {
     var body: some View {
         VStack(alignment: .leading, spacing: titleEditor.isEditing
             ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTextSpacing) {
-            editableTitle
+            if showsTitle { editableTitle }
             if let repositoryOwner, let repositoryName {
                 WorkspaceDetailHeadingText("\(repositoryOwner)/\(repositoryName)", style: Constants.Typography.subtextXXS)
                     .foregroundStyle(colorScheme == .light && colorSchemeContrast == .standard
@@ -43,7 +52,7 @@ struct WorkspaceDetailHeading: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-        .padding(.top, headingTopSpacing)
+        .padding(.top, topSpacing ?? headingTopSpacing)
         .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
     }
 
@@ -52,8 +61,8 @@ struct WorkspaceDetailHeading: View {
         if titleEditor.isEditing {
             TextField("New Workspace", text: $titleEditor.draft)
                 .textFieldStyle(.plain)
-                .interFont(Constants.Typography.heading2)
-                .tracking(WorkspaceDetailStyle.titleTracking)
+                .interFont(titleStyle)
+                .tracking(titleTracking)
                 .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
                 .submitLabel(.done)
                 .focused(focusBinding)
@@ -73,8 +82,8 @@ struct WorkspaceDetailHeading: View {
             }
         } else {
             WorkspaceTitle(title: title, createdAt: createdAt) { title in
-                WorkspaceDetailHeadingText(title, style: Constants.Typography.heading2)
-                    .tracking(WorkspaceDetailStyle.titleTracking)
+                WorkspaceDetailHeadingText(title, style: titleStyle)
+                    .tracking(titleTracking)
             }
             .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
             .contentShape(Rectangle())
@@ -262,11 +271,14 @@ struct WorkspaceDetailToolbarPicker: View {
 
 struct WorkspaceRailShortcuts: View {
     let isTerminalDisabled: Bool
+    let onCreateAgent: () -> Void
     let onTerminal: () -> Void
     let onBrowser: () -> Void
 
     var body: some View {
         VStack(spacing: IPadShellLayout.contextualRailSpacing) {
+            IntentIconButton(icon: .addCircle, label: "Create New Agent", showsBackground: false, action: onCreateAgent)
+                .accessibilityIdentifier("workspace.shortcut.createAgent")
             IntentIconButton(icon: .terminal, label: "Open terminal", showsBackground: false, action: onTerminal)
                 .disabled(isTerminalDisabled)
                 .accessibilityIdentifier("workspace.shortcut.terminal")
@@ -330,6 +342,9 @@ struct WorkspaceDetailHeader: View {
     @Binding var selection: WorkspaceTab
     let titleEditor: WorkspaceTitleEditor
     let titleFocus: FocusState<Bool>.Binding
+    var headingTopSpacing: CGFloat?
+    var usesLargeTitle = false
+    var showsTitle = true
     let onSaveTitle: () -> Void
 
     var body: some View {
@@ -342,6 +357,9 @@ struct WorkspaceDetailHeader: View {
             statusMessage: workspace?.statusMessage,
             titleEditor: titleEditor,
             titleFocus: titleFocus,
+            topSpacing: headingTopSpacing,
+            usesLargeTitle: usesLargeTitle,
+            showsTitle: showsTitle,
             onSaveTitle: onSaveTitle
         )
         if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {

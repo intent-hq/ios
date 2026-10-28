@@ -85,6 +85,8 @@ extension SpecialistInfo {
     /// successfully. Reset on workspace change; a failed fetch leaves it
     /// false so views keep the loading placeholder instead of "No agents".
     var hasLoaded = false
+    /// The latest top-level read failed before any succeeded for this workspace.
+    var hasFailedToLoad = false
 
     let connectionManager: ConnectionManagerRouting
     let summaries: AgentSummaryStore?
@@ -149,6 +151,7 @@ extension SpecialistInfo {
         list.reset()
         agents = []
         hasLoaded = false
+        hasFailedToLoad = false
         isLoading = false
     }
 

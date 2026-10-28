@@ -463,9 +463,9 @@ extension HomeActionMenuUITests {
         let actions = app.buttons["conversation.actions.open"]
         XCTAssertTrue(waitUntilHittable(back))
         XCTAssertTrue(actions.isHittable)
-        XCTAssertTrue(workspace.isHittable)
-        XCTAssertEqual(sidebar.frame, sidebarFrame)
-        XCTAssertLessThanOrEqual(sidebar.frame.maxX, composer.frame.minX)
+        // The open agent's workspace replaces the list in the sidebar.
+        XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        XCTAssertLessThanOrEqual(agent.frame.maxX, composer.frame.minX)
         XCTAssertEqual(back.frame.midY, actions.frame.midY, accuracy: Self.scrollTolerance)
         XCTAssertLessThan(actions.frame.maxY, window.frame.midY)
         XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)

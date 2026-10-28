@@ -82,6 +82,7 @@ class AppCoordinator {
     }
     var usesIPadShell = false
     var iPadNavigation = IPadNavigationState()
+    var workspaceSidebarAgents = WorkspaceSidebarAgents()
     var assistantAgentId: String?
     var workspaceCreationDraft: WorkspaceCreationDraft?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection

@@ -76,14 +76,21 @@ struct IPadTypingFocusRow<Content: View>: View {
 /// Hides only navigation chrome while the existing conversation fills its focus panel.
 struct ConversationFocusHeaderInset<Header: View>: ViewModifier {
     let isEnabled: Bool
+    /// Untitled controls float over the content instead of reserving a header band.
+    var floats = false
     @ViewBuilder let header: Header
     @Environment(\.iPadFocusPresentation) private var iPadFocusPresentation
 
+    private var showsHeader: Bool { isEnabled && iPadFocusPresentation?.wrappedValue != .conversationEditing }
+
+    // Both placements stay attached so switching between them keeps the content's identity and scroll.
     func body(content: Content) -> some View {
-        content.safeAreaInset(edge: .top, spacing: 0) {
-            if isEnabled, iPadFocusPresentation?.wrappedValue != .conversationEditing {
-                header
+        content
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if showsHeader, !floats { header }
             }
-        }
+            .overlay(alignment: .top) {
+                if showsHeader, floats { header }
+            }
     }
 }

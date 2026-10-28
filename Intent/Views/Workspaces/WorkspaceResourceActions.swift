@@ -20,6 +20,9 @@ struct WorkspaceResourceActions<Actions: View>: View {
 struct WorkspaceResourceShortcuts: View {
     let workspaceId: String
     @Environment(BackendSession.self) private var session
+    /// Created on first use, so the rail does not load agents for every screen it appears on.
+    @State private var agentStore: AgentStore?
+    @State private var showsSpecialistPicker = false
     @State private var selectedTerminal: MobileTerminal?
     @State private var selectedBrowser: WorkspaceBrowser?
     @State private var createdBrowser: WorkspaceBrowser?
@@ -35,6 +38,7 @@ struct WorkspaceResourceShortcuts: View {
     var body: some View {
         WorkspaceRailShortcuts(
             isTerminalDisabled: !terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId),
+            onCreateAgent: createAgent,
             onTerminal: openTerminal,
             onBrowser: openBrowser
         )
@@ -42,6 +46,12 @@ struct WorkspaceResourceShortcuts: View {
         .task(id: workspaceId) { await browserStore.refresh(workspaceId: workspaceId) }
         .onChange(of: workspaceId) { resetPresentation() }
         .onDisappear { terminalRequest = nil }
+        .sheet(isPresented: $showsSpecialistPicker) {
+            if let agentStore {
+                SpecialistPickerView(workspaceId: workspaceId, agentStore: agentStore, optionsStore: session.creationOptionsStore)
+                    .coversConversationComposers()
+            }
+        }
         .sheet(isPresented: $showsNewBrowser, onDismiss: presentCreatedBrowser) {
             NewWorkspaceBrowserView(workspaceId: workspaceId, store: browserStore) { createdBrowser = $0 }
                 .coversConversationComposers()
@@ -62,6 +72,13 @@ struct WorkspaceResourceShortcuts: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
+    }
+
+    private func createAgent() {
+        if agentStore == nil {
+            agentStore = AgentStore(connectionManager: session.connection, summaries: session.agentSummaries, scopedLoading: true)
+        }
+        showsSpecialistPicker = true
     }
 
     private func openTerminal() {
@@ -95,5 +112,6 @@ struct WorkspaceResourceShortcuts: View {
         selectedBrowser = nil
         createdBrowser = nil
         showsNewBrowser = false
+        showsSpecialistPicker = false
     }
 }

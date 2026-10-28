@@ -4,12 +4,13 @@ struct WorkspaceDetailView: View {
     let workspaceId: String
     private let persistence: PersistenceManager
     private let isSidebarVisible: Bool
+    let sidebar: WorkspaceDetailSidebar?
     @Environment(AppCoordinator.self) var coordinator
     @State private var storedAgentStore: AgentStore
     @State private var storedViewModel: AgentListViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.workspaceUsesVerticalBar) var usesVerticalBar
     @State private var showDeleteConfirmation = false
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
@@ -29,12 +30,13 @@ struct WorkspaceDetailView: View {
     @State private var filesExpanded = true
     @State private var titleEditor = WorkspaceTitleEditor()
     @FocusState private var titleFocused: Bool
-    @Environment(BackendSession.self) private var session
+    @Environment(BackendSession.self) var session
 
-    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false) {
+    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false, sidebar: WorkspaceDetailSidebar? = nil) {
         self.workspaceId = workspaceId
         self.persistence = persistence
         self.isSidebarVisible = isSidebarVisible
+        self.sidebar = sidebar
         _selectedTab = State(initialValue: WorkspaceTab.restored(
             persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
             fallback: .agents
@@ -50,12 +52,12 @@ struct WorkspaceDetailView: View {
 
     var agentStore: AgentStore { storedAgentStore }
     var viewModel: AgentListViewModel { storedViewModel }
-    var currentTab: WorkspaceTab { selectedTab }
+    var currentTab: WorkspaceTab { get { selectedTab } nonmutating set { selectedTab = newValue } }
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
     var noteStoreConnectionID: ObjectIdentifier { ObjectIdentifier(noteStore.connectionManager) }
     var changesStoreConnectionID: ObjectIdentifier { ObjectIdentifier(changesStore.connectionManager) }
 
-    private var workspaceStore: WorkspaceStore { session.workspaceStore }
+    var workspaceStore: WorkspaceStore { session.workspaceStore }
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
     private var browserStore: WorkspaceBrowserStore { session.browserStore }
 
@@ -72,8 +74,18 @@ struct WorkspaceDetailView: View {
     private var showsNavigationTitle: Bool { !coordinator.usesIPadShell && !usesVerticalBar }
     private var lifecycleContent: some View {
         ZStack {
-            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
-            detailContent
+            surface.ignoresSafeArea()
+            VStack(spacing: 0) {
+                if let sidebar {
+                    // The Duo sidebar has no collapse control and its rail carries the page actions.
+                    if usesVerticalBar {
+                        WorkspaceSidebarTitleHeader(title: workspaceName)
+                    } else {
+                        WorkspaceSidebarHeader(onCollapse: sidebar.onCollapse) { workspaceActionsMenu }
+                    }
+                }
+                detailContent
+            }
         }
         .onAppear {
             if let connectionId = session.backendID?.connectionID {
@@ -155,6 +167,14 @@ struct WorkspaceDetailView: View {
     }
 
     var body: some View {
+        if sidebar != nil {
+            sidebarContent
+        } else {
+            pageContent
+        }
+    }
+
+    var presentedContent: some View {
         lifecycleContent
         .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
             if titleEditor.isEditing {
@@ -249,6 +269,13 @@ struct WorkspaceDetailView: View {
         } message: {
             Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
         }
+    }
+}
+
+private extension WorkspaceDetailView {
+    var pageContent: some View {
+        presentedContent
+        .preference(key: WorkspaceFirstAgentPreference.self, value: firstAgent)
         .navigationTitle(showsNavigationTitle ? workspaceName : "")
         .toolbar(removing: usesVerticalBar ? .title : nil)
         .toolbarTitleDisplayMode(.inline)
@@ -258,7 +285,9 @@ struct WorkspaceDetailView: View {
         .toolbarBackground(WorkspaceDetailStyle.background(for: colorScheme), for: .navigationBar)
         #endif
         .toolbar {
-            if usesVerticalBar {
+            // In the Duo shell the rail carries these actions, as for conversations; a system
+            // vertical toolbar would add an opaque navigation bar over the top of the pane.
+            if usesVerticalBar, !coordinator.usesIPadShell {
                 WorkspaceVerticalNavigationToolbar(
                     isEnabled: true,
                     showsBackButton: showsBackButton && !isSidebarVisible,
@@ -266,7 +295,7 @@ struct WorkspaceDetailView: View {
                     backIdentifier: "workspaceDetail.back",
                     onBack: coordinator.onBackToWorkspaceList
                 ) { workspaceActions }
-            } else {
+            } else if !usesVerticalBar {
                 #if os(visionOS)
                 // The workspace picker lives in the top toolbar on visionOS.
                 ToolbarItem(placement: .topBarTrailing) { WorkspaceDetailToolbarPicker(selection: $selectedTab) }
@@ -293,13 +322,12 @@ struct WorkspaceDetailView: View {
             title: workspaceTitle,
             createdAt: workspace?.createdAt,
             showsBackButton: showsBackButton,
+            showsTitle: !isBesideIPadSidebar,
             onBack: coordinator.onBackToWorkspaceList
         ) { workspaceActions }
         #endif
     }
-}
 
-private extension WorkspaceDetailView {
     func saveTitle() {
         Task { await titleEditor.save(connection: session.connection, store: workspaceStore) }
     }
@@ -370,8 +398,12 @@ private extension WorkspaceDetailView {
                     tabContent
                 }
             }
-            .iPadDetailColumn()
+            .iPadDetailColumn(isEnabled: sidebar == nil)
+            // Page children own the 24 pt page inset; on the Duo they line up with the list's 8 pt.
+            .padding(.horizontal, isDuoSidebar ? IPadSidebarStyle.compactInset - WorkspaceDetailStyle.pageInset : 0)
         }
+        // The Duo pane has no top bar for content to fade under, as in conversations.
+        .modifier(ConversationScrollEdgeEffect())
         .accessibilityIdentifier("workspace.detail.scroll")
         .refreshable {
             if selectedTab == .agents {
@@ -397,6 +429,9 @@ private extension WorkspaceDetailView {
                 selection: $selectedTab,
                 titleEditor: titleEditor,
                 titleFocus: $titleFocused,
+                headingTopSpacing: sidebarHeadingTopSpacing ?? pageHeadingTopSpacing,
+                usesLargeTitle: sidebar == nil && usesIPadPaneTitle,
+                showsTitle: !isDuoSidebar,
                 onSaveTitle: saveTitle
             )
         }
@@ -458,22 +493,6 @@ private extension WorkspaceDetailView {
                 onSelectTerminal: { selectedTerminal = $0 },
                 onSelectBrowser: { selectedBrowser = $0 }
             )
-        }
-    }
-
-    private func deleteWorkspace() { changeWorkspace("workspace.delete") }
-
-    private func archiveWorkspace() { changeWorkspace("workspace.archive") }
-
-    private func changeWorkspace(_ method: String) {
-        Task {
-            do {
-                _ = try await session.connection.request(method, params: ["workspaceId": workspaceId])
-                coordinator.onBackToWorkspaceList()
-                await workspaceStore.fetchAll()
-            } catch {
-                AppLog.workspace.error("[WorkspaceDetail] \(method) failed: \(error)")
-            }
         }
     }
 }

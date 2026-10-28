@@ -9,6 +9,8 @@ enum WorkspaceDetailStyle {
     static let sectionSpacing: CGFloat = 48
     static let sectionHeadingSpacing: CGFloat = 24
     static let titleTracking: CGFloat = -0.56
+    /// The iPad main pane's 40 pt title keeps the sidebar title's -3% tracking.
+    static let largeTitleTracking: CGFloat = -1.2
     static let rowTitleTracking: CGFloat = -0.36
     static let bodyTracking: CGFloat = -0.16
     static let controlSize: CGFloat = 48

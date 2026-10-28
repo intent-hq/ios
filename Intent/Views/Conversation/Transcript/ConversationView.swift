@@ -223,6 +223,8 @@ private extension ConversationViewContent {
         viewModel.scenePhaseChanged(isActive: visible && scenePhase == .active)
     }
 
+    private var isNamedBySidebar: Bool { assistantStore == nil && WorkspaceSidebarContent.namesAgent(viewModel.agentId, coordinator: coordinator) }
+
     private var usesVerticalNavigation: Bool {
         usesVerticalBar && assistantStore == nil
     }
@@ -247,16 +249,18 @@ private extension ConversationViewContent {
             .toolbarBackground(usesVerticalNavigation || viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
             #if os(iOS)
-            .toolbar(usesWorkspaceDesign && !usesVerticalNavigation ? .hidden : .automatic, for: .navigationBar)
+            // In the Duo shell the rail replaces the vertical toolbar, so no bar sits over the transcript top.
+            .toolbar(usesWorkspaceDesign && (!usesVerticalNavigation || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
-            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign) {
+            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign, floats: isNamedBySidebar && !usesVerticalNavigation) {
                 if usesVerticalNavigation, presentation != .iPad {
                     WorkspaceVerticalConversationHeader(title: viewModel.agentName, workspaceId: viewModel.workspaceId)
                 } else {
                     WorkspaceConversationHeader(
                         title: viewModel.agentName,
-                        showsBackground: !viewModel.showsLoadingState,
+                        showsBackground: !viewModel.showsLoadingState && !isNamedBySidebar,
                         showsContextualActions: !usesVerticalNavigation,
+                        showsTitle: !isNamedBySidebar,
                         assistantStore: assistantStore,
                         onBack: navigateBack
                     ) { agentMenu }
@@ -283,7 +287,7 @@ private extension ConversationViewContent {
                 workspaceId: usesVerticalNavigation ? "" : viewModel.workspaceId
             )
             .toolbar {
-                if usesVerticalNavigation {
+                if usesVerticalNavigation, presentation != .iPad {
                     WorkspaceVerticalNavigationToolbar(
                         isEnabled: true,
                         backIdentifier: "conversation.back",
