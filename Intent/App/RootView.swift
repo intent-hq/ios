@@ -15,6 +15,7 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
+    @State private var sceneActivator = WindowSceneActivator()
     @State private var statusConsumer = UUID()
     @State private var statusWorkspaceId: String?
     @State private var isSearchingWorkspaces = false
@@ -339,19 +340,9 @@ struct RootView: View {
             // a backend route to that backend's own window instead.
             guard let backendID = session.backendID else { return }
             selectionHandlerToken = notificationManager.registerAgentSelectionHandler(
-                for: backendID
-            ) { [weak coordinator = coordinator] agentId, workspaceId, agentName, connectionId in
-                if supportsMultipleWindows {
-                    // Raise this backend's window before navigating it.
-                    openWindow(value: backendID)
-                }
-                coordinator?.handleNotificationSelection(
-                    agentId: agentId,
-                    workspaceId: workspaceId,
-                    agentName: agentName,
-                    connectionId: connectionId
-                )
-            }
+                for: backendID,
+                coordinator.agentSelectionHandler(raising: supportsMultipleWindows ? sceneActivator : nil)
+            )
         }
         .onDisappear {
             updateWorkspaceStatusLease(nil)
@@ -360,6 +351,7 @@ struct RootView: View {
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
         .environment(composerCoverage)
+        .background { WindowSceneReader(activator: sceneActivator).frame(width: 0, height: 0) }
     }
 }
 

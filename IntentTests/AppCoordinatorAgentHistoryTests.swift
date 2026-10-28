@@ -1,6 +1,7 @@
 import Foundation
 @testable import Intent
 import Testing
+import UIKit
 
 extension AppCoordinatorTests {
     @Test @MainActor func openingConversationsRecordsThemWithWorkspaceAndDevice() throws {
@@ -61,7 +62,7 @@ extension AppCoordinatorTests {
         #expect(delivered?.connectionId == laptop.connectionID)
     }
 
-    @Test @MainActor func historyEntryOnAnotherDeviceOpensItsOwnWindowWhereSupported() {
+    @Test @MainActor func historyEntryOnAnotherDeviceSwitchesTheWindowWhereMultipleWindowsAreSupported() {
         let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
         var retargeted: BackendID?
         coordinator.retargetWindow = { retargeted = $0 }
@@ -69,12 +70,74 @@ extension AppCoordinatorTests {
         manager.supportsMultipleWindows = true
         var opened: BackendID?
         manager.openBackendWindow = { opened = $0 }
+        manager.registerAgentSelectionHandler(for: Self.windowBackend) { _, _, _, _ in }
         let laptop = BackendID(UUID())
 
         coordinator.onSelectHistoryEntry(historyEntry(on: laptop.connectionID), notifications: manager)
 
-        #expect(opened == laptop)
+        #expect(opened == nil)
+        #expect(retargeted == laptop)
+        var delivered: String?
+        manager.registerAgentSelectionHandler(for: laptop) { agentId, _, _, _ in delivered = agentId }
+        #expect(delivered == "agent-1")
+    }
+
+    @Test @MainActor func historyEntryOnAnotherDeviceRaisesItsOpenWindow() {
+        let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
+        var retargeted: BackendID?
+        coordinator.retargetWindow = { retargeted = $0 }
+        let manager = makeHistoryNotificationManager()
+        manager.supportsMultipleWindows = true
+        let laptop = BackendID(UUID())
+        var delivered: String?
+        manager.registerAgentSelectionHandler(for: laptop) { agentId, _, _, _ in delivered = agentId }
+
+        coordinator.onSelectHistoryEntry(historyEntry(on: laptop.connectionID), notifications: manager)
+
+        #expect(delivered == "agent-1")
         #expect(retargeted == nil)
+    }
+
+    /// The real window handler: after an in-place history switch, the same
+    /// (active) window's new coordinator receives the selection, and no
+    /// window is opened or raised.
+    @Test @MainActor func inPlaceHistorySwitchDeliversWithoutOpeningOrRaisingAWindow() {
+        let manager = makeHistoryNotificationManager()
+        manager.supportsMultipleWindows = true
+        var opened: BackendID?
+        manager.openBackendWindow = { opened = $0 }
+        var activations = 0
+        let activator = WindowSceneActivator(activationState: { .foregroundActive }, activate: { activations += 1 })
+        let window = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
+        var retargeted: BackendID?
+        window.retargetWindow = { retargeted = $0 }
+        _ = manager.registerAgentSelectionHandler(for: Self.windowBackend, window.agentSelectionHandler(raising: activator))
+        let laptop = BackendID(UUID())
+
+        window.onSelectHistoryEntry(historyEntry(on: laptop.connectionID), notifications: manager)
+        #expect(retargeted == laptop)
+        let switched = AppCoordinator(backendID: laptop, persistence: persistence)
+        _ = manager.registerAgentSelectionHandler(for: laptop, switched.agentSelectionHandler(raising: activator))
+
+        #expect(switched.routingState.pendingNotificationSelection?.agentId == "agent-1")
+        #expect(activations == 0)
+        #expect(opened == nil)
+    }
+
+    @Test(arguments: [UIScene.ActivationState.background, .foregroundInactive, .foregroundActive])
+    @MainActor func selectionRaisesItsOwnSceneOnlyWhenNotAlreadyActive(state: UIScene.ActivationState) {
+        let manager = makeHistoryNotificationManager()
+        manager.supportsMultipleWindows = true
+        var activations = 0
+        let activator = WindowSceneActivator(activationState: { state }, activate: { activations += 1 })
+        let laptop = BackendID(UUID())
+        let window = AppCoordinator(backendID: laptop, persistence: persistence)
+        _ = manager.registerAgentSelectionHandler(for: laptop, window.agentSelectionHandler(raising: activator))
+
+        manager.routeAgentSelection(agentId: "agent-1", workspaceId: "workspace-1", agentName: "Agent", connectionId: laptop.connectionID)
+
+        #expect(activations == (state == .foregroundActive ? 0 : 1))
+        #expect(window.routingState.pendingNotificationSelection?.agentId == "agent-1")
     }
 
     @Test(arguments: ["deleted", "archived"])

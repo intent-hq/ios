@@ -31,6 +31,8 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
     @ViewBuilder let content: Content
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.isAgentHistoryOpen) private var isAgentHistoryOpen
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
+    @Environment(\.openWindow) private var openWindow
 
     private var canReveal: Bool { isEnabled && !isAgentHistoryOpen }
 
@@ -46,7 +48,8 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
             ConnectionSwitcherList(
                 connections: coordinator.savedConnections,
                 selectedID: coordinator.backendID?.connectionID,
-                onSelect: select
+                onSelect: select,
+                onOpenInNewWindow: newWindowAction
             )
         } content: {
             content
@@ -62,6 +65,17 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
         isPresented = false
         if id != coordinator.backendID?.connectionID {
             coordinator.onSwitchConnection(id: id)
+        }
+    }
+
+    /// Long-press only, and nil on iPhone where windows cannot be added.
+    private var newWindowAction: ((UUID) -> Void)? {
+        guard supportsMultipleWindows else { return nil }
+        let openWindow = openWindow
+        let isPresented = $isPresented
+        return { id in
+            isPresented.wrappedValue = false
+            openWindow(value: BackendID(id))
         }
     }
 }

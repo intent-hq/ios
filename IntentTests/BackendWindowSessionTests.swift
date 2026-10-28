@@ -5,7 +5,7 @@ import SwiftUI
 import Testing
 
 extension BackendSessionRegistryTests {
-    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .openTargetWindow, .replaceWindow])
+    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .replaceWindow])
     func raisingExistingBackendDoesNotLeaveSelectionForLaterRestoration(route: WindowRetargetRoute) {
         let registry = makeRegistry()
         let stored = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
@@ -181,7 +181,7 @@ extension BackendSessionRegistryTests {
         home.onSwitchConnection(id: backend.connectionID)
         #expect(selected == backend)
         #expect(WindowRetargetRoute.route(
-            currentBackendID: backend, target: backend, supportsMultipleWindows: true
+            currentBackendID: backend, supportsMultipleWindows: true
         ) == .rebindInPlace)
 
         // The root must call rebind for the unchanged scene value, not wait
@@ -282,7 +282,7 @@ extension BackendSessionRegistryTests {
     }
 
     @Test(arguments: [false, true])
-    func differentMachineSelectionFromHomeKeepsExistingWindowPolicy(supportsMultipleWindows: Bool) throws {
+    func differentMachineSelectionFromHomeSwitchesTheWindowInPlace(supportsMultipleWindows: Bool) throws {
         let registry = makeRegistry()
         let originalBackend = BackendID(UUID())
         let target = BackendID(UUID())
@@ -294,25 +294,46 @@ extension BackendSessionRegistryTests {
         // A new pairing can have connected over the transient Home session.
         pairingConnection.simulateConnect()
         defer { window.release() }
-        let route = WindowRetargetRoute.route(
-            currentBackendID: originalBackend, target: target, supportsMultipleWindows: supportsMultipleWindows
-        )
 
-        if supportsMultipleWindows {
-            #expect(route == .openTargetWindow)
-            window.release()
-            window.bind(to: nil)
-            #expect(window.session !== home)
-            #expect(window.isShowingSavedMachines)
-            #expect(window.session?.connection.connectionState == .disconnected)
-        } else {
-            #expect(route == .rebindInPlace)
-            window.prepareToRebind()
-            window.bind(to: target)
-            #expect(window.session?.backendID == target)
-            #expect(!window.isShowingSavedMachines)
-        }
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: originalBackend, supportsMultipleWindows: supportsMultipleWindows
+        ) == .rebindInPlace)
+        window.prepareToRebind()
+        window.bind(to: target)
+        #expect(window.session?.backendID == target)
+        #expect(!window.isShowingSavedMachines)
         #expect(pairingConnection.disconnectCallCount == 1)
         #expect(registry.attachmentCount(for: originalBackend) == 0)
+    }
+
+    /// Pairing B from one of two windows on A rebinds that window, so the
+    /// window that stays on A must re-dial the hijacked shared connection.
+    @Test(arguments: [false, true])
+    func pairingAnotherBackendRedialsTheWindowThatStays(hasSurvivingWindow: Bool) throws {
+        let registry = makeRegistry()
+        let own = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
+        let paired = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 5252))
+        let backend = BackendID(own.id)
+        let session = registry.attach(backend)
+        let leaving = session.makeCoordinator()
+        leaving.currentScreen = .workspaceList
+        var staying: AppCoordinator?
+        if hasSurvivingWindow {
+            _ = registry.attach(backend)
+            staying = session.makeCoordinator()
+            staying?.currentScreen = .workspaceList
+        }
+        var retargeted: BackendID?
+        leaving.retargetWindow = { retargeted = $0 }
+
+        leaving.onPaired(paired)
+
+        let fake = try #require(session.connection as? FakeConnectionManager)
+        #expect(retargeted == BackendID(paired.id))
+        #expect(fake.disconnectCallCount == (hasSurvivingWindow ? 1 : 0))
+        #expect(leaving.currentScreenDescription == "workspaceList")
+        if let staying {
+            #expect(staying.currentScreenDescription == "connecting")
+        }
     }
 }
