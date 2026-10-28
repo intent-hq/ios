@@ -11,6 +11,8 @@ import Observation
     private var index = AgentListIndex(agents: [])
     let list: AgentListState
     var expandedGroups: Set<AgentListGroup> = []
+    /// The selection whose sections a sidebar list finished opening and loading.
+    var completedReveal: String?
 
     init(list: AgentListState = AgentListState()) { self.list = list }
 

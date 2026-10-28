@@ -110,6 +110,29 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
     }
 
     @MainActor
+    func testConversationKeepsItsTitleWhenTheSidebarCannotListAgents() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent sidebar")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-design-scenario=agent-list-unavailable", "-appThemePreference", "light"]
+        app.launch()
+        defer { app.terminate() }
+        let workspace = app.staticTexts["Workspace agent design"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let agent = app.buttons["workspace.agent.groups-parent"]
+        XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        agent.tap()
+        XCTAssertTrue(app.buttons["conversation.back"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["conversation.header.title"].waitForExistence(timeout: Self.timeout),
+            "A failed sidebar list leaves the conversation to name its agent"
+        )
+        capture("ipad-sidebar-list-failed")
+    }
+
+    @MainActor
     func testPaneSwipesMoveBetweenOverviewAndFirstAgent() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad main pane swipes")
         XCUIDevice.shared.orientation = .landscapeLeft

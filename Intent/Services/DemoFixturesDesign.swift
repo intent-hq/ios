@@ -11,6 +11,8 @@ enum DemoDesignScenario: String, CaseIterable {
     case agentGroups = "agent-groups"
     case agentGroupsLarge = "agent-groups-large"
     case agentGroupsRetry = "agent-groups-retry"
+    /// Only the first top-level agent list succeeds, so later lists (the sidebar's) fail.
+    case agentListUnavailable = "agent-list-unavailable"
     case blocker
     case claudeTools = "claude-tools"
     case composer
@@ -60,6 +62,7 @@ final class DemoDesignFixtures {
     private var queuedMessages: [[String: Any]] = []
     private var sequence = 0
     private var failedBackgroundRead = false
+    private var servedTopLevelRead = false
     private let attachments = DemoDesignAttachments()
 
     init(scenario: DemoDesignScenario) {
@@ -186,7 +189,11 @@ final class DemoDesignFixtures {
             failedBackgroundRead = true
             return ["error": "Temporary demo failure"]
         }
-        let rows = scenario == .agentGroups || scenario == .agentGroupsRetry ? DemoAgentListFixtures.groupRows : [agent]
+        if scenario == .agentListUnavailable, params["scope"] as? String == "topLevel" {
+            if servedTopLevelRead { return ["error": "Agent list unavailable"] }
+            servedTopLevelRead = true
+        }
+        let rows = [.agentGroups, .agentGroupsRetry, .agentListUnavailable].contains(scenario) ? DemoAgentListFixtures.groupRows : [agent]
         return DemoAgentListFixtures.response(rows: rows, params: params)
     }
 

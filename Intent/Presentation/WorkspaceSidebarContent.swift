@@ -48,6 +48,13 @@ struct WorkspaceSidebarAgents: Equatable {
     var handoff: Handoff?
     var listing: Listing?
 
+    /// The sidebar names the open agent once its row is listed. While a read that could list it
+    /// is in flight, it keeps the conversation from flashing a title; a failed or finished read
+    /// without the row hands the name back to the conversation.
+    static func namesSelection(isListed: Bool, isInitialLoadPending: Bool, isRevealPending: Bool) -> Bool {
+        isListed || isInitialLoadPending || isRevealPending
+    }
+
     /// Sections to open so the agent's row appears: each known ancestor's children,
     /// and the background section when the chain ends at a background agent.
     static func revealGroups(for agent: AgentSession, lookup: (String) -> AgentSession?) -> Set<AgentListGroup> {

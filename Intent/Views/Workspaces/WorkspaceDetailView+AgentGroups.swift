@@ -183,6 +183,8 @@ extension WorkspaceDetailView {
 
     /// Opens and loads the sections above the agent; each loaded parent may reveal its own section.
     private func revealSidebarAgent() async {
+        let key = sidebarRevealKey
+        defer { if !Task.isCancelled { viewModel.completedReveal = key } }
         for _ in 0 ..< Self.revealPasses {
             for group in sidebarRevealGroups where !viewModel.isExpanded(group) { viewModel.toggle(group) }
             let pending = pendingAgentGroups
@@ -193,10 +195,11 @@ extension WorkspaceDetailView {
 
     private var sidebarListing: WorkspaceSidebarAgents.Listing? {
         guard let agentId = sidebarAgentId, currentTab == .agents else { return nil }
-        let isListed = agentListRows.contains { $0.id == "workspace.agent.\(agentId)" }
-        // While its sections load, expect the row rather than flash the conversation's title.
-        let isSettling = !agentStore.hasLoaded || !pendingAgentGroups.isEmpty
-        guard isListed || isSettling else { return nil }
+        guard WorkspaceSidebarAgents.namesSelection(
+            isListed: agentListRows.contains { $0.id == "workspace.agent.\(agentId)" },
+            isInitialLoadPending: !agentStore.hasLoaded && !agentStore.hasFailedToLoad,
+            isRevealPending: sidebarRevealKey.map { $0 != viewModel.completedReveal && !pendingAgentGroups.isEmpty } ?? false
+        ) else { return nil }
         return .init(workspaceId: workspaceId, agentId: agentId, owner: ObjectIdentifier(viewModel))
     }
 }
