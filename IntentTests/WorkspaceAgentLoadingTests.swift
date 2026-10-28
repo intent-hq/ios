@@ -111,8 +111,8 @@ struct WorkspaceAgentLoadingTests {
         let requestCount = fake.paramsForMethod("agent.list").count
         await host.view.agentStore.fetchAgents(workspaceId: "ws-1")
         let refreshRequests = fake.paramsForMethod("agent.list").dropFirst(requestCount)
-        let fallback = try #require(refreshRequests.first {
-            $0["scope"] as? String == "delegated" && $0["parentAgentId"] == nil
+        let fallback = try #require(refreshRequests.first { params in
+            params["scope"] as? String == "delegated" && params["parentAgentId"] == nil
         })
         #expect(fallback["orphanedOnly"] == nil)
     }
