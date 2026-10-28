@@ -6,6 +6,7 @@ struct IPadWorkspaceDetailView: View {
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.iPadSidebarCollapse) private var sidebarCollapse
     @State private var notePath = NavigationPath()
     @State private var firstAgent: WorkspaceFirstAgent?
     @State private var isSwiping = false
@@ -93,6 +94,12 @@ struct IPadWorkspaceDetailView: View {
             showsBackButton: showsBackButton
         ) { noteId, workspaceId, title in
             notePath.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
+        }
+        .toolbar {
+            if let sidebarCollapse {
+                ToolbarItem(placement: .topBarTrailing) { IPadSidebarCollapseButton(action: sidebarCollapse) }
+                    .intentToolbarSurface()
+            }
         }
     }
 }

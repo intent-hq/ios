@@ -49,8 +49,8 @@ struct WorkspaceListSidebar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, contentInset)
                     .padding(.top, IPadShellLayout.focusContentInset)
-            } else if let onCollapse {
-                sidebarHeader(onCollapse: onCollapse)
+            } else if isEmbedded {
+                sidebarHeader
             }
             if !isSearching {
                 WorkspaceSearchBar(
@@ -164,13 +164,10 @@ extension WorkspaceListSidebar {
         )
     }
 
-    private func sidebarHeader(onCollapse: @escaping () -> Void) -> some View {
-        IPadSidebarHeader(onCollapse: onCollapse) {
+    private var sidebarHeader: some View {
+        IPadSidebarHeader(onCollapse: nil) {
             workspaceMenu
         } actions: {
-            IntentIconButton(icon: .addIcon, label: "New workspace", showsBackground: false, action: onCreateWorkspace)
-                .disabled(!coordinator.canCreateWorkspace)
-                .accessibilityIdentifier("workspaces.create")
             WorkspaceSearchButton(
                 isSearching: $isSearching,
                 height: Constants.WorkspaceSearch.compactHeight,

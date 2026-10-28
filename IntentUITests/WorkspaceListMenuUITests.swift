@@ -47,6 +47,13 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             closeCreation(in: app)
             XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(app.buttons["workspaces.menu"].isHittable)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                let railCreate = app.buttons["ipad.rail.createWorkspace"]
+                XCTAssertTrue(railCreate.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+                railCreate.tap()
+                closeCreation(in: app)
+                XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+            }
             app.terminate()
         }
     }

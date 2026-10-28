@@ -4,7 +4,9 @@ struct IPadNavigationRail: View {
     let section: IPadSidebarSection
     let isSidebarVisible: Bool
     let canUseAssistant: Bool
+    let canCreateWorkspace: Bool
     let onSelect: (IPadSidebarSection) -> Void
+    let onCreateWorkspace: () -> Void
     let onExpand: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("appThemePreference") private var themePreference = "system"
@@ -15,6 +17,8 @@ struct IPadNavigationRail: View {
                 if !isSidebarVisible {
                     railButton(asset: .collapseLeft, label: "Show sidebar", identifier: "ipad.sidebar.expand", action: onExpand)
                 }
+                railButton(asset: .addIcon, label: "New workspace", identifier: "ipad.rail.createWorkspace", action: onCreateWorkspace)
+                    .disabled(!canCreateWorkspace)
                 destination(.assistant, asset: .dandelion, label: "Assistant")
                     .disabled(!canUseAssistant)
                 destination(.workspaces, asset: .agentGeneral1, label: "Workspaces")

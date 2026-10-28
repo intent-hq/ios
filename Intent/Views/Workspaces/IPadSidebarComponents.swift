@@ -41,7 +41,8 @@ struct IPadSidebarTitle: View {
 }
 
 struct IPadSidebarHeader<Title: View, Actions: View>: View {
-    let onCollapse: () -> Void
+    /// Nil when the detail pane hosts the collapse control instead.
+    let onCollapse: (() -> Void)?
     @ViewBuilder let title: () -> Title
     @ViewBuilder let actions: () -> Actions
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
@@ -80,14 +81,42 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
         HStack(spacing: 0) {
             if isPaneVisible {
                 actions()
-                if !usesVerticalBar {
-                    IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: onCollapse)
-                        .accessibilityIdentifier("ipad.sidebar.collapse")
-                        .accessibilityAction(.escape, onCollapse)
+                if !usesVerticalBar, let onCollapse {
+                    IPadSidebarCollapseButton(action: onCollapse)
                 }
             } else {
                 Color.clear.frame(width: Constants.WorkspaceSearch.compactHeight, height: Constants.WorkspaceSearch.compactHeight)
             }
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// Set on the detail pane while its sidebar can be hidden from the detail toolbar.
+    @Entry var iPadSidebarCollapse: (() -> Void)?
+}
+
+struct IPadSidebarCollapseButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: action)
+            .accessibilityIdentifier("ipad.sidebar.collapse")
+            .accessibilityAction(.escape, action)
+    }
+}
+
+/// Groups the detail pane's sidebar control with its trailing actions menu.
+struct IPadSidebarCollapseActions<Actions: View>: View {
+    let collapse: (() -> Void)?
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if let collapse {
+                IPadSidebarCollapseButton(action: collapse)
+            }
+            actions()
         }
     }
 }
