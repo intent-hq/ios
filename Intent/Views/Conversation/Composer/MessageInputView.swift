@@ -142,7 +142,7 @@ private extension MessageInputView {
     }
 
     @ViewBuilder var skillChips: some View {
-        if isFocused, skillCompletion.context != nil { SkillSuggestionsView(completion: skillCompletion, workspaceId: viewModel.workspaceId, connection: viewModel.connection) }
+        if isFocused, skillCompletion.context != nil { SkillSuggestionsView(completion: skillCompletion, workspaceId: viewModel.workspaceId, agentId: viewModel.agentId, connection: viewModel.connection) }
     }
     @ViewBuilder
     var supplementalRows: some View {

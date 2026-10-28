@@ -76,7 +76,7 @@ struct ComposerSkillCompletionTests {
             ["name": name, "description": "", "location": "/\(name)/SKILL.md", "scope": "user"]
         }
         let completion = ComposerSkillCompletion()
-        await completion.catalog.load(workspaceId: "workspace", connection: connection)
+        await completion.catalog.load(workspaceId: "workspace", agentId: "agent", connection: connection)
         return completion
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 struct SkillSuggestionsView: View {
     let completion: ComposerSkillCompletion
     let workspaceId: String
+    let agentId: String
     let connection: any ConnectionManagerRouting
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -25,12 +26,10 @@ struct SkillSuggestionsView: View {
             .frame(maxWidth: .infinity, minHeight: Layout.chipHeight, alignment: .leading)
             .padding(.bottom, Layout.bottomPadding)
             .accessibilityIdentifier("composer.skills")
-            .task(id: "\(connection.connectionState == .connected)-\(workspaceId)-\(retry)") {
-                completion.catalog.reset()
+            .task(id: "\(connection.connectionState == .connected)-\(workspaceId)-\(agentId)-\(retry)") {
                 guard connection.connectionState == .connected else { return }
-                await completion.catalog.load(workspaceId: workspaceId, connection: connection)
+                await completion.catalog.load(workspaceId: workspaceId, agentId: agentId, connection: connection)
             }
-            .onDisappear { completion.catalog.reset() }
     }
 
     @ViewBuilder
