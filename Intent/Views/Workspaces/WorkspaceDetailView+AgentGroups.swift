@@ -106,7 +106,12 @@ extension WorkspaceDetailView {
             colorScheme: colorScheme,
             indented: indented,
             isSelected: sidebarAgentId == agent.id,
-            onSelect: { coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name) },
+            onSelect: {
+                if sidebar == nil {
+                    coordinator.workspaceSidebarAgents.handoff = .init(workspaceId: workspaceId, expansion: viewModel.expansion)
+                }
+                coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
+            },
             onMute: { toggleNotificationsMuted(agent) }
         )
     }
@@ -121,6 +126,78 @@ extension WorkspaceDetailView {
                 AppLog.workspace.error("[WorkspaceDetail] Notification mute toggle failed: \(error)")
             }
         }
+    }
+}
+
+// MARK: - Sidebar selection
+
+extension WorkspaceDetailView {
+    private static let revealPasses = 4
+
+    /// The sidebar copy keeps the open agent's row in view, and reports whether it lists it.
+    var sidebarContent: some View {
+        presentedContent
+            .onAppear(perform: adoptOverviewExpansion)
+            .onChange(of: sidebarAgentId, initial: true) { _, agentId in
+                // An agent opened from elsewhere is found on the Agents tab.
+                if agentId != nil, currentTab != .agents { currentTab = .agents }
+            }
+            .task(id: sidebarRevealKey) { await revealSidebarAgent() }
+            .onChange(of: sidebarListing, initial: true) { _, listing in
+                coordinator.workspaceSidebarAgents.listing = listing
+            }
+            .onDisappear {
+                if coordinator.workspaceSidebarAgents.listing?.owner == ObjectIdentifier(viewModel) {
+                    coordinator.workspaceSidebarAgents.listing = nil
+                }
+            }
+    }
+
+    /// The overview's open sections carry over, so the agent just opened from one stays visible.
+    private func adoptOverviewExpansion() {
+        guard let handoff = coordinator.workspaceSidebarAgents.handoff, handoff.workspaceId == workspaceId else { return }
+        viewModel.expansion = handoff.expansion
+        coordinator.workspaceSidebarAgents.handoff = nil
+    }
+
+    private func sidebarAgent(_ agentId: String) -> AgentSession? {
+        agentStore.agents.first { $0.id == agentId }
+            ?? coordinator.agentDetails.cached(agentId: agentId).flatMap { AgentSession.parseAgent($0.values) }
+    }
+
+    private var sidebarRevealGroups: Set<AgentListGroup> {
+        guard let agent = sidebarAgentId.flatMap(sidebarAgent) else { return [] }
+        return WorkspaceSidebarAgents.revealGroups(for: agent, lookup: sidebarAgent)
+    }
+
+    private var sidebarRevealKey: String? {
+        guard let agentId = sidebarAgentId, agentStore.hasLoaded else { return nil }
+        return "\(agentId)|\(sidebarAgent(agentId) != nil)"
+    }
+
+    private var pendingAgentGroups: Set<AgentListGroup> {
+        viewModel.expandedGroups.union(sidebarRevealGroups).filter { group in
+            !agentStore.isAgentGroupLoaded(group) && agentStore.list.errors[group] == nil
+        }
+    }
+
+    /// Opens and loads the sections above the agent; each loaded parent may reveal its own section.
+    private func revealSidebarAgent() async {
+        for _ in 0 ..< Self.revealPasses {
+            for group in sidebarRevealGroups where !viewModel.isExpanded(group) { viewModel.toggle(group) }
+            let pending = pendingAgentGroups
+            guard !pending.isEmpty, !Task.isCancelled else { return }
+            for group in pending { await agentStore.loadAgentGroup(group, workspaceId: workspaceId) }
+        }
+    }
+
+    private var sidebarListing: WorkspaceSidebarAgents.Listing? {
+        guard let agentId = sidebarAgentId, currentTab == .agents else { return nil }
+        let isListed = agentListRows.contains { $0.id == "workspace.agent.\(agentId)" }
+        // While its sections load, expect the row rather than flash the conversation's title.
+        let isSettling = !agentStore.hasLoaded || !pendingAgentGroups.isEmpty
+        guard isListed || isSettling else { return nil }
+        return .init(workspaceId: workspaceId, agentId: agentId, owner: ObjectIdentifier(viewModel))
     }
 }
 

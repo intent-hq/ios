@@ -289,6 +289,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         .tracking(Design.Typography.smallTracking)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(showsTitle ? "conversation.header.title" : "")
     }
 
     @ViewBuilder private var subtitleText: some View {

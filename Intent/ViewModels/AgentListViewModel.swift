@@ -115,6 +115,20 @@ import Observation
         } else if !expandedGroups.insert(group).inserted { expandedGroups.remove(group) }
     }
 
+    /// Which sections are open, so another list of the same workspace can match it.
+    struct Expansion: Equatable {
+        var groups: Set<AgentListGroup> = []
+        var collapsedLegacyParents: Set<AgentListGroup> = []
+    }
+
+    var expansion: Expansion {
+        get { Expansion(groups: expandedGroups, collapsedLegacyParents: collapsedLegacyParents) }
+        set {
+            expandedGroups = newValue.groups
+            collapsedLegacyParents = newValue.collapsedLegacyParents
+        }
+    }
+
     func reset() {
         agents = []
         expandedGroups = []

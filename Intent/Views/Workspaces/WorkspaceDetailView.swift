@@ -52,7 +52,7 @@ struct WorkspaceDetailView: View {
 
     var agentStore: AgentStore { storedAgentStore }
     var viewModel: AgentListViewModel { storedViewModel }
-    var currentTab: WorkspaceTab { selectedTab }
+    var currentTab: WorkspaceTab { get { selectedTab } nonmutating set { selectedTab = newValue } }
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
     var noteStoreConnectionID: ObjectIdentifier { ObjectIdentifier(noteStore.connectionManager) }
     var changesStoreConnectionID: ObjectIdentifier { ObjectIdentifier(changesStore.connectionManager) }
@@ -168,13 +168,13 @@ struct WorkspaceDetailView: View {
 
     var body: some View {
         if sidebar != nil {
-            presentedContent
+            sidebarContent
         } else {
             pageContent
         }
     }
 
-    private var presentedContent: some View {
+    var presentedContent: some View {
         lifecycleContent
         .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
             if titleEditor.isEditing {

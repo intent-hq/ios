@@ -64,6 +64,52 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
     }
 
     @MainActor
+    func testGroupedAgentsStayListedAndNamedInTheSidebar() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent sidebar")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-design-scenario=agent-groups", "-appThemePreference", "light"]
+        app.launch()
+        defer { app.terminate() }
+        let workspace = app.staticTexts["Workspace agent design"].firstMatch
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        workspace.tap()
+        let title = app.descendants(matching: .any)["conversation.header.title"]
+
+        // Sections opened in the overview stay open in the sidebar, which then names the agent.
+        let backgroundSection = app.buttons["workspace.agents.background"]
+        XCTAssertTrue(backgroundSection.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        backgroundSection.tap()
+        let background = app.buttons["workspace.agent.groups-background"]
+        XCTAssertTrue(background.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        background.tap()
+        XCTAssertTrue(background.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout), "The background agent stays listed")
+        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+        capture("ipad-sidebar-background-agent")
+
+        // Another tab hides the row, so the conversation names the agent itself.
+        app.buttons["Context"].firstMatch.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), "The title returns while the sidebar shows Context")
+        capture("ipad-sidebar-context-beside-agent")
+        app.buttons["Agents"].firstMatch.tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+
+        let back = app.buttons["Back to workspace"]
+        XCTAssertTrue(back.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        back.tap()
+        let children = app.buttons["workspace.agents.children.groups-parent"]
+        XCTAssertTrue(children.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        if children.value as? String != "Expanded" { children.tap() }
+        let child = app.buttons["workspace.agent.groups-child"]
+        XCTAssertTrue(child.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        child.tap()
+        XCTAssertTrue(child.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout), "The delegated agent stays listed")
+        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+        capture("ipad-sidebar-delegated-agent")
+    }
+
+    @MainActor
     func testPaneSwipesMoveBetweenOverviewAndFirstAgent() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad main pane swipes")
         XCUIDevice.shared.orientation = .landscapeLeft
