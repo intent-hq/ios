@@ -78,9 +78,9 @@ extension AppCoordinatorTests {
     }
 
     @Test(arguments: ["deleted", "archived"])
-    @MainActor func removedWorkspaceEventDropsThisDevicesHistoryForIt(removal: String) async throws {
+    @MainActor func removedWorkspaceEventDropsThisDevicesHistoryForIt(removal: String) throws {
         let fixture = makeRemovalCoordinator()
-        try await fixture.fake.connect(
+        try fixture.fake.connect(
             hosts: fixture.saved.server.hosts,
             port: fixture.saved.server.port,
             token: fixture.saved.token,
@@ -98,12 +98,12 @@ extension AppCoordinatorTests {
     }
 
     @Test(arguments: ["pairing", "otherDevice", "disconnected"])
-    @MainActor func removalEventsKeepHistoryUnlessTheSocketReachesThisDevice(socket: String) async throws {
+    @MainActor func removalEventsKeepHistoryUnlessTheSocketReachesThisDevice(socket: String) throws {
         let fixture = makeRemovalCoordinator()
         switch socket {
         case "pairing":
-            try await PairingConnectionContext.$attemptID.withValue(UUID()) {
-                try await fixture.fake.connect(
+            try PairingConnectionContext.$attemptID.withValue(UUID()) {
+                try fixture.fake.connect(
                     hosts: fixture.saved.server.hosts,
                     port: fixture.saved.server.port,
                     token: fixture.saved.token,
@@ -112,7 +112,7 @@ extension AppCoordinatorTests {
                 )
             }
         case "otherDevice":
-            try await fixture.fake.connect(hosts: ["10.0.0.2"], port: 4200, token: "tok-other", certFingerprint: nil, tcAddress: nil)
+            try fixture.fake.connect(hosts: ["10.0.0.2"], port: 4200, token: "tok-other", certFingerprint: nil, tcAddress: nil)
         default:
             break
         }
@@ -123,9 +123,9 @@ extension AppCoordinatorTests {
         #expect(fixture.coordinator.agentHistory.entries.count == 1)
     }
 
-    @Test @MainActor func unrelatedWorkspaceUpdatesKeepHistory() async throws {
+    @Test @MainActor func unrelatedWorkspaceUpdatesKeepHistory() throws {
         let fixture = makeRemovalCoordinator()
-        try await fixture.fake.connect(hosts: fixture.saved.server.hosts, port: fixture.saved.server.port, token: fixture.saved.token, certFingerprint: nil, tcAddress: nil)
+        try fixture.fake.connect(hosts: fixture.saved.server.hosts, port: fixture.saved.server.port, token: fixture.saved.token, certFingerprint: nil, tcAddress: nil)
         fixture.coordinator.agentHistory.record(historyEntry(on: fixture.saved.id, workspaceId: "kept"))
 
         fixture.store.handleEvent("event", params: [

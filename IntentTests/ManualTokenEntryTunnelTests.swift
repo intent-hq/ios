@@ -71,7 +71,7 @@ extension ManualTokenEntryViewTests {
             self.localPort = localPort
         }
 
-        func close() async {
+        func close() {
             closed.withLock { $0 = true }
         }
 
@@ -84,7 +84,7 @@ extension ManualTokenEntryViewTests {
         let result: Result<FakeTunnelSession, WebSocketTransportError>
         let observed = OSAllocatedUnfairLock<[String: Int]>(initialState: [:])
 
-        func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+        func open(tcAddress: String, remotePort: Int) throws -> any TunnelSession {
             observed.withLock { $0[tcAddress] = remotePort }
             return try result.get()
         }

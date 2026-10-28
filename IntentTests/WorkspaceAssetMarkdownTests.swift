@@ -162,7 +162,7 @@ struct WorkspaceAssetMarkdownTests {
         )
     }
 
-    private func forbiddenFallback() async -> AnyAttachment {
+    private func forbiddenFallback() -> AnyAttachment {
         Issue.record("Saved assets must never reach the network fallback")
         return AnyAttachment(IntentFileFailureAttachment(altText: "unexpected fallback"))
     }

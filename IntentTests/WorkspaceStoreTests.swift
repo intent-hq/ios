@@ -8,7 +8,7 @@ import Testing
 struct WorkspaceStoreAgentParsingTests {
     // MARK: - Agent summary parsing within parseWorkspace
 
-    @Test func parseWorkspaceWithFullAgentSummary() async {
+    @Test func parseWorkspaceWithFullAgentSummary() {
         let dict: [String: Any] = [
             "id": "ws-agent-1",
             "title": "Agent Workspace",
@@ -59,7 +59,7 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(second?.isResponding == false)
     }
 
-    @Test func parseWorkspaceWithMinimalAgentFields() async {
+    @Test func parseWorkspaceWithMinimalAgentFields() {
         let dict: [String: Any] = [
             "id": "ws-agent-2",
             "title": "Minimal Agent",
@@ -83,7 +83,7 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(agent?.isResponding == false)
     }
 
-    @Test func parseWorkspaceSkipsAgentsMissingRequiredFields() async {
+    @Test func parseWorkspaceSkipsAgentsMissingRequiredFields() {
         let dict: [String: Any] = [
             "id": "ws-agent-3",
             "title": "Partial Agents",
@@ -103,7 +103,7 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(workspace?.agentSummaryAgents[0].id == "agent-ok")
     }
 
-    @Test func parseWorkspaceWithEmptyAgentsArray() async {
+    @Test func parseWorkspaceWithEmptyAgentsArray() {
         let dict: [String: Any] = [
             "id": "ws-agent-4",
             "title": "Empty Agents",
@@ -115,7 +115,7 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(workspace?.agentSummaryAgents.isEmpty == true)
     }
 
-    @Test func parseWorkspaceWithNoAgentSummary() async {
+    @Test func parseWorkspaceWithNoAgentSummary() {
         let dict: [String: Any] = ["id": "ws-agent-5", "title": "No Summary"]
         let workspace = WorkspaceStore.parseWorkspace(dict)
         #expect(workspace != nil)
@@ -124,7 +124,7 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(workspace?.agentSummaryWasReported == false)
     }
 
-    @Test func agentSummaryCountMatchesDictValue() async {
+    @Test func agentSummaryCountMatchesDictValue() {
         let dict: [String: Any] = [
             "id": "ws-agent-6",
             "title": "Count Check",
@@ -143,7 +143,7 @@ struct WorkspaceStoreAgentParsingTests {
 
     // MARK: - WorkspaceAgentInfo Codable round-trip
 
-    @Test func agentInfoCodableRoundTrip() async throws {
+    @Test func agentInfoCodableRoundTrip() throws {
         let agent = WorkspaceAgentInfo(
             id: "agent-rt",
             name: "Round Trip",
@@ -158,7 +158,7 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(decoded == agent)
     }
 
-    @Test func agentInfoCodableWithNilOptionals() async throws {
+    @Test func agentInfoCodableWithNilOptionals() throws {
         let agent = WorkspaceAgentInfo(
             id: "agent-nil",
             name: "Nil Opts",
@@ -220,7 +220,7 @@ struct WorkspaceStoreLastActivityTests {
 
     // MARK: - workspace:updated { changes.lastActivity } patches the row in place
 
-    @Test func workspaceUpdatedDeltaPatchesLastActivityInPlace() async {
+    @Test func workspaceUpdatedDeltaPatchesLastActivityInPlace() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
 
@@ -234,7 +234,7 @@ struct WorkspaceStoreLastActivityTests {
         #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
     }
 
-    @Test func workspaceUpdatedDeltaIsAppliedVerbatimWithoutMonotonicGuard() async {
+    @Test func workspaceUpdatedDeltaIsAppliedVerbatimWithoutMonotonicGuard() {
         // intentd guarantees monotonicity; the client applies whatever it sent.
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T14:00:00Z")]
@@ -249,7 +249,7 @@ struct WorkspaceStoreLastActivityTests {
         #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
     }
 
-    @Test func workspaceUpdatedDeltaLeavesOtherWorkspacesUntouched() async {
+    @Test func workspaceUpdatedDeltaLeavesOtherWorkspacesUntouched() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [
             makeWorkspace(id: "ws-A", lastActivity: "2026-03-01T10:00:00Z"),
@@ -267,7 +267,7 @@ struct WorkspaceStoreLastActivityTests {
         #expect(store.workspaces[1].lastActivity == "2026-03-01T10:00:00Z")
     }
 
-    @Test func updateLastActivityUnknownWorkspaceIsNoOp() async {
+    @Test func updateLastActivityUnknownWorkspaceIsNoOp() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
         store.updateLastActivity(workspaceId: "ws-other", lastActivity: "2026-03-01T12:00:00Z")
@@ -277,7 +277,7 @@ struct WorkspaceStoreLastActivityTests {
 
     // MARK: - Fetched rows are published exactly as received
 
-    @Test func fetchedRowsAreNotOverriddenByEarlierDelta() async {
+    @Test func fetchedRowsAreNotOverriddenByEarlierDelta() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
         store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-03-01T16:00:00Z")
@@ -289,7 +289,7 @@ struct WorkspaceStoreLastActivityTests {
         #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
     }
 
-    @Test func addOrUpdatePublishesRowAsReceived() async {
+    @Test func addOrUpdatePublishesRowAsReceived() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T16:00:00Z")]
 

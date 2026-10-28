@@ -213,7 +213,7 @@ extension IntentFileAttachmentLoaderTests {
         return loader
     }
 
-    private func pdfForbiddenFallback() async -> AnyAttachment {
+    private func pdfForbiddenFallback() -> AnyAttachment {
         Issue.record("Workspace PDF embeds must not reach the network fallback")
         return AnyAttachment(IntentFileFailureAttachment(altText: "unexpected fallback"))
     }

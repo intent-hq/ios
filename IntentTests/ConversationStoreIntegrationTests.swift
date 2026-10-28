@@ -358,7 +358,7 @@ extension ConversationStoreIntegrationTests {
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
 
         // Initial setup - activate this screen's event lifecycle, then connect and subscribe
-        await store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+        store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
         fake.simulateConnect()
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
@@ -660,7 +660,7 @@ extension ConversationStoreIntegrationTests {
         fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
-        await store?.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+        store?.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
         await store?.subscribeLiveChat(agentId: "agent-1")
         #expect(fake.eventHandlerCount == detailHandlerCount + 1)
         #expect(store?.eventHandlerId != nil)
@@ -679,7 +679,7 @@ extension ConversationStoreIntegrationTests {
         #expect(!fake.didCallMethod("events.subscribe") && !fake.didCallMethod("events.unsubscribe"))
     }
 
-    @Test func streamingDeactivationIsIdempotentAndBackendLocal() async {
+    @Test func streamingDeactivationIsIdempotentAndBackendLocal() {
         let fakeA = FakeConnectionManager()
         let fakeB = FakeConnectionManager()
         fakeA.responseMap["events.subscribe"] = ["subscriptionId": "sub-a"]
@@ -694,8 +694,8 @@ extension ConversationStoreIntegrationTests {
         let storeA = ConversationStore(connectionManager: fakeA, agentDetails: detailsA)
         let storeB = ConversationStore(connectionManager: fakeB, agentDetails: detailsB)
         #expect(fakeA.eventHandlerCount == detailHandlersA && fakeB.eventHandlerCount == detailHandlersB)
-        await storeA.subscribeToStreaming(agentId: "agent-a", workspaceId: "ws-a")
-        await storeB.subscribeToStreaming(agentId: "agent-b", workspaceId: "ws-b")
+        storeA.subscribeToStreaming(agentId: "agent-a", workspaceId: "ws-a")
+        storeB.subscribeToStreaming(agentId: "agent-b", workspaceId: "ws-b")
 
         storeA.deactivateStreaming()
         storeA.deactivateStreaming()

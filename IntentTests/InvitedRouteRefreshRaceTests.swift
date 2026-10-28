@@ -11,7 +11,7 @@ extension ConnectionManagerTests {
 
         init(port: Int) { self.port = port }
         func reset() { routes.withLock { $0 = [] } }
-        func open(tcAddress: String, remotePort _: Int) async -> any TunnelSession {
+        func open(tcAddress: String, remotePort _: Int) -> any TunnelSession {
             routes.withLock { $0.append(tcAddress) }
             return PathTunnelSession(localPort: port)
         }

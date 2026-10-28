@@ -27,7 +27,7 @@ nonisolated protocol TunnelDialing: Sendable {
 nonisolated struct UnavailableTunnelDialer: TunnelDialing {
     static let unavailableMessage = "Tailcat tunnels are not supported on this platform"
 
-    func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
+    func open(tcAddress _: String, remotePort _: Int) throws -> any TunnelSession {
         throw WebSocketTransportError.failed(
             host: ConnectionManager.tunnelCandidateLabel,
             message: Self.unavailableMessage

@@ -261,7 +261,7 @@ struct ToolClassifierClassificationTests {
 }
 
 extension ConversationStoreLiveStateTests {
-    @Test func claudeToolSearchLiveAndReloadedRowsKeepDetailsWithReadableTitle() async throws {
+    @Test func claudeToolSearchLiveAndReloadedRowsKeepDetailsWithReadableTitle() throws {
         let (liveStore, _) = makeStore()
         let (reloadedStore, _) = makeStore()
         let selector = "select:mcp__workspace-mcp__workspace_api"

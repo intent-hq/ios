@@ -428,7 +428,7 @@ extension ConversationViewModelTests {
 
     // MARK: - Image handling
 
-    @Test func addImageAppendsToPendingImages() async throws {
+    @Test func addImageAppendsToPendingImages() throws {
         let viewModel = makeVM()
         let img = try #require(UIImage(systemName: "star"))
         viewModel.addImage(img)
@@ -451,7 +451,7 @@ extension ConversationViewModelTests {
         #expect(changeCount.withLock { $0 } == 1)
     }
 
-    @Test func removeImageRemovesAtIndex() async throws {
+    @Test func removeImageRemovesAtIndex() throws {
         let viewModel = makeVM()
         let img1 = try #require(UIImage(systemName: "star"))
         let img2 = try #require(UIImage(systemName: "circle"))
@@ -461,7 +461,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.pendingImages.count == 1)
     }
 
-    @Test func removeImageOutOfBoundsIsSafe() async throws {
+    @Test func removeImageOutOfBoundsIsSafe() throws {
         let viewModel = makeVM()
         let img = try #require(UIImage(systemName: "star"))
         viewModel.addImage(img)

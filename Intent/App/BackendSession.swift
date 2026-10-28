@@ -53,7 +53,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
 }
 
 extension SessionConnectionManaging {
-    func makeBrowserProxy() async throws -> any BrowserProxySession {
+    func makeBrowserProxy() throws -> any BrowserProxySession {
         throw BrowserTunnelError.unavailable
     }
 }

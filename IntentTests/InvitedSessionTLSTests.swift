@@ -6,13 +6,13 @@ extension ConnectionManagerTests {
     nonisolated private struct LocalTLSTunnel: TunnelSession {
         let localPort: Int
 
-        func close() async {}
+        func close() {}
     }
 
     nonisolated private struct LocalTLSDialer: TunnelDialing {
         let port: Int
 
-        func open(tcAddress _: String, remotePort _: Int) async -> any TunnelSession { LocalTLSTunnel(localPort: port) }
+        func open(tcAddress _: String, remotePort _: Int) -> any TunnelSession { LocalTLSTunnel(localPort: port) }
     }
 
     @Test @MainActor func certificatePinSpellingsUseTheSameValidatedDigest() {

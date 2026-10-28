@@ -8,7 +8,7 @@ extension ConnectionManagerTests {
         let localPort: Int
         let expectedAddress: String
 
-        func open(tcAddress: String, remotePort _: Int) async throws -> any TunnelSession {
+        func open(tcAddress: String, remotePort _: Int) throws -> any TunnelSession {
             guard tcAddress == expectedAddress else { throw CocoaError(.coderReadCorrupt) }
             return PathTunnelSession(localPort: localPort)
         }

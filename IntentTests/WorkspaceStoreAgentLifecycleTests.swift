@@ -44,7 +44,7 @@ struct WorkspaceStoreAgentLifecycleTests {
     // (lastActivity is intentd-derived; see docs/protocol/methods/workspace.md)
 
     @Test(arguments: kAgentLifecycleEventTypes)
-    func agentLifecycleEventLeavesLastActivityUntouched(eventType: String) async {
+    func agentLifecycleEventLeavesLastActivityUntouched(eventType: String) {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-07-17T10:00:00Z")]
 
@@ -58,7 +58,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces[0].lastActivity == "2026-07-17T10:00:00Z")
     }
 
-    @Test func agentEventForUnknownWorkspaceDoesNotCrash() async {
+    @Test func agentEventForUnknownWorkspaceDoesNotCrash() {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:started",
@@ -71,7 +71,7 @@ struct WorkspaceStoreAgentLifecycleTests {
 
     // MARK: - Unknown agent events are logged but don't update state
 
-    @Test func unknownAgentEventLeavesLastActivityUntouched() async {
+    @Test func unknownAgentEventLeavesLastActivityUntouched() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-07-17T10:00:00Z")]
 
@@ -191,7 +191,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces.first { $0.id == "ws-1" }?.title == "Existing Renamed")
     }
 
-    @Test func addOrUpdatePublishesLastActivityAsReceived() async throws {
+    @Test func addOrUpdatePublishesLastActivityAsReceived() throws {
         // The workspace.create response is the daemon's row; no local
         // timestamp is layered on top of it
         let store = WorkspaceStore(forTesting: true)
@@ -221,7 +221,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces[0].lastActivity == "2026-07-17T11:00:00Z")
     }
 
-    @Test func addOrUpdateWithoutReconcilerReplacesExistingRow() async throws {
+    @Test func addOrUpdateWithoutReconcilerReplacesExistingRow() throws {
         // Legacy (non-live) mode: no reconciler, upsert still dedupes by id
         let store = WorkspaceStore(forTesting: true)
 
