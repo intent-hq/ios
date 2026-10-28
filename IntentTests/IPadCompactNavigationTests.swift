@@ -60,6 +60,17 @@ struct IPadCompactNavigationTests {
         }
     }
 
+    @Test func sidebarMeetsTheRailWithoutMovingItsTrailingEdge() {
+        let rail = IPadShellLayout(width: 1366, isAccessibilitySize: false)
+        let compact = IPadShellLayout(width: IPadShellLayout.compactWindowWidth - 1, isAccessibilitySize: false)
+        let foldable = IPadShellLayout(width: 932, isAccessibilitySize: false, usesFoldableLayout: true)
+        #expect(rail.sidebarLeadingInset == IPadShellLayout.railWidth)
+        for layout in [rail, compact, foldable] {
+            #expect(layout.sidebarLeadingInset >= 0)
+            #expect(layout.sidebarLeadingInset + layout.sidebarPaneWidth == layout.railLeadingInset + layout.sidebarWidth)
+        }
+    }
+
     @Test func initialCompactWindowShowsTheWorkspaceList() {
         var state = IPadNavigationState()
         state.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true)

@@ -127,16 +127,7 @@ struct ConversationColumnView: View {
                 )
                 .environment(\.workspaceTranscriptDesign, usesWorkspaceDesign)
                 .overlay(alignment: .top) {
-                    if usesWorkspaceDesign {
-                        LinearGradient(
-                            colors: [Design.Palette.background(for: colorScheme), Design.Palette.background(for: colorScheme).opacity(0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: Design.Header.fadeHeight)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                    }
+                    if usesWorkspaceDesign { WorkspaceHeaderFade() }
                 }
             }
         }

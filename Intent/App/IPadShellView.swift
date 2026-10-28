@@ -197,12 +197,12 @@ struct IPadShellView: View {
     private var sidebarPane: some View {
         sidebars
             .safeAreaPadding(.bottom, layout.usesCompactNavigation && !workspaceSearchVisible ? AssistantLaunchButton.scrollClearance : 0)
-            .frame(width: workspaceSearchVisible ? layout.focusedPanelWidth : layout.sidebarWidth)
+            .frame(width: workspaceSearchVisible ? layout.focusedPanelWidth : layout.sidebarPaneWidth)
             .frame(maxHeight: .infinity)
             .background(IPadShellStyle.background(for: colorScheme))
             .clipShape(sidebarShape)
             .modifier(IPadPaneBounds(identifier: "ipad.sidebar.panel", isAccessible: isSidebarAccessible))
-            .padding(.leading, workspaceSearchVisible ? 0 : layout.railLeadingInset)
+            .padding(.leading, workspaceSearchVisible ? 0 : layout.sidebarLeadingInset)
             .frame(maxWidth: .infinity, alignment: workspaceSearchVisible ? .center : .leading)
             .blur(radius: isEditing ? IPadShellLayout.focusBlurRadius : 0)
             .opacity(navigation.isSidebarVisible || workspaceSearchVisible ? 1 : 0)
