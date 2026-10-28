@@ -95,7 +95,7 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         app.buttons["Agents"].firstMatch.tap()
         XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
 
-        let back = app.buttons["Back to workspace"]
+        let back = app.buttons["conversation.back"]
         XCTAssertTrue(back.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         back.tap()
         let children = app.buttons["workspace.agents.children.groups-parent"]
