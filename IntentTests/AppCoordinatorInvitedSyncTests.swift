@@ -44,7 +44,7 @@ import Testing
         let saved = try #require(store.persistence.loadConnections().first)
         let live = FakeConnectionManager()
         live.currentPrincipal = InvitedSessionFixtures.principal()
-        try await live.connect(
+        try live.connect(
             hosts: saved.server.hosts,
             port: saved.server.port,
             token: saved.token,

@@ -203,7 +203,7 @@ import Testing
 nonisolated private struct DiagnosticRaceConnection: HostRacingConnection {
     let host: String
 
-    func disconnect() async {}
+    func disconnect() {}
 }
 
 extension ConnectionManagerTests {
@@ -227,7 +227,7 @@ extension ConnectionManagerTests {
     }
 
     nonisolated private struct CancellingTunnelDialer: TunnelDialing {
-        func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
+        func open(tcAddress _: String, remotePort _: Int) throws -> any TunnelSession {
             throw CancellationError()
         }
     }

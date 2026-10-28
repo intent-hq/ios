@@ -5,7 +5,7 @@ import Synchronization
 import Testing
 
 extension ConversationStoreLiveStateTests {
-    @Test func sparseProgressTickPreservesPriorToolBlockFields() async throws {
+    @Test func sparseProgressTickPreservesPriorToolBlockFields() throws {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
@@ -71,7 +71,7 @@ extension ConversationStoreLiveStateTests {
     /// arrives as an authoritative `role: "user"` delta entity with
     /// `streamingComplete: true` — it must render as a user message without a
     /// refetch.
-    @Test func userRowDeltaAppendsUserMessage() async throws {
+    @Test func userRowDeltaAppendsUserMessage() throws {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
@@ -101,7 +101,7 @@ extension ConversationStoreLiveStateTests {
 
     /// Re-delivery of the same user row (same synthetic block id) upserts by
     /// id instead of duplicating the message or its blocks.
-    @Test func userRowDeltaRedeliveryDoesNotDuplicate() async {
+    @Test func userRowDeltaRedeliveryDoesNotDuplicate() {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))

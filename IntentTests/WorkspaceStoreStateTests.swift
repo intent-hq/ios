@@ -32,21 +32,21 @@ struct WorkspaceStoreAttentionTests {
         )
     }
 
-    @Test func parseWorkspaceDecodesAttention() async {
+    @Test func parseWorkspaceDecodesAttention() {
         let workspace = WorkspaceStore.parseWorkspace(
             ["id": "ws-1", "title": "T", "attention": "unread"]
         )
         #expect(workspace?.attention == "unread")
     }
 
-    @Test func clearUnreadAttentionLocallyClearsUnread() async {
+    @Test func clearUnreadAttentionLocallyClearsUnread() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", attention: "unread")]
         store.clearUnreadAttentionLocally(workspaceId: "ws-1")
         #expect(store.workspaces[0].attention == "none")
     }
 
-    @Test func clearUnreadAttentionLocallyGuardedOnUnread() async {
+    @Test func clearUnreadAttentionLocallyGuardedOnUnread() {
         let store = WorkspaceStore(forTesting: true)
         // review_required must survive (mirrors the server-side markSeen guard)
         store.workspaces = [makeWorkspace(id: "ws-1", attention: "review_required")]
@@ -59,14 +59,14 @@ struct WorkspaceStoreAttentionTests {
         #expect(store.workspaces[0].attention == nil)
     }
 
-    @Test func clearUnreadAttentionLocallyUnknownWorkspaceIsNoOp() async {
+    @Test func clearUnreadAttentionLocallyUnknownWorkspaceIsNoOp() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", attention: "unread")]
         store.clearUnreadAttentionLocally(workspaceId: "ws-other")
         #expect(store.workspaces[0].attention == "unread")
     }
 
-    @Test func attentionSurvivesLastActivityRebuild() async {
+    @Test func attentionSurvivesLastActivityRebuild() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", attention: "unread")]
         store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-03-01T12:00:00Z")
@@ -106,7 +106,7 @@ struct WorkspaceStoreWaitingTests {
         )
     }
 
-    @Test func updateWaitingSetsAndClearsFlag() async {
+    @Test func updateWaitingSetsAndClearsFlag() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1")]
 
@@ -117,14 +117,14 @@ struct WorkspaceStoreWaitingTests {
         #expect(store.workspaces[0].waiting == false)
     }
 
-    @Test func updateWaitingUnknownWorkspaceIsNoOp() async {
+    @Test func updateWaitingUnknownWorkspaceIsNoOp() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1")]
         store.updateWaiting(workspaceId: "ws-other", waiting: true)
         #expect(store.workspaces[0].waiting == false)
     }
 
-    @Test func waitingChangedEventPatchesRowInPlace() async {
+    @Test func waitingChangedEventPatchesRowInPlace() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1")]
 
@@ -151,7 +151,7 @@ struct WorkspaceStoreWaitingTests {
         #expect(store.workspaces[0].waiting == false)
     }
 
-    @Test func waitingChangedEventLeavesOtherWorkspacesUntouched() async {
+    @Test func waitingChangedEventLeavesOtherWorkspacesUntouched() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [
             makeWorkspace(id: "ws-1"),
@@ -168,7 +168,7 @@ struct WorkspaceStoreWaitingTests {
         #expect(store.workspaces[1].waiting == true)
     }
 
-    @Test func waitingChangedEventFallsBackToEnvelopeWorkspaceId() async {
+    @Test func waitingChangedEventFallsBackToEnvelopeWorkspaceId() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1")]
 
@@ -183,7 +183,7 @@ struct WorkspaceStoreWaitingTests {
         #expect(store.workspaces[0].waiting == true)
     }
 
-    @Test func waitingSurvivesLastActivityRebuild() async {
+    @Test func waitingSurvivesLastActivityRebuild() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", waiting: true)]
         store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-03-01T12:00:00Z")
@@ -193,7 +193,7 @@ struct WorkspaceStoreWaitingTests {
         )
     }
 
-    @Test func waitingSurvivesClearUnreadAttention() async {
+    @Test func waitingSurvivesClearUnreadAttention() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", waiting: true, attention: "unread")]
         store.clearUnreadAttentionLocally(workspaceId: "ws-1")
@@ -204,7 +204,7 @@ struct WorkspaceStoreWaitingTests {
         )
     }
 
-    @Test func fullRowRefreshDropsWaitingWhenOmitted() async throws {
+    @Test func fullRowRefreshDropsWaitingWhenOmitted() throws {
         // A full-row refresh (workspace.list / snapshot) that omits `waiting`
         // means false — the flag must not stick from an older row.
         let store = WorkspaceStore(forTesting: true)
@@ -252,7 +252,7 @@ struct WorkspaceStorePublishOrderTests {
         #expect(store.workspaces.map(\.id) == ["ws-observed"])
     }
 
-    @Test func publishFetchedWorkspaces_updatesWorkspacesAndLastUpdated() async throws {
+    @Test func publishFetchedWorkspaces_updatesWorkspacesAndLastUpdated() throws {
         let store = WorkspaceStore(forTesting: true)
         #expect(store.lastUpdated == nil)
         let workspace = try #require(WorkspaceStore.parseWorkspace(["id": "ws-pub-1", "title": "Published"]))

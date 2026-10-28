@@ -26,7 +26,7 @@ extension AppCoordinatorInvitedSyncTests {
         let invitedLive = FakeConnectionManager()
         invitedLive.currentPrincipal = InvitedSessionFixtures.principal()
         let ownerLive = FakeConnectionManager()
-        let records = try await Self.saveLiveRecords(invited, lives: [invitedLive, ownerLive], persistence: store.persistence)
+        let records = try Self.saveLiveRecords(invited, lives: [invitedLive, ownerLive], persistence: store.persistence)
         let registry = BackendSessionRegistry { id in
             Self.session(id: id, connection: id == BackendID(invited.id) ? invitedLive : ownerLive, persistence: store.persistence)
         }
@@ -63,7 +63,7 @@ extension AppCoordinatorInvitedSyncTests {
         #expect(ownerLive.connectionState == .connected)
     }
 
-    private static func saveLiveRecords(_ invited: StoredConnection, lives: [FakeConnectionManager], persistence: PersistenceManager) async throws -> [StoredConnection] {
+    private static func saveLiveRecords(_ invited: StoredConnection, lives: [FakeConnectionManager], persistence: PersistenceManager) throws -> [StoredConnection] {
         var owner = StoredConnection(
             server: PairedServer(hosts: ["owner.example"], port: invited.server.port, name: "Owner", pairedAt: Date()), token: "owner-token"
         )
@@ -71,7 +71,7 @@ extension AppCoordinatorInvitedSyncTests {
         let records = [invited, owner]
         #expect(persistence.saveConnectionsLocked(records))
         for (record, live) in zip(records, lives) {
-            try await live.connect(hosts: record.server.hosts, port: record.server.port, token: record.token, certFingerprint: record.server.certFingerprint, tcAddress: nil)
+            try live.connect(hosts: record.server.hosts, port: record.server.port, token: record.token, certFingerprint: record.server.certFingerprint, tcAddress: nil)
             persistence.saveLastScreen(.init(screen: "workspaceList", workspaceId: nil, agentId: nil, agentName: nil, noteId: nil, noteTitle: nil), for: record.id)
         }
         return records

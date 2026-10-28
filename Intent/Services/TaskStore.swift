@@ -57,7 +57,7 @@ import Observation
         resnapshotInProgress = false
 
         await fetchAll()
-        await subscribeToEvents()
+        subscribeToEvents()
         await subscribeLiveState()
     }
 
@@ -86,7 +86,7 @@ import Observation
 
     // MARK: - Event subscription
 
-    private func subscribeToEvents() async {
+    private func subscribeToEvents() {
         // Remove old handler to prevent accumulation on reconnect
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)

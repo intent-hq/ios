@@ -296,7 +296,7 @@ extension ConversationMetadataSharingTests {
         dispatchMetadataRefresh("agent:updated", store: viewModel.store, fixture: fixture)
         try await fixture.connection.waitForPendingRequests("agent.get")
         viewModel.teardownLiveStores()
-        await viewModel.store.subscribeToStreaming(
+        viewModel.store.subscribeToStreaming(
             agentId: rebind ? "new-agent" : ConversationStartupFixture.parentId,
             workspaceId: ConversationStartupFixture.workspaceId
         )

@@ -6,7 +6,7 @@ import Testing
 struct NoteStoreLiveStateTests {
     // MARK: - Snapshot tests
 
-    @Test func appliesSnapshot() async {
+    @Test func appliesSnapshot() {
         // Simulate subscription.push snapshot
         let params: [String: Any] = [
             "subscriptionId": "sub-notes-123",
@@ -55,7 +55,7 @@ struct NoteStoreLiveStateTests {
         }
     }
 
-    @Test func appliesContiguousDelta() async {
+    @Test func appliesContiguousDelta() {
         let reconciler = DeltaReconciler<Note>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in Note.parseNote(dict) }
@@ -114,7 +114,7 @@ struct NoteStoreLiveStateTests {
         #expect(notes[1].id == "note-2")
     }
 
-    @Test func detectsGapAndReturnsFalse() async {
+    @Test func detectsGapAndReturnsFalse() {
         let reconciler = DeltaReconciler<Note>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in Note.parseNote(dict) }
@@ -148,7 +148,7 @@ struct NoteStoreLiveStateTests {
         #expect(success == false)
     }
 
-    @Test func reconcilerResets() async {
+    @Test func reconcilerResets() {
         let reconciler = DeltaReconciler<Note>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in Note.parseNote(dict) }
@@ -184,7 +184,7 @@ struct NoteStoreLiveStateTests {
         #expect(success == false)
     }
 
-    @Test func rejectsMalformedPush() async {
+    @Test func rejectsMalformedPush() {
         // Snapshot push missing "snapshot" field
         let malformedSnapshot: [String: Any] = [
             "subscriptionId": "sub-1",

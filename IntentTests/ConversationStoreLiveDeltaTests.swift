@@ -5,7 +5,7 @@ import Synchronization
 import Testing
 
 extension ConversationStoreLiveStateTests {
-    @Test func terminalFrameTimestampAdopted() async {
+    @Test func terminalFrameTimestampAdopted() {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
@@ -34,7 +34,7 @@ extension ConversationStoreLiveStateTests {
 
     // MARK: - Firehose gating while chat channel is live
 
-    @Test func firehoseActivityIgnoredWhenChatLive() async {
+    @Test func firehoseActivityIgnoredWhenChatLive() {
         let (store, _) = makeStore()
 
         // Snapshot applied → chatLive; deltas own the transcript from here on.
@@ -72,7 +72,7 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages[1].contentBlocks.first?.resolvedText == "Real content")
     }
 
-    @Test func firehoseActivityRaisesStreamingWhenChatNotLive() async {
+    @Test func firehoseActivityRaisesStreamingWhenChatNotLive() {
         // No chat.subscribe snapshot applied → chatLive is false: the firehose
         // is the only liveness signal until the channel seeds.
         let fake = FakeConnectionManager()
@@ -95,7 +95,7 @@ extension ConversationStoreLiveStateTests {
         #expect(store.isStreaming == false)
     }
 
-    @Test func firehoseStreamEndLeavesTheLiveChannelsRowsAlone() async {
+    @Test func firehoseStreamEndLeavesTheLiveChannelsRowsAlone() {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
@@ -255,7 +255,7 @@ extension ConversationStoreLiveStateTests {
     /// daemon coerces input to `{}` carrying only `_acpTitle` (tool_block.rs). The
     /// classifier must derive a meaningful title from `_acpTitle` instead of
     /// falling through to the generic .tool fallback.
-    @Test func midTurnFileReadToolWithAcpTitleOnlyClassifiesAsRead() async throws {
+    @Test func midTurnFileReadToolWithAcpTitleOnlyClassifiesAsRead() throws {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
@@ -281,7 +281,7 @@ extension ConversationStoreLiveStateTests {
         #expect(display.path == "crates/intent-core/src")
     }
 
-    @Test func workspaceApiWithAcpTitleUsesTitleAsLabel() async {
+    @Test func workspaceApiWithAcpTitleUsesTitleAsLabel() {
         let display = ToolClassifier.classify(name: "workspace_api", input: [
             "_acpTitle": AnyCodable("Read spec and task note")
         ])
@@ -289,7 +289,7 @@ extension ConversationStoreLiveStateTests {
         #expect(display.verb == "Read spec and task note")
     }
 
-    @Test func codexWorkspaceApiSnapshotUsesSummary() async throws {
+    @Test func codexWorkspaceApiSnapshotUsesSummary() throws {
         let (store, _) = makeStore()
         let summary = "Inspect the coordinates of the swipes recorded by hosted UI tests"
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
@@ -323,7 +323,7 @@ extension ConversationStoreLiveStateTests {
         #expect(display.subject == nil)
     }
 
-    @Test func codexWorkspaceApiLiveUpdateReplacesRawTitleWithSummary() async throws {
+    @Test func codexWorkspaceApiLiveUpdateReplacesRawTitleWithSummary() throws {
         let (store, _) = makeStore()
         let title = "mcp.workspace-mcp.workspace_api"
         let summary = "Inspect the coordinates of the swipes recorded by hosted UI tests"
@@ -367,7 +367,7 @@ extension ConversationStoreLiveStateTests {
         #expect(updatedDisplay.subject == nil)
     }
 
-    @Test func unrecognizedToolWithProseAcpTitleUsesTitleVerbatim() async {
+    @Test func unrecognizedToolWithProseAcpTitleUsesTitleVerbatim() {
         let display = ToolClassifier.classify(name: "zz_unrecognized_tool", input: [
             "_acpTitle": AnyCodable("Summarize recent activity for the user")
         ])
@@ -377,7 +377,7 @@ extension ConversationStoreLiveStateTests {
 
     /// A raw tool-name-shaped title (single token) must NOT be rendered verbatim;
     /// the cleaned-name generic fallback wins (desktop isProseToolName parity).
-    @Test func nonProseAcpTitleKeepsCleanedNameFallback() async {
+    @Test func nonProseAcpTitleKeepsCleanedNameFallback() {
         let display = ToolClassifier.classify(name: "zz_unrecognized_tool", input: [
             "_acpTitle": AnyCodable("zz_unrecognized_tool")
         ])
@@ -385,7 +385,7 @@ extension ConversationStoreLiveStateTests {
         #expect(display.verb == "Zz Unrecognized Tool")
     }
 
-    @Test func readToolWithQuotedExtensionlessFilenameClassifiesAsRead() async {
+    @Test func readToolWithQuotedExtensionlessFilenameClassifiesAsRead() {
         let display = ToolClassifier.classify(name: "view", input: [
             "_acpTitle": AnyCodable("Read `LICENSE`")
         ])
@@ -394,7 +394,7 @@ extension ConversationStoreLiveStateTests {
         #expect(display.subject == "LICENSE")
     }
 
-    @Test func editToolWithAcpTitleOnlyExtractsPath() async {
+    @Test func editToolWithAcpTitleOnlyExtractsPath() {
         let display = ToolClassifier.classify(name: "str-replace-editor", input: [
             "_acpTitle": AnyCodable("Edit `src/foo/bar.ts`")
         ])
@@ -407,7 +407,7 @@ extension ConversationStoreLiveStateTests {
     /// The completed `agent:tool:call` update arrives as an `updated` entity with
     /// fuller input; the store must replace the block so re-classification picks
     /// up the raw args mid-turn.
-    @Test func completedUpdatedToolBlockReplacesInputAndReclassifies() async throws {
+    @Test func completedUpdatedToolBlockReplacesInputAndReclassifies() throws {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
