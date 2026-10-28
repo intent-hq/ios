@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Inline markdown `[label](url)` links inside a suggested prompt, ported from
 /// the desktop's `suggested-prompt-markdown-links.ts` so both clients measure
@@ -139,5 +140,20 @@ enum SuggestedPromptLinks {
     private static func hasLinkScheme(_ url: [Unicode.Scalar]) -> Bool {
         let lowered = String(String.UnicodeScalarView(url.prefix(linkSchemes.map(\.count).max() ?? 0))).lowercased()
         return linkSchemes.contains { lowered.hasPrefix($0) }
+    }
+}
+
+extension SuggestedPromptLinks {
+    /// A prompt chip's label: inline markdown rendered, with links underlined
+    /// in the chip's own text color. The chip sends the prompt on tap, so its
+    /// links are not separately tappable and carry no link attribute.
+    static func displayText(_ prompt: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        var text = (try? AttributedString(markdown: prompt, options: options)) ?? AttributedString(prompt)
+        for run in text.runs where run.link != nil {
+            text[run.range].link = nil
+            text[run.range].underlineStyle = .single
+        }
+        return text
     }
 }
