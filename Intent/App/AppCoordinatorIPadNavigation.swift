@@ -1,6 +1,17 @@
 import Foundation
 
 extension AppCoordinator {
+    func updateShellPresentation(_ enabled: Bool) {
+        usesIPadShell = enabled
+        guard enabled else { return }
+        if selectedSection == .assistant {
+            iPadNavigation.showAssistantDetail()
+        } else if iPadNavigation.section == .assistant {
+            iPadNavigation.showWorkspaceDetail()
+        }
+        ensureIPadWorkspaceSelection()
+    }
+
     /// Embedded pairing dials a temporary session, so the window's connection
     /// was never borrowed and must not be torn down to repair it on success.
     func onIPadPairedConnection(_ connection: StoredConnection) {

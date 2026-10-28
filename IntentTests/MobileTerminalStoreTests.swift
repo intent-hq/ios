@@ -4,6 +4,51 @@ import Testing
 
 @MainActor
 struct MobileTerminalStoreTests {
+    @Test func shortcutCreatesWhenNoMobileTerminalExists() async throws {
+        let fixture = try MobileTerminalFixture()
+        fixture.list(ids: ["desktop"])
+        let terminal = try #require(await fixture.store.openOrCreate(workspaceId: "workspace"))
+        #expect(terminal.workspaceId == "workspace")
+        #expect(fixture.fake.paramsForMethod("terminal.create").count == 1)
+    }
+
+    @Test func shortcutReusesAnExistingTerminalButExplicitCreateStillCreates() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.fake.clearRequestLog()
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace") == terminal)
+        #expect(!fixture.fake.didCallMethod("terminal.create"))
+        fixture.fake.responseMap["terminal.create"] = ["terminalId": "second-mobile"]
+        #expect(await fixture.store.create(workspaceId: "workspace")?.id == "second-mobile")
+        #expect(fixture.fake.paramsForMethod("terminal.create").count == 1)
+    }
+
+    @Test func shortcutReplacesAnEndedTerminal() async throws {
+        let fixture = try MobileTerminalFixture()
+        _ = try await fixture.create()
+        fixture.list(ids: [])
+        fixture.fake.responseMap["terminal.create"] = ["terminalId": "replacement"]
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace")?.id == "replacement")
+        #expect(fixture.store.activeTerminals(workspaceId: "workspace").map(\.id) == ["replacement"])
+    }
+
+    @Test func shortcutDoesNotCreateAfterFailedReconciliation() async throws {
+        let fixture = try MobileTerminalFixture()
+        _ = try await fixture.create()
+        fixture.fake.clearRequestLog()
+        fixture.fake.errorMap["terminal.list"] = MobileTerminalError.disconnected
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace") == nil)
+        #expect(!fixture.fake.didCallMethod("terminal.create"))
+    }
+
+    @Test func shortcutCanRetryAFailedInitialCreation() async throws {
+        let fixture = try MobileTerminalFixture()
+        fixture.fake.errorMap["terminal.create"] = MobileTerminalError.disconnected
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace") == nil)
+        fixture.fake.errorMap["terminal.create"] = nil
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace") != nil)
+    }
+
     @Test func visitingAndRefreshingNeverCreatesOrAdoptsDesktopTerminals() async throws {
         let fixture = try MobileTerminalFixture()
         fixture.list(ids: ["desktop", "setup"])

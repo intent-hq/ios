@@ -188,6 +188,7 @@ private extension ConversationTranscriptView {
         .defaultScrollAnchor(.bottom)
         .coordinateSpace(name: Self.viewportCoordinateSpace)
         .scrollIndicators(.hidden)
+        .modifier(ConversationScrollEdgeEffect())
         .scrollBounceBehavior(.always)
         .accessibilityIdentifier("transcript.scrollView")
         .demoAccessibilityValue(transcriptDemoReport)

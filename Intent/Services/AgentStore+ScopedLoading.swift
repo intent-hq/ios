@@ -26,11 +26,13 @@ extension AgentStore {
             invalidateLegacyGroupReads(through: sequence)
             replaceRows(rows, group: nil, sequence: sequence)
             if !hasLoaded { hasLoaded = true }
+            hasFailedToLoad = false
             await refreshRequestedGroups(workspaceId: workspaceId, epoch: epoch, sequence: sequence)
         } catch is CancellationError {
             // A disappearing view must not publish a late response.
         } catch {
             AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
+            if list.epoch == epoch, list.topLevelRequest == sequence, !hasLoaded { hasFailedToLoad = true }
         }
     }
 

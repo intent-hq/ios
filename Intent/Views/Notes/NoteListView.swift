@@ -77,6 +77,11 @@ struct NoteTreeNodeView: View {
         noteStore.childNotes(of: note.id)
     }
 
+    private var isOpen: Bool {
+        guard case let .noteDetail(noteId, _, _) = coordinator.currentScreen else { return false }
+        return noteId == note.id
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // This note's row — chevron and title have separate tap targets
@@ -87,6 +92,7 @@ struct NoteTreeNodeView: View {
                 hasChildren: hasChildren,
                 isCollapsed: isCollapsed,
                 colorScheme: colorScheme,
+                isSelected: isOpen,
                 onToggleCollapse: toggleCollapse
             ) {
                 coordinator.onSelectNote(note.id, workspaceId: workspaceId, noteTitle: note.title)
@@ -133,6 +139,7 @@ struct NoteRowView: View {
     var hasChildren: Bool = false
     var isCollapsed: Bool = false
     let colorScheme: ColorScheme
+    var isSelected = false
     var onToggleCollapse: (() -> Void)?
     var onNavigate: (() -> Void)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -149,6 +156,7 @@ struct NoteRowView: View {
             }
             noteButton
         }
+        .workspaceSidebarSelection(isSelected)
         .padding(.leading, NoteRowLayout.indentation(for: depth, usesAccessibilityLayout: usesAccessibilityLayout))
     }
 

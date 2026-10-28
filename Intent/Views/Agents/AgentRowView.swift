@@ -69,6 +69,7 @@ struct AgentRowView: View {
     let agent: AgentSession
     let colorScheme: ColorScheme
     var indented: Bool = false
+    var isSelected = false
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -85,6 +86,8 @@ struct AgentRowView: View {
             agentDetails
         }
         .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .workspaceSidebarSelection(isSelected)
         .padding(.leading, indented ? WorkspaceDetailStyle.noteIndentation : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())

@@ -394,6 +394,7 @@ $(SRCROOT)/Intent/Presentation/WatcherMessagePresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceAgentSelection.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
+$(SRCROOT)/Intent/Presentation/WorkspaceSidebarContent.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceSwipePolicy.swift
 $(SRCROOT)/Intent/Resources
 $(SRCROOT)/Intent/Resources/Fonts
@@ -510,6 +511,7 @@ $(SRCROOT)/Intent/Services/NoteStoreCollections.swift
 $(SRCROOT)/Intent/Services/OutgoingImagePayload.swift
 $(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
+$(SRCROOT)/Intent/Services/PerMessageDeflate.swift
 $(SRCROOT)/Intent/Services/ProposalActionStore.swift
 $(SRCROOT)/Intent/Services/PullRequestListStore.swift
 $(SRCROOT)/Intent/Services/RemoteImageLoader.swift
@@ -524,7 +526,10 @@ $(SRCROOT)/Intent/Services/TaskStore.swift
 $(SRCROOT)/Intent/Services/TransportDiagnosticFailure.swift
 $(SRCROOT)/Intent/Services/WebSocketAdmission.swift
 $(SRCROOT)/Intent/Services/WebSocketConnection.swift
+$(SRCROOT)/Intent/Services/WebSocketConnectionIO.swift
 $(SRCROOT)/Intent/Services/WebSocketConnectionSecurity.swift
+$(SRCROOT)/Intent/Services/WebSocketFrameCodec.swift
+$(SRCROOT)/Intent/Services/WebSocketHandshake.swift
 $(SRCROOT)/Intent/Services/WebSocketMessageAssembler.swift
 $(SRCROOT)/Intent/Services/WebSocketPingSupport.swift
 $(SRCROOT)/Intent/Services/WebSocketTransportError.swift
@@ -618,6 +623,7 @@ $(SRCROOT)/Intent/Views/Components/IntentLoadingIndicator.swift
 $(SRCROOT)/Intent/Views/Components/NavigationBackGesture.swift
 $(SRCROOT)/Intent/Views/Components/NavigationPopObserver.swift
 $(SRCROOT)/Intent/Views/Components/NavigationTitleSubtitleView.swift
+$(SRCROOT)/Intent/Views/Components/PaneSwipeGesture.swift
 $(SRCROOT)/Intent/Views/Components/RepoOwnerAvatarView.swift
 $(SRCROOT)/Intent/Views/Components/TaskProgressRingView.swift
 $(SRCROOT)/Intent/Views/Components/TaskStatusIconView.swift
@@ -832,8 +838,11 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceConnectionSwitcher.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceContextView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCreationVideoPreview.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+Placement.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+WorkspaceActions.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilePreview.swift
@@ -844,6 +853,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspacePromptTextView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceResourceActions.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowSwipeGesture.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceScriptRow.swift
@@ -1143,7 +1153,9 @@ $(SRCROOT)/IntentTests/PairingLifecycleDiagnosticTests.swift
 $(SRCROOT)/IntentTests/PairingOptionTests.swift
 $(SRCROOT)/IntentTests/PairingPayloadTests.swift
 $(SRCROOT)/IntentTests/PairingReconnectOwnershipTests.swift
+$(SRCROOT)/IntentTests/PaneSwipePolicyTests.swift
 $(SRCROOT)/IntentTests/PendingQuestionDerivationTests.swift
+$(SRCROOT)/IntentTests/PerMessageDeflateTests.swift
 $(SRCROOT)/IntentTests/PersistenceBackendSyncTests.swift
 $(SRCROOT)/IntentTests/PersistenceEphemeralTests.swift
 $(SRCROOT)/IntentTests/PersistenceKeychainAccessibilityTests.swift
@@ -1237,6 +1249,11 @@ $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WatcherMessagePresentationTests.swift
+$(SRCROOT)/IntentTests/WebSocketCompressionServer.swift
+$(SRCROOT)/IntentTests/WebSocketCompressionTests.swift
+$(SRCROOT)/IntentTests/WebSocketFrameCodecTests.swift
+$(SRCROOT)/IntentTests/WebSocketHandshakeTests.swift
+$(SRCROOT)/IntentTests/WebSocketInboundStreamTests.swift
 $(SRCROOT)/IntentTests/WindowSceneTitleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceActionMenuDepthTests.swift
 $(SRCROOT)/IntentTests/WorkspaceActionTests.swift
@@ -1292,6 +1309,7 @@ $(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreRecoveryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptMonitorsStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptRepositoryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceScriptStoreTests.swift
+$(SRCROOT)/IntentTests/WorkspaceSidebarContentTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusImageViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusMessageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusTestSupport.swift

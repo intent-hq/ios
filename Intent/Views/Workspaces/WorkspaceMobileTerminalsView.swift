@@ -6,14 +6,16 @@ struct WorkspaceMobileTerminalsView: View {
     @Binding var revealedTarget: WorkspaceSwipeTarget?
     let onSelect: (MobileTerminal) -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         let terminals = store.activeTerminals(workspaceId: workspaceId)
         if !terminals.isEmpty {
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.sectionHeadingSpacing) {
                 Text("Terminals")
-                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
-                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .interFont(Constants.Typography.eyebrow)
+                    .textCase(.uppercase)
+                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast))
                     .accessibilityAddTraits(.isHeader)
                 LazyVStack(spacing: WorkspaceDetailStyle.rowSpacing) {
                     ForEach(terminals) { terminal in

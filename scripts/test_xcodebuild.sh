@@ -216,6 +216,7 @@ export TMPDIR=$work
 # The wrapper appends to a caller's step summary; the self-test's own CI job
 # must not receive the fixture tables.
 unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION DERIVED_DATA_DIR
+unset UI_TEST_SHARD UI_TEST_SHARD_PLAN_PATH ONLY_TESTING_IDENTITIES_PATH
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
@@ -929,6 +930,15 @@ status=$(run_filtered defaultbuild "" build-ios)
 assert_eq "default iOS build exits 0" "$status" 0
 assert_eq "default iOS build keeps its exact destination and signing argv" "$(argv_line defaultbuild 1)" \
   'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [generic/platform=iOS Simulator] [CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO]'
+status=$(run_filtered devicebuild "" build-ios-device DEVICE_UDID=00008160-000925E83EC0000A)
+assert_eq "device build exits 0" "$status" 0
+assert_eq "device build pins its destination and preserves project signing" "$(argv_line devicebuild 1)" \
+  'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS,id=00008160-000925E83EC0000A]'
+status=$(run_filtered missingdevice "" build-ios-device DEVICE_UDID=)
+assert_eq "device build refuses missing identifier" "$status" 1
+assert_eq "missing device never invokes Xcode" "$(wc -l < "$work/missingdevice.args" | tr -d ' ')" 0
+status=$(run_filtered invaliddevice "" build-ios-device 'DEVICE_UDID=device,platform=iOS Simulator')
+assert_eq "device build refuses destination injection" "$status" 1
 status=$(run_filtered emptyconfig "" build-ios BUILD_CONFIGURATION=)
 assert_eq "empty configuration keeps the default argv" "$(argv_line emptyconfig 1)" "$(argv_line defaultbuild 1)"
 status=$(run_filtered debugbuild "" build-ios BUILD_CONFIGURATION=Debug)
@@ -1195,6 +1205,52 @@ rm -rf -- "$work"/xcodebuild-result.*
 status=$(run_filtered nosummary "IntentTests/DemoFixturesTests" test-without-building)
 assert_eq "without GITHUB_STEP_SUMMARY the run exits 0" "$status" 0
 assert_eq "without GITHUB_STEP_SUMMARY no summary file appears" "$(ls "$work" | grep -c 'step-summary')" 3
+
+echo "# full UI shards use one built inventory, exact selectors, and verified identities"
+cat > "$work/full-catalog.json" <<'EOF'
+{"values":[{"enabledTests":[
+  {"identifier":"IntentUITests/Alpha/testOne()"},
+  {"identifier":"IntentUITests/Beta/testTwo()"}],
+  "disabledTests":[{"identifier":"IntentUITests/AppStoreScreenshotTests/testCapture()"}]}]}
+EOF
+make_results "$work/full-results.json" \
+  "IntentUITests/Alpha/testOne()=Passed" "IntentUITests/Beta/testTwo()=Passed"
+for shard in 1 2; do
+  mkdir -p "$work/plans/$shard"
+  status=$(run_filtered "fullshard$shard" "" test-without-building-ui \
+    UI_TEST_SHARD="$shard" STUB_CATALOG="$work/full-catalog.json" STUB_RESULTS="$work/full-results.json" \
+    UI_TEST_SHARD_PLAN_PATH="$work/plans/$shard/ui-test-shard-plan.json" \
+    ONLY_TESTING_IDENTITIES_PATH="$work/plans/$shard/ui-test-identities.json" GITHUB_SHA=fixture)
+  assert_eq "full shard $shard passes" "$status" 0
+  assert_eq "full shard $shard enumerates once then tests" "$(argv_count "fullshard$shard")" 2
+done
+assert_contains "first shard only selects Alpha" "$(argv_line fullshard1 2)" "[-only-testing:IntentUITests/Alpha/testOne]"
+assert_lacks "first shard does not select Beta" "$(argv_line fullshard1 2)" "-only-testing:IntentUITests/Beta"
+assert_contains "second shard only selects Beta" "$(argv_line fullshard2 2)" "[-only-testing:IntentUITests/Beta/testTwo]"
+status=0
+python3 scripts/ui_full_tests.py --verify-plans "$work/plans" --revision fixture > "$work/plan-verification.out" 2>&1 || status=$?
+assert_eq "both actual resolved identity exports agree with the plans" "$status" 0
+
+for mode in invalid narrow wrongcommand; do
+  case "$mode" in
+    invalid) shard=3; only=; command=test-without-building-ui ;;
+    narrow) shard=1; only=IntentUITests/Alpha; command=test-without-building-ui ;;
+    wrongcommand) shard=1; only=; command=test-without-building-unit ;;
+  esac
+  status=$(run_filtered "full-$mode" "$only" "$command" UI_TEST_SHARD="$shard")
+  assert_eq "invalid full-shard mode $mode fails before native work" "$status" 1
+  assert_eq "invalid full-shard mode $mode makes no native calls" "$(argv_count "full-$mode")" 0
+done
+status=$(run_filtered fullplanfailure "" test-without-building-ui UI_TEST_SHARD=1 \
+  STUB_CATALOG="$work/full-catalog.json" UI_TEST_SHARD_PLAN_PATH="$work/missing/plan.json")
+assert_eq "failed full-shard evidence export exits 83" "$status" 83
+assert_eq "failed full-shard evidence export never runs tests" "$(argv_count fullplanfailure)" 1
+status=$(run_filtered fullinventoryfailure "" test-without-building-ui UI_TEST_SHARD=1)
+assert_eq "incomplete full inventory exits 83" "$status" 83
+assert_eq "incomplete full inventory never runs tests" "$(argv_count fullinventoryfailure)" 1
+status=$(run_filtered fullnativefailure "" test-without-building-ui UI_TEST_SHARD=1 \
+  STUB_CATALOG="$work/full-catalog.json" STUB_RESULTS="$work/full-results.json" STUB_MODE=fail)
+assert_eq "full shard preserves native failure exit 65" "$status" 65
 
 echo
 if [ "$failures" -eq 0 ]; then

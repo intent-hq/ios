@@ -29,14 +29,28 @@ extension ConversationTranscriptView {
                 scrollState.retireViewportRestoration()
                 return
             }
-            // Re-realize the same row in a rehosted lazy stack. Its geometry
-            // callback restores the measured offset, including partial rows.
-            let generation = scrollState.initialScrollGeneration
-            let ownershipRevision = scrollState.viewportOwnershipRevision
-            traceEvent("RestoreRequested", "target=\(target)")
-            proxy.scrollTo(target, anchor: .top)
-            scrollState.retainedViewportScrollIssued(target: target, generation: generation, ownershipRevision: ownershipRevision)
+            if viewModel.filteredMessages.suffix(Self.eagerTailMessageLimit).contains(where: { $0.id == target }) {
+                // A nested message ID cannot reliably realize its offscreen
+                // lazy parent. Realize the tail first, then resolve the row.
+                proxy.scrollTo("transcript-tail", anchor: .top)
+                let ownership = scrollState.viewportOwnershipRevision
+                DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
+                    guard lifecycle.isVisible, ownership == scrollState.viewportOwnershipRevision,
+                          !isUserInteracting, !isFollowing else { return }
+                    alignRetainedViewport(target: target, proxy: proxy)
+                }
+            } else {
+                alignRetainedViewport(target: target, proxy: proxy)
+            }
         }
+    }
+
+    private func alignRetainedViewport(target: String, proxy: ScrollViewProxy) {
+        let generation = scrollState.initialScrollGeneration
+        let ownershipRevision = scrollState.viewportOwnershipRevision
+        traceEvent("RestoreRequested", "target=\(target)")
+        proxy.scrollTo(target, anchor: .top)
+        scrollState.retainedViewportScrollIssued(target: target, generation: generation, ownershipRevision: ownershipRevision)
     }
 
     func handleMessageCountChange(from oldIDs: [String], to newIDs: [String], proxy: ScrollViewProxy) {

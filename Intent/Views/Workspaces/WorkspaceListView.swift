@@ -10,6 +10,8 @@ struct WorkspaceListView: View {
     @Environment(\.legibilityWeight) private var legibilityWeight
     @Environment(\.isAgentHistoryOpen) private var isAgentHistoryOpen
     @Environment(\.openAgentHistory) private var openAgentHistory
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.workspaceVerticalBarEdge) private var verticalBarEdge
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
@@ -28,6 +30,8 @@ struct WorkspaceListView: View {
     @State private var showsClosedPullRequests = false
     @State private var pullRequestSearchText = ""
     @State private var creationPullRequest: PullRequestListItem?
+    @State private var trailingSafeArea: CGFloat = 0
+    @State private var leadingSafeArea: CGFloat = 0
     @FocusState private var searchFocused: Bool
     @ScaledMetric(relativeTo: .largeTitle) private var headingTracking: CGFloat = -1.2
     @ScaledMetric(relativeTo: .title) private var compactHeadingTracking: CGFloat = -0.56
@@ -45,6 +49,8 @@ struct WorkspaceListView: View {
             && !isAgentHistoryOpen
     }
 
+    private var railSafeArea: CGFloat { verticalBarEdge == .leading ? leadingSafeArea : trailingSafeArea }
+
     var body: some View {
         WorkspaceConnectionSwitcher(
             isPresented: $showingConnectionSwitcher,
@@ -52,6 +58,19 @@ struct WorkspaceListView: View {
             onReveal: prepareConnectionSwitcher
         ) {
             workspacePage
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.trailing } action: { trailingSafeArea = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.leading } action: { leadingSafeArea = $0 }
+        .overlay(alignment: verticalBarEdge == .leading ? .topLeading : .topTrailing) {
+            if usesVerticalBar {
+                pageMenu
+                    .frame(
+                        width: max(IPadShellLayout.railWidth, railSafeArea + IPadShellLayout.contextualRailOuterInset),
+                        height: IPadShellLayout.railWidth
+                    )
+                    .padding(.top, IPadShellLayout.contextualRailTopPadding(for: verticalBarEdge))
+                    .offset(x: verticalBarEdge == .leading ? -railSafeArea : railSafeArea)
+            }
         }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
@@ -184,39 +203,6 @@ struct WorkspaceListView: View {
             .accessibilityIdentifier("workspaces.empty.create")
     }
 
-    private var pageHeader: some View {
-        let style = isSearching ? Constants.Typography.heading2 : Constants.Typography.heading1
-        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
-        let font = CTFontCreateWithName(face.rawValue as CFString, isSearching ? compactHeadingSize : headingSize, nil)
-        return HStack {
-            WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
-                Text(showsPullRequests ? "Pull requests" : "Workspaces")
-                    .interFont(style)
-                    .tracking(isSearching ? compactHeadingTracking : headingTracking)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("workspaces.title")
-                    .accessibilityAction(named: Text("Switch connection")) {
-                        showingConnectionSwitcher = true
-                    }
-            }
-            Spacer(minLength: 0)
-            if isSearching { pageMenu } else {
-                // Reserve the menu's width without inflating the cap-trimmed title height.
-                Color.clear.frame(width: Constants.Accessibility.minimumTapTarget, height: 0)
-            }
-        }
-        .overlay(alignment: .trailing) {
-            if !isSearching { pageMenu }
-        }
-        .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
-        .padding(.bottom, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleBottomSpacing)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .foregroundStyle(Theme.foreground(for: colorScheme))
-        .padding(.horizontal, Constants.WorkspaceList.pageInset)
-        .modifier(WorkspaceListDuoLeadingInset())
-    }
-
     private func workspaceRows(
         _ workspaces: [Workspace],
         showRepo: Bool = true,
@@ -316,6 +302,44 @@ private struct WorkspaceListDuoLeadingInset: ViewModifier {
 }
 
 private extension WorkspaceListView {
+    var titleBottomSpacing: CGFloat {
+        if isSearching { return Constants.WorkspaceList.searchTitleSpacing }
+        return usesVerticalBar ? Constants.WorkspaceList.pageInset : Constants.WorkspaceList.titleBottomSpacing
+    }
+
+    var pageHeader: some View {
+        let style = isSearching ? Constants.Typography.heading2 : Constants.Typography.heading1
+        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
+        let font = CTFontCreateWithName(face.rawValue as CFString, isSearching ? compactHeadingSize : headingSize, nil)
+        return HStack {
+            WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
+                Text(showsPullRequests ? "Pull requests" : "Workspaces")
+                    .interFont(style)
+                    .tracking(isSearching ? compactHeadingTracking : headingTracking)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier("workspaces.title")
+                    .accessibilityAction(named: Text("Switch connection")) {
+                        showingConnectionSwitcher = true
+                    }
+            }
+            Spacer(minLength: 0)
+            if isSearching, !usesVerticalBar { pageMenu } else if !usesVerticalBar {
+                // Reserve the menu's width without inflating the cap-trimmed title height.
+                Color.clear.frame(width: Constants.Accessibility.minimumTapTarget, height: 0)
+            }
+        }
+        .overlay(alignment: .trailing) {
+            if !isSearching, !usesVerticalBar { pageMenu }
+        }
+        .padding(.top, isSearching ? Constants.WorkspaceList.searchTitleSpacing : Constants.WorkspaceList.titleTopSpacing)
+        .padding(.bottom, titleBottomSpacing)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(Theme.foreground(for: colorScheme))
+        .padding(.horizontal, Constants.WorkspaceList.pageInset)
+        .modifier(WorkspaceListDuoLeadingInset())
+    }
+
     func createWorkspace() {
         showingConnectionSwitcher = false
         if coordinator.canCreateWorkspace { showingCreateWorkspace = true }

@@ -7,11 +7,14 @@ extension View {
         title: String,
         createdAt: String?,
         showsBackButton: Bool = true,
+        showsTitle: Bool = true,
         onBack: @escaping () -> Void,
         @ViewBuilder actions: @escaping () -> Actions
     ) -> some View {
         #if os(iOS)
-        modifier(WorkspacePhoneNavigationModifier(title: title, createdAt: createdAt, showsBackButton: showsBackButton, onBack: onBack, actions: actions))
+        modifier(WorkspacePhoneNavigationModifier(
+            title: title, createdAt: createdAt, showsBackButton: showsBackButton, showsTitle: showsTitle, onBack: onBack, actions: actions
+        ))
         #else
         self
         #endif
@@ -23,6 +26,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
     let title: String
     let createdAt: String?
     let showsBackButton: Bool
+    let showsTitle: Bool
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -35,22 +39,33 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .toolbar(usesCustomHeader ? .hidden : .automatic, for: .navigationBar)
+            // Outside the shell the Duo's vertical toolbar needs the bar; inside it the rail replaces it.
+            .toolbar(usesCustomHeader && (!usesVerticalBar || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
-                if usesCustomHeader {
-                    WorkspaceNavigationHeader(
-                        title: title,
-                        subtitle: "Workspace",
-                        backLabel: "Back to workspaces",
-                        backIdentifier: "workspaceDetail.back",
-                        showsWorkspacePlaceholder: true,
-                        workspaceCreatedAt: createdAt,
-                        usesConversationLayout: presentation == .iPad,
-                        onBack: showsBackButton ? onBack : nil,
-                        actions: actions
-                    )
-                }
+                if usesCustomHeader { navigationHeader }
             }
+    }
+
+    /// The iPad shell names the workspace in its sidebar; the header repeats it only while that sidebar is collapsed.
+    private var showsHeaderTitle: Bool {
+        presentation != .iPad || (showsTitle && !usesVerticalBar)
+    }
+
+    private var navigationHeader: some View {
+        WorkspaceNavigationHeader(
+            title: title,
+            subtitle: showsHeaderTitle ? "Workspace" : nil,
+            backLabel: "Back to workspaces",
+            backIdentifier: "workspaceDetail.back",
+            showsTitle: showsHeaderTitle,
+            showsWorkspacePlaceholder: showsHeaderTitle,
+            workspaceCreatedAt: createdAt,
+            usesConversationLayout: presentation == .iPad,
+            showsContextualActions: !usesVerticalBar,
+            collapsesWhenEmptyOnRail: true,
+            onBack: showsBackButton ? onBack : nil,
+            actions: actions
+        )
     }
 }
 #endif
@@ -58,6 +73,9 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
     var showsBackground = true
+    var showsContextualActions = true
+    /// The sidebar names the open agent while its workspace sits there, so the header drops its title.
+    var showsTitle = true
     var assistantStore: AssistantStore?
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
@@ -81,11 +99,14 @@ struct WorkspaceConversationHeader<Actions: View>: View {
         } else {
             WorkspaceNavigationHeader(
                 title: title,
-                subtitle: "Agent",
+                subtitle: showsTitle ? "Agent" : nil,
                 backLabel: "Back",
                 backIdentifier: "conversation.back",
                 showsBackground: showsBackground,
+                showsTitle: showsTitle,
                 usesConversationLayout: true,
+                showsContextualActions: showsContextualActions,
+                collapsesWhenEmptyOnRail: true,
                 onBack: onBack,
                 actions: actions
             )
@@ -133,6 +154,9 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
     var usesConversationLayout = false
+    var showsContextualActions = true
+    /// The workspace overview drops its empty band on the Duo; conversations keep their spacing.
+    var collapsesWhenEmptyOnRail = false
     var onBack: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
@@ -142,13 +166,32 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
 
     private typealias Design = Constants.Conversation.Design
 
+    @Environment(\.usesDuoContextualRail) private var usesDuoContextualRail
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
+
+    private var showsInlineActions: Bool { showsContextualActions && !usesDuoContextualRail }
+    private var showsHeaderCopy: Bool { showsTitle || showsWorkspacePlaceholder || subtitle != nil }
+
     private var usesIPadDesign: Bool {
         usesConversationLayout && presentation == .iPad
     }
 
+    /// With its controls on the Duo rail and no copy, the header would only be an empty band over the content.
+    private var collapsesOnRail: Bool { collapsesWhenEmptyOnRail && usesDuoContextualRail && !showsHeaderCopy }
+
     var body: some View {
-        windowAdaptedControls
-            .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+        Group {
+            if collapsesOnRail {
+                Color.clear.frame(height: 0)
+            } else {
+                windowAdaptedControls
+                    .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+            }
+        }
+            .preference(
+                key: DuoContextualRailPreference.self,
+                value: usesDuoContextualRail && isPaneVisible ? AnyView(railControls) : nil
+            )
     }
 
     @ViewBuilder
@@ -170,7 +213,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
 
     private var controls: some View {
         HStack(spacing: 0) {
-            if let onBack {
+            if let onBack, showsInlineActions {
                 Button(action: onBack) {
                     Image(leadingIcon)
                         .resizable()
@@ -186,21 +229,46 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 .disabled(!isLeadingActionEnabled)
                 .accessibilityLabel(backLabel)
                 .accessibilityIdentifier(backIdentifier)
-            } else if usesIPadDesign {
+            } else if usesIPadDesign, showsInlineActions {
                 // Balance the trailing menu so Assistant titles share the agent alignment.
                 Color.clear
                     .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                     .accessibilityHidden(true)
             }
-            titleCopy
-            actions()
-                .buttonStyle(IntentContentButtonStyle())
-                .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
+            headerCopy
+            if showsInlineActions {
+                actions()
+                    .buttonStyle(IntentContentButtonStyle())
+                    .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
+            }
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
         .padding(.horizontal, Design.horizontalInset)
         .padding(.top, usesIPadDesign ? Design.IPad.headerTopInset : Design.Header.verticalPadding)
         .padding(.bottom, usesIPadDesign ? Design.IPad.headerBottomInset : Design.Header.verticalPadding)
+    }
+
+    @ViewBuilder private var headerCopy: some View {
+        if showsHeaderCopy {
+            titleCopy
+        } else {
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var railControls: some View {
+        VStack(spacing: IPadShellLayout.contextualRailSpacing) {
+            if let onBack {
+                IntentIconButton(icon: leadingIcon, label: backLabel, showsBackground: false, action: onBack)
+                    .frame(width: IPadShellLayout.railWidth, height: IPadShellLayout.railWidth)
+                    .disabled(!isLeadingActionEnabled)
+                    .accessibilityIdentifier(backIdentifier)
+            }
+            actions()
+                .frame(width: IPadShellLayout.railWidth)
+        }
+        .foregroundStyle(Design.Palette.foreground(for: colorScheme))
+        .accessibilityIdentifier("duo.contextual.rail")
     }
 
     private var titleCopy: some View {
@@ -221,6 +289,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         .tracking(Design.Typography.smallTracking)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(showsTitle ? "conversation.header.title" : "")
     }
 
     @ViewBuilder private var subtitleText: some View {
@@ -303,4 +372,45 @@ struct WorkspaceGoToEndLabel: View {
         .frame(minHeight: Design.minimumTapTarget)
         .contentShape(Rectangle())
     }
+}
+
+/// The outer display keeps native rail actions, while its title owns the top inset.
+struct WorkspaceVerticalConversationHeader: View {
+    let title: String
+    let workspaceId: String
+    @Environment(BackendSession.self) private var session
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .interFont(Constants.Typography.bodyM.withFace(.semibold))
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .lineLimit(1)
+            if let subtitle = WorkspaceSubtitleResolver.subtitle(forWorkspaceId: workspaceId, in: session.workspaceStore.workspaces) {
+                Text(subtitle)
+                    .interFont(Constants.Typography.subtextXXS)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+        .padding(.vertical, IPadShellLayout.outerInset)
+        .background(Constants.Conversation.Design.Palette.background(for: colorScheme).ignoresSafeArea(edges: .top))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("conversation.outer.header")
+    }
+}
+
+struct DuoContextualRailPreference: PreferenceKey {
+    static var defaultValue: AnyView? { nil }
+
+    static func reduce(value: inout AnyView?, nextValue: () -> AnyView?) {
+        if let next = nextValue() { value = next }
+    }
+}
+
+extension EnvironmentValues {
+    @Entry var usesDuoContextualRail = false
 }

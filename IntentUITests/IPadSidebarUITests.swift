@@ -117,9 +117,9 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         app.buttons["ipad.rail.workspaces"].tap()
         XCTAssertTrue(childTitle.isHittable, "Section changes must retain the pushed conversation")
         try Data().write(to: trigger)
-        let parentTitle = app.staticTexts["Test Stabilizer, Agent"]
-        XCTAssertTrue(parentTitle.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        // The reselected parent is named by its highlighted sidebar row rather than a header title.
         XCTAssertTrue(childTitle.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
     }
@@ -147,7 +147,8 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             expand.tap()
         }
         XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        XCTAssertEqual(composer.value as? String, Self.draft)
+        // History reopened the conversation, so resolve its composer again.
+        XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         verifyPopulatedHistory(in: app)
     }
 
@@ -184,13 +185,14 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
         capture(app, name: "iPad typing restored \(appearance)")
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
-        XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, Self.draft)
         verifyComposerAfterSearch(in: app, composer: composer, composerTap: composerTap, appearance: appearance)
     }
 
     @MainActor
     private func verifyPopulatedHistory(in app: XCUIApplication) {
+        let reopensConversation = showWorkspaceList(in: app)
         app.buttons["workspaces.menu"].tap()
         app.buttons["workspaces.menu.recentAgents"].tap()
         let entry = app.buttons.matching(NSPredicate(
@@ -202,6 +204,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let close = app.buttons["agent-history.close"]
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        if reopensConversation { openConversation(in: app) }
     }
 
     @MainActor
@@ -221,6 +224,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     @MainActor
     private func captureMainScreens(in app: XCUIApplication, appearance: String) {
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        showWorkspaceList(in: app)
         for mode in ["Repo", "Status", "Recent"] {
             let control = app.buttons["workspaces.viewMode.\(mode)"]
             control.tap()
@@ -293,7 +297,9 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
-        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].waitForExistence(timeout: Self.timeout))
+        // Only the ordinary iPad shell keeps the global rail; the unfolded Duo uses the launcher.
+        let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
+        XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
         return app
     }
 
@@ -318,21 +324,45 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 }
 
 extension IPadSidebarUITests {
+    /// An open conversation moves its workspace into the persistent sidebar; the
+    /// conversation's Back restores the list. Returns whether a conversation was closed.
+    @MainActor
+    @discardableResult
+    private func showWorkspaceList(in app: XCUIApplication) -> Bool {
+        let back = app.buttons["conversation.back"]
+        let closesConversation = back.exists && back.isHittable
+        if closesConversation { back.tap() }
+        XCTAssertTrue(app.collectionViews["workspaces.list"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        return closesConversation
+    }
+
+    @MainActor
+    private func waitForHittableComposer(in app: XCUIApplication) -> Bool {
+        waitUntil(timeout: Self.timeout) {
+            app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.contains(where: \.isHittable)
+        }
+    }
+
     @MainActor
     private func verifyComposerAfterSearch(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, appearance: String) {
+        let reopensConversation = showWorkspaceList(in: app)
         app.buttons["workspaces.search.open"].tap()
         let search = app.textFields["workspaces.search.field"]
         XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
         search.typeText("payment")
         app.buttons["workspaces.search.cancel"].tap()
-        let restored = composer.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout)
+        if reopensConversation { openConversation(in: app) }
+        let restored = reopensConversation
+            ? waitForHittableComposer(in: app)
+            : composer.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout)
         if !restored {
             composerTap.recordRestorationFailure(in: app, name: "iPad composer search restoration failure \(appearance)") {
                 app.buttons["ipad.focus.close"].exists && app.keyboards.firstMatch.exists
             }
         }
         XCTAssertTrue(restored, "The original post-search composer restoration must pass before any diagnostic gesture")
-        XCTAssertEqual(composer.value as? String, Self.draft, "Search cancellation must retain the current conversation draft")
+        let current = reopensConversation ? try? app.textViews.matching(identifier: "composer.textView").singleHittableElement() : composer
+        XCTAssertEqual(current?.value as? String, Self.draft, "Search cancellation must retain the current conversation draft")
     }
 
     private struct TypingBackgroundControls {
@@ -357,10 +387,11 @@ extension IPadSidebarUITests {
         XCTAssertTrue(app.buttons["saved-connections.scan"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         app.buttons["ipad.rail.workspaces"].tap()
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        showWorkspaceList(in: app)
         try controls.workspace.activate(in: app)
         XCTAssertTrue(app.staticTexts["workspace.title.heading"].wait(for: \.label, toEqual: "Fix websocket reconnect storm", timeout: Self.timeout))
         openConversation(in: app)
-        XCTAssertTrue(app.staticTexts["Dashboard Implementor, Agent"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
     }
 
     @MainActor
@@ -420,5 +451,43 @@ extension IPadSidebarUITests {
             return Date().timeIntervalSince(stableSince) >= Self.railSettleDuration
         }
         XCTAssertTrue(settled, "Rail button must stop moving before the physical tap")
+    }
+}
+
+extension IPadSidebarUITests {
+    @MainActor
+    func testExpandedDuoUsesSharedShellAndChatHeader() throws {
+        try XCTSkipUnless(
+            UIDevice.current.userInterfaceIdiom == .pad || ProcessInfo.processInfo.environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires iPad or an unfolded Duo"
+        )
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            let app = launch(appearance: appearance, extraArguments: ["--demo-ipad-pane-geometry"])
+            openConversation(in: app)
+            let header = app.buttons["conversation.back"]
+            XCTAssertTrue(header.waitForExistence(timeout: Self.timeout))
+            let transcript = app.scrollViews["transcript.scrollView"]
+            XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+            let headerFrame = header.frame
+            transcript.swipeDown()
+            XCTAssertEqual(header.frame, headerFrame)
+            XCTAssertTrue(header.isHittable)
+            let usesDuoLauncher = UIDevice.current.userInterfaceIdiom != .pad
+            XCTAssertEqual(app.buttons["ipad.rail.workspaces"].exists, !usesDuoLauncher)
+            XCTAssertEqual(app.buttons["intent.menu.open"].exists, usesDuoLauncher)
+            capture(app, name: "Shared shell chat scrollback \(appearance)")
+            if usesDuoLauncher {
+                // The unfolded Duo reaches sections through the launcher instead of the rail.
+                app.openHomeAction("settings")
+                app.openHomeAction("workspaces")
+            } else {
+                app.buttons["ipad.rail.settings"].tap()
+                app.buttons["ipad.rail.workspaces"].tap()
+            }
+            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+            app.terminate()
+        }
     }
 }

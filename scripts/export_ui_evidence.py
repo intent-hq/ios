@@ -125,6 +125,9 @@ CAPTURES = {
         ),
     },
     "IPadSidebarUITests": {
+        "testExpandedDuoUsesSharedShellAndChatHeader": (
+            "Shared shell chat scrollback light", "Shared shell chat scrollback dark",
+        ),
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"
             for appearance in ("light", "dark")
@@ -163,6 +166,7 @@ CAPTURES = {
             "iPad focused multiline draft",
         ),
         "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
+        "testMenuCardsStayReachableWithLargestText": ("Menu largest text",),
     },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
@@ -173,6 +177,14 @@ CAPTURES = {
             "mermaid-final-state", "mermaid-inline-before-gestures",
             "mermaid-fullscreen-from-button-edge", "mermaid-inline-after-pinch",
             "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
+        ),
+    },
+    "ConversationTranscriptHistoryUITests": {
+        "testFailedHistoryLoadCanBeRetriedWithoutLeavingConversation": (
+            "history-retry-older-message-visible",
+        ),
+        "testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop": (
+            "history-before-chained-prepend", "history-after-chained-prepend",
         ),
     },
     "ConversationToolActivityUITests": {
@@ -272,8 +284,15 @@ CAPTURES = {
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",
         ),
+        "testTitleDraftSurvivesScrollingOffscreenAndBack": (
+            "Workspace title draft offscreen light", "Workspace title draft offscreen dark",
+            "Workspace title draft restored light", "Workspace title draft restored dark",
+        ),
     },
     "ConnectionLossUITests": {
+        "testDemoRelaunchAfterReturningHomeStartsAtWorkspaces": (
+            "connection-loss-demo-home-before-relaunch", "connection-loss-demo-workspaces-after-relaunch",
+        ),
         "testDifferentServerAllowsSameMachineReselection": (
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
@@ -344,6 +363,8 @@ CAPTURES = {
         "testBackThenForwardPreservesProviderAndNamedModelThroughRefresh": (
             "selected-repository", "selected-branch", "branch-search-opened", "branch-search-results",
             "selected-before-back", "draft-after-source-edit",
+            "refresh-pending-light", "refresh-pending-dark",
+            "selected-after-refresh-light", "selected-after-refresh-dark",
         ),
     },
     "CreateWorkspacePreferencesUITests": {

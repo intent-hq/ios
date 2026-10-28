@@ -99,6 +99,12 @@ struct IPadNavigationState: Equatable {
         }
     }
 
+    mutating func prepareForConnectionSwitcher(showingWorkspaceList: Bool) {
+        guard usesSidebarOverlay else { return }
+        guard !usesCompactNavigation || !showingWorkspaceList || section != .workspaces else { return }
+        collapseSidebar()
+    }
+
     mutating func updateLayout(usesOverlay: Bool, usesCompactNavigation: Bool = false, showsWorkspaceList: Bool = false) {
         hasMeasuredLayout = true
         guard usesSidebarOverlay != usesOverlay || self.usesCompactNavigation != usesCompactNavigation else { return }

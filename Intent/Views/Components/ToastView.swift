@@ -7,15 +7,13 @@ struct ToastView: View {
 
     @State private var dragOffset: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: Constants.Toast.contentSpacing) {
-                Image(.checkCircle)
-                    .resizable()
-                    .scaledToFit()
+                completionIcon
                     .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
-                    .foregroundStyle(Constants.Pairing.accent)
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
@@ -49,6 +47,7 @@ struct ToastView: View {
             x: 0,
             y: Constants.Toast.shadowYOffset
         )
+        .frame(maxWidth: Constants.Toast.maximumWidth)
         .padding(.horizontal, Constants.Toast.outerHorizontalPadding)
         .offset(y: min(dragOffset, 0)) // Only allow upward drag
         .highPriorityGesture(
@@ -75,5 +74,27 @@ struct ToastView: View {
             onDismiss()
         }
         .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    /// Light material washes out the lime outline, so light mode uses the completed-task fill.
+    @ViewBuilder private var completionIcon: some View {
+        if colorScheme == .light {
+            Circle()
+                .fill(WorkspaceDetailStyle.accent)
+                .overlay {
+                    Image(.check)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: WorkspaceDetailStyle.checkmarkSize, height: WorkspaceDetailStyle.checkmarkSize)
+                        .foregroundStyle(WorkspaceDetailStyle.onAccent)
+                        .accessibilityHidden(true)
+                }
+        } else {
+            Image(.checkCircle)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Constants.Pairing.accent)
+                .accessibilityHidden(true)
+        }
     }
 }

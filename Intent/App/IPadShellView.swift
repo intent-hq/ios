@@ -3,13 +3,20 @@ import SwiftUI
 /// One view hierarchy spans expanded, collapsed and drawer layouts. In particular,
 /// the workspace and Assistant detail subtrees never move between containers.
 struct IPadShellView: View {
+    /// Pages shift this far while fading, so a slow first frame cannot turn into a visible jump.
+    static let pageParallax: CGFloat = 48
+
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.workspaceVerticalBarEdge) private var verticalBarEdge
     /// Nil until measured, so a zero first width never drives the navigation layout.
     @State private var width: CGFloat?
     @State private var topSafeArea: CGFloat = 0
+    @State private var trailingSafeArea: CGFloat = 0
+    @State private var leadingSafeArea: CGFloat = 0
     @State private var showingCreateWorkspace = false
     @State private var showingConnectionSwitcher = false
     @State private var connectionSwitcherOpen = false
@@ -17,11 +24,18 @@ struct IPadShellView: View {
 
     private var navigation: IPadNavigationState { coordinator.iPadNavigation }
     private var layout: IPadShellLayout {
-        IPadShellLayout(width: width ?? 0, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize)
+        IPadShellLayout(
+            width: width ?? 0,
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+            usesFoldableLayout: usesVerticalBar,
+            usesLeadingVerticalBar: verticalBarEdge == .leading
+        )
     }
+    private var railSafeArea: CGFloat { verticalBarEdge == .leading ? leadingSafeArea : trailingSafeArea }
+    private var railAlignment: Alignment { verticalBarEdge == .leading ? .topLeading : .topTrailing }
     private var measuredLayout: IPadShellLayout? { width.map { _ in layout } }
     private var paneInsets: EdgeInsets {
-        EdgeInsets(top: max(layout.inset, topSafeArea), leading: layout.inset, bottom: layout.inset, trailing: layout.inset)
+        EdgeInsets(top: max(layout.inset, topSafeArea), leading: layout.leadingInset, bottom: layout.inset, trailing: layout.trailingInset)
     }
     private var sidebarPresentation: SidebarPresentation {
         SidebarPresentation(isVisible: navigation.isSidebarVisible, usesOverlay: navigation.usesSidebarOverlay)
@@ -54,20 +68,22 @@ struct IPadShellView: View {
     private var workspaceSearchVisible: Bool {
         navigation.focusPresentation == .workspaceSearch
     }
-
     var body: some View {
         AgentHistoryDrawer(isEnabled: workspaceActionsEnabled && !connectionSwitcherOpen) {
             WorkspaceConnectionSwitcher(
                 isPresented: $showingConnectionSwitcher,
                 isEnabled: workspaceActionsEnabled,
-                onReveal: collapseSidebar
+                onReveal: prepareConnectionSwitcher
             ) {
                 shell
             }
         }
         .environment(\.conversationPresentation, .iPad)
+        .environment(\.usesDuoContextualRail, usesVerticalBar)
         .environment(\.iPadFocusPresentation, focusPresentation)
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeArea = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.trailing } action: { trailingSafeArea = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.leading } action: { leadingSafeArea = $0 }
         .onPreferenceChange(ConnectionSwitcherOpenPreference.self) { connectionSwitcherOpen = $0 }
         .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, dismiss in
             if dismiss { showingCreateWorkspace = false }
@@ -82,7 +98,7 @@ struct IPadShellView: View {
 
     private var shell: some View {
         ZStack(alignment: .topLeading) {
-            if !layout.usesCompactNavigation {
+            if !layout.usesCompactNavigation, !usesVerticalBar {
                 navigationRail
             }
             detailPane
@@ -109,11 +125,23 @@ struct IPadShellView: View {
         }
         .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .ignoresSafeArea(.container, edges: .vertical)
+        .overlayPreferenceValue(DuoContextualRailPreference.self, alignment: railAlignment) { rail in
+            if usesVerticalBar, !isFocused {
+                rail
+                    .frame(width: max(IPadShellLayout.railWidth, railSafeArea + IPadShellLayout.contextualRailOuterInset))
+                    .padding(.top, IPadShellLayout.contextualRailTopPadding(for: verticalBarEdge))
+                    .offset(x: verticalBarEdge == .leading ? -railSafeArea : railSafeArea)
+            }
+        }
         .opacity(width == nil ? 0 : 1)
         .background(IPadShellStyle.background(for: colorScheme).ignoresSafeArea())
         .modifier(WorkspaceActionLauncher(
             isSearching: workspaceSearchVisible,
-            isEnabled: width != nil && layout.usesCompactNavigation && !isFocused,
+            isEnabled: width != nil && (layout.usesCompactNavigation || usesVerticalBar) && !isFocused,
+            avoidsConversationInput: !usesVerticalBar,
+            hostsVerticalBarButton: !usesVerticalBar,
+            floatingVerticalBarButtonOffset: usesVerticalBar ? railSafeArea - IPadShellLayout.railWidth / 2 : nil,
+            floatingVerticalBarButtonEdge: verticalBarEdge ?? .trailing,
             onWorkspaces: { coordinator.onSelectIPadSection(.workspaces) },
             onAssistant: { coordinator.onSelectIPadSection(.assistant) },
             onCreateWorkspace: createWorkspace,
@@ -228,12 +256,7 @@ struct IPadShellView: View {
     private var sidebars: some View {
         ZStack {
             RetainedIPadPane(isVisible: navigation.section == .workspaces, keepsCoveredContentVisible: true) {
-                WorkspaceListSidebar(
-                    workspaceStore: session.workspaceStore,
-                    isSearching: isSearchingWorkspaces,
-                    onCreateWorkspace: createWorkspace,
-                    onCollapse: collapseSidebar
-                )
+                workspacesSidebar
             }
             if navigation.hasOpenedAssistant {
                 RetainedIPadPane(isVisible: navigation.section == .assistant, keepsCoveredContentVisible: true) {
@@ -285,6 +308,49 @@ struct IPadShellView: View {
         guard coordinator.canCreateWorkspace else { return }
         showingConnectionSwitcher = false
         showingCreateWorkspace = true
+    }
+}
+
+private extension IPadShellView {
+    func prepareConnectionSwitcher() {
+        coordinator.iPadNavigation.prepareForConnectionSwitcher(showingWorkspaceList: showsWorkspaceList)
+    }
+}
+
+/// The workspaces sidebar swaps between the list and the open agent's or note's workspace page.
+extension IPadShellView {
+    /// A persistent sidebar beside the detail pane; drawers and compact windows keep the list.
+    private var workspaceSidebarContent: WorkspaceSidebarContent {
+        WorkspaceSidebarContent.resolve(
+            screen: coordinator.currentScreen,
+            isPersistent: width != nil && !layout.usesCompactNavigation && !layout.usesSidebarOverlay && !workspaceSearchVisible
+        )
+    }
+
+    /// The list stays mounted under a sidebar workspace, keeping its scroll position and search.
+    /// The two swap with a crossfade; nothing moves, so a slow first frame cannot read as a jump.
+    private var workspacesSidebar: some View {
+        ZStack {
+            RetainedIPadPane(isVisible: workspaceSidebarContent == .workspaceList) {
+                WorkspaceListSidebar(
+                    workspaceStore: session.workspaceStore,
+                    isSearching: isSearchingWorkspaces,
+                    onCreateWorkspace: createWorkspace,
+                    onCollapse: collapseSidebar
+                )
+            }
+            if case let .workspace(workspaceId) = workspaceSidebarContent {
+                WorkspaceDetailView(
+                    workspaceId: workspaceId,
+                    session: session,
+                    sidebar: WorkspaceDetailSidebar(onCollapse: collapseSidebar)
+                )
+                .id(workspaceId)
+                .transition(.opacity)
+            }
+        }
+        .clipped()
+        .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration), value: workspaceSidebarContent)
     }
 }
 

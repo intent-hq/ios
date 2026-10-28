@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
     @Environment(\.openAgentHistory) private var openAgentHistory
     @Environment(\.openConnectionSwitcher) private var openConnectionSwitcher
@@ -11,7 +12,14 @@ struct WorkspaceListSidebar: View {
     private let onCollapse: (() -> Void)?
     private var isEmbedded: Bool { onCollapse != nil }
     private var isFocusedSearch: Bool { isEmbedded && isSearching }
-    private var contentInset: CGFloat { isFocusedSearch ? IPadShellLayout.focusContentInset : IPadSidebarStyle.inset }
+    private var contentInset: CGFloat {
+        if isFocusedSearch { return IPadShellLayout.focusContentInset }
+        return usesVerticalBar ? IPadSidebarStyle.compactInset : IPadSidebarStyle.inset
+    }
+    private var filterListSpacing: CGFloat {
+        if isFocusedSearch { return IPadShellLayout.focusContentInset }
+        return usesVerticalBar ? IPadSidebarStyle.compactSectionSpacing : IPadSidebarStyle.filterListSpacing
+    }
     private var surface: Color { isEmbedded ? IPadSidebarStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme) }
     @State private var viewModel: WorkspaceListViewModel
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
@@ -48,7 +56,7 @@ struct WorkspaceListSidebar: View {
                 WorkspaceSearchBar(
                     viewMode: $viewModel.viewMode,
                     isSearching: $isSearching,
-                    horizontalPadding: isEmbedded ? IPadSidebarStyle.inset : Constants.WorkspaceList.pickerHorizontalPadding,
+                    horizontalPadding: isEmbedded ? contentInset : Constants.WorkspaceList.pickerHorizontalPadding,
                     isSidebar: isEmbedded
                 )
             }
@@ -203,7 +211,7 @@ extension WorkspaceListSidebar {
         .contentMargins(.horizontal, isEmbedded ? contentInset : nil, for: .scrollContent)
         // Keep the filter gap scrollable so it cannot consume the reduced
         // viewport above the keyboard; the final row retains bottom clearance.
-        .contentMargins(.top, isEmbedded ? (isFocusedSearch ? IPadShellLayout.focusContentInset : IPadSidebarStyle.filterListSpacing) : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)
+        .contentMargins(.top, isEmbedded ? filterListSpacing : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)
         .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
     }
 

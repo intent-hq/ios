@@ -454,6 +454,8 @@ extension Constants.Toast {
     static let shadowRadius: CGFloat = 12
     static let shadowYOffset: CGFloat = 4
     static let outerHorizontalPadding: CGFloat = 12
+    /// Wide windows keep the toast to the conversation's readable width instead of the full screen.
+    static let maximumWidth = Constants.Conversation.Design.IPad.readableWidth
     static let resetSpringResponse: Double = 0.3
     static let resetSpringDamping: Double = 0.7
 }
