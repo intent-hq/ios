@@ -65,12 +65,6 @@ struct IPadShellView: View {
         if case .workspaceList = coordinator.currentScreen { return true }
         return false
     }
-    /// The workspace sidebar's hide control sits with the detail pane's actions menu.
-    private var detailSidebarCollapse: (() -> Void)? {
-        guard navigation.section == .workspaces, navigation.isSidebarVisible, !usesVerticalBar,
-              !layout.usesCompactNavigation || !showsWorkspaceList else { return nil }
-        return collapseSidebar
-    }
     private var workspaceSearchVisible: Bool {
         navigation.focusPresentation == .workspaceSearch
     }
@@ -198,7 +192,6 @@ struct IPadShellView: View {
             .frame(maxWidth: .infinity, alignment: isEditing ? .center : .leading)
             .blur(radius: workspaceSearchVisible ? IPadShellLayout.focusBlurRadius : 0)
             .environment(\.isIPadPaneVisible, isDetailAccessible)
-            .environment(\.iPadSidebarCollapse, detailSidebarCollapse)
             .allowsHitTesting(isDetailAccessible)
             .accessibilityFocused($detailFocused)
     }

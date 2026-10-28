@@ -49,8 +49,8 @@ struct WorkspaceListSidebar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, contentInset)
                     .padding(.top, IPadShellLayout.focusContentInset)
-            } else if isEmbedded {
-                sidebarHeader
+            } else if let onCollapse {
+                sidebarHeader(onCollapse: onCollapse)
             }
             if !isSearching {
                 WorkspaceSearchBar(
@@ -164,8 +164,8 @@ extension WorkspaceListSidebar {
         )
     }
 
-    private var sidebarHeader: some View {
-        IPadSidebarHeader(onCollapse: nil) {
+    private func sidebarHeader(onCollapse: @escaping () -> Void) -> some View {
+        IPadSidebarHeader(onCollapse: onCollapse) {
             workspaceMenu
         } actions: {
             WorkspaceSearchButton(

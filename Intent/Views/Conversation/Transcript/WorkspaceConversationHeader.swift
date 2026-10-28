@@ -168,7 +168,6 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
 
     @Environment(\.usesDuoContextualRail) private var usesDuoContextualRail
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
-    @Environment(\.iPadSidebarCollapse) private var sidebarCollapse
 
     private var showsInlineActions: Bool { showsContextualActions && !usesDuoContextualRail }
     private var showsHeaderCopy: Bool { showsTitle || showsWorkspacePlaceholder || subtitle != nil }
@@ -236,19 +235,11 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                     .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                     .accessibilityHidden(true)
             }
-            if sidebarCollapse != nil, showsInlineActions {
-                // Balance the sidebar control so the title stays centered.
-                Color.clear
-                    .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
-                    .accessibilityHidden(true)
-            }
             headerCopy
             if showsInlineActions {
-                IPadSidebarCollapseActions(collapse: sidebarCollapse) {
-                    actions()
-                        .buttonStyle(IntentContentButtonStyle())
-                        .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
-                }
+                actions()
+                    .buttonStyle(IntentContentButtonStyle())
+                    .frame(minWidth: Design.Header.controlSize, minHeight: Design.Header.controlSize)
             }
         }
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))

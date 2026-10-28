@@ -17,8 +17,6 @@ struct IPadNavigationRail: View {
                 if !isSidebarVisible {
                     railButton(asset: .collapseLeft, label: "Show sidebar", identifier: "ipad.sidebar.expand", action: onExpand)
                 }
-                railButton(asset: .addIcon, label: "New workspace", identifier: "ipad.rail.createWorkspace", action: onCreateWorkspace)
-                    .disabled(!canCreateWorkspace)
                 destination(.assistant, asset: .dandelion, label: "Assistant")
                     .disabled(!canUseAssistant)
                 destination(.workspaces, asset: .agentGeneral1, label: "Workspaces")
@@ -29,6 +27,8 @@ struct IPadNavigationRail: View {
                 .accessibilityValue(appearanceTitle)
                 .accessibilityHint("Changes appearance")
                 destination(.settings, asset: .settings2, label: "Settings")
+                railButton(asset: .addIcon, label: "New workspace", identifier: "ipad.rail.createWorkspace", action: onCreateWorkspace)
+                    .disabled(!canCreateWorkspace)
             }
             .padding(.top, IPadShellLayout.railTopInset)
         }
