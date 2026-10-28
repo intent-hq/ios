@@ -24,7 +24,8 @@ struct WorkspaceStatusPill<Trailing: View>: View {
             } else {
                 text
                     .interFont(Design.Typography.status)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
             trailing
         }
@@ -117,23 +118,86 @@ struct MarqueeText<Content: View>: View {
 struct WorkspaceStatusPillsRow: View {
     let viewModel: ConversationViewModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.layoutDirection) private var layoutDirection
 
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Design.Status.composerSpacing))
-            : AnyLayout(HStackLayout(spacing: Design.Status.composerSpacing))
+            : AnyLayout(WorkspaceStatusPillsLayout(spacing: Design.Status.composerSpacing, layoutDirection: layoutDirection))
         layout {
             if viewModel.showsPrMonitorStatus {
                 MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: viewModel.monitoredPrStore, usesWorkspaceDesign: true)
-                    .layoutPriority(1)
             }
             if viewModel.showsScriptMonitorStatus {
                 ScriptWatchPills(viewModel: viewModel)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            #if DEBUG
+            if DemoMode.isEnabled, ProcessInfo.processInfo.arguments.contains("--demo-script-monitor-hit-probe") {
+                DemoIPadPaneGeometry(identifier: "workspace-status-pills")
+            }
+            #endif
+        }
+    }
+}
+
+/// Equal width limits keep short pills compact; rows stack when minimum widths cannot fit.
+struct WorkspaceStatusPillsLayout: Layout {
+    var spacing: CGFloat
+    var layoutDirection: LayoutDirection
+
+    nonisolated private struct Measurement {
+        let sizes: [CGSize]
+        let proposal: ProposedViewSize
+        let stacks: Bool
+    }
+
+    private func measurement(
+        proposal: ProposedViewSize,
+        subviews: Subviews
+    ) -> Measurement {
+        let availableWidth = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+        let gaps = spacing * CGFloat(max(0, subviews.count - 1))
+        let width = availableWidth.map { max(0, $0 - gaps) / CGFloat(max(1, subviews.count)) }
+        let childProposal = ProposedViewSize(width: width, height: nil)
+        let sizes = subviews.map { $0.sizeThatFits(childProposal) }
+        if let width, sizes.contains(where: { $0.width > width.nextUp }) {
+            let stackedProposal = ProposedViewSize(width: availableWidth, height: nil)
+            return Measurement(sizes: subviews.map { $0.sizeThatFits(stackedProposal) }, proposal: stackedProposal, stacks: true)
+        }
+        return Measurement(sizes: sizes, proposal: childProposal, stacks: false)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        let measured = measurement(proposal: proposal, subviews: subviews)
+        let gaps = spacing * CGFloat(subviews.count - 1)
+        return CGSize(
+            width: measured.stacks ? measured.sizes.map(\.width).max() ?? 0 : measured.sizes.reduce(0) { $0 + $1.width } + gaps,
+            height: measured.stacks ? measured.sizes.reduce(0) { $0 + $1.height } + gaps : measured.sizes.map(\.height).max() ?? 0
+        )
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let measured = measurement(proposal: proposal, subviews: subviews)
+        let isRightToLeft = layoutDirection == .rightToLeft
+        var position = isRightToLeft ? bounds.maxX : bounds.minX
+        var top = bounds.minY
+        for (subview, size) in zip(subviews, measured.sizes) {
+            subview.place(
+                at: CGPoint(x: isRightToLeft ? position - size.width : position, y: measured.stacks ? top : bounds.midY - size.height / 2),
+                proposal: measured.proposal
+            )
+            if measured.stacks {
+                top += size.height + spacing
+            } else {
+                position += (size.width + spacing) * (isRightToLeft ? -1 : 1)
+            }
+        }
     }
 }
 

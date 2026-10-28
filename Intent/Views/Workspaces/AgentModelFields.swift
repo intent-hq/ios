@@ -22,7 +22,7 @@ struct AgentModelFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
             providerField
-            if selectedProvider != nil {
+            if selectedProvider != nil, !providers.isEmpty, providerGuidance == nil {
                 AgentOptionField("Model") {
                     ModelPicker(models: models, selectedModel: $selectedModel, daemonDefaultLabel: daemonDefaultLabel, usesFormStyle: true)
                         .disabled(isLoadingModels || isLoadingProviders)
@@ -35,12 +35,12 @@ struct AgentModelFields: View {
                         Button("Retry", action: onRetryModels).buttonStyle(IntentButtonStyle(variant: .secondary))
                     }
                 }
-            }
-            AgentOptionField("Reasoning") { reasoningPicker }
-            if reasoningLevels.isEmpty {
-                Text("Choose a model with reasoning options to override Auto.")
-                    .interFont(Constants.Typography.subtextXXS)
-                    .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+                AgentOptionField("Reasoning") { reasoningPicker }
+                if reasoningLevels.isEmpty {
+                    Text("Choose a model with reasoning options to override Auto.")
+                        .interFont(Constants.Typography.subtextXXS)
+                        .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))
+                }
             }
         }
     }

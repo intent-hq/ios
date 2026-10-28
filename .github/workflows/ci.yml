@@ -12,7 +12,7 @@ name: CI
 # receive a filter.
 # UI tests come in two tiers. Pull requests and the merge queue run only the
 # smoke selectors in scripts/ui-smoke-tests.txt; the full
-# IntentUITests bundle (about an hour) runs on the schedule below, which
+# IntentUITests bundle runs in two balanced shards on the schedule below, which
 # GitHub fires only on the default branch, and on a manual dispatch with
 # ui_suite=full. The scheduled run is the only push-independent run on main.
 on:
@@ -113,11 +113,7 @@ jobs:
           RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
           FULL_UI_SUITE: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && '1' || '' }}
         run: |
-          if [ -n "$FULL_UI_SUITE" ]; then
-            matrix='{"include":[{"lane":"iphone","family":"iphone","shard":0,"capture":true},{"lane":"ipad","family":"ipad","shard":0,"capture":false}]}'
-          else
-            matrix='{"include":[{"lane":"iphone-1","family":"iphone","shard":1,"capture":true},{"lane":"iphone-2","family":"iphone","shard":2,"capture":false},{"lane":"ipad","family":"ipad","shard":0,"capture":false}]}'
-          fi
+          matrix='{"include":[{"lane":"iphone-1","family":"iphone","shard":1,"capture":true},{"lane":"iphone-2","family":"iphone","shard":2,"capture":false},{"lane":"ipad","family":"ipad","shard":0,"capture":false}]}'
           lanes='[]'
           runner_output=$(mktemp)
           trap 'rm -f "$runner_output"' EXIT
@@ -175,6 +171,7 @@ jobs:
           python3 scripts/test_select_macos_runner.py
           python3 scripts/test_select_fixture_capture_repetitions.py
           python3 scripts/test_ui_smoke_tests.py
+          python3 scripts/test_ui_full_tests.py
 
       - name: Xcode Cloud post-clone tests
         run: scripts/test-ci-post-clone.sh
@@ -324,6 +321,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             /scripts/backend-keychain-contract.mjs
+            /scripts/lib/fixture-copy.mjs
             /docs/protocol/fixtures/backend-keychain/v1/
 
       - name: Verify Keychain fixture provenance
@@ -336,6 +334,41 @@ jobs:
             --source-commit "$SOURCE_COMMIT" --component ios --component-root "$GITHUB_WORKSPACE" \
             | tee "$RUNNER_TEMP/keychain-fixture-provenance.txt"
           cat "$RUNNER_TEMP/keychain-fixture-provenance.txt" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Read pinned suggested-prompts case revision
+        id: suggested-prompts-cases
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const lock = JSON.parse(readFileSync('IntentTests/Fixtures/suggested-prompts.lock.json', 'utf8'));
+          if (lock.sourceRepository !== 'intent-hq/intent' || !/^[0-9a-f]{40}$/.test(lock.sourceCommit)) {
+            throw new Error('suggested-prompts case lock must pin a full intent-hq/intent commit');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `source-commit=${lock.sourceCommit}\n`);
+          NODE
+
+      - name: Checkout exact canonical suggested-prompts cases
+        uses: actions/checkout@v7
+        with:
+          repository: intent-hq/intent
+          ref: ${{ steps.suggested-prompts-cases.outputs.source-commit }}
+          path: .suggested-prompts-contract-source
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/suggested-prompts-contract.mjs
+            /scripts/lib/fixture-copy.mjs
+            /docs/protocol/fixtures/suggested-prompts/v1/
+
+      - name: Verify suggested-prompts case provenance
+        env:
+          SOURCE_COMMIT: ${{ steps.suggested-prompts-cases.outputs.source-commit }}
+        run: |
+          set -euo pipefail
+          node .suggested-prompts-contract-source/scripts/suggested-prompts-contract.mjs verify \
+            --source-root "$GITHUB_WORKSPACE/.suggested-prompts-contract-source" \
+            --source-commit "$SOURCE_COMMIT" --component ios --component-root "$GITHUB_WORKSPACE" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Select Xcode
         run: |
@@ -677,7 +710,7 @@ jobs:
           bundles: TestResults
 
       - name: Upload test results
-        if: failure() || cancelled() || (github.event_name == 'workflow_dispatch' && (inputs.pre_pr_gate || contains(inputs.only_testing, 'ScriptMonitors') || contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests')))
+        if: failure() || cancelled() || (github.event_name == 'workflow_dispatch' && (inputs.pre_pr_gate || contains(inputs.only_testing, 'ScriptMonitors') || contains(inputs.only_testing, 'WorkspaceChangesUITests') || contains(inputs.only_testing, 'ConnectionSwitcherUITests') || contains(inputs.only_testing, 'WorkspaceSwipeUITests') || contains(inputs.only_testing, 'ConversationTranscriptHistoryUITests')))
         uses: actions/upload-artifact@v7
         with:
           name: ios-unit-test-results
@@ -766,7 +799,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-macos-runner.outputs.ui-matrix) }}
     runs-on: ${{ matrix.runs-on }}
-    # Allow setup, the full iPhone suite, and cleanup (ios#429).
+    # Allow setup, a full-suite shard, and cleanup (ios#891).
     timeout-minutes: 90
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -883,15 +916,19 @@ jobs:
         env:
           FULL_UI_SUITE: ${{ (github.event_name == 'schedule' || inputs.ui_suite == 'full') && '1' || '' }}
         run: |
+          set -o pipefail
           if [ -n "$FULL_UI_SUITE" ]; then
             export ONLY_TESTING=IntentUITests
-            echo "UI tests: full IntentUITests bundle" >> "$GITHUB_STEP_SUMMARY"
+            export UI_TEST_SHARD="$UI_SHARD"
+            export UI_TEST_SHARD_PLAN_PATH=ui-test-shard-plan.json
+            export ONLY_TESTING_IDENTITIES_PATH=ui-test-identities.json
+            echo "UI tests: full suite shard $UI_SHARD/2 (built inventory)" >> "$GITHUB_STEP_SUMMARY"
           else
             ONLY_TESTING=$(python3 scripts/ui_smoke_tests.py --shard "$UI_SHARD")
             export ONLY_TESTING
             echo "UI tests: smoke shard $UI_SHARD/2 (scripts/ui-smoke-tests.txt)" >> "$GITHUB_STEP_SUMMARY"
           fi
-          scripts/xcodebuild.sh test-without-building-ui
+          scripts/xcodebuild.sh test-without-building-ui 2>&1 | tee ui-tests.log
 
       - name: Run iPad sidebar regression tests
         if: matrix.family == 'ipad'
@@ -904,7 +941,21 @@ jobs:
             IntentUITests/IPadSidebarUITests/testRailRemainsReachableWithAccessibilityText
             IntentUITests/IPadSidebarUITests/testRepeatedAgentSelectionReturnsFromChildAndPreservesDraft
             IntentUITests/IPadSidebarUITests/testRepeatedSidebarTogglesWithAgentHistoryPreserveDraft
-        run: scripts/xcodebuild.sh test-without-building-ui
+        run: |
+          set -o pipefail
+          scripts/xcodebuild.sh test-without-building-ui 2>&1 | tee ui-tests.log
+
+      - name: Upload UI selection and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ format('ios-{0}-ui-selection', matrix.lane) }}
+          path: |
+            ui-test-shard-plan.json
+            ui-test-identities.json
+            ui-tests.log
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Clean up owned UI simulator
         if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
@@ -921,7 +972,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload UI test results
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: ${{ format('ios-{0}-ui-test-results', matrix.lane) }}
@@ -951,6 +1002,19 @@ jobs:
             echo "::error::Every iPhone shard and iPad UI test job must succeed (result: $UI_RESULT)"
             exit 1
           fi
+
+      - name: Checkout full UI coverage verifier
+        if: github.event_name == 'schedule' || inputs.ui_suite == 'full'
+        uses: actions/checkout@v7
+
+      - name: Verify full UI coverage
+        if: github.event_name == 'schedule' || inputs.ui_suite == 'full'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name ios-iphone-1-ui-selection --name ios-iphone-2-ui-selection --dir full-ui-selection
+          python3 scripts/ui_full_tests.py --verify-plans full-ui-selection
 
   visionos-build:
     name: visionOS Build

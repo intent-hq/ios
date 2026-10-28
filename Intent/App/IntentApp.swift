@@ -219,9 +219,7 @@ struct BackendWindowRoot: View {
                 restoresSavedMachines = false
                 backendID = demoBackendID
             }
-            if restoresSavedMachines {
-                windowSession.returnToSavedMachines()
-            }
+            restoresSavedMachines = windowSession.restoreSavedMachines(restoresSavedMachines)
             if backendID == nil, !windowSession.isShowingSavedMachines,
                let lastUsed = PersistenceManager.shared.lastUsedConnection() {
                 // Plain launch (no restored scene value): bind to the

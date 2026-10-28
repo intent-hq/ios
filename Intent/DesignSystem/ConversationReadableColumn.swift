@@ -7,13 +7,14 @@ extension View {
     }
 
     /// Detail children already own their page inset, so count it outside the readable body.
-    func iPadDetailColumn() -> some View {
-        modifier(ConversationReadableColumn(contentHorizontalInset: WorkspaceDetailStyle.pageInset))
+    func iPadDetailColumn(isEnabled: Bool = true) -> some View {
+        modifier(ConversationReadableColumn(contentHorizontalInset: WorkspaceDetailStyle.pageInset, isEnabled: isEnabled))
     }
 }
 
 private struct ConversationReadableColumn: ViewModifier {
     var contentHorizontalInset: CGFloat = 0
+    var isEnabled = true
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var availableWidth: CGFloat = 0
@@ -21,12 +22,12 @@ private struct ConversationReadableColumn: ViewModifier {
     private typealias Layout = Constants.Conversation.Design.IPad
 
     private var maximumWidth: CGFloat {
-        presentation == .iPad && !dynamicTypeSize.isAccessibilitySize
+        isEnabled && presentation == .iPad && !dynamicTypeSize.isAccessibilitySize
             ? Layout.readableWidth + 2 * contentHorizontalInset : .infinity
     }
 
     private var horizontalInset: CGFloat {
-        guard presentation == .iPad else { return 0 }
+        guard isEnabled, presentation == .iPad else { return 0 }
         let inset = availableWidth >= Layout.readableWidth + Layout.horizontalInset * 2
             ? Layout.horizontalInset : Layout.minimumHorizontalInset
         return max(0, inset - contentHorizontalInset)

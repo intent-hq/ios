@@ -72,6 +72,28 @@ struct ConversationHistoryTests {
         #expect(fake.paramsForMethod("agent.getConversation").count == 2)
     }
 
+    @Test func prependCapturesLatestReadingIntentBeforePublishingRows() async throws {
+        let (store, fake) = await makeStore()
+        fake.pendingMethods.insert("agent.getConversation")
+        var readingMessage = "4"
+        var capturedMessage: String?
+        var residentAtCapture: [String] = []
+        let pending = Task {
+            await store.loadOlderMessages {
+                capturedMessage = readingMessage
+                residentAtCapture = store.messages.map(\.id)
+            }
+        }
+        try await fake.waitForPendingRequests("agent.getConversation")
+        #expect(capturedMessage == nil)
+        readingMessage = "3"
+        fake.resolvePending("agent.getConversation", with: page(["1", "2"]))
+        await pending.value
+        #expect(capturedMessage == "3")
+        #expect(residentAtCapture == ["3", "4"])
+        #expect(store.messages.map(\.id) == ["1", "2", "3", "4"])
+    }
+
     @Test func snapshotWithoutCursorDoesNotRequestHistory() async {
         let (store, fake) = await makeStore(cursor: nil)
         await store.loadOlderMessages()

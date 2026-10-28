@@ -17,6 +17,7 @@ struct WorkspaceComposerRow: View {
     let onPhotos: () -> Void
     let onFiles: () -> Void
     var onPasteImages: (() -> Void)?
+    var skillCompletion: ComposerSkillCompletion?
 
     private typealias Design = Constants.Conversation.Design
     private typealias Layout = Design.Composer
@@ -27,7 +28,7 @@ struct WorkspaceComposerRow: View {
 
     var body: some View {
         HStack(spacing: Layout.controlSpacing - controlInset) {
-            WorkspaceComposerEditor(text: $text, isFocused: $isFocused, onSend: onSend, onPasteImages: onPasteImages)
+            WorkspaceComposerEditor(text: $text, isFocused: $isFocused, onSend: onSend, onPasteImages: onPasteImages, skillCompletion: skillCompletion)
             WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles)
             if hasDraft {
                 WorkspaceComposerAction(isStop: false, action: onSend)
@@ -76,6 +77,7 @@ private struct WorkspaceComposerEditor: View {
     @Binding var isFocused: Bool
     let onSend: () -> Void
     let onPasteImages: (() -> Void)?
+    let skillCompletion: ComposerSkillCompletion?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -97,7 +99,8 @@ private struct WorkspaceComposerEditor: View {
                     )
                 },
                 accessibilityLabel: String(localized: "Message"),
-                textColor: UIColor(Design.Palette.foreground(for: colorScheme))
+                textColor: UIColor(Design.Palette.foreground(for: colorScheme)),
+                skillCompletion: skillCompletion
             )
             .frame(height: height)
             if text.isEmpty {

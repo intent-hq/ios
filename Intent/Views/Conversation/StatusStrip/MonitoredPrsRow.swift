@@ -17,6 +17,7 @@ struct MonitoredPrsRow: View {
     private let usesWorkspaceDesign: Bool
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.openURL) private var openURL
 
     private typealias Layout = Constants.Conversation.StatusStrip.MonitoredPrs
@@ -37,6 +38,12 @@ struct MonitoredPrsRow: View {
                 if monitoredPrStore.error != nil { retryButton }
                 if activeMonitors.count == 1, let monitor = activeMonitors.first {
                     monitorChip(monitor)
+                } else if activeMonitors.count == 2 {
+                    WorkspaceStatusPillsLayout(spacing: Constants.Conversation.Design.Status.composerSpacing, layoutDirection: layoutDirection) {
+                        ForEach(activeMonitors) { monitor in
+                            monitorChip(monitor)
+                        }
+                    }
                 } else if !activeMonitors.isEmpty {
                     ScrollView(.horizontal) {
                         HStack(spacing: Constants.Conversation.Design.Status.composerSpacing) {

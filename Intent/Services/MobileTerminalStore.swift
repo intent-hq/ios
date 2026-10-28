@@ -66,6 +66,15 @@ final class MobileTerminalStore {
         }
     }
 
+    func openOrCreate(workspaceId: String) async -> MobileTerminal? {
+        if terminals.contains(where: { $0.workspaceId == workspaceId }) {
+            await refresh(workspaceId: workspaceId)
+            guard errorMessage(workspaceId: workspaceId) == nil else { return nil }
+            if let terminal = activeTerminals(workspaceId: workspaceId).first { return terminal }
+        }
+        return await create(workspaceId: workspaceId)
+    }
+
     func create(workspaceId: String) async -> MobileTerminal? {
         guard creatingWorkspaces.insert(workspaceId).inserted else { return nil }
         observedWorkspaces.insert(workspaceId)

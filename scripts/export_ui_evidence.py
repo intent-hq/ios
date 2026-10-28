@@ -24,6 +24,13 @@ CAPTURES = {
             "Providers-Disabled-Light", "Providers-Disabled-Dark", "Settings-Agents-Final",
         ),
     },
+    "SkillAutocompleteUITests": {
+        "testSkillSuggestionsFilterInsertAndSendInBothThemes": tuple(
+            f"skill-{state}-{appearance}"
+            for state in ("suggestions", "inserted")
+            for appearance in ("light", "dark")
+        ),
+    },
     "QuestionAttachmentUITests": {
         "testImageAnswerCanBeRemovedReattachedAndSentAcrossSteps": tuple(
             f"question-image{state}-{appearance}"
@@ -32,12 +39,20 @@ CAPTURES = {
         ),
     },
     "ScriptMonitorsUITests": {
+        "testRetainedWatchAndPagingActionsFitInBothThemes": (
+            "status-pills-page-error-light", "status-pills-page-error-dark",
+            "status-pills-page-recovered-light", "status-pills-page-recovered-dark", "script-monitors-final-state",
+        ),
         "testOwnedWatchDetailsUpdateAndRemovalWithoutRestart": (
             "script-monitors-active", "script-monitors-details", "script-monitors-text-update",
             "script-monitors-removed-details", "script-monitors-removed", "script-monitors-final-state",
         ),
         "testLoadingFailureRetriesWithoutInventingAnEmptyState": (
             "script-monitors-loading", "script-monitors-error", "script-monitors-retried", "script-monitors-final-state",
+        ),
+        "testStatusPillsShareWidthAndStaySingleLineInBothThemes": (
+            "status-pills-retry-light", "status-pills-retry-dark",
+            "status-pills-watching-light", "status-pills-watching-dark", "script-monitors-final-state",
         ),
         "testEmptyOwnerCanLoadNextPageAndRetryItsFailure": (
             "script-monitors-empty-owner-more", "script-monitors-page-error", "script-monitors-next-page", "script-monitors-final-state",
@@ -123,6 +138,9 @@ CAPTURES = {
         ),
     },
     "IPadSidebarUITests": {
+        "testExpandedDuoUsesSharedShellAndChatHeader": (
+            "Shared shell chat scrollback light", "Shared shell chat scrollback dark",
+        ),
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"
             for appearance in ("light", "dark")
@@ -161,6 +179,7 @@ CAPTURES = {
             "iPad focused multiline draft",
         ),
         "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
+        "testMenuCardsStayReachableWithLargestText": ("Menu largest text",),
     },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
@@ -171,6 +190,14 @@ CAPTURES = {
             "mermaid-final-state", "mermaid-inline-before-gestures",
             "mermaid-fullscreen-from-button-edge", "mermaid-inline-after-pinch",
             "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
+        ),
+    },
+    "ConversationTranscriptHistoryUITests": {
+        "testFailedHistoryLoadCanBeRetriedWithoutLeavingConversation": (
+            "history-retry-older-message-visible",
+        ),
+        "testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop": (
+            "history-before-chained-prepend", "history-after-chained-prepend",
         ),
     },
     "ConversationToolActivityUITests": {
@@ -270,8 +297,15 @@ CAPTURES = {
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",
         ),
+        "testTitleDraftSurvivesScrollingOffscreenAndBack": (
+            "Workspace title draft offscreen light", "Workspace title draft offscreen dark",
+            "Workspace title draft restored light", "Workspace title draft restored dark",
+        ),
     },
     "ConnectionLossUITests": {
+        "testDemoRelaunchAfterReturningHomeStartsAtWorkspaces": (
+            "connection-loss-demo-home-before-relaunch", "connection-loss-demo-workspaces-after-relaunch",
+        ),
         "testDifferentServerAllowsSameMachineReselection": (
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
@@ -337,6 +371,8 @@ CAPTURES = {
         "testBackThenForwardPreservesProviderAndNamedModelThroughRefresh": (
             "selected-repository", "selected-branch", "branch-search-opened", "branch-search-results",
             "selected-before-back", "draft-after-source-edit",
+            "refresh-pending-light", "refresh-pending-dark",
+            "selected-after-refresh-light", "selected-after-refresh-dark",
         ),
     },
     "CreateWorkspacePreferencesUITests": {

@@ -69,8 +69,8 @@ import SwiftUI
     var isLoadingOlderMessages: Bool { liveTranscript.isLoadingOlderMessages }
     var olderMessagesError: String? { liveTranscript.olderMessagesError }
 
-    func loadOlderMessages() async {
-        await liveTranscript.loadOlderMessages(using: commands)
+    func loadOlderMessages(beforePrepend: (() -> Void)? = nil) async {
+        await liveTranscript.loadOlderMessages(using: commands, beforePrepend: beforePrepend)
     }
 
     var agentNotFound = false

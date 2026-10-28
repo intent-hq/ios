@@ -134,11 +134,15 @@ import Observation
         var params: [String: Any] = ["workspaceId": workspaceId]
         if let root {
             params["gitRootId"] = root.id
+            params["forceRefresh"] = true
             let result = try await connectionManager.request("git.status", params: params)
             return try WorkspaceChangesSnapshot(result, rootId: root.id)
         }
         let result = try await connectionManager.request("file-tracking.getChanges", params: params)
-        return try WorkspaceChangesSnapshot(result)
+        let tracked = try WorkspaceChangesSnapshot(result)
+        params["forceRefresh"] = true
+        let status = try await connectionManager.request("git.status", params: params)
+        return try WorkspaceChangesSnapshot(status, rootId: "primary", trackedChanges: tracked.changes)
     }
 
     private func fetchCommits(

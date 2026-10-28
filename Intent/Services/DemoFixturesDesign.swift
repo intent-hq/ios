@@ -11,6 +11,8 @@ enum DemoDesignScenario: String, CaseIterable {
     case agentGroups = "agent-groups"
     case agentGroupsLarge = "agent-groups-large"
     case agentGroupsRetry = "agent-groups-retry"
+    /// Only the first top-level agent list succeeds, so later lists (the sidebar's) fail.
+    case agentListUnavailable = "agent-list-unavailable"
     case blocker
     case claudeTools = "claude-tools"
     case composer
@@ -60,6 +62,7 @@ final class DemoDesignFixtures {
     private var queuedMessages: [[String: Any]] = []
     private var sequence = 0
     private var failedBackgroundRead = false
+    private var servedTopLevelRead = false
     private let attachments = DemoDesignAttachments()
 
     init(scenario: DemoDesignScenario) {
@@ -86,6 +89,12 @@ final class DemoDesignFixtures {
         if ownsAgent, let response = agentResponse(for: method, params: params) { return response }
         if ownsWorkspace, let response = monitorResponse(for: method, params: params) { return response }
         switch method {
+        case "skill.list" where ownsWorkspace:
+            return [
+                ["name": "code-review", "description": "Review changes for bugs, regressions, and missing tests.", "location": "/demo/code-review/SKILL.md", "scope": "project"],
+                ["name": "ios-device-build", "description": "Build and run the iOS app on a connected device.", "location": "/demo/ios-device-build/SKILL.md", "scope": "user"],
+                ["name": "release-notes", "description": "Write release notes from recent changes.", "location": "/demo/release-notes/SKILL.md", "scope": "project"]
+            ]
         case "workspace.list":
             return ["workspaces": [workspace] + (scenario == .mermaidHistory ? DemoFixtures.workspaces : [])]
         case "note.list" where ownsWorkspace && scenario == .context: return ["notes": contextNotes]
@@ -180,7 +189,11 @@ final class DemoDesignFixtures {
             failedBackgroundRead = true
             return ["error": "Temporary demo failure"]
         }
-        let rows = scenario == .agentGroups || scenario == .agentGroupsRetry ? DemoAgentListFixtures.groupRows : [agent]
+        if scenario == .agentListUnavailable, params["scope"] as? String == "topLevel" {
+            if servedTopLevelRead { return ["error": "Agent list unavailable"] }
+            servedTopLevelRead = true
+        }
+        let rows = [.agentGroups, .agentGroupsRetry, .agentListUnavailable].contains(scenario) ? DemoAgentListFixtures.groupRows : [agent]
         return DemoAgentListFixtures.response(rows: rows, params: params)
     }
 

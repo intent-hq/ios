@@ -21,6 +21,8 @@ final class TranscriptGestureAccessibilityView: UIView {
                 + " host=\(ObjectIdentifier(scrollView)) hosting=\(scrollState.momentumProxy.hostingRevision)"
                 + " offset=\(scrollView.contentOffset.y) content=\(scrollView.contentSize.height) viewport=\(scrollView.bounds.height)"
                 + " insets=\(scrollView.adjustedContentInset)"
+                + " away=\(scrollState.userIsScrolledAway) pendingRestore=\(scrollState.hasPendingViewportRestoration)"
+                + " visible=\(String(describing: scrollState.viewportAnchor.visiblePosition))"
                 + " restoration=[\(scrollState.viewportAnchor.restorationSummary)]"
         }
         set { super.accessibilityValue = newValue }

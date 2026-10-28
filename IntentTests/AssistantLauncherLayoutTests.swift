@@ -4,6 +4,51 @@ import Testing
 
 @MainActor
 struct AssistantLauncherLayoutTests {
+    @Test(arguments: [3, 4, 5, 6])
+    func allMenuActionsFitWhenMinimumWidthsAreAvailable(actionCount: Int) {
+        let count = CGFloat(actionCount)
+        let spacing: CGFloat = 8
+        let minimumWidth: CGFloat = 152
+        let minimumRowWidth = count * minimumWidth + (count - 1) * spacing
+        for width in stride(from: minimumRowWidth, through: 1400, by: 1) {
+            let tile = HomeActionTiles.tileWidth(in: width, actionCount: actionCount, accessibility: false)
+            #expect(tile >= minimumWidth)
+            #expect(tile <= 192)
+            #expect(tile * count + (count - 1) * spacing <= width + 0.001)
+        }
+        #expect(HomeActionTiles.tileWidth(in: minimumRowWidth, actionCount: actionCount, accessibility: false) == minimumWidth)
+        #expect(HomeActionTiles.columnCount(in: minimumRowWidth - 1, actionCount: actionCount, accessibility: false) == actionCount - 1)
+    }
+
+    @Test func carouselCapsHeightAndWidensCardsForAccessibilityText() {
+        #expect(HomeActionTiles.carouselHeight(content: 240, container: 800) == 240)
+        #expect(HomeActionTiles.carouselHeight(content: 760, container: 400) == 300)
+        #expect(HomeActionTiles.carouselTileWidth(in: 354, accessibility: false) == 192)
+        #expect(HomeActionTiles.carouselTileWidth(in: 354, accessibility: true) == 354)
+        #expect(HomeActionTiles.carouselTileWidth(in: 0, accessibility: true) == 192)
+    }
+
+    @Test func menuWrapsCardsOnNarrowScreensAndUsesOneColumnForAccessibilityText() {
+        #expect(HomeActionTiles.tileWidth(in: 352, actionCount: 5, accessibility: false) == 172)
+        #expect(HomeActionTiles.tileWidth(in: 320, actionCount: 5, accessibility: false) == 156)
+        #expect(HomeActionTiles.tileWidth(in: 352, actionCount: 5, accessibility: true) == 352)
+        #expect(HomeActionTiles.tileWidth(in: 900, actionCount: 5, accessibility: true) == 900)
+        #expect(HomeActionTiles.columnCount(in: 620, actionCount: 5, accessibility: false) == 3)
+        #expect(HomeActionTiles.columnCount(in: 352, actionCount: 5, accessibility: false) == 2)
+    }
+
+    @Test(arguments: [1, 3, 4, 5, 6])
+    func menuColumnsNeverOverflowTheirContainer(actionCount: Int) {
+        for accessibility in [false, true] {
+            for width in stride(from: CGFloat(0), through: 1400, by: 1) {
+                let columns = HomeActionTiles.columnCount(in: width, actionCount: actionCount, accessibility: accessibility)
+                let tile = HomeActionTiles.tileWidth(in: width, actionCount: actionCount, accessibility: accessibility)
+                #expect(columns >= 1 && columns <= actionCount)
+                #expect(tile * CGFloat(columns) + CGFloat(columns - 1) * 8 <= width + 0.001)
+            }
+        }
+    }
+
     @Test func spatialControlsAreModestlyLargerAndFartherFromResizeCorner() {
         let old = AssistantLauncherLayout.handheld
         let spatial = AssistantLauncherLayout.spatial

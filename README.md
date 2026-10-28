@@ -76,7 +76,7 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 - note and comment reading and live state, plus task listing, status changes, and live state;
 - agent discovery and lifecycle plus conversation history, sending, queue management, questions, models, and streaming controls;
 - attachment upload, placement, and download;
-- repository, branch, provider, model, and specialist discovery;
+- repository, branch, provider, model, specialist, and workspace skill discovery;
 - Git status, diffs, and commit history across workspace repositories;
 - workspace transfer and mobile terminal lifecycle, input, output, and resizing; and
 - background-hook and pull-request-monitor status and controls.
@@ -84,6 +84,17 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 Live updates combine domain subscriptions for workspaces, notes, tasks, comments, and chats—delivered as `subscription.push` notifications—with filtered `events.subscribe` streams for agent, hook, and pull-request-monitor events.
 Browser previews use an auxiliary authenticated WebSocket tunnel rather than
 passing daemon credentials to web content.
+
+The workspace browser also opens HTTP and HTTPS addresses reachable from the
+device, including LAN IP addresses, local hostnames, and Tailscale hostnames.
+Allow Intent's local network access when prompted. The app declares an App
+Transport Security exception for web content so user-entered HTTP sites can
+load; daemon connections still require pinned WSS/TLS.
+
+In an agent conversation, type `/` in the prompt to browse available workspace
+skills. Keep typing to filter by name or description, then tap a skill to insert
+its slash command. Hardware keyboards can use Up/Down to select, Tab to insert,
+and Escape to dismiss the suggestions.
 
 ## Quickstart
 
@@ -296,6 +307,7 @@ The Xcode wrapper supports these subcommands:
 | --- | --- |
 | `resolve` | Resolve Swift package dependencies. |
 | `build-ios` | Build for the generic iOS Simulator destination. |
+| `build-ios-device` | Build for physical `DEVICE_UDID` using project signing; does not install, upload, or change provisioning. |
 | `build-visionos` | Build for the generic visionOS Simulator destination. |
 | `build-for-testing` | Build the iOS test bundles for a later test-only run. |
 | `build-for-testing-ui` | Build the app and UI tests using the `IntentUI` scheme, without compiling the unit-test bundle. |
@@ -363,7 +375,7 @@ self-hosted Mac; GitHub-hosted Macs handle overflow when the local pool is busy.
 Matrix fail-fast is
 disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
 Go tests, wrapper self-tests, and the strict SwiftLint gate run on Linux.
-The full UI bundle runs once in one iPhone job, alongside the iPad regressions,
+The full UI bundle runs across two isolated iPhone shards, alongside the iPad regressions,
 on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
 
 ```bash
@@ -385,8 +397,24 @@ selection. Invalid annotations, duplicate selectors, or empty shards fail before
 native tests start. Run `python3 scripts/test_ui_smoke_tests.py` after changing
 selection logic and `python3 scripts/test_ci_simulator.py` after changing the
 workflow. Screenshot artifact names use `-iphone-1`, `-iphone-2`, and `-ipad`
-suffixes for smoke runs; full runs use `-iphone` and `-ipad`. Simulator and failure
+suffixes for smoke and full runs. Simulator and failure
 artifacts also include the lane name.
+
+Full shards partition the built runnable inventory through `scripts/ui_full_tests.py`.
+Measured suite durations in `scripts/ui-full-test-durations.json` guide balancing;
+new suites use a per-test estimate and are always included. Each test belongs to
+exactly one shard, and each suite stays together. The aggregate job compares both
+lanes' inventories, plans, tested revisions, and resolved identities before passing.
+Scheme exclusions and runtime quarantines remain in force. Only the first iPhone
+shard owns the screenshot lifecycle contract. Logs and selection plans are retained
+in `ios-iphone-1-ui-selection` and `ios-iphone-2-ui-selection`; failed or cancelled
+lanes retain their available result bundles. An interrupted bundle can remain unreadable.
+
+After building with `build-for-testing-ui`, select a full shard locally with
+`UI_TEST_SHARD=1 scripts/xcodebuild.sh test-without-building-ui` (or `2`). It cannot
+be combined with a narrower `ONLY_TESTING`. Use `UI_TEST_SHARD_PLAN_PATH` and
+`ONLY_TESTING_IDENTITIES_PATH` to retain selection evidence. Run
+`python3 scripts/test_ui_full_tests.py` after changing the partitioner or its timing data.
 
 `pre_pr_gate=true` runs the literal `scripts/xcodebuild.sh test-ios` gate,
 building once and running unit and UI tests together on an owned iPhone simulator.
@@ -401,8 +429,11 @@ iPhone route, it selects an available runtime matching the selected Xcode SDK's
 major version and fails before creation if no compatible iPad is available.
 
 The full UI bundle still excludes `AppStoreScreenshotTests` and honors runtime
-skips. Quarantined transcript cases in `ConversationTranscriptFullGateUITests`
-require `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run;
+skips. Quarantined transcript cases in
+[`ConversationTranscriptFullGateUITests.swift`](IntentUITests/ConversationTranscriptFullGateUITests.swift)
+extend `ConversationTranscriptScrollUITests`. Select
+`ONLY_TESTING='IntentUITests/ConversationTranscriptScrollUITests'` with
+`TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run;
 `ui_suite=full` alone does not opt into them.
 
 #### Mermaid UI quarantine
@@ -459,7 +490,7 @@ resolve dynamic dispatch, aliases, computed properties, or constructors.
 After `scripts/xcodebuild.sh build-for-testing-ui`, run
 `python3 scripts/verify_fixture_capture_lifecycle.py --output-root build/capture-contract`
 with the same simulator and derived-data settings. The output directory must be
-new. The first iPhone smoke shard, or the single full iPhone job, runs this contract
+new. The first iPhone shard in both smoke and full runs owns this contract
 separately from the smoke selection and uploads `ios-fixture-capture-lifecycle`,
 including the original failing xcresults,
 result JSON, logs, and compact PNG manifests. The isolated abort fixture opts in

@@ -116,6 +116,7 @@ extension WorkspaceChangesStoreTests {
             #expect(params["gitRootId"] as? String == "root-a")
             #expect(params["workspaceId"] as? String == "workspace-1")
         }
+        #expect(fake.paramsForMethod("git.status").first?["forceRefresh"] as? Bool == true)
         #expect(fake.didCallMethod("file-tracking.getChanges") == false)
         #expect(fake.didCallMethod("file-tracking.loadCommits") == false)
         #expect(fake.didCallMethod("git.diffs") == false)

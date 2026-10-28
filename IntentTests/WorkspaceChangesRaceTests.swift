@@ -11,6 +11,7 @@ extension WorkspaceChangesStoreTests {
         try await fake.waitForPendingRequests("file-tracking.getChanges")
 
         fake.pendingMethods.remove("file-tracking.getChanges")
+        fake.responseMap["git.status"] = ["files": [["path": "current.swift", "status": "M", "staged": false]]]
         fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot([
             WorkspaceChangesFixture.change(id: "current-file")
         ])
@@ -20,7 +21,7 @@ extension WorkspaceChangesStoreTests {
         ]))
         await oldRequest.value
 
-        #expect(store.unstagedChanges.map(\.id) == ["current-file"])
+        #expect(store.unstagedChanges.map(\.path) == ["current.swift"])
         #expect(fake.paramsForMethod("file-tracking.loadCommits").count == 1)
         #expect(store.isLoading == false)
     }
@@ -121,11 +122,12 @@ extension WorkspaceChangesStoreTests {
         try await fake.waitForPendingRequests("file-tracking.getChanges")
         #expect(store.unstagedChanges.isEmpty)
         #expect(fake.paramsForMethod("file-tracking.getChanges").count == 2)
+        fake.responseMap["git.status"] = ["files": [["path": "current.swift", "status": "M", "staged": false]]]
         fake.resolvePending("file-tracking.getChanges", with: WorkspaceChangesFixture.snapshot([
             WorkspaceChangesFixture.change(id: "current-file")
         ]))
         try await waitUntil("fresh Changes snapshot after the event burst") {
-            store.unstagedChanges.first?.id == "current-file" && !store.isLoading
+            store.unstagedChanges.first?.path == "current.swift" && !store.isLoading
         }
         #expect(fake.paramsForMethod("file-tracking.loadCommits").count == 1)
         store.stopObserving()
