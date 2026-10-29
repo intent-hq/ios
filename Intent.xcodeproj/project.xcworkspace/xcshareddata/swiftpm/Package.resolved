@@ -1,5 +1,5 @@
 {
-  "originHash" : "d69c3c3728ceb008618b45fb06c1ac377f7b060cec627ec4f8c000234bc7a60b",
+  "originHash" : "d65e77f68dfc9dda8c7b631b98c6f02992d00e3ba9955d2aa104b44bc2673610",
   "pins" : [
     {
       "identity" : "lottie-ios",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "82a4ae7170d98d8538ec77238b7eb8e7199ef2e8",
         "version" : "1.3.1"
+      }
+    },
+    {
+      "identity" : "swift-highlight",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/atacan/swift-highlight",
+      "state" : {
+        "revision" : "61dd3a67b186d18816ef22c1047f7ec1bdeb91f2",
+        "version" : "0.0.2"
       }
     },
     {

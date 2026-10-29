@@ -15,6 +15,7 @@
 		AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000003AAAA000000000003 /* Info-visionOS.plist */; };
 		AC000014AAAA000000000014 /* IntentUITests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000005AAAA000000000005 /* IntentUITests */; };
 		AD000003AAAA000000000003 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = AD000001AAAA000000000001 /* SwiftTerm */; };
+		AE000003AAAA000000000003 /* SwiftHighlight in Frameworks */ = {isa = PBXBuildFile; productRef = AE000001AAAA000000000001 /* SwiftHighlight */; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -104,6 +105,7 @@
 			files = (
 				EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */,
 				AD000003AAAA000000000003 /* SwiftTerm in Frameworks */,
+				AE000003AAAA000000000003 /* SwiftHighlight in Frameworks */,
 				AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */,
 				0B047438940A36D62A002FE6 /* Lottie in Frameworks */,
 			);
@@ -183,6 +185,7 @@
 			packageProductDependencies = (
 				AA000001AAAA000000000001 /* Textual */,
 				AD000001AAAA000000000001 /* SwiftTerm */,
+				AE000001AAAA000000000001 /* SwiftHighlight */,
 				20E5CDC07E6C8F2AF917AE01 /* Lottie */,
 			);
 			productName = Intent;
@@ -268,6 +271,7 @@
 			packageReferences = (
 				AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */,
 				AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
+				AE000002AAAA000000000002 /* XCRemoteSwiftPackageReference "swift-highlight" */,
 				37F58DE8F9ED3C34D35D3F0F /* XCRemoteSwiftPackageReference "lottie-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -787,6 +791,14 @@
 				version = 1.18.0;
 			};
 		};
+		AE000002AAAA000000000002 /* XCRemoteSwiftPackageReference "swift-highlight" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/atacan/swift-highlight";
+			requirement = {
+				kind = exactVersion;
+				version = 0.0.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -804,6 +816,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AD000002AAAA000000000002 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
 			productName = SwiftTerm;
+		};
+		AE000001AAAA000000000001 /* SwiftHighlight */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AE000002AAAA000000000002 /* XCRemoteSwiftPackageReference "swift-highlight" */;
+			productName = SwiftHighlight;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

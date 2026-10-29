@@ -36,6 +36,9 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
     static func isVideo(path: String, mimeType: String? = nil) -> Bool {
         if mimeType?.lowercased().hasPrefix("video/") == true { return true }
         let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
+        // Prefer TypeScript over ambiguous transport-stream extensions unless
+        // the caller supplied a video MIME type (intent-hq/ios#883).
+        if ext == "ts" || ext == "mts" { return false }
         return ext == "webm" || UTType(filenameExtension: ext)?.conforms(to: .movie) == true
     }
 

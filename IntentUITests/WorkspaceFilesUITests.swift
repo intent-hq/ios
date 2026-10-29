@@ -38,6 +38,9 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
             let text = app.textViews["text.content"].firstMatch
             XCTAssertTrue(text.waitForExistence(timeout: Fixture.timeout))
             XCTAssertEqual((text.value as? String)?.contains("case workspaceOpened"), true)
+            XCTAssertEqual((text.value as? String)?.contains("// Events keep the dashboard up to date."), true)
+            XCTAssertEqual((text.value as? String)?.contains("\"workspace.opened\""), true)
+            XCTAssertTrue(app.buttons["Share text file"].exists)
             capture(app, name: "workspace-file-preview-\(appearance)")
             app.buttons["text.close"].tap()
             reveal(analytics, in: app)
@@ -57,6 +60,72 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
             XCTAssertEqual(notes.value as? String, "Collapsed")
             analytics.tap()
             reveal(file, in: app)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testMultiLanguagePreviewsInBothThemes() {
+        let examples = [
+            ("Analytics.swift", "@discardableResult", "swift"),
+            ("buffer.rs", "#[derive(Debug, Clone)]", "rust"),
+            ("collector.go", "type Event struct", "go"),
+            ("report.py", "@dataclass(frozen=True)", "python")
+        ]
+        for appearance in ["light", "dark"] {
+            let app = openContext(appearance: appearance)
+            let notes = app.buttons["context.section.notes"].firstMatch
+            reveal(notes, in: app)
+            notes.tap()
+            let sources = app.buttons["files.folder.Sources"].firstMatch
+            reveal(sources, in: app)
+            sources.tap()
+            for (filename, expected, language) in examples {
+                let file = app.buttons["files.file.Sources/\(filename)"].firstMatch
+                reveal(file, in: app)
+                file.tap()
+                let text = app.textViews["text.content"].firstMatch
+                XCTAssertTrue(text.waitForExistence(timeout: Fixture.timeout))
+                XCTAssertEqual((text.value as? String)?.contains(expected), true)
+                XCTAssertTrue(app.buttons["Share text file"].exists)
+                capture(app, name: "workspace-file-\(language)-\(appearance)")
+                app.buttons["text.close"].tap()
+            }
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testWebAndShellPreviewsInBothThemes() {
+        let groups = [
+            ("Web", [
+                ("activity.js", "export async function", "javascript"),
+                ("collector.ts", "export interface Activity<T>", "typescript"),
+                ("dashboard.css", "--accent: #336699", "css")
+            ]),
+            ("Scripts", [("report.sh", "describe_batch", "shell")])
+        ]
+        for appearance in ["light", "dark"] {
+            let app = openContext(appearance: appearance)
+            let notes = app.buttons["context.section.notes"].firstMatch
+            reveal(notes, in: app)
+            notes.tap()
+            for (directory, examples) in groups {
+                let folder = app.buttons["files.folder.\(directory)"].firstMatch
+                reveal(folder, in: app, towardTop: directory == "Scripts")
+                folder.tap()
+                for (filename, expected, language) in examples {
+                    let file = app.buttons["files.file.\(directory)/\(filename)"].firstMatch
+                    reveal(file, in: app)
+                    file.tap()
+                    let text = app.textViews["text.content"].firstMatch
+                    XCTAssertTrue(text.waitForExistence(timeout: Fixture.timeout))
+                    XCTAssertEqual((text.value as? String)?.contains(expected), true)
+                    XCTAssertTrue(app.buttons["Share text file"].exists)
+                    capture(app, name: "workspace-file-\(language)-\(appearance)")
+                    app.buttons["text.close"].tap()
+                }
+            }
             app.terminate()
         }
     }

@@ -129,6 +129,7 @@ Direct dependencies managed via Swift Package Manager (integrated in Xcode):
 | --- | --- | --- |
 | [Textual](https://github.com/intent-hq/textual) | `0.5.0-intent.4` (exact) | Markdown rendering for notes and messages |
 | [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) | `1.18.0` (exact) | Workspace terminal emulation |
+| [SwiftHighlight](https://github.com/atacan/swift-highlight) | `0.0.2` (exact) | Pure-Swift syntax tokenization for workspace files |
 | [Lottie](https://github.com/airbnb/lottie-ios) | `4.6.1..<5.0.0` (currently resolved to `4.6.1`) | Bundled animations |
 
 `Intent.xcodeproj/project.pbxproj` declares these requirements;

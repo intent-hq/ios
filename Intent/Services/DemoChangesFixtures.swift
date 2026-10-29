@@ -18,6 +18,13 @@ enum DemoChangesFixtures {
             let changes = [
                 change(path: "Sources/Analytics.swift", stage: "unstaged"),
                 change(path: "Sources/Analytics/Events.swift", stage: "unstaged"),
+                change(path: "Sources/report.py", stage: "unstaged"),
+                change(path: "Sources/collector.go", stage: "unstaged"),
+                change(path: "Config/analytics.json", stage: "unstaged"),
+                change(path: "Config/analytics.yaml", stage: "unstaged"),
+                change(path: "Web/collector.ts", stage: "unstaged"),
+                change(path: "Web/dashboard.css", stage: "unstaged"),
+                change(path: "Scripts/report.sh", stage: "unstaged"),
                 change(path: "Tests/AnalyticsTests.swift", stage: "staged")
             ]
             return [
@@ -39,14 +46,15 @@ enum DemoChangesFixtures {
         case "git.commitDetails":
             return [
                 "commitHash": commitHash,
-                "fileDetails": [
-                    ["path": "Sources/Analytics.swift", "additions": 1, "deletions": 1],
-                    ["path": "Tests/AnalyticsTests.swift", "additions": 1, "deletions": 0]
-                ]
+                "fileDetails": DemoDiffFixtures.files.map { file in
+                    ["path": file.path, "additions": file.additions, "deletions": file.deletions]
+                }
             ]
         case "git.branchDiff":
-            let path = (params["paths"] as? [String])?.first ?? ""
-            return [["file": path, "oldContent": "let count = 0\n", "newContent": "let count = 1\n"]]
+            let paths = params["paths"] as? [String] ?? []
+            return DemoDiffFixtures.files.filter { paths.contains($0.path) }.map { file in
+                ["file": file.path, "oldContent": file.old, "newContent": file.new]
+            }
         case "events.subscribe" where (params["replaceGroup"] as? String)?.hasPrefix("ios-changes-") == true:
             return ["subscriptionId": UUID().uuidString]
         default:
@@ -55,27 +63,16 @@ enum DemoChangesFixtures {
     }
 
     private static func workingDiff(params: [String: Any]) -> [[String: Any]] {
-        let staged = params["staged"] as? Bool ?? false
-        return [
-            [
-                "path": params["path"] as? String ?? "",
-                "hunks": [
-                    [
-                        "oldStart": 1, "oldLines": 1, "newStart": 1, "newLines": 1,
-                        "lines": [
-                            ["type": "Deletion", "content": "let enabled = false", "oldNumber": 1],
-                            ["type": "Addition", "content": staged ? "let staged = true" : "let enabled = true", "newNumber": 1]
-                        ]
-                    ]
-                ]
-            ]
-        ]
+        guard let file = DemoDiffFixtures.files.first(where: { $0.path == params["path"] as? String }) else { return [] }
+        return [["path": file.path, "hunks": file.wireHunks]]
     }
 
     private static func change(path: String, stage: String) -> [String: Any] {
-        [
+        let file = DemoDiffFixtures.files.first { $0.path == path }
+        return [
             "id": "\(stage):\(path)", "file": "/workspace/\(path)", "relativePath": path,
-            "stage": stage, "status": "modified", "stats": ["additions": 1, "deletions": 1],
+            "stage": stage, "status": "modified",
+            "stats": ["additions": file?.additions ?? 0, "deletions": file?.deletions ?? 0],
             "attribution": ["agent": ["agentId": "demo-analytics-agent", "agentName": "Analytics Agent"]]
         ]
     }

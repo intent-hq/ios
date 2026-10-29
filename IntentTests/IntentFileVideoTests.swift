@@ -10,6 +10,31 @@ import UIKit
 /// dispatch together. Existing image/remote suites remain the image contract owners.
 @MainActor
 struct IntentFileVideoTests {
+    struct VideoClassificationCase: Sendable {
+        let path: String
+        let mimeType: String?
+        let expected: Bool
+    }
+
+    @Test(arguments: [
+        VideoClassificationCase(path: "collector.ts", mimeType: nil, expected: false),
+        .init(path: "collector.mts", mimeType: nil, expected: false),
+        .init(path: "COLLECTOR.TS", mimeType: nil, expected: false),
+        .init(path: "COLLECTOR.MTS", mimeType: nil, expected: false),
+        .init(path: "collector.ts", mimeType: "application/typescript", expected: false),
+        .init(path: "collector.mts", mimeType: "text/plain", expected: false),
+        .init(path: "clip.ts", mimeType: "video/mp2t", expected: true),
+        .init(path: "clip.mts", mimeType: "VIDEO/MP2T", expected: true),
+        .init(path: "clip.mp4", mimeType: nil, expected: true),
+        .init(path: "clip.mov", mimeType: nil, expected: true),
+        .init(path: "clip.webm", mimeType: nil, expected: true)
+    ])
+    func videoClassificationPrefersTypeScriptUnlessVideoMIMEIsExplicit(
+        _ sample: VideoClassificationCase
+    ) {
+        #expect(WorkspaceVideo.isVideo(path: sample.path, mimeType: sample.mimeType) == sample.expected)
+    }
+
     @Test(arguments: ["mp4", "mov", "m4v"])
     func fileVideoProducesPlayablePoster(_ ext: String) async throws {
         let bytes = try await Self.videoBytes()

@@ -4,9 +4,12 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
         static let timeout: TimeInterval = 30
-        static let scrollAttempts = 4
-        static let maximumInitialLineOffset: CGFloat = 100
+        static let scrollAttempts = 8
+        // Three context rows plus a deletion put the Python/shell addition 103.67 pt down.
+        static let maximumInitialLineOffset: CGFloat = 104
         static let maximumLeadingInset: CGFloat = 40
+        static let presentationSettleDuration: TimeInterval = 1
+        static let presentationPollInterval: TimeInterval = 0.1
     }
 
     override func setUpWithError() throws {
@@ -21,27 +24,64 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 
     @MainActor
     func testChangesTabOpensStagedUnstagedAndCommitDiffs() {
-        let app = openChanges()
+        for appearance in ["light", "dark"] {
+            checkChangesDiffs(appearance: appearance)
+        }
+    }
+
+    @MainActor
+    private func checkChangesDiffs(appearance: String) {
+        let app = openChanges(appearance: appearance)
+        defer { app.terminate() }
         let unstaged = app.buttons["changes.file.unstaged.Sources/Analytics.swift"].firstMatch
         reveal(unstaged, in: app)
-        capture(app, name: "workspace-changes")
+        capture(app, name: "workspace-changes-\(appearance)")
         unstaged.tap()
         XCTAssertTrue(app.navigationBars["Unstaged Changes"].waitForExistence(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let enabled = true")
-        capture(app, name: "unstaged-diff")
+        capture(app, name: "unstaged-diff-\(appearance)")
+        app.buttons["Done"].tap()
+        let python = app.buttons["changes.file.unstaged.Sources/report.py"].firstMatch
+        reveal(python, in: app)
+        python.tap()
+        assertDiffLine(in: app, containing: "BATCH_SIZE = 20")
+        capture(app, name: "python-diff-\(appearance)")
         app.buttons["Done"].tap()
         let staged = app.buttons["changes.file.staged.Tests/AnalyticsTests.swift"].firstMatch
         reveal(staged, in: app)
         staged.tap()
         XCTAssertTrue(app.navigationBars["Staged Changes"].waitForExistence(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let staged = true")
+        capture(app, name: "staged-diff-\(appearance)")
         app.buttons["Done"].tap()
         let commit = app.staticTexts["feat: add usage analytics"].firstMatch
         reveal(commit, in: app)
         commit.tap()
         XCTAssertTrue(app.navigationBars["Commit Changes"].waitForExistence(timeout: Fixture.timeout))
-        assertDiffLine(in: app, containing: "let count = 1")
-        capture(app, name: "commit-diff")
+        assertDiffLine(in: app, containing: "let enabled = true")
+        capture(app, name: "commit-diff-\(appearance)")
+    }
+
+    @MainActor
+    func testWebAndShellDiffsInBothThemes() {
+        let examples = [
+            ("Web/collector.ts", "export const batchLimit = 20", "typescript"),
+            ("Web/dashboard.css", "--accent: #336699", "css"),
+            ("Scripts/report.sh", "batch_limit=20", "shell")
+        ]
+        for appearance in ["light", "dark"] {
+            let app = openChanges(appearance: appearance)
+            for (path, expected, language) in examples {
+                let file = app.buttons["changes.file.unstaged.\(path)"].firstMatch
+                reveal(file, in: app, towardTop: language == "shell")
+                file.tap()
+                XCTAssertTrue(app.navigationBars["Unstaged Changes"].waitForExistence(timeout: Fixture.timeout))
+                assertDiffLine(in: app, containing: expected)
+                capture(app, name: "\(language)-diff-\(appearance)")
+                app.buttons["Done"].tap()
+            }
+            app.terminate()
+        }
     }
 
     @MainActor
@@ -140,9 +180,9 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     }
 
     @MainActor
-    private func openChanges() -> XCUIApplication {
+    private func openChanges(appearance: String = "light") -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data"]
+        app.launchArguments += ["--demo-data", "-appThemePreference", appearance]
         app.launch()
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
@@ -183,10 +223,39 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         XCTAssertTrue(line.waitForExistence(timeout: Fixture.timeout))
         let viewport = app.scrollViews["changes.diff.scroll"].firstMatch
         XCTAssertTrue(viewport.exists)
+        waitForDiffPresentation(in: app, viewport: viewport, line: line)
         XCTAssertTrue(line.isHittable)
-        XCTAssertGreaterThanOrEqual(line.frame.minY, viewport.frame.minY)
-        XCTAssertLessThan(line.frame.minY - viewport.frame.minY, Fixture.maximumInitialLineOffset)
-        XCTAssertLessThan(line.frame.minX - viewport.frame.minX, Fixture.maximumLeadingInset)
+        let lineFrame = line.frame
+        let viewportFrame = viewport.frame
+        XCTAssertGreaterThanOrEqual(lineFrame.minY, viewportFrame.minY)
+        XCTAssertLessThanOrEqual(lineFrame.maxY, viewportFrame.maxY)
+        XCTAssertLessThan(lineFrame.minY - viewportFrame.minY, Fixture.maximumInitialLineOffset)
+        XCTAssertLessThan(lineFrame.minX - viewportFrame.minX, Fixture.maximumLeadingInset)
+    }
+
+    @MainActor
+    private func waitForDiffPresentation(in app: XCUIApplication, viewport: XCUIElement, line: XCUIElement) {
+        // Existence alone can observe a sheet while it is still sliding into place.
+        let navigation = app.navigationBars.containing(.button, identifier: "Done").firstMatch
+        var previousFrames: [CGRect] = []
+        var stableSince = Date()
+        let deadline = Date().addingTimeInterval(Fixture.timeout)
+        repeat {
+            if navigation.exists, viewport.exists, line.exists, app.buttons["Done"].isHittable {
+                let frames = [navigation.frame, viewport.frame, line.frame]
+                if frames != previousFrames {
+                    previousFrames = frames
+                    stableSince = Date()
+                } else if Date().timeIntervalSince(stableSince) >= Fixture.presentationSettleDuration {
+                    return
+                }
+            } else {
+                previousFrames = []
+                stableSince = Date()
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(Fixture.presentationPollInterval))
+        } while Date() < deadline
+        XCTFail("Diff sheet and viewport must stop moving before checking lines or taking screenshots")
     }
 
     @MainActor

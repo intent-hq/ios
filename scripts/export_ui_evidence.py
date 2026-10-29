@@ -67,6 +67,16 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for screen in ("workspace-context", "workspace-files", "workspace-file-preview")
         ),
+        "testMultiLanguagePreviewsInBothThemes": tuple(
+            f"workspace-file-{language}-{appearance}"
+            for language in ("swift", "python", "go", "rust")
+            for appearance in ("light", "dark")
+        ),
+        "testWebAndShellPreviewsInBothThemes": tuple(
+            f"workspace-file-{language}-{appearance}"
+            for language in ("javascript", "typescript", "css", "shell")
+            for appearance in ("light", "dark")
+        ),
     },
     "FixtureCaptureLifecycleUITests": {
         "testAssertionAbortRetainsFinalCapture": ("fixture-assertion-abort-final-state",),
@@ -369,8 +379,17 @@ CAPTURES = {
         "testDismissedPromptRestoresAndClearsAfterSuccessfulRetry": ("restored-workspace-draft",),
     },
     "WorkspaceChangesUITests": {
+        "testWebAndShellDiffsInBothThemes": tuple(
+            f"{language}-diff-{appearance}"
+            for language in ("typescript", "css", "shell")
+            for appearance in ("light", "dark")
+        ),
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
-            "workspace-changes", "unstaged-diff", "commit-diff",
+            "workspace-changes-light", "workspace-changes-dark",
+            "unstaged-diff-light", "unstaged-diff-dark",
+            "python-diff-light", "python-diff-dark",
+            "staged-diff-light", "staged-diff-dark",
+            "commit-diff-light", "commit-diff-dark",
         ),
         "testRepositorySelectionScopesFilesAndCommitDiffs": (
             "submodule-changes", "submodule-unstaged-diff", "submodule-commit-diff",
