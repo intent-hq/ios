@@ -53,7 +53,6 @@ struct WorkspaceListView: View {
         ) {
             workspacePage
         }
-        .workspaceSearchFeedback(isSearching: isSearching)
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.trailing } action: { trailingSafeArea = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.leading } action: { leadingSafeArea = $0 }
         .overlay(alignment: verticalBarEdge == .leading ? .topLeading : .topTrailing) {
