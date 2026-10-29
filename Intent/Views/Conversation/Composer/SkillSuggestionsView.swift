@@ -19,6 +19,9 @@ struct SkillSuggestionsView: View {
         static let chipHorizontalPadding: CGFloat = 20
         static let chipSpacing: CGFloat = 8
         static let bottomPadding: CGFloat = 12
+        static let previewWidth: CGFloat = 320
+        static let previewPadding: CGFloat = 20
+        static let previewSpacing: CGFloat = 6
     }
 
     var body: some View {
@@ -79,10 +82,36 @@ struct SkillSuggestionsView: View {
             chipLabel(Text(verbatim: "/\(skill.name)"), selected: selected)
         }
         .buttonStyle(IntentContentButtonStyle())
+        .contextMenu {
+            Button { completion.insert(skill) } label: {
+                Label("Insert", systemImage: "arrow.turn.down.left")
+            }
+        } preview: {
+            skillPreview(skill)
+        }
         .accessibilityIdentifier("composer.skill.\(skill.name)")
         .accessibilityHint(Text(verbatim: skill.description))
         .accessibilityAddTraits(selected ? .isSelected : [])
         .id(skill.id)
+    }
+
+    /// Long-press preview: the chip itself shows only the name.
+    private func skillPreview(_ skill: SkillInfo) -> some View {
+        VStack(alignment: .leading, spacing: Layout.previewSpacing) {
+            Text(verbatim: "/\(skill.name)")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .foregroundStyle(Palette.foreground(for: colorScheme))
+            if !skill.description.isEmpty {
+                Text(verbatim: skill.description)
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Layout.previewPadding)
+        .frame(width: Layout.previewWidth, alignment: .leading)
+        .background(Palette.background(for: colorScheme))
+        .accessibilityIdentifier("composer.skill.preview")
     }
 
     private func chipLabel(_ label: Text, selected: Bool) -> some View {

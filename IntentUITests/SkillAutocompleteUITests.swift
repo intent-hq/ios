@@ -52,6 +52,25 @@ nonisolated final class SkillAutocompleteUITests: XCTestCase {
     }
 
     @MainActor
+    func testLongPressShowsDescriptionAndInsertKeepsKeyboard() {
+        continueAfterFailure = false
+        let app = launch(appearance: "light")
+        let editor = app.textViews["composer.textView"]
+        editor.tap()
+        editor.typeText("/")
+        let review = app.buttons["composer.skill.code-review"]
+        XCTAssertTrue(review.waitForExistence(timeout: Self.timeout))
+        review.press(forDuration: 1)
+        let description = app.staticTexts["Review changes for bugs, regressions, and missing tests."]
+        XCTAssertTrue(description.waitForExistence(timeout: Self.timeout))
+        capture(app, name: "skill-description-preview")
+        app.buttons["Insert"].tap()
+        XCTAssertTrue(description.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertEqual(editor.value as? String, "/code-review ")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
     private func launch(appearance: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-design-scenario=composer", "-appThemePreference", appearance]
