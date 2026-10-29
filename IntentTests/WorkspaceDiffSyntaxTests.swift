@@ -46,7 +46,8 @@ struct WorkspaceDiffSyntaxTests {
         let deletion = try #require(hunks[0].lines.firstIndex { $0.type == .deletion })
         #expect(oldRuns[.init(hunk: 0, line: deletion)]?.first?.length == "old 👋\r".utf16.count)
         let new = try #require(sources.last)
-        let tokenRange = (new.text as NSString).range(of: "café")
+        let token = try #require(new.text.range(of: "café"))
+        let tokenRange = NSRange(token, in: new.text)
         let mapped = WorkspaceDiffPresentation.map([
             FileSyntaxRun(location: tokenRange.location, length: tokenRange.length, color: "#654321")
         ], from: new)

@@ -102,7 +102,8 @@ nonisolated struct WorkspaceDiffPresentation: Sendable {
                 if intersection.length > 0 {
                     result[mapping.row, default: []].append(FileSyntaxRun(
                         location: intersection.location - mapping.range.location,
-                        length: intersection.length, color: run.color
+                        length: intersection.length,
+                        color: run.color
                     ))
                 }
                 index += 1
@@ -117,7 +118,9 @@ enum WorkspaceDiffSyntax {
     typealias Tokenizer = @MainActor (String, String, Bool) async -> [FileSyntaxRun]
 
     static func highlight(
-        _ presentation: WorkspaceDiffPresentation, path: String, dark: Bool,
+        _ presentation: WorkspaceDiffPresentation,
+        path: String,
+        dark: Bool,
         tokenize: Tokenizer = { source, path, dark in
             await FileSyntaxHighlighter.shared.highlight(source: source, path: path, dark: dark)
         }

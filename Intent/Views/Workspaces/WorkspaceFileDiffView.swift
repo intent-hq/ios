@@ -43,8 +43,13 @@ struct WorkspaceFileDiffView: View {
         }
         .background(WorkspaceDetailStyle.background(for: colorScheme))
         .task(id: LoadID(
-            workspace: loader.workspaceId, root: loader.gitRootId, path: path,
-            staged: staged, binary: isBinary, commit: commitHash, retry: retry
+            workspace: loader.workspaceId,
+            root: loader.gitRootId,
+            path: path,
+            staged: staged,
+            binary: isBinary,
+            commit: commitHash,
+            retry: retry
         )) { await load() }
         .task(id: SyntaxID(presentation: presentation?.id, dark: colorScheme == .dark)) {
             await highlight()
