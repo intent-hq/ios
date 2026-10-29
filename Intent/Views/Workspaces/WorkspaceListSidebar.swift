@@ -98,6 +98,7 @@ struct WorkspaceListSidebar: View {
         } message: {
             Text(actionError ?? "Please try again.")
         }
+        .workspaceSearchFeedback(isSearching: isSearching)
         .onChange(of: isSearching) { _, searching in
             revealedSwipeTarget = nil
             if !searching {

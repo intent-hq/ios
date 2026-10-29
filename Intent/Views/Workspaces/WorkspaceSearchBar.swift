@@ -71,6 +71,13 @@ struct WorkspaceSearchBar: View {
     }
 }
 
+extension View {
+    /// Entering and leaving search share the Intent menu's open and close haptics.
+    func workspaceSearchFeedback(isSearching: Bool) -> some View {
+        sensoryFeedback(trigger: isSearching) { _, searching in .impact(weight: searching ? .medium : .light) }
+    }
+}
+
 struct WorkspaceSearchButton: View {
     @Binding var isSearching: Bool
     var height: CGFloat = Constants.WorkspaceSearch.expandedHeight
