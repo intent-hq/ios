@@ -50,7 +50,7 @@ struct WorkspaceActionLauncher: ViewModifier {
                 floatingMenu(content: content)
             }
         }
-        .sensoryFeedback(trigger: isOpen) { _, open in .impact(weight: open ? .medium : .light) }
+        .onChange(of: isOpen) { _, open in HapticManager.impact(open ? .medium : .light) }
     }
 
     // Keep the original modifier chain and ordering on devices without a vertical bar.
