@@ -38,6 +38,7 @@ struct WorkspaceSearchBar: View {
         HStack(spacing: Constants.WorkspaceSearch.visionSegmentSpacing) {
             ForEach(ViewMode.allCases, id: \.self) { mode in
                 Button {
+                    if viewMode != mode { HapticManager.selection() }
                     viewMode = mode
                 } label: {
                     Text(mode.rawValue)

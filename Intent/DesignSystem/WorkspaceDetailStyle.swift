@@ -116,7 +116,10 @@ struct WorkspaceContentTabs: View {
     }
 
     private func tab(_ title: String, value: WorkspaceTab) -> some View {
-        Button { selection = value } label: {
+        Button {
+            if selection != value { HapticManager.selection() }
+            selection = value
+        } label: {
             Text(title)
                 .interFont(Constants.Typography.bodySEmphasized)
                 .tracking(WorkspaceDetailStyle.tabLabelTracking)
