@@ -294,7 +294,6 @@ extension Constants.WorkspaceDetail {
     static let horizontalPadding: CGFloat = 16
     static let regularTitleTopPadding: CGFloat = 4
     static let titleBottomPadding: CGFloat = 4
-    static let statusImageBottomPadding: CGFloat = 8
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
     // visionOS deliberate confirmation sheets for destructive/irreversible

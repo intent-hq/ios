@@ -29,12 +29,9 @@ extension Constants.WorkspaceRow {
 }
 
 extension WorkspaceStatusImageLayout {
-    /// Detail banner cap — the desktop card's `max-h-48`.
-    nonisolated static let detailMaxHeight: CGFloat = 192
+    nonisolated static let thumbnailSize: CGFloat = 56
     nonisolated static let cornerRadius: CGFloat = 8
     nonisolated static let borderWidth: CGFloat = 0.5
-    nonisolated static let detailPlaceholderHeight: CGFloat = 44
-    nonisolated static let placeholderSpacing: CGFloat = 6
     nonisolated static let placeholderOpacity: Double = 0.5
 }
 

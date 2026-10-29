@@ -8,6 +8,7 @@ struct WorkspaceDetailHeading: View {
     let repositoryOwner: String?
     let repositoryName: String?
     var statusMessage: String?
+    var statusImageAssetId: String?
     @Bindable var titleEditor: WorkspaceTitleEditor
     var titleFocus: FocusState<Bool>.Binding?
     var topSpacing: CGFloat?
@@ -43,17 +44,36 @@ struct WorkspaceDetailHeading: View {
                         ? WorkspaceDetailStyle.neutral
                         : WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
             }
-            if let summary = statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
-                WorkspaceDetailHeadingText(summary, style: Constants.Typography.bodyS)
-                    .tracking(WorkspaceDetailStyle.bodyTracking)
-                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
-                    .accessibilityIdentifier("workspaceDetail.summary")
-            }
+            if summary != nil || statusImageAssetId != nil { statusRow }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.top, topSpacing ?? headingTopSpacing)
         .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
+    }
+
+    private var summary: String? {
+        guard let trimmed = statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    /// The status image sits beside the summary as a thumbnail; accessibility sizes stack it below.
+    private var statusRow: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing))
+            : AnyLayout(HStackLayout(spacing: WorkspaceDetailStyle.headingTextSpacing))
+        return layout {
+            if let summary {
+                WorkspaceDetailHeadingText(summary, style: Constants.Typography.bodyS)
+                    .tracking(WorkspaceDetailStyle.bodyTracking)
+                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("workspaceDetail.summary")
+            }
+            if let statusImageAssetId {
+                WorkspaceStatusImageView(workspaceId: workspaceId, assetId: statusImageAssetId)
+            }
+        }
     }
 
     @ViewBuilder
@@ -245,6 +265,7 @@ struct WorkspaceDetailHeader: View {
             repositoryOwner: workspace?.repositoryOwner,
             repositoryName: workspace?.repositoryName,
             statusMessage: workspace?.statusMessage,
+            statusImageAssetId: WorkspaceStatusImageLayout.assetId(for: workspace),
             titleEditor: titleEditor,
             titleFocus: titleFocus,
             topSpacing: headingTopSpacing,
@@ -252,11 +273,6 @@ struct WorkspaceDetailHeader: View {
             showsTitle: showsTitle,
             onSaveTitle: onSaveTitle
         )
-        if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
-            WorkspaceStatusImageView(workspaceId: workspaceId, assetId: assetId)
-                .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-                .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
-        }
         #if !os(visionOS)
         WorkspaceContentTabs(selection: $selection)
             .padding(.horizontal, WorkspaceDetailStyle.pageInset)
