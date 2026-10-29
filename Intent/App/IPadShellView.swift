@@ -14,6 +14,7 @@ struct IPadShellView: View {
     @Environment(\.workspaceVerticalBarEdge) private var verticalBarEdge
     /// Nil until measured, so a zero first width never drives the navigation layout.
     @State private var width: CGFloat?
+    @State private var windowShortSide: CGFloat = .infinity
     @State private var topSafeArea: CGFloat = 0
     @State private var trailingSafeArea: CGFloat = 0
     @State private var leadingSafeArea: CGFloat = 0
@@ -28,7 +29,8 @@ struct IPadShellView: View {
             width: width ?? 0,
             isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
             usesFoldableLayout: usesVerticalBar,
-            usesLeadingVerticalBar: verticalBarEdge == .leading
+            usesLeadingVerticalBar: verticalBarEdge == .leading,
+            windowShortSide: windowShortSide
         )
     }
     private var railSafeArea: CGFloat { verticalBarEdge == .leading ? leadingSafeArea : trailingSafeArea }
@@ -149,6 +151,7 @@ struct IPadShellView: View {
         ))
         .accessibilityAction(.escape) { coordinator.iPadNavigation.setFocusPresentation(.normal) }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { width = $0 } }
+        .onGeometryChange(for: CGFloat.self) { min($0.size.width, $0.size.height) } action: { if $0 > 0 { windowShortSide = $0 } }
         .onChange(of: measuredLayout, initial: true) { _, measuredLayout in
             if let measuredLayout {
                 coordinator.iPadNavigation.updateLayout(
