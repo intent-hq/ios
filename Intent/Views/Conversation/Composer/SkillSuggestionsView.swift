@@ -84,7 +84,7 @@ struct SkillSuggestionsView: View {
         .buttonStyle(IntentContentButtonStyle())
         .contextMenu {
             Button { completion.insert(skill) } label: {
-                Label("Insert", systemImage: "arrow.turn.down.left")
+                Label("Use", systemImage: "arrow.turn.down.left")
             }
         } preview: {
             skillPreview(skill)
