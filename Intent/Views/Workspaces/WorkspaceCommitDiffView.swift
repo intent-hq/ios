@@ -7,6 +7,9 @@ enum WorkspaceCommitLayout {
     static let textSpacing: CGFloat = 4
     static let sectionSpacing: CGFloat = 24
     static let iconSize: CGFloat = 16
+    static let floatingShadowOpacity = 0.16
+    static let floatingShadowRadius: CGFloat = 8
+    static let floatingShadowOffset: CGFloat = 4
 }
 
 struct WorkspaceCommitDiffView: View {
@@ -20,16 +23,18 @@ struct WorkspaceCommitDiffView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var retry = 0
+    @State private var jumpControlHeight: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Commit view", selection: $showsDetails) {
-                Text("Changes").tag(false)
-                Text("Details").tag(true)
-            }
-            .pickerStyle(.segmented)
+            IntentContentSwitcher(
+                selection: $showsDetails,
+                options: [.init(value: false, title: "Changes"), .init(value: true, title: "Details")],
+                accessibilityLabel: "Commit view",
+                identifierPrefix: "commit.view"
+            )
             .padding(.horizontal, WorkspaceCommitLayout.padding)
             .padding(.bottom, WorkspaceCommitLayout.rowPadding)
             .background(Theme.sidebar(for: colorScheme))
@@ -52,32 +57,41 @@ struct WorkspaceCommitDiffView: View {
 
     private var changes: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    commitHeader
-                    fileContent
-                }
-                .padding(.bottom, WorkspaceCommitLayout.padding)
-            }
+            changesContent
             .accessibilityIdentifier("commit.changes.scroll")
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !files.isEmpty { jumpButton }
+            .overlay(alignment: .bottomTrailing) {
+                if !files.isEmpty {
+                    jumpButton
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { jumpControlHeight = $0 }
+                }
             }
             .sheet(
                 isPresented: $showsFiles,
                 onDismiss: {
-                guard let jumpPath else { return }
-                proxy.scrollTo(jumpPath, anchor: .top)
-                self.jumpPath = nil
+                    guard let jumpPath else { return }
+                    proxy.scrollTo(jumpPath, anchor: .top)
+                    self.jumpPath = nil
                 },
                 content: {
-                WorkspaceCommitFilePicker(files: files) { path in
-                    collapsedPaths.remove(path)
-                    jumpPath = path
-                    showsFiles = false
-                }
+                    WorkspaceCommitFilePicker(files: files) { path in
+                        collapsedPaths.remove(path)
+                        jumpPath = path
+                        showsFiles = false
+                    }
+                    .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+                    .presentationDragIndicator(.visible)
                 }
             )
+        }
+    }
+
+    private var changesContent: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                commitHeader
+                fileContent
+            }
+            .padding(.bottom, jumpControlHeight + WorkspaceCommitLayout.padding)
         }
     }
 
@@ -105,12 +119,16 @@ struct WorkspaceCommitDiffView: View {
 
     private var jumpButton: some View {
         Button { showsFiles = true } label: {
-            Label("Jump to file", image: "FileList").frame(maxWidth: .infinity)
+            Label("Jump to file", image: "FileList")
         }
         .buttonStyle(IntentButtonStyle(variant: .secondary))
+        .shadow(
+            color: .black.opacity(WorkspaceCommitLayout.floatingShadowOpacity),
+            radius: WorkspaceCommitLayout.floatingShadowRadius,
+            y: WorkspaceCommitLayout.floatingShadowOffset
+        )
         .padding(.horizontal, WorkspaceCommitLayout.padding)
-        .padding(.vertical, WorkspaceCommitLayout.spacing)
-        .background(Theme.sidebar(for: colorScheme))
+        .padding(.vertical, WorkspaceCommitLayout.padding)
         .accessibilityIdentifier("commit.jump")
     }
 

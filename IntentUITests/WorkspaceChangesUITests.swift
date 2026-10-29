@@ -50,14 +50,15 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         let source = app.buttons["commit.file.Sources/Analytics.swift"].firstMatch
         source.tap()
         XCTAssertEqual(source.value as? String, "Collapsed")
-        app.segmentedControls.buttons["Details"].tap()
+        app.buttons["commit.view.Details"].tap()
         XCTAssertTrue(app.scrollViews["commit.details"].waitForExistence(timeout: Fixture.timeout))
         app.buttons["commit.copy"].tap()
         XCTAssertEqual(app.buttons["commit.copy"].label, "Copied")
         capture(app, name: "commit-details")
-        app.segmentedControls.buttons["Changes"].tap()
+        app.buttons["commit.view.Changes"].tap()
         XCTAssertEqual(source.value as? String, "Collapsed")
         app.buttons["commit.jump"].tap()
+        capture(app, name: "commit-file-picker")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: Fixture.timeout))
         search.tap()

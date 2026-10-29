@@ -19,6 +19,7 @@ enum WorkspaceDetailStyle {
     static let tabLabelTracking: CGFloat = -0.32
     static let tabCornerRadius: CGFloat = 20
     static let selectedTabCornerRadius: CGFloat = 16
+    static let selectionAnimationDuration = 0.35
     static let rowSpacing: CGFloat = 36
     static let avatarSize: CGFloat = 32
     static let avatarSpacing: CGFloat = 24
@@ -86,21 +87,44 @@ struct ToolbarOverflowLabel: View {
 }
 
 struct WorkspaceContentTabs: View {
-    private static let selectionAnimationDuration = 0.35
-
     @Binding var selection: WorkspaceTab
+
+    var body: some View {
+        IntentContentSwitcher(
+            selection: $selection,
+            options: [
+                .init(value: .agents, title: "Agents"),
+                .init(value: .context, title: "Context"),
+                .init(value: .changes, title: "Changes")
+            ],
+            accessibilityLabel: "Workspace Content",
+            identifierPrefix: "workspace.content"
+        )
+    }
+}
+
+struct IntentContentSwitcher<Value: Hashable>: View {
+    struct Option {
+        let value: Value
+        let title: String
+    }
+
+    @Binding var selection: Value
+    let options: [Option]
+    let accessibilityLabel: String
+    let identifierPrefix: String
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionAnimation
 
     var body: some View {
         HStack(spacing: 0) {
-            tab("Agents", value: .agents)
-            tab("Context", value: .context)
-            tab("Changes", value: .changes)
+            ForEach(options, id: \.value) { option in
+                tab(option.title, value: option.value)
+            }
         }
         .background {
-            if selection == .agents || selection == .context || selection == .changes {
+            if options.contains(where: { $0.value == selection }) {
                 RoundedRectangle(cornerRadius: WorkspaceDetailStyle.selectedTabCornerRadius)
                     .fill(WorkspaceDetailStyle.foreground(for: colorScheme))
                     .matchedGeometryEffect(id: selection, in: selectionAnimation, isSource: false)
@@ -110,12 +134,12 @@ struct WorkspaceContentTabs: View {
         .background(WorkspaceDetailStyle.surface(for: colorScheme), in: .rect(
             cornerRadius: WorkspaceDetailStyle.tabCornerRadius
         ))
-        .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: selection)
+        .animation(reduceMotion ? nil : .snappy(duration: WorkspaceDetailStyle.selectionAnimationDuration), value: selection)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Workspace Content")
+        .accessibilityLabel(accessibilityLabel)
     }
 
-    private func tab(_ title: String, value: WorkspaceTab) -> some View {
+    private func tab(_ title: String, value: Value) -> some View {
         Button {
             if selection != value { HapticManager.selection() }
             selection = value
@@ -133,5 +157,6 @@ struct WorkspaceContentTabs: View {
         .buttonStyle(IntentContentButtonStyle())
         .matchedGeometryEffect(id: value, in: selectionAnimation)
         .accessibilityAddTraits(selection == value ? .isSelected : [])
+        .accessibilityIdentifier("\(identifierPrefix).\(title)")
     }
 }
