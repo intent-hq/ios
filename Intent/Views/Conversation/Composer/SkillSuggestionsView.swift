@@ -27,8 +27,7 @@ struct SkillSuggestionsView: View {
             .padding(.bottom, Layout.bottomPadding)
             .accessibilityIdentifier("composer.skills")
             .task(id: "\(connection.connectionState == .connected)-\(workspaceId)-\(agentId)-\(retry)") {
-                guard connection.connectionState == .connected else { return }
-                await completion.catalog.load(workspaceId: workspaceId, agentId: agentId, connection: connection)
+                await completion.catalog.refresh(workspaceId: workspaceId, agentId: agentId, connection: connection)
             }
     }
 

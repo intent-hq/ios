@@ -23,6 +23,16 @@ import Observation
 
     private static var cache: [CacheKey: CachedCatalog] = [:]
 
+    /// Offline, the visible catalog is cleared so keyboard acceptance cannot insert a hidden
+    /// suggestion; the session cache survives and repopulates the picker on reconnect.
+    func refresh(workspaceId: String, agentId: String, connection: any ConnectionManagerRouting) async {
+        guard connection.connectionState == .connected else {
+            reset()
+            return
+        }
+        await load(workspaceId: workspaceId, agentId: agentId, connection: connection)
+    }
+
     func load(workspaceId: String, agentId: String, connection: any ConnectionManagerRouting) async {
         guard !Task.isCancelled else { return }
         let key = CacheKey(workspaceId: workspaceId, agentId: agentId)

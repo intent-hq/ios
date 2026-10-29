@@ -70,6 +70,31 @@ struct ComposerSkillCompletionTests {
         #expect(completion.selectedSkill?.name == "release-notes")
     }
 
+    @Test func disconnectHidesCachedSkillsFromKeyboardAcceptanceUntilReconnect() async {
+        let connection = FakeConnectionManager()
+        connection.connectionState = .connected
+        connection.responseMap["skill.list"] = [["name": "code-review", "description": "", "location": "/code-review/SKILL.md", "scope": "user"]]
+        let completion = ComposerSkillCompletion()
+        await completion.catalog.refresh(workspaceId: "workspace", agentId: "offline-agent", connection: connection)
+        #expect(completion.catalog.skills.map(\.name) == ["code-review"])
+
+        connection.connectionState = .disconnected
+        await completion.catalog.refresh(workspaceId: "workspace", agentId: "offline-agent", connection: connection)
+        let editor = SkillCompletionTextView()
+        editor.text = "/"
+        editor.selectedRange = NSRange(location: 1, length: 0)
+        completion.update(from: editor)
+        #expect(completion.context != nil && completion.selectedSkill == nil)
+        #expect(!completion.acceptSelection())
+        #expect(editor.text == "/")
+
+        connection.connectionState = .connected
+        await completion.catalog.refresh(workspaceId: "workspace", agentId: "offline-agent", connection: connection)
+        #expect(completion.acceptSelection())
+        #expect(editor.text == "/code-review ")
+        #expect(connection.paramsForMethod("skill.list").count == 1)
+    }
+
     private func makeCompletion() async -> ComposerSkillCompletion {
         let connection = FakeConnectionManager()
         connection.responseMap["skill.list"] = ["code-review", "release-notes"].map { name in
