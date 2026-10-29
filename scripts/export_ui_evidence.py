@@ -370,7 +370,7 @@ CAPTURES = {
     },
     "WorkspaceChangesUITests": {
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
-            "workspace-changes", "unstaged-diff", "commit-diff",
+            "workspace-changes", "unstaged-diff", "commit-diff", "commit-details", "commit-file-search",
         ),
         "testRepositorySelectionScopesFilesAndCommitDiffs": (
             "submodule-changes", "submodule-unstaged-diff", "submodule-commit-diff",

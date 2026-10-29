@@ -42,6 +42,39 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Commit Changes"].waitForExistence(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let count = 1")
         capture(app, name: "commit-diff")
+        verifyCommitNavigation(in: app)
+    }
+
+    @MainActor
+    private func verifyCommitNavigation(in app: XCUIApplication) {
+        let source = app.buttons["commit.file.Sources/Analytics.swift"].firstMatch
+        source.tap()
+        XCTAssertEqual(source.value as? String, "Collapsed")
+        app.segmentedControls.buttons["Details"].tap()
+        XCTAssertTrue(app.scrollViews["commit.details"].waitForExistence(timeout: Fixture.timeout))
+        app.buttons["commit.copy"].tap()
+        XCTAssertEqual(app.buttons["commit.copy"].label, "Copied")
+        capture(app, name: "commit-details")
+        app.segmentedControls.buttons["Changes"].tap()
+        XCTAssertEqual(source.value as? String, "Collapsed")
+        app.buttons["commit.jump"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: Fixture.timeout))
+        search.tap()
+        search.typeText("no-such-file")
+        XCTAssertFalse(app.buttons["commit.jump.file.Sources/Analytics.swift"].exists)
+        search.buttons["Clear text"].tap()
+        search.typeText("Tests/")
+        XCTAssertFalse(app.buttons["commit.jump.file.Sources/Analytics.swift"].exists)
+        let testFile = app.buttons["commit.jump.file.Tests/AnalyticsTests.swift"].firstMatch
+        XCTAssertTrue(testFile.waitForExistence(timeout: Fixture.timeout))
+        capture(app, name: "commit-file-search")
+        testFile.tap()
+        XCTAssertTrue(app.buttons["commit.file.Tests/AnalyticsTests.swift"].waitForExistence(timeout: Fixture.timeout))
+        app.buttons["commit.jump"].tap()
+        app.buttons["commit.jump.file.Sources/Analytics.swift"].tap()
+        XCTAssertEqual(source.value as? String, "Expanded")
+        assertDiffLine(in: app, containing: "let count = 1")
     }
 
     @MainActor

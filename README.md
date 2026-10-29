@@ -233,6 +233,13 @@ fresh lexer state; a comment or string that begins in omitted context can have
 incomplete colors. Unknown or over-budget diffs remain plain. Theme and file
 changes cancel highlighting and discard stale results.
 
+Commit viewing uses one vertically scrolling Changes page with collapsible file
+sections and independently scrolling horizontal diffs. Jump to file searches paths
+and expands the chosen section. The Details tab exposes the available message,
+author, date, copyable full hash, and known push status; switching tabs preserves
+the Changes scroll position. Associated PRs and parent links are not supplied by
+the current commit model.
+
 Regenerate and verify the assets with Node 24 or newer:
 
 ```bash
