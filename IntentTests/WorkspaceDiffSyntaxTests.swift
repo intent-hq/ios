@@ -115,16 +115,20 @@ struct WorkspaceDiffSyntaxTests {
         let presentation = WorkspaceDiffPresentation(hunks: hunks)
         let deletion = try #require(hunks[0].lines.firstIndex { $0.type == .deletion })
         let addition = try #require(hunks[0].lines.firstIndex { $0.type == .addition })
-        var colors: [String] = []
         for dark in [false, true] {
+            let oldTokens = await FileSyntaxHighlighter.shared.highlight(source: old, path: "File.swift", dark: dark)
+            let newTokens = await FileSyntaxHighlighter.shared.highlight(source: new, path: "File.swift", dark: dark)
+            let commentOffset = "/*\n".utf16.count
+            let expectedOld = try #require(oldTokens.first { NSLocationInRange(commentOffset, $0.range) })
+            let expectedNew = try #require(newTokens.first { NSLocationInRange(commentOffset, $0.range) })
             let result = await WorkspaceDiffSyntax.highlight(presentation, path: "File.swift", dark: dark)
             let oldRun = try #require(result[.init(hunk: 0, line: deletion)]?.first)
             let newRun = try #require(result[.init(hunk: 0, line: addition)]?.first)
             let contextRun = try #require(result[.init(hunk: 0, line: 0)]?.first)
             #expect(oldRun.color == contextRun.color)
             #expect(newRun.color == contextRun.color)
-            colors.append(newRun.color)
+            #expect(oldRun.color == expectedOld.color)
+            #expect(newRun.color == expectedNew.color)
         }
-        #expect(colors.first != colors.last)
     }
 }
