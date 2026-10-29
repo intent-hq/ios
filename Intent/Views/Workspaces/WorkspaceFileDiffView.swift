@@ -6,11 +6,31 @@ struct WorkspaceFileDiffView: View {
     var staged = false
     var isBinary = false
     var commitHash: String?
-    @State private var hunks: [WorkspaceDiffHunk] = []
+    @State private var presentation: WorkspaceDiffPresentation?
+    @State private var syntax: [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] = [:]
+    @State private var syntaxIsDark = false
+    @State private var retry = 0
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var viewportSize = CGSize.zero
     @Environment(\.colorScheme) private var colorScheme
+
+    private struct LoadID: Hashable {
+        let workspace: String
+        let root: String?
+        let path: String
+        let staged: Bool
+        let binary: Bool
+        let commit: String?
+        let retry: Int
+    }
+
+    private struct SyntaxID: Hashable {
+        let presentation: UUID?
+        let dark: Bool
+    }
+
+    private var hunks: [WorkspaceDiffHunk] { presentation?.hunks ?? [] }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -22,7 +42,13 @@ struct WorkspaceFileDiffView: View {
             content
         }
         .background(WorkspaceDetailStyle.background(for: colorScheme))
-        .task { await load() }
+        .task(id: LoadID(
+            workspace: loader.workspaceId, root: loader.gitRootId, path: path,
+            staged: staged, binary: isBinary, commit: commitHash, retry: retry
+        )) { await load() }
+        .task(id: SyntaxID(presentation: presentation?.id, dark: colorScheme == .dark)) {
+            await highlight()
+        }
     }
 
     @ViewBuilder
@@ -35,7 +61,7 @@ struct WorkspaceFileDiffView: View {
             } description: {
                 Text(errorMessage)
             } actions: {
-                Button("Retry") { Task { await load() } }
+                Button("Retry") { retry += 1 }
                     .buttonStyle(IntentButtonStyle(variant: .secondary))
             }
         } else if hunks.isEmpty {
@@ -55,8 +81,8 @@ struct WorkspaceFileDiffView: View {
                             .foregroundStyle(.secondary)
                             .padding(.vertical, WorkspaceChangesLayout.sectionSpacing)
                             .padding(.horizontal)
-                        ForEach(Array(hunk.lines.enumerated()), id: \.offset) { _, line in
-                            diffLine(line)
+                        ForEach(Array(hunk.lines.enumerated()), id: \.offset) { lineIndex, line in
+                            diffLine(line, row: .init(hunk: index, line: lineIndex))
                         }
                     }
                 }
@@ -73,14 +99,16 @@ struct WorkspaceFileDiffView: View {
         }
     }
 
-    private func diffLine(_ line: WorkspaceDiffLine) -> some View {
+    private func diffLine(_ line: WorkspaceDiffLine, row: WorkspaceDiffPresentation.RowID) -> some View {
         HStack(alignment: .top, spacing: WorkspaceChangesLayout.sectionSpacing) {
             Text(line.oldNumber.map(String.init) ?? "")
                 .frame(width: WorkspaceChangesLayout.lineNumberWidth, alignment: .trailing).foregroundStyle(.secondary)
             Text(line.newNumber.map(String.init) ?? "")
                 .frame(width: WorkspaceChangesLayout.lineNumberWidth, alignment: .trailing).foregroundStyle(.secondary)
             Text(line.type.marker).fixedSize()
-            Text(line.content.hasSuffix("\n") ? String(line.content.dropLast()) : line.content)
+            Text(WorkspaceDiffSyntax.text(
+                line, runs: syntaxIsDark == (colorScheme == .dark) ? syntax[row] ?? [] : []
+            ))
                 .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal)
@@ -101,17 +129,33 @@ struct WorkspaceFileDiffView: View {
     private func load() async {
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        presentation = nil
+        syntax = [:]
+        defer { if !Task.isCancelled { isLoading = false } }
         if isBinary { return }
         do {
+            let loaded: WorkspaceDiffPresentation
             if let commitHash {
-                hunks = try await loader.commitFile(path: path, hash: commitHash)
+                loaded = try await loader.commitPresentation(path: path, hash: commitHash)
             } else {
-                hunks = try await loader.workingFile(path: path, staged: staged)
+                let hunks = try await loader.workingFile(path: path, staged: staged)
+                loaded = WorkspaceDiffPresentation(hunks: hunks)
             }
+            try Task.checkCancellation()
+            presentation = loaded
         } catch is CancellationError {
         } catch {
-            errorMessage = error.localizedDescription
+            if !Task.isCancelled { errorMessage = error.localizedDescription }
         }
+    }
+
+    private func highlight() async {
+        syntax = [:]
+        guard let presentation else { return }
+        let dark = colorScheme == .dark
+        let runs = await WorkspaceDiffSyntax.highlight(presentation, path: path, dark: dark)
+        guard !Task.isCancelled, self.presentation?.id == presentation.id, dark == (colorScheme == .dark) else { return }
+        syntaxIsDark = dark
+        syntax = runs
     }
 }

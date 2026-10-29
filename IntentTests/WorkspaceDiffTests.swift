@@ -102,8 +102,10 @@ struct WorkspaceDiffLoaderTests {
             ["file": "file.swift", "oldContent": "before\n", "newContent": "after\n"]
         ]
         let loader = WorkspaceDiffLoader(connectionManager: connection, workspaceId: "workspace")
-        let hunks = try await loader.commitFile(path: "file.swift", hash: "commit")
-        #expect(hunks.first?.lines.map(\.content) == ["before", "after"])
+        let presentation = try await loader.commitPresentation(path: "file.swift", hash: "commit")
+        #expect(presentation.hunks.first?.lines.map(\.content) == ["before", "after"])
+        #expect(presentation.oldSource == "before\n")
+        #expect(presentation.newSource == "after\n")
         let request = try #require(connection.requestLog.first)
         #expect(request.params["baseRef"] as? String == "commit^")
         #expect(request.params["targetRef"] as? String == "commit")
