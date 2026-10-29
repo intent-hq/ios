@@ -218,7 +218,8 @@ change, preserving font metrics, text selection, scrolling, and original-file
 sharing. Requests cancel on file/theme changes or dismissal and fall back after
 five seconds; JavaScript cannot interrupt synchronous WebAssembly tokenization.
 
-File previews include a native line-number gutter and 16-point content padding.
+File previews include a native line-number gutter, 8-point horizontal padding,
+and 16-point vertical padding.
 Numbers follow source lines, including blank lines and a final empty line;
 wrapped continuations do not repeat numbers. The gutter uses visible TextKit 2
 layout fragments and stays outside the selectable/shared text. Source line

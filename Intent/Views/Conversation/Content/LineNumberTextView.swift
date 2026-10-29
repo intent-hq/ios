@@ -2,7 +2,8 @@ import UIKit
 
 final class LineNumberTextView: UITextView {
     private enum Layout {
-        static let padding: CGFloat = 16
+        static let verticalPadding: CGFloat = 16
+        static let horizontalPadding: CGFloat = 8
         static let gutterGap: CGFloat = 12
         static let minimumDigits = 2
     }
@@ -37,14 +38,14 @@ final class LineNumberTextView: UITextView {
         let number = String(repeating: "8", count: digits)
         let width = ceil(number.size(withAttributes: [.font: numberFont]).width)
         let inset = UIEdgeInsets(
-            top: Layout.padding,
-            left: Layout.padding + width + Layout.gutterGap,
-            bottom: Layout.padding,
-            right: Layout.padding
+            top: Layout.verticalPadding,
+            left: Layout.horizontalPadding + width + Layout.gutterGap,
+            bottom: Layout.verticalPadding,
+            right: Layout.horizontalPadding
         )
         if textContainerInset != inset { textContainerInset = inset }
         super.layoutSubviews()
-        gutter.frame = CGRect(x: bounds.minX, y: bounds.minY, width: Layout.padding + width, height: bounds.height)
+        gutter.frame = CGRect(x: bounds.minX, y: bounds.minY, width: Layout.horizontalPadding + width, height: bounds.height)
         bringSubviewToFront(gutter)
         gutter.setNeedsDisplay()
     }
