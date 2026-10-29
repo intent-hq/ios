@@ -491,7 +491,7 @@ extension ConnectionManagerTests {
 
     // MARK: - Invalid message handling
 
-    @Test @MainActor func dispatchInvalidJsonDoesNotCrash() async {
+    @Test @MainActor func dispatchInvalidJsonDoesNotCrash() {
         let manager = ConnectionManager.shared
         manager.dispatchMessage("not valid json")
         manager.dispatchMessage("")

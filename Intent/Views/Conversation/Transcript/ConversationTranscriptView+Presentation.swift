@@ -316,7 +316,7 @@ extension ConversationTranscriptView {
                 Task { await viewModel.sendSuggestedPrompt(prompt) }
             } label: {
                 HStack(spacing: Constants.Conversation.Design.SuggestedPrompt.contentSpacing) {
-                    Text(LocalizedStringKey(prompt))
+                    Text(SuggestedPromptLinks.displayText(prompt))
                         .interFont(Constants.Typography.bodyS)
                         .tracking(Constants.Conversation.Design.Typography.bodyTracking)
                         .multilineTextAlignment(.leading)
@@ -351,7 +351,7 @@ extension ConversationTranscriptView {
                     .frame(width: actionIconSide, height: actionIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
                     .accessibilityHidden(true)
-                Text(LocalizedStringKey(prompt))
+                Text(SuggestedPromptLinks.displayText(prompt))
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.foreground(for: transcriptColorScheme))
                     .frame(maxWidth: .infinity, alignment: .leading)

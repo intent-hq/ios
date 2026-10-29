@@ -66,6 +66,8 @@ struct HTMLFileWebView: UIViewRepresentable {
             webView.loadHTMLString(prefix + file.content, baseURL: nil)
         }
 
+        // WebKit only calls the async form of this delegate method.
+        // swiftlint:disable:next async_without_await
         func webView(_: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard awaitingInitialLoad, action.navigationType == .other,
                   action.targetFrame?.isMainFrame == true,

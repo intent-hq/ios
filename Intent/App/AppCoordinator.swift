@@ -180,14 +180,15 @@ class AppCoordinator {
     /// window that has no backend yet (pairing session). Bound windows route
     /// straight to .connecting on load and dial this backend's saved record.
     @ObservationIgnored let backendID: BackendID?
-    /// Rebinds this coordinator's window to another backend, set by the
-    /// window root (BackendWindowRoot). On single-window platforms it
-    /// retargets the window in place; where multiple windows are supported
-    /// it opens/raises the target backend's window instead (window model
-    /// v2: a bound multi-window scene never retargets). When unset (tests,
+    /// Rebinds this coordinator's window to another backend in place, set
+    /// by the window root (BackendWindowRoot); an unbound pairing window is
+    /// replaced by the target's own window instead. When unset (tests,
     /// previews), switch/pair actions fall back to in-place routing over
     /// this session's connection.
     @ObservationIgnored var retargetWindow: ((BackendID) -> Void)?
+    /// Hands a hijacked shared connection's re-dial to a window that stays
+    /// on this backend, set by the session. When unset, this window re-dials.
+    @ObservationIgnored var repairSharedConnection: (() -> Void)?
     /// Detaches only this window and supplies a fresh pairing session. The
     /// root, not the coordinator, owns the registry's attachment count.
     @ObservationIgnored var returnWindowToSavedMachines: (() -> Void)?

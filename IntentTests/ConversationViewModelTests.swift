@@ -68,7 +68,7 @@ struct ConversationViewModelTests {
 
     // MARK: - filteredMessages
 
-    @Test func filteredMessagesKeepsWorkspaceEvents() async {
+    @Test func filteredMessagesKeepsWorkspaceEvents() {
         // Event wakes render as a banner (or fall back to the user bubble
         // on legacy text-only rows) — they are no longer hidden.
         let viewModel = makeVM()
@@ -78,7 +78,7 @@ struct ConversationViewModelTests {
         #expect(viewModel.filteredMessages.count == 1)
     }
 
-    @Test func filteredMessagesKeepsTaskWake() async {
+    @Test func filteredMessagesKeepsTaskWake() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(role: .user, text: "[TASK WAKE] waking up")
@@ -86,7 +86,7 @@ struct ConversationViewModelTests {
         #expect(viewModel.filteredMessages.count == 1)
     }
 
-    @Test func filteredMessagesKeepsAgentMessage() async {
+    @Test func filteredMessagesKeepsAgentMessage() {
         // A2A sends are no longer hidden — MessageView renders them with a
         // sender attribution header instead.
         let viewModel = makeVM()
@@ -96,7 +96,7 @@ struct ConversationViewModelTests {
         #expect(viewModel.filteredMessages.count == 1)
     }
 
-    @Test func filteredMessagesKeepsEventNotificationMetadata() async {
+    @Test func filteredMessagesKeepsEventNotificationMetadata() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(
@@ -108,13 +108,13 @@ struct ConversationViewModelTests {
         #expect(viewModel.filteredMessages.count == 1)
     }
 
-    @Test func filteredMessagesHandlesEmptyList() async {
+    @Test func filteredMessagesHandlesEmptyList() {
         let viewModel = makeVM()
         viewModel.store.messages = []
         #expect(viewModel.filteredMessages.isEmpty)
     }
 
-    @Test func filteredMessagesMixedKeepsCorrectOnes() async {
+    @Test func filteredMessagesMixedKeepsCorrectOnes() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(role: .user, text: "Hello"),
@@ -185,7 +185,7 @@ struct ConversationViewModelTests {
         )
     }
 
-    @Test func queuedMessagesHidesNonUserEntries() async {
+    @Test func queuedMessagesHidesNonUserEntries() {
         let viewModel = makeVM()
         viewModel.store.queuedMessages = [
             queuedEntry(id: "q-user"),
@@ -199,7 +199,7 @@ struct ConversationViewModelTests {
         #expect(viewModel.store.queuedMessages.count == 4)
     }
 
-    @Test func queuedMessagesHidesAgentMessageEntries() async {
+    @Test func queuedMessagesHidesAgentMessageEntries() {
         // Agent-to-agent sends are daemon-originated: hidden from the section.
         let viewModel = makeVM()
         viewModel.store.queuedMessages = [
@@ -212,7 +212,7 @@ struct ConversationViewModelTests {
         #expect(viewModel.queuedMessages.isEmpty)
     }
 
-    @Test func queuedMessagesHidesEventNotificationEntries() async {
+    @Test func queuedMessagesHidesEventNotificationEntries() {
         // Metadata-typed event-notification wakes are hidden; legacy
         // content-prefix entries without metadata fail open as user-authored
         // (`isUserMessage` rules unchanged).
@@ -224,7 +224,7 @@ struct ConversationViewModelTests {
         #expect(viewModel.queuedMessages.map(\.id) == ["q-event-legacy"])
     }
 
-    @Test func queuedMessagesEmptyWhenOnlyNonUserEntries() async {
+    @Test func queuedMessagesEmptyWhenOnlyNonUserEntries() {
         let viewModel = makeVM()
         viewModel.store.queuedMessages = [
             queuedEntry(id: "q-agent", metadata: ["fromAgentId": AnyCodable("agent-2")])
@@ -232,7 +232,7 @@ struct ConversationViewModelTests {
         #expect(viewModel.queuedMessages.isEmpty)
     }
 
-    @Test func queuedMessagesHidesWakeEntries() async {
+    @Test func queuedMessagesHidesWakeEntries() {
         // Hook and PR-monitor wakes (PROTOCOL §5.40 / §5.42) are
         // daemon-originated: hidden from the section.
         let viewModel = makeVM()
@@ -257,7 +257,7 @@ struct ConversationViewModelTests {
 
     // MARK: - suggestedPrompts
 
-    @Test func suggestedPromptsParsesSinglePrompt() async {
+    @Test func suggestedPromptsParsesSinglePrompt() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(
@@ -268,7 +268,7 @@ struct ConversationViewModelTests {
         #expect(viewModel.suggestedPrompts == ["Run the tests"])
     }
 
-    @Test func suggestedPromptsMultiplePrompts() async {
+    @Test func suggestedPromptsMultiplePrompts() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(
@@ -281,7 +281,7 @@ struct ConversationViewModelTests {
 }
 
 extension ConversationViewModelTests {
-    @Test func suggestedPromptsEmptyWhenLastIsUser() async {
+    @Test func suggestedPromptsEmptyWhenLastIsUser() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(role: .assistant, text: "<!-- suggested-prompts\nA\n-->"),
@@ -290,7 +290,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.suggestedPrompts.isEmpty)
     }
 
-    @Test func suggestedPromptsEmptyWhenNoComment() async {
+    @Test func suggestedPromptsEmptyWhenNoComment() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(role: .assistant, text: "Just a normal message")
@@ -298,7 +298,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.suggestedPrompts.isEmpty)
     }
 
-    @Test func suggestedPromptsTrimsWhitespace() async {
+    @Test func suggestedPromptsTrimsWhitespace() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(
@@ -309,7 +309,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.suggestedPrompts == ["Spaced prompt"])
     }
 
-    @Test func suggestedPromptsIgnoresEmptyLines() async {
+    @Test func suggestedPromptsIgnoresEmptyLines() {
         let viewModel = makeVM()
         viewModel.store.messages = [
             textMessage(
@@ -320,7 +320,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.suggestedPrompts == ["A", "B"])
     }
 
-    @Test func suggestedPromptsSpanningTwoTextBlocks() async {
+    @Test func suggestedPromptsSpanningTwoTextBlocks() {
         // Text blocks join with the empty separator (desktop parity), so a
         // block boundary reassembles the original stream — even mid-line.
         let viewModel = makeVM()
@@ -337,7 +337,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.suggestedPrompts == ["Run the tests"])
     }
 
-    @Test func suggestedPromptsEmptyWhenNoMessages() async {
+    @Test func suggestedPromptsEmptyWhenNoMessages() {
         let viewModel = makeVM()
         #expect(viewModel.suggestedPrompts.isEmpty)
     }

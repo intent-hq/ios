@@ -111,6 +111,28 @@ extension AppCoordinatorTests {
         #expect(state.detail == .assistant)
     }
 
+    @Test @MainActor func iPadWorkspacesRailLeavesSidebarWorkspaceOnlyWhenItIsShown() {
+        let coordinator = iPadCoordinator(connection: FakeConnectionManager())
+        coordinator.iPadNavigation.updateLayout(usesOverlay: false)
+        coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
+        let agentRoute = coordinator.currentScreenDescription
+        coordinator.onSelectIPadSection(.settings)
+        coordinator.onSelectIPadSection(.workspaces)
+        #expect(coordinator.currentScreenDescription == agentRoute)
+
+        coordinator.onSelectIPadSection(.workspaces)
+        guard case .workspaceDetail(workspaceId: "workspace") = coordinator.currentScreen else {
+            Issue.record("Expected the workspace overview, got \(coordinator.currentScreenDescription)")
+            return
+        }
+        #expect(coordinator.iPadNavigation.isSidebarVisible)
+
+        coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
+        coordinator.iPadNavigation.collapseSidebar()
+        coordinator.onSelectIPadSection(.workspaces)
+        #expect(coordinator.currentScreenDescription == agentRoute)
+    }
+
     @Test @MainActor func iPadNarrowRowSelectionClosesDrawerIncludingRepeatedAgentSelection() {
         let coordinator = iPadCoordinator(connection: FakeConnectionManager())
         coordinator.iPadNavigation.updateLayout(usesOverlay: true)

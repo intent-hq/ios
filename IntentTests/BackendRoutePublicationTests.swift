@@ -11,7 +11,7 @@ struct BackendRoutePublicationTests {
         // The first refresh learns no route. Pairing still publishes successfully.
         let live = FakeConnectionManager()
         let target = server(route: nil)
-        try await live.connect(hosts: target.hosts, port: target.port, token: "local-token", certFingerprint: target.certFingerprint, tcAddress: nil)
+        try live.connect(hosts: target.hosts, port: target.port, token: "local-token", certFingerprint: target.certFingerprint, tcAddress: nil)
         let paired = try await ConnectionPairing.finalize(
             server: server(route: nil),
             token: "local-token",

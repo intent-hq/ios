@@ -11,7 +11,7 @@ struct WorkspaceSubtitleResolverTests {
         try #require(WorkspaceStore.parseWorkspace(["id": id, "title": title]))
     }
 
-    @Test func resolvesTitleForKnownWorkspace() async throws {
+    @Test func resolvesTitleForKnownWorkspace() throws {
         let workspaces = [
             try makeWorkspace(id: "ws-1", title: "Alpha"),
             try makeWorkspace(id: "ws-2", title: "Beta")
@@ -22,7 +22,7 @@ struct WorkspaceSubtitleResolverTests {
         ) == "Beta")
     }
 
-    @Test func returnsNilForUnknownWorkspace() async throws {
+    @Test func returnsNilForUnknownWorkspace() throws {
         let workspaces = [try makeWorkspace(id: "ws-1", title: "Alpha")]
         #expect(WorkspaceSubtitleResolver.subtitle(
             forWorkspaceId: "ws-missing",
@@ -30,7 +30,7 @@ struct WorkspaceSubtitleResolverTests {
         ) == nil)
     }
 
-    @Test func returnsNilForEmptyStore() async {
+    @Test func returnsNilForEmptyStore() {
         // Cold start / deep link before the first fetch lands.
         #expect(WorkspaceSubtitleResolver.subtitle(
             forWorkspaceId: "ws-1",
@@ -38,7 +38,7 @@ struct WorkspaceSubtitleResolverTests {
         ) == nil)
     }
 
-    @Test func returnsNilForBlankTitle() async throws {
+    @Test func returnsNilForBlankTitle() throws {
         // Never show a blank subtitle line — hide it instead.
         let workspaces = [try makeWorkspace(id: "ws-1", title: "   ")]
         #expect(WorkspaceSubtitleResolver.subtitle(
@@ -47,7 +47,7 @@ struct WorkspaceSubtitleResolverTests {
         ) == nil)
     }
 
-    @Test func resolvesAgainstTestStoreWorkspaces() async throws {
+    @Test func resolvesAgainstTestStoreWorkspaces() throws {
         let store = WorkspaceStore(forTesting: true)
         store.publishFetchedWorkspaces([try makeWorkspace(id: "ws-1", title: "My Workspace")])
         #expect(WorkspaceSubtitleResolver.subtitle(

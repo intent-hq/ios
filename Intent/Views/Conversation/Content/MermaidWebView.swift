@@ -119,6 +119,8 @@ struct MermaidWebView: UIViewRepresentable {
             render()
         }
 
+        // WebKit only calls the async form of this delegate method.
+        // swiftlint:disable:next async_without_await
         func webView(_: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
             navigationAction.targetFrame?.isMainFrame == true && navigationAction.request.url == MermaidWebView.pageURL
                 ? .allow : .cancel

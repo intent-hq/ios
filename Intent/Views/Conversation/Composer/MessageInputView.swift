@@ -431,7 +431,7 @@ private extension MessageInputView {
                                 .frame(width: suggestedPromptIconSide, height: suggestedPromptIconSide)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .accessibilityHidden(true)
-                            Text(LocalizedStringKey(prompt))
+                            Text(SuggestedPromptLinks.displayText(prompt))
                                 .interFont(Constants.Typography.bodyS)
                                 .lineLimit(Constants.Conversation.Composer.suggestedPromptLineLimit)
                                 .foregroundStyle(Theme.foreground(for: colorScheme))

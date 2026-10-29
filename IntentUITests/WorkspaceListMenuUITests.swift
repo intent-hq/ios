@@ -47,6 +47,13 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             closeCreation(in: app)
             XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(app.buttons["workspaces.menu"].isHittable)
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                let railCreate = app.buttons["ipad.rail.createWorkspace"]
+                XCTAssertTrue(railCreate.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+                railCreate.tap()
+                closeCreation(in: app)
+                XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+            }
             app.terminate()
         }
     }
@@ -179,7 +186,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         app.buttons["Recent connections"].tap()
         travel.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
-        // iPad opens the selected connection in its own native window.
+        // iPad switches this same window to the selected connection.
         let window = app.windows.firstMatch
         let menu = window.buttons["workspaces.menu"]
         if UIDevice.current.userInterfaceIdiom == .pad, !menu.isHittable {

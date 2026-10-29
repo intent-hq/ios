@@ -5,7 +5,7 @@ import Testing
 struct ModelsTests {
     /// Records saved before the tcAddress field existed must keep decoding
     /// (the optional field defaults to nil).
-    @Test func pairedServerDecodesLegacyJSONWithoutTcAddress() async throws {
+    @Test func pairedServerDecodesLegacyJSONWithoutTcAddress() throws {
         let legacy = Data("""
         {"hosts":["192.168.1.1"],"port":3000,"name":"My Mac","pairedAt":1000}
         """.utf8)
@@ -16,7 +16,7 @@ struct ModelsTests {
 
     // MARK: - Workspace.pullRequests (PROTOCOL §5.1 / §7.6)
 
-    @Test func workspaceDecodesPullRequests() async throws {
+    @Test func workspaceDecodesPullRequests() throws {
         let json = Data("""
         {
             "id": "ws-1",
@@ -53,7 +53,7 @@ struct ModelsTests {
         #expect(pullRequests[1].url == nil)
     }
 
-    @Test func workspaceDecodesAbsentPullRequestsAsUnreportedEmptyPool() async throws {
+    @Test func workspaceDecodesAbsentPullRequestsAsUnreportedEmptyPool() throws {
         let json = Data("""
         {"id": "ws-1", "title": "Test"}
         """.utf8)
@@ -62,7 +62,7 @@ struct ModelsTests {
         #expect(workspace.pullRequestsWereReported == false)
     }
 
-    @Test func workspacePullRequestKeepsUnknownStatusRaw() async throws {
+    @Test func workspacePullRequestKeepsUnknownStatusRaw() throws {
         // Future status variants pass through as raw strings (lenient).
         let json = Data("""
         {"id": "ws-1", "title": "Test", "pullRequests": [{"number": 7, "status": "SomeFutureStatus"}]}
@@ -74,7 +74,7 @@ struct ModelsTests {
 
     // MARK: - Workspace.activePullRequest (PROTOCOL §5.1 / §7.6)
 
-    @Test func workspaceDecodesActivePullRequest() async throws {
+    @Test func workspaceDecodesActivePullRequest() throws {
         let json = Data("""
         {
             "id": "ws-1",
@@ -100,7 +100,7 @@ struct ModelsTests {
         #expect(pullRequest.updatedAt == "2026-08-02T10:00:00Z")
     }
 
-    @Test func workspaceDecodesAbsentActivePullRequestAsNil() async throws {
+    @Test func workspaceDecodesAbsentActivePullRequestAsNil() throws {
         let json = Data("""
         {"id": "ws-1", "title": "Test"}
         """.utf8)

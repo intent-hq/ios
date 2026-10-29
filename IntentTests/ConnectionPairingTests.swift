@@ -70,7 +70,7 @@ struct ConnectionPairingTests {
         fake.responseMap["principal.me"] = ["id": "B", "isAdministrator": false, "hostRole": "member", "hostMembershipRevision": 1]
         fake.responseMap["system.status"] = ["collaborationName": "Shared Studio", "prettyHostname": "Mac Studio"]
         let server = PairedServer(hosts: [], port: 443, name: "Intent", pairedAt: Date(), certFingerprint: InvitedSessionFixtures.pin, tcAddress: "tcRoute")
-        try await fake.connect(hosts: [], port: server.port, token: "B-token", certFingerprint: server.certFingerprint, tcAddress: server.tcAddress)
+        try fake.connect(hosts: [], port: server.port, token: "B-token", certFingerprint: server.certFingerprint, tcAddress: server.tcAddress)
         let saved = try await ConnectionPairing.finalize(server: server, token: "B-token", connection: fake, persistence: store.persistence)
         #expect(saved.displayName == "Shared Studio")
         #expect(!fake.requestLog.contains { $0.method == "host.status" })
@@ -107,7 +107,7 @@ struct ConnectionPairingTests {
         storage.setSaveFailure(true)
         let fake = FakeConnectionManager()
         fake.responseMap["host.status"] = ["prettyHostname": "Updated Name"]
-        try await fake.connect(hosts: ["10.0.0.1"], port: 4242, token: "new-token", certFingerprint: "aa:bb", tcAddress: nil)
+        try fake.connect(hosts: ["10.0.0.1"], port: 4242, token: "new-token", certFingerprint: "aa:bb", tcAddress: nil)
         let repairedServer = PairedServer(
             hosts: ["10.0.0.1"],
             port: 4242,
@@ -145,7 +145,7 @@ struct ConnectionPairingTests {
         ))
         let fake = FakeConnectionManager()
         fake.responseMap["host.status"] = ["prettyHostname": "New Mac"]
-        try await fake.connect(hosts: ["10.0.0.1"], port: 4242, token: "new-token", certFingerprint: "aa:bb", tcAddress: nil)
+        try fake.connect(hosts: ["10.0.0.1"], port: 4242, token: "new-token", certFingerprint: "aa:bb", tcAddress: nil)
         let server = PairedServer(
             hosts: ["10.0.0.1"],
             port: 4242,

@@ -5,7 +5,7 @@ import Testing
 extension ModelsTests {
     // MARK: - SpecialistInfo wire decoding (specialist.list)
 
-    @Test func specialistInfoWireDecodesResolvedFields() async throws {
+    @Test func specialistInfoWireDecodesResolvedFields() throws {
         // Fixture mirroring a daemon specialist.list entry carrying the
         // additive resolvedModel/resolvedProvider preview fields (PROTOCOL §5.11).
         let info = SpecialistInfo(wire: [
@@ -23,7 +23,7 @@ extension ModelsTests {
         #expect(specialist.hidden == false)
     }
 
-    @Test func specialistInfoWireDecodesOmittedResolvedFields() async throws {
+    @Test func specialistInfoWireDecodesOmittedResolvedFields() throws {
         // Both fields are omitted when resolution yields the provider CLI
         // default — clients render "Provider default".
         let info = SpecialistInfo(wire: [
@@ -38,7 +38,7 @@ extension ModelsTests {
         #expect(specialist.hidden == false)
     }
 
-    @Test func specialistInfoWireDecodesHiddenTrue() async throws {
+    @Test func specialistInfoWireDecodesHiddenTrue() throws {
         let info = SpecialistInfo(wire: [
             "id": "chief-of-staff",
             "name": "Chief of Staff",
@@ -49,7 +49,7 @@ extension ModelsTests {
         #expect(specialist.hidden == true)
     }
 
-    @Test func specialistInfoWireDecodesHiddenFalse() async throws {
+    @Test func specialistInfoWireDecodesHiddenFalse() throws {
         let info = SpecialistInfo(wire: [
             "id": "verifier",
             "name": "Verifier",
@@ -73,11 +73,11 @@ extension ModelsTests {
         #expect(specialist.hidden)
     }
 
-    @Test func specialistInfoWireRejectsMissingRequiredFields() async {
+    @Test func specialistInfoWireRejectsMissingRequiredFields() {
         #expect(SpecialistInfo(wire: ["id": "x", "name": "X"]) == nil)
     }
 
-    @Test func specialistInfoWireDecodesPickerMetadata() async throws {
+    @Test func specialistInfoWireDecodesPickerMetadata() throws {
         // role/teamAgents/icon picker metadata (PROTOCOL §5.11), mirroring
         // the bundled spec-writer frontmatter.
         let info = SpecialistInfo(wire: [
@@ -94,7 +94,7 @@ extension ModelsTests {
         #expect(specialist.icon == "coordinator")
     }
 
-    @Test func specialistInfoWireDecodesOmittedPickerMetadataAsNil() async throws {
+    @Test func specialistInfoWireDecodesOmittedPickerMetadataAsNil() throws {
         let info = SpecialistInfo(wire: [
             "id": "ui-designer",
             "name": "UI Designer",
@@ -106,7 +106,7 @@ extension ModelsTests {
         #expect(specialist.icon == nil)
     }
 
-    @Test func pickableDropsHiddenSpecialists() async {
+    @Test func pickableDropsHiddenSpecialists() {
         let specialists = [
             SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans"),
             SpecialistInfo(id: "chief-of-staff", name: "Chief of Staff", description: "Chief", hidden: true),
@@ -115,7 +115,7 @@ extension ModelsTests {
         #expect(specialists.pickable.map(\.id) == ["spec-writer", "implementor"])
     }
 
-    @Test func pickableKeepsAllWhenNoneHidden() async {
+    @Test func pickableKeepsAllWhenNoneHidden() {
         let specialists = [
             SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans"),
             SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements")
@@ -123,7 +123,7 @@ extension ModelsTests {
         #expect(specialists.pickable.map(\.id) == ["spec-writer", "implementor"])
     }
 
-    @Test func modalPickableDropsHiddenAndInternalSpecialists() async {
+    @Test func modalPickableDropsHiddenAndInternalSpecialists() {
         // Internal specialists stay out of the New Agent picker only —
         // they remain in the unfiltered list for by-id lookups (mirrors
         // the FE's filterModalPickableSpecialists).
@@ -137,7 +137,7 @@ extension ModelsTests {
         #expect(specialists.modalPickable.map(\.id) == ["spec-writer", "ui-designer"])
     }
 
-    @Test func orchestratorResolvesFirstOrchestratorByIdOrder() async {
+    @Test func orchestratorResolvesFirstOrchestratorByIdOrder() {
         // First role: "orchestrator" by id order regardless of list sort
         // (mirrors the FE's selectOrchestratorSpecialist).
         let specialists = [
@@ -148,7 +148,7 @@ extension ModelsTests {
         #expect(specialists.orchestrator?.id == "spec-writer")
     }
 
-    @Test func orchestratorIsNilWithoutOrchestratorRole() async {
+    @Test func orchestratorIsNilWithoutOrchestratorRole() {
         let specialists = [
             SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans"),
             SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", role: "internal")

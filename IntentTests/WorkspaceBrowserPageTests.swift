@@ -196,7 +196,7 @@ private final class BrowserPageTestProxy: BrowserProxySession {
         }
     }
 
-    func close() async {
+    func close() {
         closeCount += 1
     }
 

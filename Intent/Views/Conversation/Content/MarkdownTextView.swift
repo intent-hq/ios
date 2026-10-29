@@ -76,6 +76,12 @@ struct MarkdownTextView: View {
         }
     }
 
+    private var textColor: Color {
+        workspaceDesign
+            ? Constants.Conversation.Design.Palette.assistantForeground(for: colorScheme)
+            : Theme.foreground(for: colorScheme)
+    }
+
     var body: some View {
         let pending = isStreaming ? pendingDiagram : nil
         let markdownView = StructuredText(
@@ -124,9 +130,9 @@ struct MarkdownTextView: View {
             .id(attachmentAttempt)
             .interFont(Constants.Typography.bodyS)
             .tracking(workspaceDesign ? Constants.Conversation.Design.Typography.bodyTracking : 0)
-            .foregroundStyle(workspaceDesign
-                ? Constants.Conversation.Design.Palette.assistantForeground(for: colorScheme)
-                : Theme.foreground(for: colorScheme))
+            .foregroundStyle(textColor)
+            // SwiftUI draws link runs in the tint; links match the text and are underlined instead.
+            .tint(textColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)

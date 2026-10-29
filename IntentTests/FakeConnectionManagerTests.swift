@@ -8,7 +8,7 @@ import Testing
 struct FakeConnectionManagerTests {
     // MARK: - Connection State
 
-    @Test func connectionStatePublisher() async {
+    @Test func connectionStatePublisher() {
         let fake = FakeConnectionManager()
         var states: [ConnectionState] = []
         let cancellable = fake.connectionStatePublisher.sink { state in
@@ -28,17 +28,17 @@ struct FakeConnectionManagerTests {
         cancellable.cancel()
     }
 
-    @Test func connectionLogsPreserveNamedFieldsAndOrder() async throws {
+    @Test func connectionLogsPreserveNamedFieldsAndOrder() throws {
         let fake = FakeConnectionManager()
 
-        try await fake.connect(
+        try fake.connect(
             hosts: ["first.example"],
             port: 1111,
             token: "first-token",
             certFingerprint: "first-cert",
             tcAddress: nil
         )
-        try await fake.connect(
+        try fake.connect(
             hosts: ["second.example"],
             port: 2222,
             token: "second-token",
@@ -129,7 +129,7 @@ struct FakeConnectionManagerTests {
 
     // MARK: - Legacy Event Handlers
 
-    @Test func legacyEventHandlerRegistration() async {
+    @Test func legacyEventHandlerRegistration() {
         let fake = FakeConnectionManager()
 
         var receivedEvents: [(String, Any)] = []
@@ -152,7 +152,7 @@ struct FakeConnectionManagerTests {
 
     // MARK: - Subscription Push Routing
 
-    @Test func subscriptionHandlerRegistrationAndDelivery() async {
+    @Test func subscriptionHandlerRegistrationAndDelivery() {
         let fake = FakeConnectionManager()
 
         var receivedPushes: [SubscriptionPush] = []
@@ -175,7 +175,7 @@ struct FakeConnectionManagerTests {
         #expect(receivedPushes[0].seq == 0)
     }
 
-    @Test func subscriptionPushOnlyReachesRegisteredHandler() async {
+    @Test func subscriptionPushOnlyReachesRegisteredHandler() {
         let fake = FakeConnectionManager()
 
         var receivedA: [SubscriptionPush] = []

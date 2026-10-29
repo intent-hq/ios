@@ -229,7 +229,7 @@ class FakeConnectionManager: SessionConnectionManaging {
         token: String,
         certFingerprint: String?,
         tcAddress: String?
-    ) async throws {
+    ) throws {
         connectLog.append(
             ConnectionLogEntry(
                 hosts: hosts,
@@ -263,7 +263,7 @@ class FakeConnectionManager: SessionConnectionManaging {
         )
     }
 
-    func refreshHostRoutes() async {
+    func refreshHostRoutes() {
         refreshHostRoutesCallCount += 1
     }
 

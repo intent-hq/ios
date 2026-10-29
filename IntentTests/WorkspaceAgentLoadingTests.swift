@@ -108,10 +108,13 @@ struct WorkspaceAgentLoadingTests {
         #expect(fake.paramsForMethod("agent.list").last?["retiredOnly"] as? Bool == true)
         #expect(host.view.agentStore.list.retiredAgents.map(\.id) == ["groups-retired"])
         fake.omitOrphanCounts = true
+        let requestCount = fake.paramsForMethod("agent.list").count
         await host.view.agentStore.fetchAgents(workspaceId: "ws-1")
-        let fallback = fake.paramsForMethod("agent.list").last { $0["scope"] as? String == "delegated" }
-        #expect(fallback?["orphanedOnly"] == nil)
-        #expect(fallback?["parentAgentId"] == nil)
+        let refreshRequests = fake.paramsForMethod("agent.list").dropFirst(requestCount)
+        let fallback = try #require(refreshRequests.first { params in
+            params["scope"] as? String == "delegated" && params["parentAgentId"] == nil
+        })
+        #expect(fallback["orphanedOnly"] == nil)
     }
 
     @Test func emptyExpandedGroupRemainsCollapsibleAndLegacyRowsNeedNoExtraReads() async throws {

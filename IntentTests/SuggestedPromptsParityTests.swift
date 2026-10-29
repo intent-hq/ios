@@ -1,5 +1,6 @@
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
 
 /// Behaviors the shared suggested-prompts cases (monorepo
@@ -70,5 +71,15 @@ struct SuggestedPromptsParityTests {
         #expect(SuggestedPromptLinks.visibleText("![img](https://a.test/x.png)") == "![img](https://a.test/x.png)")
         #expect(SuggestedPromptLinks.visibleText("[x](javascript:alert(1))") == "[x](javascript:alert(1))")
         #expect(SuggestedPromptLinks.textAfterLabel("no pipe here") == nil)
+    }
+
+    @Test func displayTextUnderlinesLinksWithoutLinkAttributes() {
+        let text = SuggestedPromptLinks.displayText("Merge [PR #3770](https://a.test/pr/3770) **now**.")
+        #expect(String(text.characters) == "Merge PR #3770 now.")
+        let link = text.runs.first { String(text[$0.range].characters) == "PR #3770" }
+        #expect(link?.underlineStyle == .single)
+        #expect(text.runs.allSatisfy { $0.link == nil })
+        let bold = text.runs.first { String(text[$0.range].characters) == "now" }
+        #expect(bold?.inlinePresentationIntent == .stronglyEmphasized)
     }
 }

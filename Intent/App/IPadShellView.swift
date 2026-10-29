@@ -170,7 +170,9 @@ struct IPadShellView: View {
             section: navigation.section,
             isSidebarVisible: navigation.isSidebarVisible,
             canUseAssistant: coordinator.canUseAssistant,
-            onSelect: coordinator.onSelectIPadSection
+            canCreateWorkspace: coordinator.canCreateWorkspace,
+            onSelect: coordinator.onSelectIPadSection,
+            onCreateWorkspace: createWorkspace
         ) {
             coordinator.iPadNavigation.revealSidebar()
         }
