@@ -19,6 +19,8 @@ struct IPadShellLayout: Equatable {
     static let cornerRadius: CGFloat = 20
     static let largeWindowWidth: CGFloat = 1300
     static let compactWindowWidth: CGFloat = 600
+    /// Between the iPad mini's 744 pt short side and the 820 pt of the 11-inch iPads.
+    static let tightRailShortSide: CGFloat = 800
     static let outerInset: CGFloat = 16
     static let largeSidebarWidth: CGFloat = 400
     static let smallSidebarWidth: CGFloat = 384
@@ -34,6 +36,7 @@ struct IPadShellLayout: Equatable {
     let isAccessibilitySize: Bool
     var usesFoldableLayout = false
     var usesLeadingVerticalBar = false
+    var windowShortSide: CGFloat = .infinity
 
     static func contextualRailTopPadding(for edge: HorizontalEdge?) -> CGFloat {
         edge == .leading ? leadingContextualRailTopInset : contextualRailTopInset
@@ -62,8 +65,10 @@ struct IPadShellLayout: Equatable {
     var focusedPanelLeadingInset: CGFloat { (availableWidth - focusedPanelWidth) / 2 }
     var contentWidth: CGFloat { max(0, availableWidth - railLeadingInset) }
     var sidebarWidth: CGFloat { usesCompactNavigation ? contentWidth : min(preferredSidebarWidth, contentWidth) }
-    /// The sidebar shares the shell background, so it meets the rail and lets its content inset do the spacing.
-    var sidebarLeadingInset: CGFloat { max(0, railLeadingInset - railGutter) }
+    /// Small windows let the sidebar meet the rail; it shares the shell background, so its content inset does the spacing.
+    var sidebarLeadingInset: CGFloat {
+        windowShortSide < Self.tightRailShortSide ? max(0, railLeadingInset - railGutter) : railLeadingInset
+    }
     var sidebarPaneWidth: CGFloat { sidebarWidth + railLeadingInset - sidebarLeadingInset }
     var usesSidebarOverlay: Bool {
         let minimumDetail = isAccessibilitySize ? Self.accessibleDetailWidth : Self.minimumDetailWidth

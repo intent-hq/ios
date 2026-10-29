@@ -60,12 +60,15 @@ struct IPadCompactNavigationTests {
         }
     }
 
-    @Test func sidebarMeetsTheRailWithoutMovingItsTrailingEdge() {
-        let rail = IPadShellLayout(width: 1366, isAccessibilitySize: false)
-        let compact = IPadShellLayout(width: IPadShellLayout.compactWindowWidth - 1, isAccessibilitySize: false)
-        let foldable = IPadShellLayout(width: 932, isAccessibilitySize: false, usesFoldableLayout: true)
-        #expect(rail.sidebarLeadingInset == IPadShellLayout.railWidth)
-        for layout in [rail, compact, foldable] {
+    @Test func onlySmallWindowsTuckTheSidebarAgainstTheRail() {
+        let mini = IPadShellLayout(width: 1133, isAccessibilitySize: false, windowShortSide: 744)
+        let elevenInch = IPadShellLayout(width: 820, isAccessibilitySize: false, windowShortSide: 820)
+        let compact = IPadShellLayout(width: IPadShellLayout.compactWindowWidth - 1, isAccessibilitySize: false, windowShortSide: 744)
+        let foldable = IPadShellLayout(width: 932, isAccessibilitySize: false, usesFoldableLayout: true, windowShortSide: 744)
+        #expect(mini.sidebarLeadingInset == IPadShellLayout.railWidth)
+        #expect(elevenInch.sidebarLeadingInset == elevenInch.railLeadingInset)
+        #expect(elevenInch.sidebarPaneWidth == elevenInch.sidebarWidth)
+        for layout in [mini, elevenInch, compact, foldable] {
             #expect(layout.sidebarLeadingInset >= 0)
             #expect(layout.sidebarLeadingInset + layout.sidebarPaneWidth == layout.railLeadingInset + layout.sidebarWidth)
         }
