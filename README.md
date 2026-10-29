@@ -212,8 +212,11 @@ and JavaScript evaluation while permitting the bundled WebAssembly engine.
 Unknown filenames, engine failures, source above 512 KiB UTF-8, lines above
 10,000 UTF-16 code units, or output above 60,000 runs return empty runs for native
 plain-text fallback. These are prototype highlighting limits, independent of
-the existing file-opening limit. Native integration owns cancellation and its
-deadline; JavaScript cannot interrupt synchronous WebAssembly tokenization.
+the existing 5 MiB file-opening limit. A shared, nonpersistent `WKWebView`
+returns token ranges to the native TextKit 2 viewer. Only foreground colors
+change, preserving font metrics, text selection, scrolling, and original-file
+sharing. Requests cancel on file/theme changes or dismissal and fall back after
+five seconds; JavaScript cannot interrupt synchronous WebAssembly tokenization.
 
 Regenerate and verify the assets with Node 24 or newer:
 

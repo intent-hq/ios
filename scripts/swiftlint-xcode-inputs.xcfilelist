@@ -118,6 +118,7 @@ $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor.swift
 $(SRCROOT)/Intent/Presentation/ConversationViewportTrace.swift
 $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
+$(SRCROOT)/Intent/Presentation/FileSyntaxRun.swift
 $(SRCROOT)/Intent/Presentation/IPadTypingFocus.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
@@ -231,6 +232,7 @@ $(SRCROOT)/Intent/Services/DemoScriptMonitorFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
+$(SRCROOT)/Intent/Services/FileSyntaxHighlighter.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/ImagePasteboard.swift
 $(SRCROOT)/Intent/Services/ImportedPhotoVideo.swift
@@ -789,6 +791,7 @@ $(SRCROOT)/IntentTests/EventWakeAttributionTests.swift
 $(SRCROOT)/IntentTests/ExternalLinkTests.swift
 $(SRCROOT)/IntentTests/FakeConnectionManager.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
+$(SRCROOT)/IntentTests/FileSyntaxHighlighterTests.swift
 $(SRCROOT)/IntentTests/FloatingComposerImportTests.swift
 $(SRCROOT)/IntentTests/FloatingComposerPolicyTests.swift
 $(SRCROOT)/IntentTests/ForEachSnapshotTests.swift

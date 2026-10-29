@@ -80,6 +80,7 @@
 				EB655ECC2F669E6B00176730 /* Exceptions for "Intent" folder in "Intent" target */,
 			);
 			explicitFolders = (
+				Resources/Highlights,
 				Resources/Mermaid,
 			);
 			path = Intent;
