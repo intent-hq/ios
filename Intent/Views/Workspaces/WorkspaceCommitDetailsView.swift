@@ -72,13 +72,17 @@ struct WorkspaceCommitDetailsView: View {
 struct WorkspaceCommitFileLabel: View {
     let file: WorkspaceCommitFile
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(alignment: .top, spacing: WorkspaceCommitLayout.spacing) {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: WorkspaceCommitLayout.spacing))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: WorkspaceCommitLayout.spacing))
+        return layout {
             VStack(alignment: .leading, spacing: WorkspaceCommitLayout.textSpacing) {
                 Text(file.path.split(separator: "/").last.map(String.init) ?? file.path)
                     .interFont(Constants.Typography.bodySEmphasized)
-                    .lineLimit(2)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     .truncationMode(.middle)
                 let directory = file.path.split(separator: "/").dropLast().joined(separator: "/")
                 if !directory.isEmpty {

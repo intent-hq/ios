@@ -21,6 +21,7 @@ struct WorkspaceCommitDiffView: View {
     @State private var errorMessage: String?
     @State private var retry = 0
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: 0) {
@@ -127,9 +128,13 @@ struct WorkspaceCommitDiffView: View {
     }
 
     private var summary: some View {
-        HStack {
-            Text("\(files.count) files changed").interFont(Constants.Typography.bodySEmphasized)
-            Spacer(minLength: WorkspaceCommitLayout.spacing)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: WorkspaceCommitLayout.spacing))
+            : AnyLayout(HStackLayout(spacing: WorkspaceCommitLayout.spacing))
+        return layout {
+            Text(files.count == 1 ? "1 file changed" : "\(files.count) files changed")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .frame(maxWidth: .infinity, alignment: .leading)
             WorkspaceChangeStats(
                 additions: files.reduce(0) { $0 + $1.additions },
                 deletions: files.reduce(0) { $0 + $1.deletions }
