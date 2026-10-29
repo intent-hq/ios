@@ -193,6 +193,45 @@ checks missing and late callbacks, error propagation, and cancellation without
 depending on a healthy WebKit process. CI retains unit results and console logs
 on cancellation as well as failure so interrupted renderer runs can be inspected.
 
+### Offline file syntax highlighting with Pierre
+
+The file-preview prototype uses **@pierre/highlights 0.3.0**, bundled in
+`Intent/Resources/Highlights/` with its WebAssembly engine, Pierre Light/Dark
+themes, full license notices, and `vendor.json` checksums. The published package
+contains 120 syntax lexers plus plain text. Normal app builds use the checked-in
+assets; no Node installation, CDN, or grammar downloads are needed at runtime.
+
+The local page exposes asynchronous
+`window.intentHighlights.highlight({ source, path, dark })`, returning
+`{ language, runs: [{ location, length, color, fontStyle }] }`. Ranges use UTF-16
+code units in the unchanged source, colors are six-digit hex RGB, and font styles
+use Shiki flags. `ready` resolves to a boolean; `status` is `loading`, `ready`, or
+`failed`. Source text is never inserted into the page. CSP blocks network access
+and JavaScript evaluation while permitting the bundled WebAssembly engine.
+
+Unknown filenames, engine failures, source above 512 KiB UTF-8, lines above
+10,000 UTF-16 code units, or output above 60,000 runs return empty runs for native
+plain-text fallback. These are prototype highlighting limits, independent of
+the existing file-opening limit. Native integration owns cancellation and its
+deadline; JavaScript cannot interrupt synchronous WebAssembly tokenization.
+
+Regenerate and verify the assets with Node 24 or newer:
+
+```bash
+cd scripts/highlights
+npm ci
+npm run build
+npx playwright install chromium webkit
+npm test
+```
+
+The suite checks the shipped bundle, filename resolution, Unicode/CRLF offsets,
+multiline syntax, both themes, budgets, WebAssembly failure, and offline CSP in
+Chromium and WebKit. `HIGHLIGHTS_BROWSERS=webkit npm test` selects one browser.
+Review generated assets, notices, provenance and the lockfile together. Browser
+tests validate the tokenizer contract; native screenshots and device timings
+remain separate evidence for the prototype.
+
 ## Development
 
 ### Clean-checkout prerequisites
