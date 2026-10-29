@@ -8,6 +8,7 @@ struct WorkspaceDetailHeading: View {
     let repositoryOwner: String?
     let repositoryName: String?
     var statusMessage: String?
+    var statusImageAssetId: String?
     @Bindable var titleEditor: WorkspaceTitleEditor
     var titleFocus: FocusState<Bool>.Binding?
     var topSpacing: CGFloat?
@@ -43,17 +44,36 @@ struct WorkspaceDetailHeading: View {
                         ? WorkspaceDetailStyle.neutral
                         : WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
             }
-            if let summary = statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !summary.isEmpty {
-                WorkspaceDetailHeadingText(summary, style: Constants.Typography.bodyS)
-                    .tracking(WorkspaceDetailStyle.bodyTracking)
-                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
-                    .accessibilityIdentifier("workspaceDetail.summary")
-            }
+            if summary != nil || statusImageAssetId != nil { statusRow }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)
         .padding(.top, topSpacing ?? headingTopSpacing)
         .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
+    }
+
+    private var summary: String? {
+        guard let trimmed = statusMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    /// The status image leads the summary as a thumbnail; accessibility sizes stack it above.
+    private var statusRow: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing))
+            : AnyLayout(HStackLayout(spacing: WorkspaceDetailStyle.headingTextSpacing))
+        return layout {
+            if let statusImageAssetId {
+                WorkspaceStatusImageView(workspaceId: workspaceId, assetId: statusImageAssetId)
+            }
+            if let summary {
+                WorkspaceDetailHeadingText(summary, style: Constants.Typography.bodyS)
+                    .tracking(WorkspaceDetailStyle.bodyTracking)
+                    .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("workspaceDetail.summary")
+            }
+        }
     }
 
     @ViewBuilder
@@ -121,116 +141,6 @@ private struct WorkspaceDetailHeadingText: View {
                 .interFont(style)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-}
-
-struct WorkspaceTaskProgressLayout: Equatable {
-    let total: Int
-    let completed: Int
-    let inProgress: Int
-    let remaining: Int
-
-    init?(total: Int, completed: Int, inProgress: Int) {
-        guard total > 0 else { return nil }
-        self.total = total
-        self.completed = min(max(0, completed), total)
-        self.inProgress = min(max(0, inProgress), total - self.completed)
-        self.remaining = total - self.completed - self.inProgress
-    }
-
-    var visibleSegmentCount: Int {
-        [completed, inProgress, remaining].count { $0 > 0 }
-    }
-
-    var summary: String {
-        "\(completed) of \(total) tasks complete"
-            + (inProgress > 0 ? ", \(inProgress) in progress" : "")
-    }
-
-    func segmentWidth(
-        for count: Int,
-        in measuredWidth: CGFloat,
-        spacing: CGFloat
-    ) -> CGFloat {
-        let totalSpacing = spacing * CGFloat(max(0, visibleSegmentCount - 1))
-        let distributableWidth = max(0, measuredWidth - totalSpacing)
-        return distributableWidth * CGFloat(count) / CGFloat(total)
-    }
-}
-
-struct WorkspaceTaskProgressView: View {
-    let progress: WorkspaceTaskProgressLayout
-
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-    @State private var progressWidth: CGFloat = 0
-
-    var body: some View {
-        progressBar
-            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-            .padding(.bottom, WorkspaceDetailStyle.progressBottomSpacing)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Task progress")
-            .accessibilityValue(progress.summary)
-    }
-
-    private var progressBar: some View {
-        HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
-            progressSegment(count: progress.completed, color: WorkspaceDetailStyle.foreground(for: colorScheme))
-            progressSegment(count: progress.inProgress, color: WorkspaceDetailStyle.accent)
-            remainingProgressSegment
-        }
-        // Accept a narrower proposal even while segments still use the previous measurement.
-        .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-        .frame(height: WorkspaceDetailStyle.progressHeight)
-        .clipShape(Capsule())
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { progressWidth = $0 }
-        .overlay { progressBorder }
-    }
-
-    @ViewBuilder
-    private func progressSegment(count: Int, color: Color) -> some View {
-        if count > 0 {
-            Rectangle()
-                .fill(color)
-                .frame(width: segmentWidth(for: count))
-        }
-    }
-
-    @ViewBuilder
-    private var remainingProgressSegment: some View {
-        if progress.remaining > 0 {
-            Rectangle()
-                .fill(WorkspaceDetailStyle.surface(for: colorScheme))
-                .frame(width: segmentWidth(for: progress.remaining))
-        }
-    }
-
-    private func segmentWidth(for count: Int) -> CGFloat {
-        progressWidth > 0
-            ? progress.segmentWidth(
-                for: count,
-                in: progressWidth,
-                spacing: Constants.WorkspaceDetail.progressSpacing
-            )
-            : 0
-    }
-
-    @ViewBuilder
-    private var progressBorder: some View {
-        if colorSchemeContrast == .increased {
-            Capsule()
-                .strokeBorder(
-                    Theme.border(for: colorScheme, contrast: colorSchemeContrast),
-                    lineWidth: Constants.WorkspaceDetail.increasedContrastProgressBorderWidth
-                )
-        }
-    }
-}
-
-enum WorkspaceDetailHeaderLayout {
-    static func tabTopPadding(hasTaskProgress: Bool) -> CGFloat {
-        hasTaskProgress ? 0 : Constants.WorkspaceDetail.tabVerticalPadding
     }
 }
 
@@ -355,6 +265,7 @@ struct WorkspaceDetailHeader: View {
             repositoryOwner: workspace?.repositoryOwner,
             repositoryName: workspace?.repositoryName,
             statusMessage: workspace?.statusMessage,
+            statusImageAssetId: WorkspaceStatusImageLayout.assetId(for: workspace),
             titleEditor: titleEditor,
             titleFocus: titleFocus,
             topSpacing: headingTopSpacing,
@@ -362,25 +273,10 @@ struct WorkspaceDetailHeader: View {
             showsTitle: showsTitle,
             onSaveTitle: onSaveTitle
         )
-        if let assetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
-            WorkspaceStatusImageView(workspaceId: workspaceId, assetId: assetId)
-                .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-                .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
-        }
-        if let total = workspace?.taskStatsTotal,
-           let progress = WorkspaceTaskProgressLayout(
-               total: total,
-               completed: workspace?.taskStatsCompleted ?? 0,
-               inProgress: workspace?.taskStatsInProgress ?? 0
-           ) {
-            WorkspaceTaskProgressView(progress: progress)
-        }
         #if !os(visionOS)
         WorkspaceContentTabs(selection: $selection)
             .padding(.horizontal, WorkspaceDetailStyle.pageInset)
-            .padding(.top, WorkspaceDetailHeaderLayout.tabTopPadding(
-                hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0
-            ))
+            .padding(.top, Constants.WorkspaceDetail.tabVerticalPadding)
             .padding(.bottom, WorkspaceDetailStyle.sectionSpacing)
         #endif
     }

@@ -19,8 +19,6 @@ enum WorkspaceDetailStyle {
     static let tabLabelTracking: CGFloat = -0.32
     static let tabCornerRadius: CGFloat = 20
     static let selectedTabCornerRadius: CGFloat = 16
-    static let progressHeight: CGFloat = 8
-    static let progressBottomSpacing: CGFloat = 56
     static let rowSpacing: CGFloat = 36
     static let avatarSize: CGFloat = 32
     static let avatarSpacing: CGFloat = 24
@@ -118,7 +116,10 @@ struct WorkspaceContentTabs: View {
     }
 
     private func tab(_ title: String, value: WorkspaceTab) -> some View {
-        Button { selection = value } label: {
+        Button {
+            if selection != value { HapticManager.selection() }
+            selection = value
+        } label: {
             Text(title)
                 .interFont(Constants.Typography.bodySEmphasized)
                 .tracking(WorkspaceDetailStyle.tabLabelTracking)

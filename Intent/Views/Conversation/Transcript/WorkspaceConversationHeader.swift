@@ -141,6 +141,19 @@ struct AssistantConversationHeader<Actions: View>: View {
     }
 }
 
+/// Softens the edge where scrolled content meets the opaque navigation header.
+struct WorkspaceHeaderFade: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let background = Constants.Conversation.Design.Palette.background(for: colorScheme)
+        LinearGradient(colors: [background, background.opacity(0)], startPoint: .top, endPoint: .bottom)
+            .frame(height: Constants.Conversation.Design.Header.fadeHeight)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 /// Workspace, agent and Assistant navigation share the native top safe area and control geometry.
 struct WorkspaceNavigationHeader<Actions: View>: View {
     let title: String

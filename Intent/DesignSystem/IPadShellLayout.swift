@@ -62,6 +62,9 @@ struct IPadShellLayout: Equatable {
     var focusedPanelLeadingInset: CGFloat { (availableWidth - focusedPanelWidth) / 2 }
     var contentWidth: CGFloat { max(0, availableWidth - railLeadingInset) }
     var sidebarWidth: CGFloat { usesCompactNavigation ? contentWidth : min(preferredSidebarWidth, contentWidth) }
+    /// The sidebar shares the shell background, so it meets the rail and lets its content inset do the spacing.
+    var sidebarLeadingInset: CGFloat { max(0, railLeadingInset - railGutter) }
+    var sidebarPaneWidth: CGFloat { sidebarWidth + railLeadingInset - sidebarLeadingInset }
     var usesSidebarOverlay: Bool {
         let minimumDetail = isAccessibilitySize ? Self.accessibleDetailWidth : Self.minimumDetailWidth
         return contentWidth < preferredSidebarWidth + gutter + minimumDetail
