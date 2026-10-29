@@ -20,6 +20,7 @@ enum WorkspaceDetailStyle {
     static let tabCornerRadius: CGFloat = 20
     static let selectedTabCornerRadius: CGFloat = 16
     static let selectionAnimationDuration = 0.35
+    static let tabLabelMinimumScale: CGFloat = 0.75
     static let rowSpacing: CGFloat = 36
     static let avatarSize: CGFloat = 32
     static let avatarSpacing: CGFloat = 24
@@ -147,6 +148,8 @@ struct IntentContentSwitcher<Value: Hashable>: View {
             Text(title)
                 .interFont(Constants.Typography.bodySEmphasized)
                 .tracking(WorkspaceDetailStyle.tabLabelTracking)
+                .lineLimit(1)
+                .minimumScaleFactor(WorkspaceDetailStyle.tabLabelMinimumScale)
                 .padding(.vertical, WorkspaceDetailStyle.tabInset)
                 .frame(maxWidth: .infinity, minHeight: WorkspaceDetailStyle.controlSize)
                 .foregroundStyle(selection == value
