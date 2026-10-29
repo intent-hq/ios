@@ -16,6 +16,7 @@ struct TextLinkPreviewView: View {
     @State private var file: WorkspaceTextFile?
     @State private var hasFailed = false
     @State private var attempt = 0
+    @AppStorage("fileViewerWrapLines") private var wrapLines = true
 
     private var fileLoader: WorkspaceFileImageLoader {
         loaderOverride ?? session?.workspaceFileImageLoader ?? .shared
@@ -29,8 +30,12 @@ struct TextLinkPreviewView: View {
                 .toolbarBackground(Theme.sidebar(for: colorScheme), for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        closeButton
+                    ToolbarItem(placement: .topBarLeading) {
+                        backButton
+                    }
+                    .intentToolbarSurface()
+                    ToolbarItem(placement: .topBarTrailing) {
+                        fileMenu
                     }
                     .intentToolbarSurface()
                 }
@@ -39,17 +44,30 @@ struct TextLinkPreviewView: View {
         .task(id: attempt) { await loadText() }
     }
 
-    private var closeButton: some View {
-        IntentIconButton(icon: .close, label: "Close text file", showsBackground: false) {
+    private var backButton: some View {
+        IntentIconButton(icon: .arrowLeft, label: "Back", showsBackground: false) {
             dismiss()
         }
         .accessibilityIdentifier("text.close")
     }
 
+    private var fileMenu: some View {
+        Menu {
+            Toggle("Wrap lines", isOn: $wrapLines)
+                .accessibilityIdentifier("text.wrap")
+        } label: {
+            ToolbarOverflowLabel()
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .disabled(file == nil)
+        .accessibilityLabel("File options")
+        .accessibilityIdentifier("text.options")
+    }
+
     @ViewBuilder
     private var content: some View {
         if let file {
-            WorkspaceTextFileView(file: file)
+            WorkspaceTextFileView(file: file, wrapLines: wrapLines)
         } else if hasFailed {
             ContentUnavailableView {
                 Label("Text file unavailable", systemImage: "doc.text")

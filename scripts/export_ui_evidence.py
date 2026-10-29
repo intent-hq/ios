@@ -253,6 +253,8 @@ CAPTURES = {
         ),
         "testTextLinkOpensViewerAndRetriesMissingFile": (
             "Text viewer from text link", "Text unavailable with close and retry",
+            "Text viewer wrap menu", "Text viewer without wrapping",
+            "Text viewer after toggling wrapping",
         ),
     },
     "AssistantStateUITests": {

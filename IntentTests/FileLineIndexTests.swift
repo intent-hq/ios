@@ -47,6 +47,73 @@ struct FileLineIndexTests {
     }
 
     @MainActor
+    @Test func disablingWrapEnablesHorizontalScrollingWithoutChangingSourceOrSelection() throws {
+        let view = LineNumberTextView()
+        view.frame = CGRect(x: 0, y: 0, width: 320, height: 240)
+        view.font = .monospacedSystemFont(ofSize: 17, weight: .regular)
+        view.isEditable = false
+        let source = "let message = \"" + String(repeating: "café 👋 ", count: 20) + "\"\r\nlet next = 1\n"
+        view.setSource(source)
+        view.layoutIfNeeded()
+        let selection = NSRange(location: 4, length: 7)
+        view.selectedRange = selection
+        view.textStorage.addAttribute(.foregroundColor, value: UIColor.systemGreen, range: selection)
+        view.setWrapLines(false)
+        view.layoutIfNeeded()
+        try #require(view.textLayoutManager != nil)
+        #expect(view.contentSize.width > view.bounds.width)
+        #expect(view.contentSize.width < 10_000)
+        let labels = view.visibleLineLabels()
+        try #require(labels.count >= 2)
+        #expect(abs(labels[1].baseline - labels[0].baseline - view.numberFont.lineHeight) < 2)
+        view.setContentOffset(CGPoint(x: 200, y: 0), animated: false)
+        view.layoutIfNeeded()
+        #expect(view.visibleLineLabels().first?.number == 1)
+        view.setWrapLines(true)
+        view.layoutIfNeeded()
+        #expect(view.contentOffset.x == 0)
+        #expect(view.contentSize.width <= view.bounds.width + 1)
+        #expect(view.selectedRange == selection)
+        #expect(view.text == source)
+        #expect(view.textStorage.attribute(.foregroundColor, at: 4, effectiveRange: nil) as? UIColor == .systemGreen)
+    }
+
+    @MainActor
+    @Test func savedUnwrappedPreferenceAppliesBeforeTheFirstFrame() throws {
+        let container = LineNumberTextContainer()
+        let view = container.textView
+        view.font = .monospacedSystemFont(ofSize: 17, weight: .regular)
+        view.isEditable = false
+        view.setSource(String(repeating: "long source line ", count: 20) + "\nnext line")
+        view.setWrapLines(false)
+        container.frame = CGRect(x: 0, y: 0, width: 320, height: 240)
+        container.layoutIfNeeded()
+        #expect(view.contentSize.width > view.bounds.width)
+        let labels = view.visibleLineLabels()
+        try #require(labels.count >= 2)
+        #expect(abs(labels[1].baseline - labels[0].baseline - view.numberFont.lineHeight) < 2)
+    }
+
+    @MainActor
+    @Test func togglingWrapKeepsTheVisibleSourceLine() throws {
+        let view = LineNumberTextView()
+        view.frame = CGRect(x: 0, y: 0, width: 320, height: 240)
+        view.font = .monospacedSystemFont(ofSize: 17, weight: .regular)
+        view.isEditable = false
+        view.setSource(String(repeating: "// a long source line with extra words that wraps on the phone\n", count: 100))
+        view.layoutIfNeeded()
+        view.setContentOffset(CGPoint(x: 0, y: 800), animated: false)
+        view.layoutIfNeeded()
+        let original = try #require(view.visibleLineLabels().first?.number)
+        for wraps in [false, true] {
+            view.setWrapLines(wraps)
+            view.layoutIfNeeded()
+            let current = try #require(view.visibleLineLabels().first?.number)
+            #expect(abs(current - original) <= 1)
+        }
+    }
+
+    @MainActor
     @Test func emptyAndTrailingLinesHaveNumbers() {
         let view = LineNumberTextView()
         view.frame = CGRect(x: 0, y: 0, width: 320, height: 240)

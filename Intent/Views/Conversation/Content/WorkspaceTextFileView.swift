@@ -5,16 +5,16 @@ import UIKit
 /// Keep its native selection and scrolling; never access the legacy layoutManager.
 struct WorkspaceTextFileView: UIViewRepresentable {
     let file: WorkspaceTextFile
+    var wrapLines = true
     @Environment(\.colorScheme) private var colorScheme
 
-    func makeUIView(context _: Context) -> LineNumberTextView {
-        let view = LineNumberTextView()
+    func makeUIView(context _: Context) -> LineNumberTextContainer {
+        let container = LineNumberTextContainer()
+        let view = container.textView
         view.isEditable = false
         view.isSelectable = true
         view.isScrollEnabled = true
         view.alwaysBounceVertical = true
-        view.textContainer.widthTracksTextView = true
-        view.textContainer.lineBreakMode = .byWordWrapping
         view.font = UIFontMetrics(forTextStyle: .body).scaledFont(
             for: .monospacedSystemFont(ofSize: UIFont.systemFontSize, weight: .regular)
         )
@@ -23,16 +23,18 @@ struct WorkspaceTextFileView: UIViewRepresentable {
         view.backgroundColor = .systemBackground
         view.setSource(file.content, index: file.lineIndex)
         view.accessibilityIdentifier = "text.content"
-        return view
+        return container
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func updateUIView(_ view: LineNumberTextView, context: Context) {
+    func updateUIView(_ container: LineNumberTextContainer, context: Context) {
+        let view = container.textView
         context.coordinator.update(view, file: file, dark: colorScheme == .dark)
+        view.setWrapLines(wrapLines)
     }
 
-    static func dismantleUIView(_: LineNumberTextView, coordinator: Coordinator) {
+    static func dismantleUIView(_: LineNumberTextContainer, coordinator: Coordinator) {
         coordinator.cancel()
     }
 

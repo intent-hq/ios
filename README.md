@@ -220,7 +220,9 @@ five seconds; JavaScript cannot interrupt synchronous WebAssembly tokenization.
 
 File previews include a native line-number gutter, 8-point horizontal padding,
 and 16-point vertical padding.
-The header uses the shared sidebar tint and a flat Close action.
+The header uses the shared sidebar tint, a flat Back action, and a file-options
+menu. Wrap lines is on by default and remembered across previews; turning it off
+enables horizontal scrolling with a pinned line-number gutter.
 Numbers follow source lines, including blank lines and a final empty line;
 wrapped continuations do not repeat numbers. The gutter uses visible TextKit 2
 layout fragments and stays outside the selectable/shared text. Source line
