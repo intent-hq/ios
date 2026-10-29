@@ -19,7 +19,7 @@ struct SkillCatalogStoreTests {
         ]
         let store = SkillCatalogStore()
 
-        await store.load(workspaceId: "workspace", connection: fake)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: fake)
 
         #expect(store.skills.map(\.name) == ["Alpha", "Alpha", "alpha", "zulu"])
         #expect(store.skills.first == SkillInfo(
@@ -48,7 +48,7 @@ struct SkillCatalogStoreTests {
         ] as [Any]
         let store = SkillCatalogStore()
 
-        await store.load(workspaceId: "workspace", connection: fake)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: fake)
 
         #expect(store.skills.map(\.name) == ["valid"])
         #expect(store.skills.first?.resourceDirectory == nil)
@@ -59,42 +59,53 @@ struct SkillCatalogStoreTests {
         let fake = FakeConnectionManager()
         let store = SkillCatalogStore()
         fake.responseMap["skill.list"] = ["skills": [skill("wrong-envelope")]]
-        await store.load(workspaceId: "workspace", connection: fake)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: fake)
         #expect(store.skills.isEmpty && store.errorMessage != nil && !store.isLoading)
 
         fake.errorMap["skill.list"] = URLError(.notConnectedToInternet)
-        await store.load(workspaceId: "workspace", connection: fake)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: fake)
         #expect(store.skills.isEmpty && store.errorMessage != nil && !store.isLoading)
 
         fake.errorMap.removeValue(forKey: "skill.list")
         fake.responseMap["skill.list"] = [skill("recovered")]
-        await store.load(workspaceId: "workspace", connection: fake)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: fake)
         #expect(store.skills.map(\.name) == ["recovered"])
         #expect(store.errorMessage == nil && !store.isLoading)
         #expect(fake.paramsForMethod("skill.list").count == 3)
     }
 
-    @Test func refreshesSuccessfulCatalogAndAcceptsEmptyList() async {
+    @Test func reusesSuccessfulCatalogPerAgentAndConnection() async {
         let fake = FakeConnectionManager()
-        fake.responseQueueMap["skill.list"] = [[skill("old")], [skill("new")], [] as [Any]]
+        fake.responseQueueMap["skill.list"] = [[skill("cached")], [skill("other-agent")]]
         let store = SkillCatalogStore()
 
-        await store.load(workspaceId: "workspace", connection: fake)
-        #expect(store.skills.map(\.name) == ["old"])
-        await store.load(workspaceId: "workspace", connection: fake)
-        #expect(store.skills.map(\.name) == ["new"])
-        await store.load(workspaceId: "workspace", connection: fake)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: fake)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: fake)
+        #expect(store.skills.map(\.name) == ["cached"] && !store.isLoading && store.errorMessage == nil)
+        #expect(fake.paramsForMethod("skill.list").count == 1)
+
+        await store.load(workspaceId: "workspace", agentId: "second", connection: fake)
+        #expect(store.skills.map(\.name) == ["other-agent"])
+        let reopened = SkillCatalogStore()
+        await reopened.load(workspaceId: "workspace", agentId: "agent", connection: fake)
+        #expect(reopened.skills.map(\.name) == ["cached"])
+        #expect(fake.paramsForMethod("skill.list").count == 2)
+
+        let reconnected = FakeConnectionManager()
+        reconnected.responseMap["skill.list"] = [] as [Any]
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: reconnected)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: reconnected)
         #expect(store.skills.isEmpty && store.errorMessage == nil && !store.isLoading)
-        #expect(fake.paramsForMethod("skill.list").count == 3)
+        #expect(reconnected.paramsForMethod("skill.list").count == 1)
     }
 
     @Test func workspaceChangeClearsPriorSkillsBeforeResponse() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["skill.list"] = [skill("previous")]
         let store = SkillCatalogStore()
-        await store.load(workspaceId: "previous", connection: fake)
+        await store.load(workspaceId: "previous", agentId: "agent", connection: fake)
         fake.pendingMethods = ["skill.list"]
-        let loading = Task { await store.load(workspaceId: "next", connection: fake) }
+        let loading = Task { await store.load(workspaceId: "next", agentId: "agent", connection: fake) }
         defer { loading.cancel() }
         try await fake.waitForPendingRequests("skill.list")
         #expect(store.skills.isEmpty && store.isLoading && store.errorMessage == nil)
@@ -111,10 +122,10 @@ struct SkillCatalogStoreTests {
         let newConnection = FakeConnectionManager()
         newConnection.responseMap["skill.list"] = [skill("current")]
         let store = SkillCatalogStore()
-        let oldLoad = Task { await store.load(workspaceId: "old", connection: oldConnection) }
+        let oldLoad = Task { await store.load(workspaceId: "old", agentId: "agent", connection: oldConnection) }
         defer { oldLoad.cancel() }
         try await oldConnection.waitForPendingRequests("skill.list")
-        await store.load(workspaceId: "new", connection: newConnection)
+        await store.load(workspaceId: "new", agentId: "agent", connection: newConnection)
 
         if fails {
             oldConnection.failPending("skill.list", with: URLError(.notConnectedToInternet))
@@ -130,10 +141,10 @@ struct SkillCatalogStoreTests {
         let fake = FakeConnectionManager()
         fake.pendingMethods = ["skill.list"]
         let store = SkillCatalogStore()
-        let first = Task { await store.load(workspaceId: "workspace", connection: fake) }
+        let first = Task { await store.load(workspaceId: "workspace", agentId: "agent", connection: fake) }
         defer { first.cancel() }
         try await fake.waitForPendingRequests("skill.list")
-        let second = Task { await store.load(workspaceId: "workspace", connection: fake) }
+        let second = Task { await store.load(workspaceId: "workspace", agentId: "agent", connection: fake) }
         defer { second.cancel() }
         try await fake.waitForPendingRequests("skill.list", count: 2)
 
@@ -149,7 +160,7 @@ struct SkillCatalogStoreTests {
         let fake = FakeConnectionManager()
         fake.pendingMethods = ["skill.list"]
         let store = SkillCatalogStore()
-        let loading = Task { await store.load(workspaceId: "workspace", connection: fake) }
+        let loading = Task { await store.load(workspaceId: "workspace", agentId: "agent", connection: fake) }
         defer { loading.cancel() }
         try await fake.waitForPendingRequests("skill.list")
         loading.cancel()
@@ -158,7 +169,7 @@ struct SkillCatalogStoreTests {
 
         fake.pendingMethods = []
         fake.responseMap["skill.list"] = [skill("retry")]
-        await store.load(workspaceId: "workspace", connection: fake)
+        await store.load(workspaceId: "workspace", agentId: "agent", connection: fake)
         #expect(store.skills.map(\.name) == ["retry"])
     }
 
@@ -166,7 +177,7 @@ struct SkillCatalogStoreTests {
         let fake = FakeConnectionManager()
         fake.pendingMethods = ["skill.list"]
         let store = SkillCatalogStore()
-        let loading = Task { await store.load(workspaceId: "workspace", connection: fake) }
+        let loading = Task { await store.load(workspaceId: "workspace", agentId: "agent", connection: fake) }
         defer { loading.cancel() }
         try await fake.waitForPendingRequests("skill.list")
         store.reset()

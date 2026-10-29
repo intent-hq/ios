@@ -1,92 +1,137 @@
 import SwiftUI
 
+/// Slash-command skill picker: a horizontally scrolling row of chips above the composer.
+/// The highlighted chip uses the accent; Return or a tap inserts it.
 struct SkillSuggestionsView: View {
     let completion: ComposerSkillCompletion
     let workspaceId: String
+    let agentId: String
     let connection: any ConnectionManagerRouting
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
     @State private var retry = 0
-    @ScaledMetric(relativeTo: .body) private var maximumHeight: CGFloat = 216
+
+    private typealias Palette = Constants.Conversation.Design.Palette
 
     private enum Layout {
-        static let spacing: CGFloat = 4
-        static let padding: CGFloat = 12
-        static let minimumRowHeight: CGFloat = 44
-        static let cornerRadius: CGFloat = 12
+        static let chipCornerRadius: CGFloat = 16
+        static let chipHeight: CGFloat = 40
+        static let chipHorizontalPadding: CGFloat = 20
+        static let chipSpacing: CGFloat = 8
+        static let bottomPadding: CGFloat = 12
+        static let previewWidth: CGFloat = 320
+        static let previewPadding: CGFloat = 20
+        static let previewSpacing: CGFloat = 6
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.spacing) {
-            if connection.connectionState != .connected {
-                status("Connect to see available skills")
-            } else if completion.catalog.isLoading {
-                ProgressView("Loading skills…").padding(Layout.padding)
-            } else if completion.catalog.errorMessage != nil {
-                HStack {
-                    status("Skills could not be loaded")
-                    Spacer(minLength: 0)
-                    Button("Retry") { retry += 1 }
-                        .buttonStyle(IntentContentButtonStyle())
-                        .padding(Layout.padding)
-                }
-            } else if completion.matches.isEmpty {
-                status(completion.catalog.skills.isEmpty ? "No skills available" : "No matching skills")
-            } else {
-                suggestions
+        content
+            .frame(maxWidth: .infinity, minHeight: Layout.chipHeight, alignment: .leading)
+            .padding(.bottom, Layout.bottomPadding)
+            .accessibilityIdentifier("composer.skills")
+            .task(id: "\(connection.connectionState == .connected)-\(workspaceId)-\(agentId)-\(retry)") {
+                await completion.catalog.refresh(workspaceId: workspaceId, agentId: agentId, connection: connection)
             }
-        }
-        .interFont(Constants.Typography.bodyS)
-        .background(Theme.card(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius))
-        .padding(.horizontal, Layout.padding)
-        .padding(.top, Layout.padding)
-        .accessibilityIdentifier("composer.skills")
-        .task(id: "\(connection.connectionState == .connected)-\(workspaceId)-\(retry)") {
-            completion.catalog.reset()
-            guard connection.connectionState == .connected else { return }
-            await completion.catalog.load(workspaceId: workspaceId, connection: connection)
-        }
-        .onDisappear { completion.catalog.reset() }
     }
 
-    private var suggestions: some View {
+    @ViewBuilder
+    private var content: some View {
+        if connection.connectionState != .connected {
+            status("Connect to see available skills")
+        } else if completion.catalog.isLoading {
+            HStack(spacing: Layout.chipSpacing) {
+                ProgressView()
+                status("Loading skills…")
+            }
+            .padding(.horizontal, Layout.chipHorizontalPadding)
+        } else if completion.catalog.errorMessage != nil {
+            HStack(spacing: Layout.chipSpacing) {
+                status("Skills could not be loaded")
+                Button { retry += 1 } label: {
+                    chipLabel(Text("Retry"), selected: true)
+                }
+                .buttonStyle(IntentContentButtonStyle())
+            }
+        } else if completion.matches.isEmpty {
+            status(completion.catalog.skills.isEmpty ? "No skills available" : "No matching skills")
+        } else {
+            chips
+        }
+    }
+
+    private var chips: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Layout.chipSpacing) {
                     ForEach(completion.matches) { skill in
-                        Button { completion.insert(skill) } label: {
-                            VStack(alignment: .leading, spacing: Layout.spacing) {
-                                Text(verbatim: "/\(skill.name)")
-                                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                                if !skill.description.isEmpty {
-                                    Text(verbatim: skill.description)
-                                        .interFont(Constants.Typography.subtextXXS)
-                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                        .lineLimit(2)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, minHeight: Layout.minimumRowHeight, alignment: .leading)
-                            .padding(Layout.padding)
-                            .background(completion.selectedSkill?.id == skill.id ? Theme.muted(for: colorScheme) : Color.clear)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(IntentContentButtonStyle())
-                        .accessibilityIdentifier("composer.skill.\(skill.name)")
-                        .id(skill.id)
+                        chip(skill)
                     }
                 }
             }
-            .frame(maxHeight: maximumHeight)
-            .fixedSize(horizontal: false, vertical: true)
+            .scrollClipDisabled()
             .onChange(of: completion.selectedSkill?.id) { _, id in
-                if let id { proxy.scrollTo(id, anchor: .center) }
+                guard let id else { return }
+                withAnimation(.easeOut) { proxy.scrollTo(id, anchor: .center) }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+    }
+
+    private func chip(_ skill: SkillInfo) -> some View {
+        let selected = completion.selectedSkill?.id == skill.id
+        return Button { completion.insert(skill) } label: {
+            chipLabel(Text(verbatim: "/\(skill.name)"), selected: selected)
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .contextMenu {
+            Button { completion.insert(skill) } label: {
+                Label("Use", systemImage: "arrow.turn.down.left")
+            }
+        } preview: {
+            skillPreview(skill)
+        }
+        .accessibilityIdentifier("composer.skill.\(skill.name)")
+        .accessibilityHint(Text(verbatim: skill.description))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .id(skill.id)
+    }
+
+    /// Long-press preview: the chip itself shows only the name.
+    private func skillPreview(_ skill: SkillInfo) -> some View {
+        VStack(alignment: .leading, spacing: Layout.previewSpacing) {
+            Text(verbatim: "/\(skill.name)")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .foregroundStyle(Palette.foreground(for: colorScheme))
+            if !skill.description.isEmpty {
+                Text(verbatim: skill.description)
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Layout.previewPadding)
+        .frame(width: Layout.previewWidth, alignment: .leading)
+        .background(Palette.background(for: colorScheme))
+        .accessibilityIdentifier("composer.skill.preview")
+    }
+
+    private func chipLabel(_ label: Text, selected: Bool) -> some View {
+        label
+            .interFont(Constants.Typography.bodyXSEmphasized)
+            .foregroundStyle(selected ? Palette.onAccent : Palette.foreground(for: colorScheme))
+            .lineLimit(1)
+            .padding(.horizontal, Layout.chipHorizontalPadding)
+            .frame(minHeight: Layout.chipHeight)
+            .background(
+                selected ? Palette.accent : Palette.surface(for: colorScheme),
+                in: RoundedRectangle(cornerRadius: Layout.chipCornerRadius)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: Layout.chipCornerRadius))
     }
 
     private func status(_ message: LocalizedStringKey) -> some View {
         Text(message)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .padding(Layout.padding)
+            .interFont(Constants.Typography.bodyXS)
+            .foregroundStyle(Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+            .padding(.horizontal, Layout.chipHorizontalPadding)
     }
 }

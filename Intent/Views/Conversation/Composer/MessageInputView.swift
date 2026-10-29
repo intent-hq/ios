@@ -57,7 +57,7 @@ struct MessageInputView: View {
     var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
 
     var body: some View {
-        IPadTypingFocusRow(isFocused: focusBinding) { inputContent }
+        IPadTypingFocusRow(isFocused: focusBinding) { VStack(spacing: 0) { skillChips; inputContent } }
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
@@ -106,9 +106,6 @@ struct MessageInputView: View {
 private extension MessageInputView {
     var inputContent: some View {
         VStack(spacing: 0) {
-            if isFocused, skillCompletion.context != nil {
-                SkillSuggestionsView(completion: skillCompletion, workspaceId: viewModel.workspaceId, connection: viewModel.connection)
-            }
             supplementalRows
             if usesWorkspaceDesign {
                 WorkspaceComposerRow(
@@ -144,6 +141,9 @@ private extension MessageInputView {
         }
     }
 
+    @ViewBuilder var skillChips: some View {
+        if isFocused, skillCompletion.context != nil { SkillSuggestionsView(completion: skillCompletion, workspaceId: viewModel.workspaceId, agentId: viewModel.agentId, connection: viewModel.connection) }
+    }
     @ViewBuilder
     var supplementalRows: some View {
         #if os(visionOS)

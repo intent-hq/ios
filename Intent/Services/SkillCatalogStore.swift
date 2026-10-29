@@ -9,9 +9,40 @@ import Observation
 
     @ObservationIgnored private var loadIdentity = UUID()
 
-    /// Each popup opening refreshes the catalog, including after an earlier failure.
-    func load(workspaceId: String, connection: any ConnectionManagerRouting) async {
+    /// Skills do not change during an app session, so a successful catalog is reused per
+    /// agent and connection. Failures are not cached; the next opening retries.
+    private struct CacheKey: Hashable {
+        let workspaceId: String
+        let agentId: String
+    }
+
+    private struct CachedCatalog {
+        weak var connection: AnyObject?
+        let skills: [SkillInfo]
+    }
+
+    private static var cache: [CacheKey: CachedCatalog] = [:]
+
+    /// Offline, the visible catalog is cleared so keyboard acceptance cannot insert a hidden
+    /// suggestion; the session cache survives and repopulates the picker on reconnect.
+    func refresh(workspaceId: String, agentId: String, connection: any ConnectionManagerRouting) async {
+        guard connection.connectionState == .connected else {
+            reset()
+            return
+        }
+        await load(workspaceId: workspaceId, agentId: agentId, connection: connection)
+    }
+
+    func load(workspaceId: String, agentId: String, connection: any ConnectionManagerRouting) async {
         guard !Task.isCancelled else { return }
+        let key = CacheKey(workspaceId: workspaceId, agentId: agentId)
+        if let cached = Self.cache[key], cached.connection === connection {
+            loadIdentity = UUID()
+            skills = cached.skills
+            isLoading = false
+            errorMessage = nil
+            return
+        }
         reset()
         let identity = loadIdentity
         isLoading = true
@@ -35,6 +66,7 @@ import Observation
                 if lhs.name != rhs.name { return lhs.name < rhs.name }
                 return lhs.location < rhs.location
             }
+            Self.cache[key] = CachedCatalog(connection: connection, skills: skills)
         } catch {
             guard identity == loadIdentity, !Task.isCancelled, !(error is CancellationError) else { return }
             errorMessage = "Skills could not be loaded. Try again."
