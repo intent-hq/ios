@@ -395,7 +395,7 @@ extension InlineResponseImageUITests {
 
 extension InlineResponseImageUITests {
     @MainActor
-    func testTextLinkOpensViewerSharesAndRetriesMissingFile() {
+    func testTextLinkOpensViewerAndRetriesMissingFile() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-inline-text"]
         app.launch()
@@ -410,7 +410,7 @@ extension InlineResponseImageUITests {
         reveal(link, in: transcript)
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
-        assertTextViewerAndShare(in: app)
+        assertTextViewer(in: app)
         let close = app.buttons["text.close"].firstMatch
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
@@ -425,7 +425,7 @@ extension InlineResponseImageUITests {
     }
 
     @MainActor
-    private func assertTextViewerAndShare(in app: XCUIApplication) {
+    private func assertTextViewer(in app: XCUIApplication) {
         let content = app.textViews["text.content"].firstMatch
         XCTAssertTrue(content.waitForExistence(timeout: Fixture.timeout))
         let text = content.value as? String ?? ""
@@ -434,21 +434,9 @@ extension InlineResponseImageUITests {
         XCTAssertTrue(text.contains("3. Return to the conversation."))
         XCTAssertTrue(app.navigationBars["Demo notes.txt"].exists)
         let close = app.buttons["text.close"].firstMatch
-        let share = app.buttons["Share text file"].firstMatch
-        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && share.isHittable })
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
         XCTAssertEqual(close.label, "Close text file")
         captureMedia(app, named: "Text viewer from text link")
-        share.tap()
-        let activity = app.otherElements["ActivityListView"].firstMatch
-        XCTAssertTrue(activity.waitForExistence(timeout: Fixture.timeout), "Share must present the native activity sheet")
-        let dismissRegion = app.otherElements["PopoverDismissRegion"].firstMatch
-        if dismissRegion.exists {
-            dismissRegion.tap()
-        } else {
-            activity.swipeDown()
-        }
-        XCTAssertTrue(activity.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
     }
 
     @MainActor

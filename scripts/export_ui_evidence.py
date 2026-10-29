@@ -251,7 +251,7 @@ CAPTURES = {
             "Inline PDF card and link", "PDF viewer from inline card",
             "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",
         ),
-        "testTextLinkOpensViewerSharesAndRetriesMissingFile": (
+        "testTextLinkOpensViewerAndRetriesMissingFile": (
             "Text viewer from text link", "Text unavailable with close and retry",
         ),
     },

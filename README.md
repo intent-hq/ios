@@ -215,11 +215,12 @@ plain-text fallback. These are prototype highlighting limits, independent of
 the existing 5 MiB file-opening limit. A shared, nonpersistent `WKWebView`
 returns token ranges to the native TextKit 2 viewer. Only foreground colors
 change, preserving font metrics, text selection, scrolling, and original-file
-sharing. Requests cancel on file/theme changes or dismissal and fall back after
+contents. Requests cancel on file/theme changes or dismissal and fall back after
 five seconds; JavaScript cannot interrupt synchronous WebAssembly tokenization.
 
 File previews include a native line-number gutter, 8-point horizontal padding,
 and 16-point vertical padding.
+The header uses the shared sidebar tint and a flat Close action.
 Numbers follow source lines, including blank lines and a final empty line;
 wrapped continuations do not repeat numbers. The gutter uses visible TextKit 2
 layout fragments and stays outside the selectable/shared text. Source line
