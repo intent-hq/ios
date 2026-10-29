@@ -57,21 +57,21 @@ struct WorkspaceDetailHeading: View {
         return trimmed
     }
 
-    /// The status image sits beside the summary as a thumbnail; accessibility sizes stack it below.
+    /// The status image leads the summary as a thumbnail; accessibility sizes stack it above.
     private var statusRow: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing))
             : AnyLayout(HStackLayout(spacing: WorkspaceDetailStyle.headingTextSpacing))
         return layout {
+            if let statusImageAssetId {
+                WorkspaceStatusImageView(workspaceId: workspaceId, assetId: statusImageAssetId)
+            }
             if let summary {
                 WorkspaceDetailHeadingText(summary, style: Constants.Typography.bodyS)
                     .tracking(WorkspaceDetailStyle.bodyTracking)
                     .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("workspaceDetail.summary")
-            }
-            if let statusImageAssetId {
-                WorkspaceStatusImageView(workspaceId: workspaceId, assetId: statusImageAssetId)
             }
         }
     }
