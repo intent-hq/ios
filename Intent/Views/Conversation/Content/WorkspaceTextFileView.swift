@@ -7,8 +7,8 @@ struct WorkspaceTextFileView: UIViewRepresentable {
     let file: WorkspaceTextFile
     @Environment(\.colorScheme) private var colorScheme
 
-    func makeUIView(context _: Context) -> UITextView {
-        let view = UITextView(usingTextLayoutManager: true)
+    func makeUIView(context _: Context) -> LineNumberTextView {
+        let view = LineNumberTextView()
         view.isEditable = false
         view.isSelectable = true
         view.isScrollEnabled = true
@@ -21,18 +21,18 @@ struct WorkspaceTextFileView: UIViewRepresentable {
         view.adjustsFontForContentSizeCategory = true
         view.textColor = .label
         view.backgroundColor = .systemBackground
-        view.text = file.content
+        view.setSource(file.content, index: file.lineIndex)
         view.accessibilityIdentifier = "text.content"
         return view
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func updateUIView(_ view: UITextView, context: Context) {
+    func updateUIView(_ view: LineNumberTextView, context: Context) {
         context.coordinator.update(view, file: file, dark: colorScheme == .dark)
     }
 
-    static func dismantleUIView(_: UITextView, coordinator: Coordinator) {
+    static func dismantleUIView(_: LineNumberTextView, coordinator: Coordinator) {
         coordinator.cancel()
     }
 
@@ -43,10 +43,10 @@ struct WorkspaceTextFileView: UIViewRepresentable {
         private var task: Task<Void, Never>?
         private var revision = UUID()
 
-        func update(_ view: UITextView, file: WorkspaceTextFile, dark: Bool) {
+        func update(_ view: LineNumberTextView, file: WorkspaceTextFile, dark: Bool) {
             guard self.file !== file || self.dark != dark else { return }
             cancel()
-            if self.file !== file { view.text = file.content }
+            if self.file !== file { view.setSource(file.content, index: file.lineIndex) }
             self.file = file
             self.dark = dark
             Self.apply([], to: view)

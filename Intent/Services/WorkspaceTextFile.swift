@@ -5,12 +5,14 @@ nonisolated final class WorkspaceTextFile: Sendable {
     let url: URL
     let content: String
     let byteCount: Int
+    let lineIndex: FileLineIndex
     static let maxBytes = 5 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
 
     private init(url: URL, content: String, byteCount: Int) {
         self.url = url
         self.content = content
         self.byteCount = byteCount
+        lineIndex = FileLineIndex(content)
     }
 
     deinit {

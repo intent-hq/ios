@@ -195,7 +195,7 @@ on cancellation as well as failure so interrupted renderer runs can be inspected
 
 ### Offline file syntax highlighting with Pierre
 
-The file-preview prototype uses **@pierre/highlights 0.3.0**, bundled in
+File previews and workspace diffs use **@pierre/highlights 0.3.0**, bundled in
 `Intent/Resources/Highlights/` with its WebAssembly engine, Pierre Light/Dark
 themes, full license notices, and `vendor.json` checksums. The published package
 contains 120 syntax lexers plus plain text. Normal app builds use the checked-in
@@ -217,6 +217,19 @@ returns token ranges to the native TextKit 2 viewer. Only foreground colors
 change, preserving font metrics, text selection, scrolling, and original-file
 sharing. Requests cancel on file/theme changes or dismissal and fall back after
 five seconds; JavaScript cannot interrupt synchronous WebAssembly tokenization.
+
+File previews include a native line-number gutter and 16-point content padding.
+Numbers follow source lines, including blank lines and a final empty line;
+wrapped continuations do not repeat numbers. The gutter uses visible TextKit 2
+layout fragments and stays outside the selectable/shared text. Source line
+offsets are indexed during background file loading.
+
+Diffs retain native old/new numbers, markers and change backgrounds. Commit
+diffs tokenize the complete old and new sources separately. Working and staged
+diffs only receive hunks from the daemon, so each contiguous side starts with
+fresh lexer state; a comment or string that begins in omitted context can have
+incomplete colors. Unknown or over-budget diffs remain plain. Theme and file
+changes cancel highlighting and discard stale results.
 
 Regenerate and verify the assets with Node 24 or newer:
 
