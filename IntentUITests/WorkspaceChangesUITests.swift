@@ -213,9 +213,12 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false) {
+        let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
+        // On iPad the workspace can be beside a viewer; app-wide swipes target the viewer instead.
+        let scrollTarget = UIDevice.current.userInterfaceIdiom == .pad && overview.exists ? overview : app
         for _ in 0..<Fixture.scrollAttempts {
             if element.exists, element.isHittable { return }
-            if towardTop { app.swipeDown() } else { app.swipeUp() }
+            if towardTop { scrollTarget.swipeDown() } else { scrollTarget.swipeUp() }
         }
         XCTAssertTrue(element.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(element.isHittable)
@@ -311,6 +314,8 @@ extension WorkspaceChangesUITests {
         selectRepository("ios", in: app)
         openIPadCommit(in: app)
         assertIPadCommitPane(in: app)
+        // Reaching the commit can scroll the repository picker offscreen on a smaller iPad.
+        reveal(app.buttons["changes.repository"], in: app, towardTop: true)
         XCTAssertTrue(app.buttons["changes.repository"].isHittable, "The sidebar stays interactive")
         capture(app, name: "ipad-commit-from-sidebar-\(appearance)")
         openIPadFileDiff(in: app, staged: false)
