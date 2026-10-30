@@ -11,6 +11,7 @@ enum ConnectionState: Equatable {
 nonisolated enum InboundFrame: Sendable {
     case error(id: Int, error: NSError)
     case notification(method: String, params: InboundJSONValue)
+    case request(id: InboundJSONValue, method: String, params: InboundJSONValue)
     case response(id: Int, result: InboundJSONValue)
     case subscriptionPush(SubscriptionPush)
 
@@ -18,7 +19,7 @@ nonisolated enum InboundFrame: Sendable {
         switch self {
         case let .response(id, _), let .error(id, _): "id=\(id)"
         case .subscriptionPush: "method=subscription.push"
-        case let .notification(method, _): "method=\(method)"
+        case let .request(_, method, _), let .notification(method, _): "method=\(method)"
         }
     }
 }
