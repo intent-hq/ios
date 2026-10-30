@@ -133,7 +133,7 @@ struct WorkspaceCommitFilePicker: View {
             .background(Theme.background(for: colorScheme))
             .navigationTitle("Jump to file")
             .toolbarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.sidebar(for: colorScheme), for: .navigationBar)
+            .toolbarBackground(WorkspaceCommitLayout.chromeBackground(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

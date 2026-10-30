@@ -10,6 +10,14 @@ enum WorkspaceCommitLayout {
     static let floatingShadowOpacity = 0.16
     static let floatingShadowRadius: CGFloat = 8
     static let floatingShadowOffset: CGFloat = 4
+
+    static func chromeBackground(for scheme: ColorScheme) -> Color {
+        scheme == .light ? WorkspaceDetailStyle.background(for: scheme) : Theme.sidebar(for: scheme)
+    }
+
+    static func fileHeaderBackground(for scheme: ColorScheme) -> Color {
+        scheme == .light ? WorkspaceDetailStyle.surface(for: scheme) : Theme.sidebar(for: scheme)
+    }
 }
 
 struct WorkspaceCommitDiffView: View {
@@ -43,7 +51,7 @@ struct WorkspaceCommitDiffView: View {
             )
             .padding(.horizontal, WorkspaceCommitLayout.padding)
             .padding(.bottom, WorkspaceCommitLayout.rowPadding)
-            .background(usesPanel ? IPadShellStyle.panel(for: colorScheme) : Theme.sidebar(for: colorScheme))
+            .background(usesPanel ? IPadShellStyle.panel(for: colorScheme) : WorkspaceCommitLayout.chromeBackground(for: colorScheme))
             ZStack {
                 changes
                     .opacity(showsDetails ? 0 : 1)
@@ -56,7 +64,7 @@ struct WorkspaceCommitDiffView: View {
         .background(usesPanel ? IPadShellStyle.panel(for: colorScheme) : Theme.background(for: colorScheme))
         .navigationTitle("Commit Changes")
         .toolbarTitleDisplayMode(.inline)
-        .toolbarBackground(usesPanel ? IPadShellStyle.panel(for: colorScheme) : Theme.sidebar(for: colorScheme), for: .navigationBar)
+        .toolbarBackground(usesPanel ? IPadShellStyle.panel(for: colorScheme) : WorkspaceCommitLayout.chromeBackground(for: colorScheme), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .task(id: retry) { await load() }
     }
@@ -191,7 +199,7 @@ struct WorkspaceCommitDiffView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(IntentContentButtonStyle())
-            .background(usesPanel ? IPadShellStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme))
+            .background(usesPanel ? IPadShellStyle.background(for: colorScheme) : WorkspaceCommitLayout.fileHeaderBackground(for: colorScheme))
             .accessibilityIdentifier("commit.file.\(file.path)")
             .accessibilityValue(collapsedPaths.contains(file.path) ? "Collapsed" : "Expanded")
             if !collapsedPaths.contains(file.path) {
