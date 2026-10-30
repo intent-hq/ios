@@ -113,7 +113,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         assertDiffLine(in: app, containing: "let mobileCount = 0")
         assertDiffLine(in: app, containing: "let mobileCount = 1")
         capture(app, name: "submodule-commit-diff")
-        app.buttons["Done"].tap()
+        app.buttons["commit.back"].tap()
         selectRepository("Main repository", in: app)
         let mainStaged = app.buttons["changes.file.staged.Tests/AnalyticsTests.swift"].firstMatch
         reveal(mainStaged, in: app)

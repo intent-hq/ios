@@ -83,8 +83,9 @@ struct WorkspaceChangesView: View {
             NavigationStack {
                 WorkspaceCommitDiffView(loader: loader, commit: commit)
                     .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            IntentIconButton(icon: .close, label: "Done", showsBackground: false) { selectedCommit = nil }
+                        ToolbarItem(placement: .topBarLeading) {
+                            IntentIconButton(icon: .arrowLeft, label: "Back", showsBackground: false) { selectedCommit = nil }
+                                .accessibilityIdentifier("commit.back")
                         }
                         .intentToolbarSurface()
                     }
