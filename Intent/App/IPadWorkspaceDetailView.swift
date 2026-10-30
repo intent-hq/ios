@@ -20,25 +20,19 @@ struct IPadWorkspaceDetailView: View {
                     note(destination, showsBackButton: true)
                 }
                 .navigationDestination(item: $coordinator.workspaceChange) { destination in
-                    changeViewer(destination)
+                    VStack(spacing: 0) {
+                        changeHeader(destination)
+                        changeViewer(destination)
+                    }
                     .id(destination.id)
                     .environment(\.workspaceViewerUsesPanel, true)
                     .navigationBarBackButtonHidden()
                     .nativeNavigationBackGesture()
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            IntentIconButton(icon: .arrowLeft, label: "Back", showsBackground: false) {
-                                coordinator.workspaceChange = nil
-                            }
-                            .accessibilityIdentifier(destination.backIdentifier)
-                        }
-                        .intentToolbarSurface()
-                    }
+                    .toolbar(.hidden, for: .navigationBar)
                     .modifier(IPadNavigationVisibility())
                 }
                 .modifier(IPadNavigationVisibility())
         }
-        .padding(.top, coordinator.workspaceChange == nil ? 0 : IPadShellLayout.headerInset)
         .onChange(of: coordinator.currentScreenDescription) {
             if !notePath.isEmpty { notePath = NavigationPath() }
         }
@@ -46,6 +40,29 @@ struct IPadWorkspaceDetailView: View {
             if !notePath.isEmpty { notePath = NavigationPath() }
         }
         .task { await DemoFixtures.reselectConversationIfRequested(coordinator: coordinator) }
+    }
+
+    private func changeHeader(_ destination: WorkspaceChangeDestination) -> some View {
+        WorkspaceNavigationHeader(
+            title: changeTitle(destination),
+            subtitle: nil,
+            backIdentifier: destination.backIdentifier,
+            titleIdentifier: "workspace.change.title",
+            usesConversationLayout: true,
+            onBack: { coordinator.workspaceChange = nil },
+            actions: {
+                Color.clear
+                    .frame(width: WorkspaceDetailStyle.controlSize, height: WorkspaceDetailStyle.controlSize)
+                    .accessibilityHidden(true)
+            }
+        )
+    }
+
+    private func changeTitle(_ destination: WorkspaceChangeDestination) -> String {
+        switch destination.content {
+        case .commit: "Commit Changes"
+        case let .file(file): file.stage == "staged" ? "Staged Changes" : "Unstaged Changes"
+        }
     }
 
     @ViewBuilder
@@ -60,10 +77,6 @@ struct IPadWorkspaceDetailView: View {
             WorkspaceCommitDiffView(loader: loader, commit: commit)
         case let .file(file):
             WorkspaceFileDiffView(loader: loader, path: file.path, staged: file.stage == "staged", isBinary: file.isBinary)
-                .navigationTitle(file.stage == "staged" ? "Staged Changes" : "Unstaged Changes")
-                .toolbarTitleDisplayMode(.inline)
-                .toolbarBackground(IPadShellStyle.panel(for: colorScheme), for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
         }
     }
 

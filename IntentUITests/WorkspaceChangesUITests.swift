@@ -276,7 +276,7 @@ extension WorkspaceChangesUITests {
             XCTAssertEqual(app.buttons["changes.repository"].value as? String, "ios")
             XCUIDevice.shared.orientation = .landscapeLeft
             openIPadFileDiff(in: app, staged: true)
-            XCTAssertTrue(app.navigationBars["Staged Changes"].exists)
+            XCTAssertEqual(app.staticTexts["workspace.change.title"].label, "Staged Changes")
             assertDiffLine(in: app, containing: "let mobileStaged = true")
             app.buttons["diff.back"].tap()
             openIPadCommit(in: app)
@@ -355,6 +355,7 @@ extension WorkspaceChangesUITests {
         XCTAssertGreaterThanOrEqual(viewport.frame.width, minimumWidth)
         XCTAssertGreaterThan(viewport.frame.maxY, app.frame.height * 0.85)
         XCTAssertLessThan(app.buttons["diff.back"].frame.minY, app.frame.height * 0.15)
+        assertIPadHeaderAlignment(in: app, backIdentifier: "diff.back")
         XCTAssertFalse(app.sheets.firstMatch.exists)
     }
 
@@ -378,7 +379,19 @@ extension WorkspaceChangesUITests {
         XCTAssertTrue(viewport.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
         XCTAssertGreaterThanOrEqual(viewport.frame.width, minimumWidth)
         XCTAssertGreaterThan(viewport.frame.maxY, app.frame.height * 0.85)
-        XCTAssertLessThan(app.navigationBars["Commit Changes"].frame.minY, app.frame.height * 0.15)
+        XCTAssertEqual(app.staticTexts["workspace.change.title"].label, "Commit Changes")
+        XCTAssertLessThan(app.buttons["commit.back"].frame.minY, app.frame.height * 0.15)
+        assertIPadHeaderAlignment(in: app, backIdentifier: "commit.back")
         XCTAssertFalse(app.sheets.firstMatch.exists)
+    }
+
+    @MainActor
+    private func assertIPadHeaderAlignment(in app: XCUIApplication, backIdentifier: String) {
+        let back = app.buttons[backIdentifier]
+        let sidebarControl = app.buttons["ipad.sidebar.collapse"].firstMatch
+        if sidebarControl.exists, sidebarControl.isHittable {
+            XCTAssertEqual(back.frame.midY, sidebarControl.frame.midY, accuracy: 1, "Viewer and sidebar headers align")
+        }
+        XCTAssertTrue(app.staticTexts["workspace.change.title"].isHittable)
     }
 }
