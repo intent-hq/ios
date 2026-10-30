@@ -28,7 +28,10 @@ struct WorkspaceCommitDiffView: View {
     @State private var showsFiles = false
     @State private var jumpPath: String?
     @State private var collapsedPaths: Set<String> = []
-    @State private var visibleFilePaths: Set<String> = []
+    @State private var visibleHeaderPaths: Set<String> = []
+    @State private var visibleDiffPaths: Set<String> = []
+    // Lazy layout can probe a collapsed height offscreen; retain loaded heights until text sizing changes.
+    @State private var diffHeights: [String: CGFloat] = [:]
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var retry = 0
@@ -38,7 +41,10 @@ struct WorkspaceCommitDiffView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var hasOffscreenFiles: Bool {
-        !isLoading && errorMessage == nil && files.contains { !visibleFilePaths.contains($0.path) }
+        !isLoading && errorMessage == nil && files.contains { file in
+            !visibleHeaderPaths.contains(file.path)
+                || (!collapsedPaths.contains(file.path) && !visibleDiffPaths.contains(file.path))
+        }
     }
 
     var body: some View {
@@ -67,6 +73,7 @@ struct WorkspaceCommitDiffView: View {
         .toolbarBackground(usesPanel ? IPadShellStyle.panel(for: colorScheme) : WorkspaceCommitLayout.chromeBackground(for: colorScheme), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .task(id: retry) { await load() }
+        .onChange(of: dynamicTypeSize) { diffHeights = [:] }
     }
 
     private var changes: some View {
@@ -101,7 +108,7 @@ struct WorkspaceCommitDiffView: View {
 
     private var changesContent: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                 commitHeader
                 fileContent
             }
@@ -127,7 +134,7 @@ struct WorkspaceCommitDiffView: View {
             ContentUnavailableView("No Changed Files", systemImage: "doc.text")
         } else {
             summary
-            ForEach(files) { file in fileSection(file).id(file.path) }
+            ForEach(files) { file in fileSection(file) }
         }
     }
 
@@ -177,43 +184,58 @@ struct WorkspaceCommitDiffView: View {
     }
 
     private func fileSection(_ file: WorkspaceCommitFile) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                if collapsedPaths.contains(file.path) {
-                    collapsedPaths.remove(file.path)
-                } else {
-                    collapsedPaths.insert(file.path)
-                }
-            } label: {
-                HStack(spacing: WorkspaceCommitLayout.spacing) {
-                    Image(collapsedPaths.contains(file.path) ? .chevronRight : .chevronDown)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: WorkspaceCommitLayout.iconSize, height: WorkspaceCommitLayout.iconSize)
-                        .accessibilityHidden(true)
-                    WorkspaceCommitFileLabel(file: file)
-                }
-                .padding(.horizontal, WorkspaceCommitLayout.rowPadding)
-                .padding(.vertical, WorkspaceCommitLayout.rowPadding)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(IntentContentButtonStyle())
-            .background(usesPanel ? IPadShellStyle.background(for: colorScheme) : WorkspaceCommitLayout.fileHeaderBackground(for: colorScheme))
-            .accessibilityIdentifier("commit.file.\(file.path)")
-            .accessibilityValue(collapsedPaths.contains(file.path) ? "Collapsed" : "Expanded")
+        Section {
             if !collapsedPaths.contains(file.path) {
                 WorkspaceFileDiffView(loader: loader, path: file.path, commitHash: commit.hash, embedded: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                        if height > diffHeights[file.path, default: 0] { diffHeights[file.path] = height }
+                    }
+                    .frame(minHeight: diffHeights[file.path], alignment: .top)
+                    .onScrollVisibilityChange(threshold: 1) { isVisible in
+                        guard visibleDiffPaths.contains(file.path) != isVisible else { return }
+                        if isVisible { visibleDiffPaths.insert(file.path) } else { visibleDiffPaths.remove(file.path) }
+                    }
+                    .onDisappear {
+                        if visibleDiffPaths.contains(file.path) { visibleDiffPaths.remove(file.path) }
+                    }
             }
+        } header: {
+            fileHeader(file).id(file.path)
         }
-        .onScrollVisibilityChange(threshold: 1) { isVisible in
-            if isVisible {
-                visibleFilePaths.insert(file.path)
+    }
+
+    private func fileHeader(_ file: WorkspaceCommitFile) -> some View {
+        Button {
+            if collapsedPaths.contains(file.path) {
+                collapsedPaths.remove(file.path)
             } else {
-                visibleFilePaths.remove(file.path)
+                collapsedPaths.insert(file.path)
             }
+        } label: {
+            HStack(spacing: WorkspaceCommitLayout.spacing) {
+                Image(collapsedPaths.contains(file.path) ? .chevronRight : .chevronDown)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: WorkspaceCommitLayout.iconSize, height: WorkspaceCommitLayout.iconSize)
+                    .accessibilityHidden(true)
+                WorkspaceCommitFileLabel(file: file)
+            }
+            .padding(.horizontal, WorkspaceCommitLayout.rowPadding)
+            .padding(.vertical, WorkspaceCommitLayout.rowPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .onDisappear { visibleFilePaths.remove(file.path) }
+        .buttonStyle(IntentContentButtonStyle())
+        .background(usesPanel ? IPadShellStyle.background(for: colorScheme) : WorkspaceCommitLayout.fileHeaderBackground(for: colorScheme))
+        .accessibilityIdentifier("commit.file.\(file.path)")
+        .accessibilityValue(collapsedPaths.contains(file.path) ? "Collapsed" : "Expanded")
+        .onScrollVisibilityChange(threshold: 1) { isVisible in
+            guard visibleHeaderPaths.contains(file.path) != isVisible else { return }
+            if isVisible { visibleHeaderPaths.insert(file.path) } else { visibleHeaderPaths.remove(file.path) }
+        }
+        .onDisappear {
+            if visibleHeaderPaths.contains(file.path) { visibleHeaderPaths.remove(file.path) }
+        }
     }
 
     private func load() async {

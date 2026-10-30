@@ -185,9 +185,9 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     }
 
     @MainActor
-    private func openChanges(largeText: Bool = false) -> XCUIApplication {
+    private func openChanges(largeText: Bool = false, launchArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data"]
+        app.launchArguments += ["--demo-data"] + launchArguments
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"]
         }
@@ -251,6 +251,48 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 }
 
 extension WorkspaceChangesUITests {
+    @MainActor
+    func testCommitFilenamesStayPinnedWhileScrollingInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let app = openChanges(launchArguments: ["--demo-long-commit", "-appThemePreference", appearance])
+            let commit = app.staticTexts["feat: add usage analytics"].firstMatch
+            reveal(commit, in: app)
+            commit.tap()
+            let source = app.buttons["commit.file.Sources/Analytics.swift"].firstMatch
+            XCTAssertTrue(source.waitForExistence(timeout: Fixture.timeout))
+            let viewport = app.scrollViews["commit.changes.scroll"]
+            viewport.swipeUp()
+            assertPinned(source, in: viewport)
+            capture(app, name: "commit-sticky-source-\(appearance)")
+
+            let tests = app.buttons["commit.file.Tests/AnalyticsTests.swift"].firstMatch
+            for _ in 0..<Fixture.scrollAttempts * 2 {
+                if tests.exists, tests.isHittable, abs(tests.frame.minY - viewport.frame.minY) < 2 { break }
+                viewport.swipeUp()
+            }
+            assertPinned(tests, in: viewport)
+            XCTAssertFalse(source.isHittable, "The next file replaces the previous pinned header")
+            capture(app, name: "commit-sticky-tests-\(appearance)")
+            tests.tap()
+            XCTAssertEqual(tests.value as? String, "Collapsed")
+            tests.tap()
+            XCTAssertEqual(tests.value as? String, "Expanded")
+
+            app.buttons["commit.jump"].tap()
+            app.buttons["commit.jump.file.Sources/Analytics.swift"].tap()
+            assertPinned(source, in: viewport)
+            XCTAssertEqual(source.value as? String, "Expanded")
+            capture(app, name: "commit-sticky-jump-\(appearance)")
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    private func assertPinned(_ header: XCUIElement, in viewport: XCUIElement) {
+        XCTAssertTrue(header.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        XCTAssertEqual(header.frame.minY, viewport.frame.minY, accuracy: 2, "Filename stays at the diff viewport's top")
+    }
+
     @MainActor
     func testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad main pane navigation")

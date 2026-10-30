@@ -239,7 +239,8 @@ incomplete colors. Unknown or over-budget diffs remain plain. Theme and file
 changes cancel highlighting and discard stale results.
 
 Commit viewing uses one vertically scrolling Changes page with collapsible file
-sections and independently scrolling horizontal diffs. A floating Jump to file
+sections and independently scrolling horizontal diffs. Each filename stays pinned
+above its diff until the next file header takes its place. A floating Jump to file
 control appears only while a file section is not fully visible, and opens a
 searchable half sheet (expandable to full height; full height at
 accessibility text sizes) and expands the chosen section. Changes and Details use

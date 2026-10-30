@@ -14,6 +14,7 @@ struct WorkspaceFileDiffView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var viewportSize = CGSize.zero
+    @State private var diffContentHeight: CGFloat?
     @Environment(\.workspaceViewerUsesPanel) private var usesPanel
     @Environment(\.colorScheme) private var colorScheme
 
@@ -147,9 +148,12 @@ struct WorkspaceFileDiffView: View {
             .font(.system(.caption, design: .monospaced))
             .textSelection(.enabled)
             .padding(.bottom)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { diffContentHeight = $0 }
             .frame(minHeight: embedded ? nil : viewportSize.height, alignment: .topLeading)
         }
         .defaultScrollAnchor(.topLeading)
+        // Keep lazy section measurements stable when the horizontal scroller moves offscreen.
+        .frame(height: embedded ? diffContentHeight : nil)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGSize.self) { $0.size } action: { viewportSize = $0 }
         .accessibilityIdentifier("changes.diff.scroll")
