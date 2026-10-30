@@ -52,8 +52,9 @@ struct WorkspaceDetailPresentations: ViewModifier {
                     }
                 }
             )
-            .fullScreenCover(item: $presentation.selectedBrowser) { browser in
-                WorkspaceBrowserView(browser: browser, connection: session.connection)
+            .onChange(of: presentation.selectedBrowser) { _, browser in
+                if let browser { session.browserNavigation.presentUserBrowser(browser) }
+                presentation.selectedBrowser = nil
             }
             .fullScreenCover(
                 item: $presentation.selectedTerminal,
