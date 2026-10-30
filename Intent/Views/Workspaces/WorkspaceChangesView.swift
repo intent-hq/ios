@@ -53,12 +53,12 @@ struct WorkspaceChangesView: View {
             await store.startObserving(workspaceId: workspaceId)
         }
         .onDisappear {
-            store.stopObserving(preservingSnapshot: coordinator.workspaceCommit?.workspaceId == workspaceId)
+            store.stopObserving(preservingSnapshot: coordinator.workspaceChange?.workspaceId == workspaceId)
         }
         .onChange(of: store.selectedRootId) { _, _ in
             selectedFile = nil
             selectedCommit = nil
-            if coordinator.workspaceCommit?.workspaceId == workspaceId { coordinator.workspaceCommit = nil }
+            if coordinator.workspaceChange?.workspaceId == workspaceId { coordinator.workspaceChange = nil }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -152,7 +152,13 @@ struct WorkspaceChangesView: View {
             identifier: identifier,
             files: files,
             scope: "\(workspaceId):\(store.selectedRootId ?? "")"
-        ) { selectedFile = $0 }
+        ) { file in
+            if coordinator.usesIPadShell {
+                coordinator.onSelectWorkspaceFileDiff(file, workspaceId: workspaceId, gitRootId: store.selectedRootId)
+            } else {
+                selectedFile = file
+            }
+        }
     }
 
     private var commitsSection: some View {

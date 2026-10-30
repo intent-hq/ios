@@ -263,11 +263,25 @@ extension WorkspaceChangesUITests {
             app.buttons["Changes"].firstMatch.tap()
             selectRepository("ios", in: app)
             let overviewWidth = app.scrollViews["workspace.detail.scroll"].firstMatch.frame.width
+            openIPadFileDiff(in: app, staged: false)
+            assertIPadDiffPane(in: app, minimumWidth: overviewWidth * 0.95)
+            capture(app, name: "ipad-diff-main-\(appearance)")
+            XCUIDevice.shared.orientation = .portrait
+            assertIPadDiffPane(in: app)
+            capture(app, name: "ipad-diff-portrait-\(appearance)")
+            app.buttons["diff.back"].tap()
+            XCTAssertEqual(app.buttons["changes.repository"].value as? String, "ios")
+            XCUIDevice.shared.orientation = .landscapeLeft
+            openIPadFileDiff(in: app, staged: true)
+            XCTAssertTrue(app.navigationBars["Staged Changes"].exists)
+            assertDiffLine(in: app, containing: "let mobileStaged = true")
+            app.buttons["diff.back"].tap()
             openIPadCommit(in: app)
             assertIPadCommitPane(in: app, minimumWidth: overviewWidth * 0.95)
             capture(app, name: "ipad-commit-main-\(appearance)")
             app.buttons["commit.view.Details"].tap()
             XCTAssertTrue(app.scrollViews["commit.details"].waitForExistence(timeout: Fixture.timeout))
+            capture(app, name: "ipad-commit-details-\(appearance)")
             app.buttons["commit.view.Changes"].tap()
 
             XCUIDevice.shared.orientation = .portrait
@@ -277,26 +291,66 @@ extension WorkspaceChangesUITests {
             XCTAssertTrue(app.buttons["changes.repository"].waitForExistence(timeout: Fixture.timeout))
             XCTAssertEqual(app.buttons["changes.repository"].value as? String, "ios")
 
-            // A commit selected beside a conversation also belongs to the main pane.
-            XCUIDevice.shared.orientation = .landscapeLeft
-            let agents = app.buttons["Agents"].firstMatch
-            reveal(agents, in: app, towardTop: true)
-            agents.tap()
-            let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-            reveal(agent, in: app)
-            agent.tap()
-            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
-            app.buttons["Changes"].firstMatch.tap()
-            selectRepository("ios", in: app)
-            openIPadCommit(in: app)
-            assertIPadCommitPane(in: app)
-            XCTAssertTrue(app.buttons["changes.repository"].isHittable, "The sidebar stays interactive")
-            capture(app, name: "ipad-commit-from-sidebar-\(appearance)")
-            selectRepository("Main repository", in: app)
-            XCTAssertTrue(app.buttons["commit.back"].waitForNonExistence(timeout: Fixture.timeout))
-            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+            verifyIPadSidebarViewers(in: app, appearance: appearance)
             app.terminate()
         }
+    }
+
+    @MainActor
+    private func verifyIPadSidebarViewers(in app: XCUIApplication, appearance: String) {
+        // A commit selected beside a conversation also belongs to the main pane.
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let agents = app.buttons["Agents"].firstMatch
+        reveal(agents, in: app, towardTop: true)
+        agents.tap()
+        let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        reveal(agent, in: app)
+        agent.tap()
+        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+        app.buttons["Changes"].firstMatch.tap()
+        selectRepository("ios", in: app)
+        openIPadCommit(in: app)
+        assertIPadCommitPane(in: app)
+        XCTAssertTrue(app.buttons["changes.repository"].isHittable, "The sidebar stays interactive")
+        capture(app, name: "ipad-commit-from-sidebar-\(appearance)")
+        openIPadFileDiff(in: app, staged: false)
+        assertIPadDiffPane(in: app)
+        XCTAssertFalse(app.buttons["commit.back"].exists, "File selection replaces the commit")
+        capture(app, name: "ipad-diff-from-sidebar-\(appearance)")
+        app.buttons["diff.back"].tap()
+        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+        openIPadFileDiff(in: app, staged: true)
+        selectRepository("Main repository", in: app)
+        XCTAssertTrue(app.buttons["diff.back"].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["commit.back"].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+    }
+
+    @MainActor
+    private func openIPadFileDiff(in app: XCUIApplication, staged: Bool) {
+        let identifier = staged
+            ? "changes.file.staged.Tests/MobileAnalyticsTests.swift"
+            : "changes.file.unstaged.Sources/Analytics.swift"
+        let file = app.buttons[identifier].firstMatch
+        let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
+        for _ in 0..<Fixture.scrollAttempts {
+            if file.exists, file.isHittable { break }
+            if staged { overview.swipeUp() } else { overview.swipeDown() }
+        }
+        XCTAssertTrue(file.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        file.tap()
+        XCTAssertTrue(app.buttons["diff.back"].waitForExistence(timeout: Fixture.timeout))
+        assertDiffLine(in: app, containing: staged ? "let mobileStaged = true" : "let mobile = true")
+    }
+
+    @MainActor
+    private func assertIPadDiffPane(in app: XCUIApplication, minimumWidth: CGFloat = 0) {
+        let viewport = app.scrollViews["changes.diff.scroll"].firstMatch
+        XCTAssertTrue(viewport.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        XCTAssertGreaterThanOrEqual(viewport.frame.width, minimumWidth)
+        XCTAssertGreaterThan(viewport.frame.maxY, app.frame.height * 0.85)
+        XCTAssertLessThan(app.buttons["diff.back"].frame.minY, app.frame.height * 0.15)
+        XCTAssertFalse(app.sheets.firstMatch.exists)
     }
 
     @MainActor

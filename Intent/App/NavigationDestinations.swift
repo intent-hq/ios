@@ -1,11 +1,24 @@
 import SwiftUI
 
-/// A transient commit route captures its repository so sidebar changes cannot retarget its diffs.
-struct WorkspaceCommitDestination: Hashable {
+/// A transient viewer route captures its repository so sidebar changes cannot retarget its diffs.
+struct WorkspaceChangeDestination: Hashable {
     let id = UUID()
     let workspaceId: String
     let gitRootId: String?
-    let commit: WorkspaceCommit
+
+    enum Content {
+        case commit(WorkspaceCommit)
+        case file(WorkspaceChange)
+    }
+
+    let content: Content
+
+    var backIdentifier: String {
+        switch content {
+        case .commit: "commit.back"
+        case .file: "diff.back"
+        }
+    }
 
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
 

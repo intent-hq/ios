@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkspaceCommitDetailsView: View {
     let commit: WorkspaceCommit
     @State private var copied = false
+    @Environment(\.workspaceViewerUsesPanel) private var usesPanel
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -29,7 +30,7 @@ struct WorkspaceCommitDetailsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.background(for: colorScheme))
+        .background(usesPanel ? IPadShellStyle.panel(for: colorScheme) : Theme.background(for: colorScheme))
         .accessibilityIdentifier("commit.details")
         .task(id: copied) {
             guard copied else { return }

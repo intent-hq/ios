@@ -374,6 +374,9 @@ CAPTURES = {
         "testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes": (
             "ipad-commit-main-light", "ipad-commit-main-dark", "ipad-commit-portrait-light", "ipad-commit-portrait-dark",
             "ipad-commit-from-sidebar-light", "ipad-commit-from-sidebar-dark",
+            "ipad-commit-details-light", "ipad-commit-details-dark",
+            "ipad-diff-main-light", "ipad-diff-main-dark", "ipad-diff-portrait-light", "ipad-diff-portrait-dark",
+            "ipad-diff-from-sidebar-light", "ipad-diff-from-sidebar-dark",
         ),
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
             "workspace-changes", "unstaged-diff", "commit-diff", "commit-details", "commit-file-search", "commit-file-picker",

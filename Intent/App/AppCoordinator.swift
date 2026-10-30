@@ -65,7 +65,7 @@ final class AppCoordinatorLifecycleState {
 class AppCoordinator {
     var currentScreen: AppScreen = .loading {
         didSet {
-            workspaceCommit = nil
+            workspaceChange = nil
             navigationState.recentWorkspaceAgentRequestId = nil
             recordAgentVisit()
             if !currentScreen.supportsConnectionLossOverlay {
@@ -83,7 +83,7 @@ class AppCoordinator {
     }
     var usesIPadShell = false
     var iPadNavigation = IPadNavigationState()
-    var workspaceCommit: WorkspaceCommitDestination?
+    var workspaceChange: WorkspaceChangeDestination?
     var workspaceSidebarAgents = WorkspaceSidebarAgents()
     var assistantAgentId: String?
     var workspaceCreationDraft: WorkspaceCreationDraft?

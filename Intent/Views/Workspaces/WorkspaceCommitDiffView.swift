@@ -25,6 +25,7 @@ struct WorkspaceCommitDiffView: View {
     @State private var errorMessage: String?
     @State private var retry = 0
     @State private var jumpControlHeight: CGFloat = 0
+    @Environment(\.workspaceViewerUsesPanel) private var usesPanel
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -42,7 +43,7 @@ struct WorkspaceCommitDiffView: View {
             )
             .padding(.horizontal, WorkspaceCommitLayout.padding)
             .padding(.bottom, WorkspaceCommitLayout.rowPadding)
-            .background(Theme.sidebar(for: colorScheme))
+            .background(usesPanel ? IPadShellStyle.panel(for: colorScheme) : Theme.sidebar(for: colorScheme))
             ZStack {
                 changes
                     .opacity(showsDetails ? 0 : 1)
@@ -52,10 +53,10 @@ struct WorkspaceCommitDiffView: View {
             }
         }
         .foregroundStyle(Theme.foreground(for: colorScheme))
-        .background(Theme.background(for: colorScheme))
+        .background(usesPanel ? IPadShellStyle.panel(for: colorScheme) : Theme.background(for: colorScheme))
         .navigationTitle("Commit Changes")
         .toolbarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.sidebar(for: colorScheme), for: .navigationBar)
+        .toolbarBackground(usesPanel ? IPadShellStyle.panel(for: colorScheme) : Theme.sidebar(for: colorScheme), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .task(id: retry) { await load() }
     }
@@ -190,7 +191,7 @@ struct WorkspaceCommitDiffView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(IntentContentButtonStyle())
-            .background(Theme.sidebar(for: colorScheme))
+            .background(usesPanel ? IPadShellStyle.background(for: colorScheme) : Theme.sidebar(for: colorScheme))
             .accessibilityIdentifier("commit.file.\(file.path)")
             .accessibilityValue(collapsedPaths.contains(file.path) ? "Collapsed" : "Expanded")
             if !collapsedPaths.contains(file.path) {

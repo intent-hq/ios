@@ -14,6 +14,7 @@ struct WorkspaceFileDiffView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var viewportSize = CGSize.zero
+    @Environment(\.workspaceViewerUsesPanel) private var usesPanel
     @Environment(\.colorScheme) private var colorScheme
 
     private struct LoadID: Hashable {
@@ -44,7 +45,7 @@ struct WorkspaceFileDiffView: View {
             }
             content
         }
-        .background(WorkspaceDetailStyle.background(for: colorScheme))
+        .background(usesPanel ? IPadShellStyle.panel(for: colorScheme) : WorkspaceDetailStyle.background(for: colorScheme))
         .task(id: LoadID(
             workspace: loader.workspaceId,
             root: loader.gitRootId,

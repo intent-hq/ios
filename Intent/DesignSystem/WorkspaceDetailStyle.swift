@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var workspaceViewerUsesPanel = false
+}
+
 enum WorkspaceDetailStyle {
     static let pageInset: CGFloat = 24
     static let headingTopSpacing: CGFloat = 64

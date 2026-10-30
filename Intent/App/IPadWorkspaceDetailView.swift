@@ -19,23 +19,18 @@ struct IPadWorkspaceDetailView: View {
                 .navigationDestination(for: NoteDestination.self) { destination in
                     note(destination, showsBackButton: true)
                 }
-                .navigationDestination(item: $coordinator.workspaceCommit) { destination in
-                    WorkspaceCommitDiffView(
-                        loader: WorkspaceDiffLoader(
-                            connectionManager: session.connection,
-                            workspaceId: destination.workspaceId,
-                            gitRootId: destination.gitRootId
-                        ),
-                        commit: destination.commit
-                    )
+                .navigationDestination(item: $coordinator.workspaceChange) { destination in
+                    changeViewer(destination)
+                    .id(destination.id)
+                    .environment(\.workspaceViewerUsesPanel, true)
                     .navigationBarBackButtonHidden()
                     .nativeNavigationBackGesture()
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             IntentIconButton(icon: .arrowLeft, label: "Back", showsBackground: false) {
-                                coordinator.workspaceCommit = nil
+                                coordinator.workspaceChange = nil
                             }
-                            .accessibilityIdentifier("commit.back")
+                            .accessibilityIdentifier(destination.backIdentifier)
                         }
                         .intentToolbarSurface()
                     }
@@ -50,6 +45,25 @@ struct IPadWorkspaceDetailView: View {
             if !notePath.isEmpty { notePath = NavigationPath() }
         }
         .task { await DemoFixtures.reselectConversationIfRequested(coordinator: coordinator) }
+    }
+
+    @ViewBuilder
+    private func changeViewer(_ destination: WorkspaceChangeDestination) -> some View {
+        let loader = WorkspaceDiffLoader(
+            connectionManager: session.connection,
+            workspaceId: destination.workspaceId,
+            gitRootId: destination.gitRootId
+        )
+        switch destination.content {
+        case let .commit(commit):
+            WorkspaceCommitDiffView(loader: loader, commit: commit)
+        case let .file(file):
+            WorkspaceFileDiffView(loader: loader, path: file.path, staged: file.stage == "staged", isBinary: file.isBinary)
+                .navigationTitle(file.stage == "staged" ? "Staged Changes" : "Unstaged Changes")
+                .toolbarTitleDisplayMode(.inline)
+                .toolbarBackground(IPadShellStyle.panel(for: colorScheme), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -91,7 +105,7 @@ struct IPadWorkspaceDetailView: View {
     }
 
     private var canSwipe: Bool {
-        coordinator.iPadNavigation.focusPresentation == .normal && notePath.isEmpty && coordinator.workspaceCommit == nil
+        coordinator.iPadNavigation.focusPresentation == .normal && notePath.isEmpty && coordinator.workspaceChange == nil
     }
 
     private var swipeBack: (() -> Void)? {
