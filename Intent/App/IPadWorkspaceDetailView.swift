@@ -38,6 +38,7 @@ struct IPadWorkspaceDetailView: View {
                 }
                 .modifier(IPadNavigationVisibility())
         }
+        .padding(.top, coordinator.workspaceChange == nil ? 0 : IPadShellLayout.headerInset)
         .onChange(of: coordinator.currentScreenDescription) {
             if !notePath.isEmpty { notePath = NavigationPath() }
         }
