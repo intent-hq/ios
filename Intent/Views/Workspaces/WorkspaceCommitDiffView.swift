@@ -20,12 +20,17 @@ struct WorkspaceCommitDiffView: View {
     @State private var showsFiles = false
     @State private var jumpPath: String?
     @State private var collapsedPaths: Set<String> = []
+    @State private var visibleFilePaths: Set<String> = []
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var retry = 0
     @State private var jumpControlHeight: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var hasOffscreenFiles: Bool {
+        !isLoading && errorMessage == nil && files.contains { !visibleFilePaths.contains($0.path) }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,7 +65,7 @@ struct WorkspaceCommitDiffView: View {
             changesContent
             .accessibilityIdentifier("commit.changes.scroll")
             .overlay(alignment: .bottomTrailing) {
-                if !files.isEmpty {
+                if hasOffscreenFiles {
                     jumpButton
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { jumpControlHeight = $0 }
                 }
@@ -91,7 +96,7 @@ struct WorkspaceCommitDiffView: View {
                 commitHeader
                 fileContent
             }
-            .padding(.bottom, jumpControlHeight + WorkspaceCommitLayout.padding)
+            .padding(.bottom, (hasOffscreenFiles ? jumpControlHeight : 0) + WorkspaceCommitLayout.padding)
         }
     }
 
@@ -192,6 +197,14 @@ struct WorkspaceCommitDiffView: View {
                 WorkspaceFileDiffView(loader: loader, path: file.path, commitHash: commit.hash, embedded: true)
             }
         }
+        .onScrollVisibilityChange(threshold: 1) { isVisible in
+            if isVisible {
+                visibleFilePaths.insert(file.path)
+            } else {
+                visibleFilePaths.remove(file.path)
+            }
+        }
+        .onDisappear { visibleFilePaths.remove(file.path) }
     }
 
     private func load() async {

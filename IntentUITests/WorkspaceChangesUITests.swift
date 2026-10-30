@@ -21,7 +21,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 
     @MainActor
     func testChangesTabOpensStagedUnstagedAndCommitDiffs() {
-        let app = openChanges()
+        let app = openChanges(largeText: true)
         let unstaged = app.buttons["changes.file.unstaged.Sources/Analytics.swift"].firstMatch
         reveal(unstaged, in: app)
         capture(app, name: "workspace-changes")
@@ -57,7 +57,18 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         capture(app, name: "commit-details")
         app.buttons["commit.view.Changes"].tap()
         XCTAssertEqual(source.value as? String, "Collapsed")
-        app.buttons["commit.jump"].tap()
+        let tests = app.buttons["commit.file.Tests/AnalyticsTests.swift"].firstMatch
+        reveal(tests, in: app)
+        tests.tap()
+        let jump = app.buttons["commit.jump"]
+        XCTAssertTrue(jump.waitForNonExistence(timeout: Fixture.timeout), "All collapsed files fit in the viewport")
+        capture(app, name: "commit-files-fit")
+        source.tap()
+        reveal(tests, in: app)
+        tests.tap()
+        XCTAssertTrue(jump.waitForExistence(timeout: Fixture.timeout), "Expanded diffs extend below the viewport")
+        capture(app, name: "commit-files-offscreen")
+        jump.tap()
         capture(app, name: "commit-file-picker")
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: Fixture.timeout))
@@ -174,9 +185,12 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     }
 
     @MainActor
-    private func openChanges() -> XCUIApplication {
+    private func openChanges(largeText: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data"]
+        if largeText {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"]
+        }
         app.launch()
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
@@ -219,7 +233,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         XCTAssertTrue(viewport.exists)
         XCTAssertTrue(line.isHittable)
         XCTAssertGreaterThanOrEqual(line.frame.minY, viewport.frame.minY)
-        XCTAssertLessThan(line.frame.minY - viewport.frame.minY, Fixture.maximumInitialLineOffset)
+        XCTAssertLessThan(line.frame.minY - viewport.frame.minY, max(Fixture.maximumInitialLineOffset, line.frame.height * 6))
         XCTAssertLessThan(line.frame.minX - viewport.frame.minX, Fixture.maximumLeadingInset)
     }
 
