@@ -12,6 +12,7 @@ enum WorkspaceChangesLayout {
 struct WorkspaceChangesView: View {
     let workspaceId: String
     let store: WorkspaceChangesStore
+    @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -51,10 +52,13 @@ struct WorkspaceChangesView: View {
         .task(id: workspaceId) {
             await store.startObserving(workspaceId: workspaceId)
         }
-        .onDisappear { store.stopObserving() }
+        .onDisappear {
+            store.stopObserving(preservingSnapshot: coordinator.workspaceCommit?.workspaceId == workspaceId)
+        }
         .onChange(of: store.selectedRootId) { _, _ in
             selectedFile = nil
             selectedCommit = nil
+            if coordinator.workspaceCommit?.workspaceId == workspaceId { coordinator.workspaceCommit = nil }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -189,7 +193,13 @@ struct WorkspaceChangesView: View {
     }
 
     private func commitRow(_ commit: WorkspaceCommit) -> some View {
-        Button { selectedCommit = commit } label: {
+        Button {
+            if coordinator.usesIPadShell {
+                coordinator.onSelectWorkspaceCommit(commit, workspaceId: workspaceId, gitRootId: store.selectedRootId)
+            } else {
+                selectedCommit = commit
+            }
+        } label: {
             WorkspaceChangesRow(title: commit.message.components(separatedBy: "\n").first ?? commit.message) {
                 metadataLayout {
                     HStack(spacing: WorkspaceChangesLayout.statsSpacing) {

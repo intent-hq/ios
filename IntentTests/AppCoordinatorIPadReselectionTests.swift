@@ -3,6 +3,23 @@ import Foundation
 import Testing
 
 extension AppCoordinatorTests {
+    @Test @MainActor func commitNavigationKeepsItsRepositoryAndClearsWhenLeavingTheWorkspace() {
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.usesIPadShell = true
+        coordinator.onSelectWorkspace("workspace-1")
+        let commit = WorkspaceCommit(hash: "abc123", message: "Change", author: "Sam", date: "", agentId: nil, isPushed: true)
+        coordinator.onSelectWorkspaceCommit(commit, workspaceId: "workspace-1", gitRootId: "ios")
+        #expect(coordinator.workspaceCommit?.gitRootId == "ios")
+        #expect(coordinator.workspaceCommit?.workspaceId == "workspace-1")
+        #expect(coordinator.workspaceCommit?.commit == commit)
+
+        coordinator.onSelectWorkspace("workspace-2")
+        #expect(coordinator.workspaceCommit == nil)
+        coordinator.onSelectWorkspaceCommit(commit, workspaceId: "workspace-2", gitRootId: nil)
+        coordinator.onSelectAgent("agent-2", workspaceId: "workspace-2", agentName: "Worker")
+        #expect(coordinator.workspaceCommit == nil)
+    }
+
     @Test @MainActor func onSelectAgent_bumpsConversationRequestId_afterBackAndReselect() {
         let wsId = "test-coord-reselect-\(UUID().uuidString)"
         defer { cleanupLastScreen() }

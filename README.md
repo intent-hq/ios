@@ -246,7 +246,9 @@ accessibility text sizes) and expands the chosen section. Changes and Details us
 the same switcher as workspace content. The Details tab exposes the available message,
 author, date, copyable full hash, and known push status; switching tabs preserves
 the Changes scroll position. Associated PRs and parent links are not supplied by
-the current commit model.
+the current commit model. On iPad, commits open in the main content pane from
+either the overview or workspace sidebar. Back preserves the previous page and
+repository selection; changing workspaces or repositories closes the commit.
 
 Regenerate and verify the assets with Node 24 or newer:
 
@@ -441,7 +443,7 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
 queue. Smoke coverage uses two balanced iPhone shards and an independent job for
-all seven focused iPad sidebar regressions. Each lane owns its build directory,
+all eight focused iPad navigation regressions, including commit viewing in the main pane. Each lane owns its build directory,
 disposable simulator, results, and evidence. All lanes prefer an idle
 self-hosted Mac; GitHub-hosted Macs handle overflow when the local pool is busy.
 Matrix fail-fast is

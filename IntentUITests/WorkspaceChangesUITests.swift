@@ -239,9 +239,87 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 
     @MainActor
     private func capture(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = UIDevice.current.userInterfaceIdiom == .pad ? XCUIScreen.main.screenshot() : app.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+}
+
+extension WorkspaceChangesUITests {
+    @MainActor
+    func testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad main pane navigation")
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            let app = XCUIApplication()
+            app.launchArguments = ["--demo-data", "-appThemePreference", appearance]
+            app.launch()
+            let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
+            XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+            workspace.tap()
+            app.buttons["Changes"].firstMatch.tap()
+            selectRepository("ios", in: app)
+            let overviewWidth = app.scrollViews["workspace.detail.scroll"].firstMatch.frame.width
+            openIPadCommit(in: app)
+            assertIPadCommitPane(in: app, minimumWidth: overviewWidth * 0.95)
+            capture(app, name: "ipad-commit-main-\(appearance)")
+            app.buttons["commit.view.Details"].tap()
+            XCTAssertTrue(app.scrollViews["commit.details"].waitForExistence(timeout: Fixture.timeout))
+            app.buttons["commit.view.Changes"].tap()
+
+            XCUIDevice.shared.orientation = .portrait
+            assertIPadCommitPane(in: app)
+            capture(app, name: "ipad-commit-portrait-\(appearance)")
+            app.buttons["commit.back"].tap()
+            XCTAssertTrue(app.buttons["changes.repository"].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertEqual(app.buttons["changes.repository"].value as? String, "ios")
+
+            // A commit selected beside a conversation also belongs to the main pane.
+            XCUIDevice.shared.orientation = .landscapeLeft
+            let agents = app.buttons["Agents"].firstMatch
+            reveal(agents, in: app, towardTop: true)
+            agents.tap()
+            let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+            reveal(agent, in: app)
+            agent.tap()
+            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+            app.buttons["Changes"].firstMatch.tap()
+            selectRepository("ios", in: app)
+            openIPadCommit(in: app)
+            assertIPadCommitPane(in: app)
+            XCTAssertTrue(app.buttons["changes.repository"].isHittable, "The sidebar stays interactive")
+            capture(app, name: "ipad-commit-from-sidebar-\(appearance)")
+            selectRepository("Main repository", in: app)
+            XCTAssertTrue(app.buttons["commit.back"].waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    private func openIPadCommit(in app: XCUIApplication) {
+        let commit = app.staticTexts["feat: add mobile analytics"].firstMatch
+        let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
+        for _ in 0..<Fixture.scrollAttempts {
+            if commit.exists, commit.isHittable { break }
+            overview.swipeUp()
+        }
+        XCTAssertTrue(commit.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        commit.tap()
+        XCTAssertTrue(app.buttons["commit.back"].waitForExistence(timeout: Fixture.timeout))
+        assertDiffLine(in: app, containing: "let mobileCount = 1")
+    }
+
+    @MainActor
+    private func assertIPadCommitPane(in app: XCUIApplication, minimumWidth: CGFloat = 0) {
+        let viewport = app.scrollViews["commit.changes.scroll"]
+        XCTAssertTrue(viewport.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        XCTAssertGreaterThanOrEqual(viewport.frame.width, minimumWidth)
+        XCTAssertGreaterThan(viewport.frame.maxY, app.frame.height * 0.85)
+        XCTAssertLessThan(app.navigationBars["Commit Changes"].frame.minY, app.frame.height * 0.15)
+        XCTAssertFalse(app.sheets.firstMatch.exists)
     }
 }

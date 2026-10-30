@@ -371,6 +371,10 @@ CAPTURES = {
         "testDismissedPromptRestoresAndClearsAfterSuccessfulRetry": ("restored-workspace-draft",),
     },
     "WorkspaceChangesUITests": {
+        "testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes": (
+            "ipad-commit-main-light", "ipad-commit-main-dark", "ipad-commit-portrait-light", "ipad-commit-portrait-dark",
+            "ipad-commit-from-sidebar-light", "ipad-commit-from-sidebar-dark",
+        ),
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
             "workspace-changes", "unstaged-diff", "commit-diff", "commit-details", "commit-file-search", "commit-file-picker",
             "commit-files-fit", "commit-files-offscreen",

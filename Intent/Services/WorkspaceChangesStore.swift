@@ -181,7 +181,7 @@ import Observation
     }
 
     /// Invalidates pending reads synchronously so a disappearing screen cannot be repopulated.
-    func stopObserving() {
+    func stopObserving(preservingSnapshot: Bool = false) {
         registration &+= 1
         revision &+= 1
         isObserving = false
@@ -192,6 +192,8 @@ import Observation
         eventHandlerId = nil
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
         subscriptionId = nil
+        // A commit pushed over Changes keeps its repository and rows for Back.
+        guard !preservingSnapshot else { return }
         workspaceId = nil
         roots = []
         selectedRootId = nil

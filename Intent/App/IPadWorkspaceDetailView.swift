@@ -11,12 +11,35 @@ struct IPadWorkspaceDetailView: View {
     @State private var isSwiping = false
 
     var body: some View {
+        @Bindable var coordinator = coordinator
         NavigationStack(path: $notePath) {
             content
                 .paneSwipe(isSwiping: $isSwiping, onBack: swipeBack, onForward: swipeForward)
                 .onPreferenceChange(WorkspaceFirstAgentPreference.self) { firstAgent = $0 }
                 .navigationDestination(for: NoteDestination.self) { destination in
                     note(destination, showsBackButton: true)
+                }
+                .navigationDestination(item: $coordinator.workspaceCommit) { destination in
+                    WorkspaceCommitDiffView(
+                        loader: WorkspaceDiffLoader(
+                            connectionManager: session.connection,
+                            workspaceId: destination.workspaceId,
+                            gitRootId: destination.gitRootId
+                        ),
+                        commit: destination.commit
+                    )
+                    .navigationBarBackButtonHidden()
+                    .nativeNavigationBackGesture()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            IntentIconButton(icon: .arrowLeft, label: "Back", showsBackground: false) {
+                                coordinator.workspaceCommit = nil
+                            }
+                            .accessibilityIdentifier("commit.back")
+                        }
+                        .intentToolbarSurface()
+                    }
+                    .modifier(IPadNavigationVisibility())
                 }
                 .modifier(IPadNavigationVisibility())
         }
@@ -67,7 +90,9 @@ struct IPadWorkspaceDetailView: View {
         return .opacity.combined(with: .offset(x: isOverview ? -IPadShellView.pageParallax : IPadShellView.pageParallax))
     }
 
-    private var canSwipe: Bool { coordinator.iPadNavigation.focusPresentation == .normal && notePath.isEmpty }
+    private var canSwipe: Bool {
+        coordinator.iPadNavigation.focusPresentation == .normal && notePath.isEmpty && coordinator.workspaceCommit == nil
+    }
 
     private var swipeBack: (() -> Void)? {
         guard canSwipe else { return nil }
