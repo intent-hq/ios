@@ -102,7 +102,7 @@ nonisolated enum WorkspaceDiffBuilder {
     private static func lines(in content: String) -> [String] {
         guard !content.isEmpty else { return [] }
         var result = content.components(separatedBy: "\n")
-        if content.hasSuffix("\n") {
+        if content.utf8.last == UInt8(ascii: "\n") {
             result.removeLast()
         } else {
             result[result.count - 1] += "  ⟵ No newline at end of file"

@@ -2,6 +2,10 @@ import Foundation
 
 enum DemoChangesFixtures {
     static let commitHash = "a12bc34de56f789012345678901234567890abcdef"
+    private static let testSource = "import Testing\n\n@Test func recordsUsage() {\n    #expect(Analytics().count == 1)\n}\n"
+    private static let testLineCount = testSource.split(separator: "\n", omittingEmptySubsequences: false).count - 1
+    private static let longCommitLineCount = 80
+    private static var usesLongCommit: Bool { ProcessInfo.processInfo.arguments.contains("--demo-long-commit") }
 
     static func response(for method: String, params: [String: Any]) -> Any? {
         if let response = DemoChangesRootFixtures.response(for: method, params: params) { return response }
@@ -37,21 +41,45 @@ enum DemoChangesFixtures {
         case "git.diffs":
             return workingDiff(params: params)
         case "git.commitDetails":
-            return [
-                "commitHash": commitHash,
-                "fileDetails": [
-                    ["path": "Sources/Analytics.swift", "additions": 1, "deletions": 1],
-                    ["path": "Tests/AnalyticsTests.swift", "additions": 1, "deletions": 0]
-                ]
-            ]
+            return commitDetails
         case "git.branchDiff":
-            let path = (params["paths"] as? [String])?.first ?? ""
-            return [["file": path, "oldContent": "let count = 0\n", "newContent": "let count = 1\n"]]
+            return commitDiff(params: params)
         case "events.subscribe" where (params["replaceGroup"] as? String)?.hasPrefix("ios-changes-") == true:
             return ["subscriptionId": UUID().uuidString]
         default:
             return nil
         }
+    }
+
+    private static var commitDetails: [String: Any] {
+        [
+            "commitHash": commitHash,
+            "fileDetails": [
+                [
+                    "path": "Sources/Analytics.swift", "additions": usesLongCommit ? longCommitLineCount : 1,
+                    "deletions": usesLongCommit ? 0 : 1
+                ],
+                [
+                    "path": "Tests/AnalyticsTests.swift", "additions": usesLongCommit ? longCommitLineCount : testLineCount,
+                    "deletions": 0
+                ]
+            ]
+        ]
+    }
+
+    private static func commitDiff(params: [String: Any]) -> [[String: Any]] {
+        let path = (params["paths"] as? [String])?.first ?? ""
+        if usesLongCommit {
+            let name = path.hasPrefix("Tests/") ? "testValue" : "value"
+            let source = (1...longCommitLineCount).map { "let \(name)\($0) = \($0)" }.joined(separator: "\n") + "\n"
+            return [["file": path, "oldContent": "", "newContent": source]]
+        }
+        if path.hasPrefix("Tests/") {
+            return [["file": path, "oldContent": "", "newContent": testSource]]
+        }
+        let source = "import Foundation\n\nstruct Analytics {\n    let count = 0\n}\n"
+        let updated = source.replacingOccurrences(of: "count = 0", with: "count = 1")
+        return [["file": path, "oldContent": source, "newContent": updated]]
     }
 
     private static func workingDiff(params: [String: Any]) -> [[String: Any]] {

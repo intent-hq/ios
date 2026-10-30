@@ -3,6 +3,62 @@ import Foundation
 import Testing
 
 extension AppCoordinatorTests {
+    @Test @MainActor func commitNavigationKeepsItsRepositoryAndClearsWhenLeavingTheWorkspace() {
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.usesIPadShell = true
+        coordinator.onSelectWorkspace("workspace-1")
+        let commit = WorkspaceCommit(hash: "abc123", message: "Change", author: "Sam", date: "", agentId: nil, isPushed: true)
+        coordinator.onSelectWorkspaceCommit(commit, workspaceId: "workspace-1", gitRootId: "ios")
+        #expect(coordinator.workspaceChange?.gitRootId == "ios")
+        #expect(coordinator.workspaceChange?.workspaceId == "workspace-1")
+        if case let .commit(selected) = coordinator.workspaceChange?.content {
+            #expect(selected == commit)
+        } else {
+            Issue.record("Expected a commit destination")
+        }
+
+        coordinator.onSelectWorkspace("workspace-2")
+        #expect(coordinator.workspaceChange == nil)
+        coordinator.onSelectWorkspaceCommit(commit, workspaceId: "workspace-2", gitRootId: nil)
+        coordinator.onSelectAgent("agent-2", workspaceId: "workspace-2", agentName: "Worker")
+        #expect(coordinator.workspaceChange == nil)
+    }
+
+    @Test @MainActor func fileDiffNavigationReplacesTheViewerAndKeepsItsScope() {
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.usesIPadShell = true
+        coordinator.onSelectAgent("agent-1", workspaceId: "workspace-1", agentName: "Worker")
+        let screen = coordinator.currentScreenDescription
+        let file = WorkspaceChange(
+            id: "staged:Sources/Analytics.swift",
+            path: "Sources/Analytics.swift",
+            stage: "staged",
+            status: "modified",
+            additions: 1,
+            deletions: 0,
+            isBinary: false,
+            agentName: nil
+        )
+        coordinator.onSelectWorkspaceFileDiff(file, workspaceId: "workspace-1", gitRootId: "ios")
+        #expect(coordinator.workspaceChange?.gitRootId == "ios")
+        #expect(coordinator.workspaceChange?.workspaceId == "workspace-1")
+        if case let .file(selected) = coordinator.workspaceChange?.content {
+            #expect(selected == file)
+        } else {
+            Issue.record("Expected a file diff destination")
+        }
+        #expect(coordinator.currentScreenDescription == screen)
+        let fileID = coordinator.workspaceChange?.id
+        let commit = WorkspaceCommit(hash: "abc123", message: "Change", author: "Sam", date: "", agentId: nil, isPushed: true)
+        coordinator.onSelectWorkspaceCommit(commit, workspaceId: "workspace-1", gitRootId: "ios")
+        #expect(coordinator.workspaceChange?.id != fileID)
+        coordinator.workspaceChange = nil
+        #expect(coordinator.currentScreenDescription == screen)
+        coordinator.onSelectWorkspaceFileDiff(file, workspaceId: "workspace-1", gitRootId: nil)
+        coordinator.onSelectWorkspace("workspace-2")
+        #expect(coordinator.workspaceChange == nil)
+    }
+
     @Test @MainActor func onSelectAgent_bumpsConversationRequestId_afterBackAndReselect() {
         let wsId = "test-coord-reselect-\(UUID().uuidString)"
         defer { cleanupLastScreen() }

@@ -160,6 +160,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     let subtitle: LocalizedStringKey?
     var backLabel: LocalizedStringKey = "Back"
     var backIdentifier = "conversation.back"
+    var titleIdentifier = "conversation.header.title"
     var leadingIcon: ImageResource = .arrowLeft
     var isLeadingActionEnabled = true
     var showsBackground = true
@@ -302,7 +303,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         .tracking(Design.Typography.smallTracking)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(showsTitle ? "conversation.header.title" : "")
+        .accessibilityIdentifier(showsTitle ? titleIdentifier : "")
     }
 
     @ViewBuilder private var subtitleText: some View {

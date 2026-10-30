@@ -11,12 +11,25 @@ struct IPadWorkspaceDetailView: View {
     @State private var isSwiping = false
 
     var body: some View {
+        @Bindable var coordinator = coordinator
         NavigationStack(path: $notePath) {
             content
                 .paneSwipe(isSwiping: $isSwiping, onBack: swipeBack, onForward: swipeForward)
                 .onPreferenceChange(WorkspaceFirstAgentPreference.self) { firstAgent = $0 }
                 .navigationDestination(for: NoteDestination.self) { destination in
                     note(destination, showsBackButton: true)
+                }
+                .navigationDestination(item: $coordinator.workspaceChange) { destination in
+                    VStack(spacing: 0) {
+                        changeHeader(destination)
+                        changeViewer(destination)
+                    }
+                    .id(destination.id)
+                    .environment(\.workspaceViewerUsesPanel, true)
+                    .navigationBarBackButtonHidden()
+                    .nativeNavigationBackGesture()
+                    .toolbar(.hidden, for: .navigationBar)
+                    .modifier(IPadNavigationVisibility())
                 }
                 .modifier(IPadNavigationVisibility())
         }
@@ -27,6 +40,44 @@ struct IPadWorkspaceDetailView: View {
             if !notePath.isEmpty { notePath = NavigationPath() }
         }
         .task { await DemoFixtures.reselectConversationIfRequested(coordinator: coordinator) }
+    }
+
+    private func changeHeader(_ destination: WorkspaceChangeDestination) -> some View {
+        WorkspaceNavigationHeader(
+            title: changeTitle(destination),
+            subtitle: nil,
+            backIdentifier: destination.backIdentifier,
+            titleIdentifier: "workspace.change.title",
+            usesConversationLayout: true,
+            onBack: { coordinator.workspaceChange = nil },
+            actions: {
+                Color.clear
+                    .frame(width: WorkspaceDetailStyle.controlSize, height: WorkspaceDetailStyle.controlSize)
+                    .accessibilityHidden(true)
+            }
+        )
+    }
+
+    private func changeTitle(_ destination: WorkspaceChangeDestination) -> String {
+        switch destination.content {
+        case .commit: "Commit Changes"
+        case let .file(file): file.stage == "staged" ? "Staged Changes" : "Unstaged Changes"
+        }
+    }
+
+    @ViewBuilder
+    private func changeViewer(_ destination: WorkspaceChangeDestination) -> some View {
+        let loader = WorkspaceDiffLoader(
+            connectionManager: session.connection,
+            workspaceId: destination.workspaceId,
+            gitRootId: destination.gitRootId
+        )
+        switch destination.content {
+        case let .commit(commit):
+            WorkspaceCommitDiffView(loader: loader, commit: commit)
+        case let .file(file):
+            WorkspaceFileDiffView(loader: loader, path: file.path, staged: file.stage == "staged", isBinary: file.isBinary)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -67,7 +118,9 @@ struct IPadWorkspaceDetailView: View {
         return .opacity.combined(with: .offset(x: isOverview ? -IPadShellView.pageParallax : IPadShellView.pageParallax))
     }
 
-    private var canSwipe: Bool { coordinator.iPadNavigation.focusPresentation == .normal && notePath.isEmpty }
+    private var canSwipe: Bool {
+        coordinator.iPadNavigation.focusPresentation == .normal && notePath.isEmpty && coordinator.workspaceChange == nil
+    }
 
     private var swipeBack: (() -> Void)? {
         guard canSwipe else { return nil }

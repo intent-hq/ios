@@ -193,6 +193,82 @@ checks missing and late callbacks, error propagation, and cancellation without
 depending on a healthy WebKit process. CI retains unit results and console logs
 on cancellation as well as failure so interrupted renderer runs can be inspected.
 
+### Offline file syntax highlighting with Pierre
+
+File previews and workspace diffs use **@pierre/highlights 0.3.0**, bundled in
+`Intent/Resources/Highlights/` with its WebAssembly engine, Pierre Light/Dark
+themes, full license notices, and `vendor.json` checksums. The published package
+contains 120 syntax lexers plus plain text. Normal app builds use the checked-in
+assets; no Node installation, CDN, or grammar downloads are needed at runtime.
+
+The local page exposes asynchronous
+`window.intentHighlights.highlight({ source, path, dark })`, returning
+`{ language, runs: [{ location, length, color, fontStyle }] }`. Ranges use UTF-16
+code units in the unchanged source, colors are six-digit hex RGB, and font styles
+use Shiki flags. `ready` resolves to a boolean; `status` is `loading`, `ready`, or
+`failed`. Source text is never inserted into the page. CSP blocks network access
+and JavaScript evaluation while permitting the bundled WebAssembly engine.
+
+Unknown filenames, engine failures, source above 512 KiB UTF-8, lines above
+10,000 UTF-16 code units, or output above 60,000 runs return empty runs for native
+plain-text fallback. These are prototype highlighting limits, independent of
+the existing 5 MiB file-opening limit. A shared, nonpersistent `WKWebView`
+returns token ranges to the native TextKit 2 viewer. Only foreground colors
+change, preserving font metrics, text selection, scrolling, and original-file
+contents. Requests cancel on file/theme changes or dismissal and fall back after
+five seconds; JavaScript cannot interrupt synchronous WebAssembly tokenization.
+
+File previews include a native line-number gutter, 8-point horizontal padding,
+and 16-point vertical padding.
+The header uses the shared sidebar tint, a flat Back action, and a file-options
+menu with Copy contents, Copy path, Wrap lines, and Show line numbers. Copy uses
+the original source text or workspace file path. Both display toggles are on by
+default and remembered across previews; turning wrapping off enables horizontal
+scrolling with a pinned line-number gutter. Hiding numbers reclaims the gutter's
+width while preserving the reading position and selection.
+Numbers follow source lines, including blank lines and a final empty line;
+wrapped continuations do not repeat numbers. The gutter uses visible TextKit 2
+layout fragments and stays outside the selectable/shared text. Source line
+offsets are indexed during background file loading.
+
+Diffs retain native old/new numbers, markers and change backgrounds. Commit
+diffs tokenize the complete old and new sources separately. Working and staged
+diffs only receive hunks from the daemon, so each contiguous side starts with
+fresh lexer state; a comment or string that begins in omitted context can have
+incomplete colors. Unknown or over-budget diffs remain plain. Theme and file
+changes cancel highlighting and discard stale results.
+
+Commit viewing uses one vertically scrolling Changes page with collapsible file
+sections and independently scrolling horizontal diffs. Each filename stays pinned
+above its diff until the next file header takes its place. A floating Jump to file
+control appears only while a file section is not fully visible, and opens a
+searchable half sheet (expandable to full height; full height at
+accessibility text sizes) and expands the chosen section. Changes and Details use
+the same switcher as workspace content. The Details tab exposes the available message,
+author, date, copyable full hash, and known push status; switching tabs preserves
+the Changes scroll position. Associated PRs and parent links are not supplied by
+the current commit model. On iPad, commits and staged/unstaged file diffs open in
+the main content pane from either the overview or workspace sidebar, using the shell’s background
+colors. Back preserves the previous page and repository selection; changing
+workspaces or repositories closes the viewer.
+
+Regenerate and verify the assets with Node 24 or newer:
+
+```bash
+cd scripts/highlights
+npm ci
+npm run build
+npx playwright install chromium webkit
+npm test
+```
+
+The suite checks the shipped bundle, filename resolution, Unicode/CRLF offsets,
+multiline syntax, both themes, budgets, WebAssembly failure, and offline CSP in
+Chromium and WebKit. `HIGHLIGHTS_BROWSERS=webkit npm test` selects one browser.
+Review generated assets, notices, provenance and the lockfile together. Browser
+tests validate the tokenizer contract; native screenshots and device timings
+remain separate evidence for the prototype.
+
 ## Development
 
 ### Clean-checkout prerequisites
@@ -369,7 +445,8 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
 queue. Smoke coverage uses two balanced iPhone shards and an independent job for
-all seven focused iPad sidebar regressions. Each lane owns its build directory,
+all eight focused iPad navigation regressions, including commit and file diff
+viewing in the main pane. Each lane owns its build directory,
 disposable simulator, results, and evidence. All lanes prefer an idle
 self-hosted Mac; GitHub-hosted Macs handle overflow when the local pool is busy.
 Matrix fail-fast is

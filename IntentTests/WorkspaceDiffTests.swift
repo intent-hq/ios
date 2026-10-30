@@ -45,10 +45,26 @@ struct WorkspaceDiffTests {
         #expect(hunks.last?.lines.last?.newNumber == Fixture.finalLineNumber)
     }
 
-    @Test func newlineOnlyChangeIsVisible() throws {
-        let hunks = try WorkspaceDiffBuilder.hunks(old: "text", new: "text\n")
+    @Test(arguments: ["\n", "\r\n"])
+    func newlineOnlyChangeIsVisible(ending: String) throws {
+        let hunks = try WorkspaceDiffBuilder.hunks(old: "text", new: "text" + ending)
         #expect(hunks.first?.lines.map(\.type) == [.deletion, .addition])
         #expect(hunks.first?.lines.first?.content.contains("No newline") == true)
+        #expect(hunks.first?.lines.last?.content.contains("No newline") == false)
+    }
+
+    @Test(arguments: ["\n", "\r\n"])
+    func terminatedLinesHaveNoPhantomRowOrMissingNewlineAnnotation(ending: String) throws {
+        let hunks = try WorkspaceDiffBuilder.hunks(old: "first\(ending)old\(ending)", new: "first\(ending)new\(ending)")
+        let hunk = try #require(hunks.first)
+        #expect(hunk.oldLines == 2)
+        #expect(hunk.newLines == 2)
+        #expect(hunk.lines.map(\.type) == [.context, .deletion, .addition])
+        #expect(hunk.lines.map(\.oldNumber) == [1, 2, nil])
+        #expect(hunk.lines.map(\.newNumber) == [1, nil, 2])
+        #expect(hunk.lines.allSatisfy { !$0.content.contains("No newline") })
+        let suffix = ending == "\r\n" ? "\r" : ""
+        #expect(hunk.lines.map(\.content) == ["first" + suffix, "old" + suffix, "new" + suffix])
     }
 
     @Test func rejectsBinaryAndExcessiveWork() {
@@ -102,8 +118,10 @@ struct WorkspaceDiffLoaderTests {
             ["file": "file.swift", "oldContent": "before\n", "newContent": "after\n"]
         ]
         let loader = WorkspaceDiffLoader(connectionManager: connection, workspaceId: "workspace")
-        let hunks = try await loader.commitFile(path: "file.swift", hash: "commit")
-        #expect(hunks.first?.lines.map(\.content) == ["before", "after"])
+        let presentation = try await loader.commitPresentation(path: "file.swift", hash: "commit")
+        #expect(presentation.hunks.first?.lines.map(\.content) == ["before", "after"])
+        #expect(presentation.oldSource == "before\n")
+        #expect(presentation.newSource == "after\n")
         let request = try #require(connection.requestLog.first)
         #expect(request.params["baseRef"] as? String == "commit^")
         #expect(request.params["targetRef"] as? String == "commit")

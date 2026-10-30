@@ -941,6 +941,8 @@ jobs:
             IntentUITests/IPadSidebarUITests/testRailRemainsReachableWithAccessibilityText
             IntentUITests/IPadSidebarUITests/testRepeatedAgentSelectionReturnsFromChildAndPreservesDraft
             IntentUITests/IPadSidebarUITests/testRepeatedSidebarTogglesWithAgentHistoryPreserveDraft
+            IntentUITests/WorkspaceChangesUITests/testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes
+            IntentUITests/WorkspaceChangesUITests/testCommitFilenamesStayPinnedWhileScrollingInBothThemes
         run: |
           set -o pipefail
           scripts/xcodebuild.sh test-without-building-ui 2>&1 | tee ui-tests.log
