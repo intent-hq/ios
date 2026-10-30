@@ -7,6 +7,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         static let scrollAttempts = 4
         static let maximumInitialLineOffset: CGFloat = 100
         static let maximumLeadingInset: CGFloat = 40
+        static let railSettleDuration: TimeInterval = 0.5
     }
 
     override func setUpWithError() throws {
@@ -196,13 +197,37 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         // Narrow iPads retain the workspace list behind a closed sidebar.
         let workspaces = app.buttons["ipad.rail.workspaces"]
-        if workspaces.exists { workspaces.tap() }
+        if workspaces.exists {
+            waitForStableRailButton(workspaces)
+            workspaces.tap()
+            XCTAssertTrue(workspaces.wait(for: \.isSelected, toEqual: true, timeout: Fixture.timeout))
+        }
         XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
         workspace.tap()
         let changes = app.buttons["Changes"].firstMatch
         reveal(changes, in: app)
         changes.tap()
         return app
+    }
+
+    @MainActor
+    private func waitForStableRailButton(_ button: XCUIElement) {
+        var previousFrame: CGRect?
+        var stableSince = Date()
+        let settled = waitUntil(timeout: Fixture.timeout) {
+            guard button.exists, button.isEnabled, button.isHittable else {
+                previousFrame = nil
+                stableSince = Date()
+                return false
+            }
+            let currentFrame = button.frame
+            if currentFrame != previousFrame {
+                previousFrame = currentFrame
+                stableSince = Date()
+            }
+            return Date().timeIntervalSince(stableSince) >= Fixture.railSettleDuration
+        }
+        XCTAssertTrue(settled, "Rail button must stop moving before the physical tap")
     }
 
     @MainActor
