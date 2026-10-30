@@ -114,6 +114,41 @@ struct FileLineIndexTests {
     }
 
     @MainActor
+    @Test func hidingLineNumbersReclaimsWidthAndPreservesReadingPosition() throws {
+        let container = LineNumberTextContainer()
+        let view = container.textView
+        view.font = .monospacedSystemFont(ofSize: 17, weight: .regular)
+        view.isEditable = false
+        let source = String(repeating: "// a long source line with 👋 and extra words for wrapping\r\n", count: 100)
+        view.setSource(source)
+        view.setShowLineNumbers(false)
+        container.frame = CGRect(x: 0, y: 0, width: 320, height: 240)
+        container.layoutIfNeeded()
+        #expect(view.gutter.isHidden)
+        #expect(view.textContainerInset.left == view.textContainerInset.right)
+        let selection = NSRange(location: 3, length: 12)
+        view.selectedRange = selection
+        for wraps in [true, false] {
+            view.setWrapLines(wraps)
+            view.setContentOffset(CGPoint(x: wraps ? 0 : 100, y: 800), animated: false)
+            view.layoutIfNeeded()
+            let original = try #require(view.visibleLineLabels().first?.number)
+            let textWidth = view.textContainer.size.width
+            for show in [true, false] {
+                view.setShowLineNumbers(show)
+                #expect(view.gutter.isHidden == !show)
+                #expect(abs(try #require(view.visibleLineLabels().first?.number) - original) <= 1)
+                #expect(view.contentOffset.x == (wraps ? 0 : 100))
+                #expect(view.selectedRange == selection)
+                #expect(view.text == source)
+                if wraps {
+                    #expect(show ? view.textContainer.size.width < textWidth : view.textContainer.size.width == textWidth)
+                }
+            }
+        }
+    }
+
+    @MainActor
     @Test func emptyAndTrailingLinesHaveNumbers() {
         let view = LineNumberTextView()
         view.frame = CGRect(x: 0, y: 0, width: 320, height: 240)

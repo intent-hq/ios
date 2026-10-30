@@ -17,6 +17,7 @@ struct TextLinkPreviewView: View {
     @State private var hasFailed = false
     @State private var attempt = 0
     @AppStorage("fileViewerWrapLines") private var wrapLines = true
+    @AppStorage("fileViewerShowLineNumbers") private var showLineNumbers = true
 
     private var fileLoader: WorkspaceFileImageLoader {
         loaderOverride ?? session?.workspaceFileImageLoader ?? .shared
@@ -53,8 +54,27 @@ struct TextLinkPreviewView: View {
 
     private var fileMenu: some View {
         Menu {
-            Toggle("Wrap lines", isOn: $wrapLines)
-                .accessibilityIdentifier("text.wrap")
+            Section {
+                Button {
+                    guard let file else { return }
+                    copy(file.content)
+                } label: {
+                    Label("Copy contents", image: "Copy")
+                }
+                .accessibilityIdentifier("text.copyContents")
+                Button {
+                    copy(link.path)
+                } label: {
+                    Label("Copy path", image: "File")
+                }
+                .accessibilityIdentifier("text.copyPath")
+            }
+            Section {
+                Toggle("Wrap lines", isOn: $wrapLines)
+                    .accessibilityIdentifier("text.wrap")
+                Toggle("Show line numbers", isOn: $showLineNumbers)
+                    .accessibilityIdentifier("text.lineNumbers")
+            }
         } label: {
             ToolbarOverflowLabel()
         }
@@ -64,10 +84,15 @@ struct TextLinkPreviewView: View {
         .accessibilityIdentifier("text.options")
     }
 
+    private func copy(_ text: String) {
+        UIPasteboard.general.string = text
+        HapticManager.notification(.success)
+    }
+
     @ViewBuilder
     private var content: some View {
         if let file {
-            WorkspaceTextFileView(file: file, wrapLines: wrapLines)
+            WorkspaceTextFileView(file: file, wrapLines: wrapLines, showLineNumbers: showLineNumbers)
         } else if hasFailed {
             ContentUnavailableView {
                 Label("Text file unavailable", systemImage: "doc.text")

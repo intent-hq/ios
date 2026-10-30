@@ -6,6 +6,7 @@ import UIKit
 struct WorkspaceTextFileView: UIViewRepresentable {
     let file: WorkspaceTextFile
     var wrapLines = true
+    var showLineNumbers = true
     @Environment(\.colorScheme) private var colorScheme
 
     func makeUIView(context _: Context) -> LineNumberTextContainer {
@@ -32,6 +33,7 @@ struct WorkspaceTextFileView: UIViewRepresentable {
         let view = container.textView
         context.coordinator.update(view, file: file, dark: colorScheme == .dark)
         view.setWrapLines(wrapLines)
+        view.setShowLineNumbers(showLineNumbers)
     }
 
     static func dismantleUIView(_: LineNumberTextContainer, coordinator: Coordinator) {

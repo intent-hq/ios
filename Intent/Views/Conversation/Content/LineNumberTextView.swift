@@ -31,6 +31,7 @@ final class LineNumberTextView: UITextView {
     let gutter = FileLineNumberGutter()
     private(set) var lineIndex = FileLineIndex("")
     private var wrapsLines = true
+    private var showsLineNumbers = true
     private var unwrappedWidth: CGFloat = 0
 
     init() {
@@ -82,7 +83,22 @@ final class LineNumberTextView: UITextView {
         restoreAnchor(anchor)
     }
 
-    private func restoreAnchor(_ anchor: LineLabel?) {
+    func setShowLineNumbers(_ enabled: Bool) {
+        guard showsLineNumbers != enabled else { return }
+        layoutIfNeeded()
+        let selection = selectedRange
+        let anchor = visibleLineLabels().first
+        let horizontalOffset = contentOffset.x
+        showsLineNumbers = enabled
+        gutter.isHidden = !enabled
+        unwrappedWidth = 0
+        setNeedsLayout()
+        layoutIfNeeded()
+        selectedRange = selection
+        restoreAnchor(anchor, horizontalOffset: horizontalOffset)
+    }
+
+    private func restoreAnchor(_ anchor: LineLabel?, horizontalOffset: CGFloat = 0) {
         var proposedY = contentOffset.y
         if let anchor, let manager = textLayoutManager, let content = manager.textContentManager,
            let location = content.location(content.documentRange.location, offsetBy: lineIndex.starts[anchor.number - 1]) {
@@ -90,7 +106,12 @@ final class LineNumberTextView: UITextView {
             proposedY = origin + textContainerInset.top + numberFont.ascender - anchor.baseline
         }
         let maximumY = max(-adjustedContentInset.top, contentSize.height - bounds.height + adjustedContentInset.bottom)
-        setContentOffset(CGPoint(x: 0, y: min(maximumY, max(-adjustedContentInset.top, proposedY))), animated: false)
+        let maximumX = max(0, contentSize.width - bounds.width)
+        let offset = CGPoint(
+            x: min(maximumX, horizontalOffset),
+            y: min(maximumY, max(-adjustedContentInset.top, proposedY))
+        )
+        setContentOffset(offset, animated: false)
         textLayoutManager?.textViewportLayoutController.layoutViewport()
         setNeedsLayout()
         layoutIfNeeded()
@@ -102,7 +123,7 @@ final class LineNumberTextView: UITextView {
         let width = ceil(number.size(withAttributes: [.font: numberFont]).width)
         let inset = UIEdgeInsets(
             top: Layout.verticalPadding,
-            left: Layout.horizontalPadding + width + Layout.gutterGap,
+            left: Layout.horizontalPadding + (showsLineNumbers ? width + Layout.gutterGap : 0),
             bottom: Layout.verticalPadding,
             right: Layout.horizontalPadding
         )

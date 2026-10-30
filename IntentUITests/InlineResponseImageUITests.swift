@@ -411,7 +411,7 @@ extension InlineResponseImageUITests {
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
         assertTextViewer(in: app)
-        assertWrapToggle(in: app)
+        assertFileOptions(in: app)
         let close = app.buttons["text.close"].firstMatch
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
@@ -441,16 +441,24 @@ extension InlineResponseImageUITests {
     }
 
     @MainActor
-    private func assertWrapToggle(in app: XCUIApplication) {
+    private func assertFileOptions(in app: XCUIApplication) {
         let options = app.buttons["text.options"]
+        let content = app.textViews["text.content"].firstMatch
+        let original = content.value as? String
+        for title in ["Copy contents", "Copy path", "Show line numbers", "Show line numbers"] {
+            options.tap()
+            let action = app.buttons[title].firstMatch
+            XCTAssertTrue(action.waitForExistence(timeout: Fixture.timeout))
+            action.tap()
+            XCTAssertTrue(action.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertEqual(content.value as? String, original)
+        }
         XCTAssertTrue(options.isHittable)
         options.tap()
         let wrap = app.buttons["Wrap lines"].firstMatch
         XCTAssertTrue(wrap.waitForExistence(timeout: Fixture.timeout))
         captureMedia(app, named: "Text viewer wrap menu")
         wrap.tap()
-        let content = app.textViews["text.content"].firstMatch
-        let original = content.value as? String
         captureMedia(app, named: "Text viewer after toggling wrapping")
         content.swipeLeft()
         XCTAssertEqual(content.value as? String, original)
