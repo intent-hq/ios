@@ -341,7 +341,9 @@ private struct ConnectionPairingActions: View {
                 }
             )
         }
+        #if !targetEnvironment(macCatalyst)
         .fullScreenCover(isPresented: $showQRScanner) { QRScannerView(onPaired: onPaired) }
+        #endif
         .sheet(isPresented: $showManualEntry) { ManualTokenEntryView(onPaired: onPaired) }
     }
 }

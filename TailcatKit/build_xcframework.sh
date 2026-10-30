@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds TailcatKit.xcframework from the Go wrapper in this directory
-# with gomobile bind, for iOS devices and simulators.
+# with gomobile bind, for iOS devices, simulators, and Mac Catalyst.
 #
 # Requires: macOS with Xcode command line tools and a Go toolchain
 # (>= the version in go.mod). The build is reproducible: tailcat and
@@ -47,7 +47,7 @@ rm -rf build/TailcatKit.xcframework
 
 echo "== gomobile bind =="
 gomobile bind \
-  -target ios,iossimulator \
+  -target ios,iossimulator,maccatalyst \
   -iosversion 16.0 \
   -trimpath \
   -ldflags "-s -w" \

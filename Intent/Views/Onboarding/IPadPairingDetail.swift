@@ -30,7 +30,11 @@ struct IPadPairingDetail: View {
     @ViewBuilder private var pairingContent: some View {
         switch mode {
         case .qrCode:
+            #if targetEnvironment(macCatalyst)
+            ManualTokenEntryView(onPaired: paired, isEmbedded: true, onCancel: cancel)
+            #else
             QRScannerView(onPaired: paired, isEmbedded: true, onCancel: cancel)
+            #endif
         case .manual:
             ManualTokenEntryView(onPaired: paired, isEmbedded: true, onCancel: cancel)
         }

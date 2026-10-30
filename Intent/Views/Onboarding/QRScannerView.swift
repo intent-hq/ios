@@ -1,3 +1,4 @@
+#if !targetEnvironment(macCatalyst)
 import SwiftUI
 #if !os(visionOS)
 @preconcurrency import AVFoundation
@@ -361,4 +362,5 @@ struct QRCameraPreview: UIViewControllerRepresentable {
         }
     }
 }
+#endif
 #endif

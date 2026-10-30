@@ -21,7 +21,9 @@ struct SettingsPairingSection: View {
                 }
             )
         }
+        #if !targetEnvironment(macCatalyst)
         .fullScreenCover(isPresented: $showQRScanner, onDismiss: refreshConnections) { QRScannerView(onPaired: handlePaired) }
+        #endif
         .sheet(isPresented: $showManualEntry, onDismiss: refreshConnections) {
             ManualTokenEntryView(onPaired: handlePaired)
                 .preferredColorScheme(colorScheme)

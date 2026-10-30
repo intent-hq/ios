@@ -2,8 +2,8 @@ import CoreText
 import SwiftUI
 
 /// The pairing paths PairingView offers, platform-filtered: visionOS exposes
-/// no camera to third-party apps, so live QR scanning is not a viable path
-/// there and is excluded from the options list.
+/// no camera to third-party apps, and Mac Catalyst has no VisionKit scanner,
+/// so those platforms offer manual pairing instead.
 enum PairingOption: Equatable {
     case manualEntry
     case qrScan
@@ -11,7 +11,7 @@ enum PairingOption: Equatable {
 
     /// Whether live camera QR scanning exists on this platform.
     static var platformSupportsCameraScanning: Bool {
-        #if os(visionOS)
+        #if os(visionOS) || targetEnvironment(macCatalyst)
         false
         #else
         true
@@ -49,7 +49,9 @@ struct PairingView: View {
         NavigationStack {
             pairingContent
                 .toolbar(.hidden, for: .navigationBar)
+                #if !targetEnvironment(macCatalyst)
                 .fullScreenCover(isPresented: $showQRScanner) { QRScannerView() }
+                #endif
                 .sheet(isPresented: $showManualEntry) { ManualTokenEntryView() }
                 .sheet(isPresented: $showConnections) { ConnectionsView() }
         }
