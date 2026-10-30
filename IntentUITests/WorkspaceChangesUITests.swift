@@ -192,8 +192,12 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"]
         }
         app.launch()
-        let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        let workspace = app.buttons["workspace.row.demo-ws-dashboard"]
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        // Narrow iPads retain the workspace list behind a closed sidebar.
+        let workspaces = app.buttons["ipad.rail.workspaces"]
+        if workspaces.exists { workspaces.tap() }
+        XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
         workspace.tap()
         let changes = app.buttons["Changes"].firstMatch
         reveal(changes, in: app)
@@ -253,6 +257,8 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 extension WorkspaceChangesUITests {
     @MainActor
     func testCommitFilenamesStayPinnedWhileScrollingInBothThemes() {
+        // Exercise the narrow iPad launch without depending on the previous test's orientation.
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {
             let app = openChanges(launchArguments: ["--demo-long-commit", "-appThemePreference", appearance])
             let commit = app.staticTexts["feat: add usage analytics"].firstMatch
