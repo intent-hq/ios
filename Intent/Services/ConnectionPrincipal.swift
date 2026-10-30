@@ -100,8 +100,11 @@ enum PairingClientIdentity {
         return created
     }
 
-    static func parameters(defaults: UserDefaults = .standard) -> [String: Any] {
-        ["clientId": identifier(defaults: defaults), "name": "Intent", "deviceKind": deviceKind, "capabilities": [String: Bool]()]
+    static func parameters(defaults: UserDefaults = .standard, browserNavigation: Bool = false) -> [String: Any] {
+        [
+            "clientId": identifier(defaults: defaults), "name": "Intent", "deviceKind": deviceKind,
+            "capabilities": ["browserNavigation": browserNavigation, "browserExec": false]
+        ]
     }
 
     private static var deviceKind: String {

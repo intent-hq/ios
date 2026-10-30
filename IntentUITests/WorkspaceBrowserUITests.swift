@@ -4,6 +4,23 @@ nonisolated final class WorkspaceBrowserUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
+    func testAgentRequestedNativePreviewPresentsWithoutTappingALink() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo-data", "--demo-native-browser-navigation"]
+        app.launch()
+        let address = app.textFields["Browser URL"]
+        XCTAssertTrue(address.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(address.value as? String, "http://127.0.0.1:5173/preview?view=phone")
+        XCTAssertTrue(app.buttons["Done"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "agent-native-preview"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(address.waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
     func testAgentBrowserAppearsAndMessageLinkOpensInApp() {
         continueAfterFailure = false
         let app = XCUIApplication()

@@ -56,9 +56,9 @@ struct WorkspaceResourceShortcuts: View {
             NewWorkspaceBrowserView(workspaceId: workspaceId, store: browserStore) { createdBrowser = $0 }
                 .coversConversationComposers()
         }
-        .fullScreenCover(item: $selectedBrowser) { browser in
-            WorkspaceBrowserView(browser: browser, connection: session.connection)
-                .coversConversationComposers()
+        .onChange(of: selectedBrowser) { _, browser in
+            if let browser { session.browserNavigation.presentUserBrowser(browser) }
+            selectedBrowser = nil
         }
         .fullScreenCover(item: $selectedTerminal, onDismiss: clearTerminalError) { terminal in
             MobileTerminalView(terminal: terminal, workspaceName: workspaceName, store: terminalStore)

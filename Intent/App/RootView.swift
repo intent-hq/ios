@@ -135,6 +135,7 @@ struct RootView: View {
                 launchContent
             }
         }
+        .modifier(NativeBrowserPresenter())
         #if DEBUG
         .modifier(DemoIPadProducerEntry())
         .modifier(DemoToastOverlay())
