@@ -251,8 +251,10 @@ CAPTURES = {
             "Inline PDF card and link", "PDF viewer from inline card",
             "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",
         ),
-        "testTextLinkOpensViewerSharesAndRetriesMissingFile": (
+        "testTextLinkOpensViewerAndRetriesMissingFile": (
             "Text viewer from text link", "Text unavailable with close and retry",
+            "Text viewer wrap menu", "Text viewer without wrapping",
+            "Text viewer after toggling wrapping",
         ),
     },
     "AssistantStateUITests": {
@@ -374,8 +376,21 @@ CAPTURES = {
         "testDismissedPromptRestoresAndClearsAfterSuccessfulRetry": ("restored-workspace-draft",),
     },
     "WorkspaceChangesUITests": {
+        "testCommitFilenamesStayPinnedWhileScrollingInBothThemes": (
+            "commit-sticky-source-light", "commit-sticky-source-dark",
+            "commit-sticky-tests-light", "commit-sticky-tests-dark",
+            "commit-sticky-jump-light", "commit-sticky-jump-dark",
+        ),
+        "testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes": (
+            "ipad-commit-main-light", "ipad-commit-main-dark", "ipad-commit-portrait-light", "ipad-commit-portrait-dark",
+            "ipad-commit-from-sidebar-light", "ipad-commit-from-sidebar-dark",
+            "ipad-commit-details-light", "ipad-commit-details-dark",
+            "ipad-diff-main-light", "ipad-diff-main-dark", "ipad-diff-portrait-light", "ipad-diff-portrait-dark",
+            "ipad-diff-from-sidebar-light", "ipad-diff-from-sidebar-dark",
+        ),
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
-            "workspace-changes", "unstaged-diff", "commit-diff",
+            "workspace-changes", "unstaged-diff", "commit-diff", "commit-details", "commit-file-search", "commit-file-picker",
+            "commit-files-fit", "commit-files-offscreen",
         ),
         "testRepositorySelectionScopesFilesAndCommitDiffs": (
             "submodule-changes", "submodule-unstaged-diff", "submodule-commit-diff",

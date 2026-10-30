@@ -67,6 +67,7 @@ Run the matching checks after changing tooling:
 
 - Require trusted certificate fingerprints for WSS/TLS, including Tailcat routes; never restore legacy plaintext fallback. [WebSocketConnectionSecurity.swift](Intent/Services/WebSocketConnectionSecurity.swift) limits the override to Debug loopback tests; Release must reject missing pins.
 - Regenerate bundled diagrams through the [Pele vendoring workflow](README.md#offline-mermaid-rendering-with-pele); preserve its renderer/security contract and review both appearances. Keep the lockfile, bundle, provenance, and licenses consistent.
+- Regenerate file highlighting through the [Pierre vendoring workflow](README.md#offline-file-syntax-highlighting-with-pierre); keep the bundle, lockfile, provenance, and notices together, preserve plain-text fallback, and review both appearances.
 - Browser stale-request tests must gate font preparation while Pele rendering stays synchronous; native probes must remain bounded without WebKit callbacks. Preserve missing/late-callback and cancellation coverage in [MermaidJavaScriptProbeTests](IntentTests/MermaidWebViewTests.swift).
 
 ## Releases

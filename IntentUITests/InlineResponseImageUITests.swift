@@ -395,7 +395,7 @@ extension InlineResponseImageUITests {
 
 extension InlineResponseImageUITests {
     @MainActor
-    func testTextLinkOpensViewerSharesAndRetriesMissingFile() {
+    func testTextLinkOpensViewerAndRetriesMissingFile() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-inline-text"]
         app.launch()
@@ -410,7 +410,8 @@ extension InlineResponseImageUITests {
         reveal(link, in: transcript)
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
-        assertTextViewerAndShare(in: app)
+        assertTextViewer(in: app)
+        assertFileOptions(in: app)
         let close = app.buttons["text.close"].firstMatch
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
@@ -425,7 +426,7 @@ extension InlineResponseImageUITests {
     }
 
     @MainActor
-    private func assertTextViewerAndShare(in app: XCUIApplication) {
+    private func assertTextViewer(in app: XCUIApplication) {
         let content = app.textViews["text.content"].firstMatch
         XCTAssertTrue(content.waitForExistence(timeout: Fixture.timeout))
         let text = content.value as? String ?? ""
@@ -434,21 +435,37 @@ extension InlineResponseImageUITests {
         XCTAssertTrue(text.contains("3. Return to the conversation."))
         XCTAssertTrue(app.navigationBars["Demo notes.txt"].exists)
         let close = app.buttons["text.close"].firstMatch
-        let share = app.buttons["Share text file"].firstMatch
-        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && share.isHittable })
-        XCTAssertEqual(close.label, "Close text file")
-        captureMedia(app, named: "Text viewer from text link")
-        share.tap()
-        let activity = app.otherElements["ActivityListView"].firstMatch
-        XCTAssertTrue(activity.waitForExistence(timeout: Fixture.timeout), "Share must present the native activity sheet")
-        let dismissRegion = app.otherElements["PopoverDismissRegion"].firstMatch
-        if dismissRegion.exists {
-            dismissRegion.tap()
-        } else {
-            activity.swipeDown()
-        }
-        XCTAssertTrue(activity.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
+        XCTAssertEqual(close.label, "Back")
+        captureMedia(app, named: "Text viewer from text link")
+    }
+
+    @MainActor
+    private func assertFileOptions(in app: XCUIApplication) {
+        let options = app.buttons["text.options"]
+        let content = app.textViews["text.content"].firstMatch
+        let original = content.value as? String
+        for title in ["Copy contents", "Copy path", "Show line numbers", "Show line numbers"] {
+            options.tap()
+            let action = app.buttons[title].firstMatch
+            XCTAssertTrue(action.waitForExistence(timeout: Fixture.timeout))
+            action.tap()
+            XCTAssertTrue(action.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertEqual(content.value as? String, original)
+        }
+        XCTAssertTrue(options.isHittable)
+        options.tap()
+        let wrap = app.buttons["Wrap lines"].firstMatch
+        XCTAssertTrue(wrap.waitForExistence(timeout: Fixture.timeout))
+        captureMedia(app, named: "Text viewer wrap menu")
+        wrap.tap()
+        captureMedia(app, named: "Text viewer after toggling wrapping")
+        content.swipeLeft()
+        XCTAssertEqual(content.value as? String, original)
+        options.tap()
+        XCTAssertTrue(wrap.waitForExistence(timeout: Fixture.timeout))
+        wrap.tap()
+        XCTAssertEqual(content.value as? String, original)
     }
 
     @MainActor
@@ -463,7 +480,7 @@ extension InlineResponseImageUITests {
         let close = app.buttons["text.close"].firstMatch
         let retry = app.buttons["Retry loading text file"].firstMatch
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && retry.isHittable })
-        XCTAssertEqual(close.label, "Close text file")
+        XCTAssertEqual(close.label, "Back")
         XCTAssertFalse(app.buttons["Share text file"].exists)
         captureMedia(app, named: "Text unavailable with close and retry")
         retry.tap()

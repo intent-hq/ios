@@ -119,6 +119,8 @@ $(SRCROOT)/Intent/Presentation/ConversationTranscriptViewportAnchor.swift
 $(SRCROOT)/Intent/Presentation/ConversationViewportTrace.swift
 $(SRCROOT)/Intent/Presentation/CreationSelectionPolicy.swift
 $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
+$(SRCROOT)/Intent/Presentation/FileLineIndex.swift
+$(SRCROOT)/Intent/Presentation/FileSyntaxRun.swift
 $(SRCROOT)/Intent/Presentation/IPadTypingFocus.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
@@ -142,6 +144,7 @@ $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
 $(SRCROOT)/Intent/Presentation/TranscriptDisclosureState.swift
 $(SRCROOT)/Intent/Presentation/WatcherMessagePresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceAgentSelection.swift
+$(SRCROOT)/Intent/Presentation/WorkspaceDiffPresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceSidebarContent.swift
@@ -233,6 +236,7 @@ $(SRCROOT)/Intent/Services/DemoScriptMonitorFixtures.swift
 $(SRCROOT)/Intent/Services/DemoSettings.swift
 $(SRCROOT)/Intent/Services/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Services/DemoWorkspaceActionFixtures.swift
+$(SRCROOT)/Intent/Services/FileSyntaxHighlighter.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/ImagePasteboard.swift
 $(SRCROOT)/Intent/Services/ImportedPhotoVideo.swift
@@ -419,6 +423,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/ImageLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileAttachmentLoader.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFilePDFAttachment.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileVideoAttachment.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/LineNumberTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MarkdownTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MermaidDiagramView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/MermaidWebView.swift
@@ -561,6 +566,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceBrowsersView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesFileTree.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesSection.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceChangesView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDetailsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceConnectionSwitcher.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceContextView.swift
@@ -795,6 +801,8 @@ $(SRCROOT)/IntentTests/EventWakeAttributionTests.swift
 $(SRCROOT)/IntentTests/ExternalLinkTests.swift
 $(SRCROOT)/IntentTests/FakeConnectionManager.swift
 $(SRCROOT)/IntentTests/FakeConnectionManagerTests.swift
+$(SRCROOT)/IntentTests/FileLineIndexTests.swift
+$(SRCROOT)/IntentTests/FileSyntaxHighlighterTests.swift
 $(SRCROOT)/IntentTests/FloatingComposerImportTests.swift
 $(SRCROOT)/IntentTests/FloatingComposerPolicyTests.swift
 $(SRCROOT)/IntentTests/ForEachSnapshotTests.swift
@@ -1001,6 +1009,7 @@ $(SRCROOT)/IntentTests/WorkspaceCreationProposalTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationVideosTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
+$(SRCROOT)/IntentTests/WorkspaceDiffSyntaxTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileEntryTests.swift

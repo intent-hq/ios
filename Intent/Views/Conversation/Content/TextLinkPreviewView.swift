@@ -12,10 +12,12 @@ struct TextLinkPreviewView: View {
     var loaderOverride: WorkspaceFileImageLoader?
     @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var file: WorkspaceTextFile?
     @State private var hasFailed = false
     @State private var attempt = 0
-    @ScaledMetric(relativeTo: .body) private var closeIconSide: CGFloat = 17
+    @AppStorage("fileViewerWrapLines") private var wrapLines = true
+    @AppStorage("fileViewerShowLineNumbers") private var showLineNumbers = true
 
     private var fileLoader: WorkspaceFileImageLoader {
         loaderOverride ?? session?.workspaceFileImageLoader ?? .shared
@@ -26,49 +28,71 @@ struct TextLinkPreviewView: View {
             content
                 .navigationTitle(link.name)
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(Theme.sidebar(for: colorScheme), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        closeButton
+                    ToolbarItem(placement: .topBarLeading) {
+                        backButton
                     }
-                    if let file {
-                        ToolbarItem(placement: .primaryAction) {
-                            ShareLink(item: file.url) {
-                                Label("Share text file", systemImage: "square.and.arrow.up")
-                            }
-                            .buttonStyle(IntentContentButtonStyle())
-                        }
+                    .intentToolbarSurface()
+                    ToolbarItem(placement: .topBarTrailing) {
+                        fileMenu
                     }
+                    .intentToolbarSurface()
                 }
                 .accessibilityAction(.escape) { dismiss() }
         }
         .task(id: attempt) { await loadText() }
     }
 
-    private var closeButton: some View {
-        Button { dismiss() } label: {
-            Image(.close)
-                .resizable()
-                .scaledToFit()
-                .frame(width: closeIconSide, height: closeIconSide)
-                .foregroundStyle(.white)
-                .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
-                .background(.black, in: Circle())
-                .frame(
-                    minWidth: Constants.Accessibility.minimumTapTarget,
-                    minHeight: Constants.Accessibility.minimumTapTarget
-                )
-                .contentShape(.rect)
-                .accessibilityHidden(true)
+    private var backButton: some View {
+        IntentIconButton(icon: .arrowLeft, label: "Back", showsBackground: false) {
+            dismiss()
+        }
+        .accessibilityIdentifier("text.close")
+    }
+
+    private var fileMenu: some View {
+        Menu {
+            Section {
+                Button {
+                    guard let file else { return }
+                    copy(file.content)
+                } label: {
+                    Label("Copy contents", image: "Copy")
+                }
+                .accessibilityIdentifier("text.copyContents")
+                Button {
+                    copy(link.path)
+                } label: {
+                    Label("Copy path", image: "File")
+                }
+                .accessibilityIdentifier("text.copyPath")
+            }
+            Section {
+                Toggle("Wrap lines", isOn: $wrapLines)
+                    .accessibilityIdentifier("text.wrap")
+                Toggle("Show line numbers", isOn: $showLineNumbers)
+                    .accessibilityIdentifier("text.lineNumbers")
+            }
+        } label: {
+            ToolbarOverflowLabel()
         }
         .buttonStyle(IntentContentButtonStyle())
-        .accessibilityLabel("Close text file")
-        .accessibilityIdentifier("text.close")
+        .disabled(file == nil)
+        .accessibilityLabel("File options")
+        .accessibilityIdentifier("text.options")
+    }
+
+    private func copy(_ text: String) {
+        UIPasteboard.general.string = text
+        HapticManager.notification(.success)
     }
 
     @ViewBuilder
     private var content: some View {
         if let file {
-            WorkspaceTextFileView(file: file)
+            WorkspaceTextFileView(file: file, wrapLines: wrapLines, showLineNumbers: showLineNumbers)
         } else if hasFailed {
             ContentUnavailableView {
                 Label("Text file unavailable", systemImage: "doc.text")

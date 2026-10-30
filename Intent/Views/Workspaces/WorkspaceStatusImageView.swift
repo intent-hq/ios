@@ -26,7 +26,7 @@ nonisolated enum WorkspaceStatusImageLayout {
     }
 }
 
-/// Renders a workspace's status screenshot, fetched through the session's
+/// Renders a workspace's status screenshot as a square thumbnail, fetched through the session's
 /// `WorkspaceFileImageLoader` asset path (`note.readAsset`). Callers only
 /// mount it when `WorkspaceStatusImageLayout.assetId(for:)` is non-nil, so
 /// an unset image leaves no gap.
@@ -76,20 +76,13 @@ struct WorkspaceStatusImageView: View {
     private var content: some View {
         if let image {
             Button { lightboxPresented = true } label: {
-                StatusImagePreviewLayout(imageSize: image.size) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .accessibilityLabel(Layout.accessibilityLabel)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
-                .overlay(border)
-                .frame(
-                    minWidth: Constants.Accessibility.minimumTapTarget,
-                    minHeight: Constants.Accessibility.minimumTapTarget,
-                    alignment: .leading
-                )
-                .contentShape(Rectangle())
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize, alignment: .top)
+                    .clipShape(thumbnailShape)
+                    .overlay(border)
+                    .contentShape(thumbnailShape)
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel(Layout.accessibilityLabel)
@@ -101,62 +94,34 @@ struct WorkspaceStatusImageView: View {
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: image)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         } else if failed {
             Button { attempt += 1 } label: {
-                placeholder(
-                    systemImage: "photo.badge.exclamationmark",
-                    text: "Status image unavailable — tap to retry"
-                )
+                placeholder { Image(systemName: "photo.badge.exclamationmark") }
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Status image unavailable")
             .accessibilityHint("Retries loading the image")
         } else {
-            placeholder(systemImage: nil, text: "Loading status image…")
+            placeholder { ProgressView().controlSize(.mini) }
                 .accessibilityHidden(true)
         }
     }
 
-    private var border: some View {
+    private var thumbnailShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Layout.cornerRadius)
-            .strokeBorder(Theme.border(for: colorScheme), lineWidth: Layout.borderWidth)
     }
 
-    /// Fixed-height, full-width band standing in for the detail banner so
-    /// the header neither jumps on load nor looks broken on failure.
-    private func placeholder(systemImage: String?, text: LocalizedStringKey) -> some View {
-        HStack(spacing: Layout.placeholderSpacing) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .accessibilityHidden(true)
-            } else {
-                ProgressView()
-                    .controlSize(.mini)
-            }
-            Text(text)
-                .interFont(Constants.Typography.subtextXXS)
-        }
-        .font(.caption)
-        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        .frame(maxWidth: .infinity)
-        .frame(height: Layout.detailPlaceholderHeight)
-        .background(Theme.muted(for: colorScheme).opacity(Layout.placeholderOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
-    }
-}
-
-private struct StatusImagePreviewLayout: Layout {
-    let imageSize: CGSize
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews _: Subviews, cache _: inout ()) -> CGSize {
-        guard imageSize.width > 0, imageSize.height > 0 else { return .zero }
-        let availableWidth = max(0, proposal.width ?? imageSize.width)
-        let scale = min(1, availableWidth / imageSize.width, WorkspaceStatusImageLayout.detailMaxHeight / imageSize.height)
-        return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+    private var border: some View {
+        thumbnailShape.strokeBorder(Theme.border(for: colorScheme), lineWidth: Layout.borderWidth)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
-        subviews.first?.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+    /// Holds the thumbnail's square so the header neither jumps on load nor looks broken on failure.
+    private func placeholder(@ViewBuilder _ icon: () -> some View) -> some View {
+        icon()
+            .font(.caption)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize)
+            .background(Theme.muted(for: colorScheme).opacity(Layout.placeholderOpacity))
+            .clipShape(thumbnailShape)
     }
 }

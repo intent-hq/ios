@@ -141,12 +141,26 @@ struct AssistantConversationHeader<Actions: View>: View {
     }
 }
 
+/// Softens the edge where scrolled content meets the opaque navigation header.
+struct WorkspaceHeaderFade: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let background = Constants.Conversation.Design.Palette.background(for: colorScheme)
+        LinearGradient(colors: [background, background.opacity(0)], startPoint: .top, endPoint: .bottom)
+            .frame(height: Constants.Conversation.Design.Header.fadeHeight)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+
 /// Workspace, agent and Assistant navigation share the native top safe area and control geometry.
 struct WorkspaceNavigationHeader<Actions: View>: View {
     let title: String
     let subtitle: LocalizedStringKey?
     var backLabel: LocalizedStringKey = "Back"
     var backIdentifier = "conversation.back"
+    var titleIdentifier = "conversation.header.title"
     var leadingIcon: ImageResource = .arrowLeft
     var isLeadingActionEnabled = true
     var showsBackground = true
@@ -289,7 +303,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         .tracking(Design.Typography.smallTracking)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier(showsTitle ? "conversation.header.title" : "")
+        .accessibilityIdentifier(showsTitle ? titleIdentifier : "")
     }
 
     @ViewBuilder private var subtitleText: some View {

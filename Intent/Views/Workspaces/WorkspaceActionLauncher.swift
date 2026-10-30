@@ -36,18 +36,21 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        if usesVerticalBar {
-            floatingMenu(content: content)
-                .onChange(of: isOpen) { _, open in
-                    if open { connectionCount = PersistenceManager.shared.loadConnections().count }
-                }
-                .modifier(WorkspaceActionLauncherToolbar(
-                    isEnabled: isEnabled && hostsVerticalBarButton && floatingVerticalBarButtonOffset == nil && !isSearching
-                ))
-                .environment(\.workspaceActionMenuPresented, $isOpen)
-        } else {
-            floatingMenu(content: content)
+        Group {
+            if usesVerticalBar {
+                floatingMenu(content: content)
+                    .onChange(of: isOpen) { _, open in
+                        if open { connectionCount = PersistenceManager.shared.loadConnections().count }
+                    }
+                    .modifier(WorkspaceActionLauncherToolbar(
+                        isEnabled: isEnabled && hostsVerticalBarButton && floatingVerticalBarButtonOffset == nil && !isSearching
+                    ))
+                    .environment(\.workspaceActionMenuPresented, $isOpen)
+            } else {
+                floatingMenu(content: content)
+            }
         }
+        .onChange(of: isOpen) { _, open in HapticManager.impact(open ? .medium : .light) }
     }
 
     // Keep the original modifier chain and ordering on devices without a vertical bar.

@@ -1,6 +1,16 @@
 import Foundation
 
 extension AppCoordinator {
+    func onSelectWorkspaceCommit(_ commit: WorkspaceCommit, workspaceId: String, gitRootId: String?) {
+        workspaceChange = WorkspaceChangeDestination(workspaceId: workspaceId, gitRootId: gitRootId, content: .commit(commit))
+        revealIPadWorkspaceRoute()
+    }
+
+    func onSelectWorkspaceFileDiff(_ file: WorkspaceChange, workspaceId: String, gitRootId: String?) {
+        workspaceChange = WorkspaceChangeDestination(workspaceId: workspaceId, gitRootId: gitRootId, content: .file(file))
+        revealIPadWorkspaceRoute()
+    }
+
     func updateShellPresentation(_ enabled: Bool) {
         usesIPadShell = enabled
         guard enabled else { return }
