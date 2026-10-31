@@ -178,6 +178,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             app.otherElements["ActivityListView"].firstMatch.waitForExistence(timeout: Fixture.timeout),
             "Share must present the native activity sheet"
         )
+        assertPDFShareKeepsOriginalName(in: app, timeout: Fixture.timeout)
         captureMedia(app, named: "PDF share sheet")
     }
 }
