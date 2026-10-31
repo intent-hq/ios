@@ -65,6 +65,7 @@ enum WorkspaceFileTreeLayout {
     static let indentation: CGFloat = 16
     static let guideOpacity = 0.3
     static let guideWidth: CGFloat = 1
+    static let guideLeadingShift: CGFloat = 3.5
 
     static func indentation(for depth: Int, accessibility: Bool) -> CGFloat {
         let step = accessibility ? WorkspaceDetailStyle.accessibilityIndentation : indentation
@@ -102,7 +103,8 @@ private struct FileTreeGuides: ViewModifier {
     private var offsets: [CGFloat] {
         let accessibility = dynamicTypeSize.isAccessibilitySize
         return (0..<min(depth, WorkspaceFileTreeLayout.maximumIndentationDepth)).map {
-            WorkspaceFileTreeLayout.indentation(for: $0, accessibility: accessibility) + iconSize / 2
+            WorkspaceFileTreeLayout.indentation(for: $0, accessibility: accessibility)
+                + iconSize / 2 - WorkspaceFileTreeLayout.guideLeadingShift
         }
     }
 }
