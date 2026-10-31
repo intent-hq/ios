@@ -137,6 +137,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             XCTAssertTrue(app.scrollViews["changes.diff.scroll"].waitForExistence(timeout: Self.timeout))
             capture(app, named: "pull-request-detail-code-\(appearance)")
 
+            app.buttons["pullRequest.menu"].tap()
             app.buttons["pullRequest.close"].tap()
             XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
             switchList(in: app, to: "workspaces")

@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// A pull request's detail, matching the FE Home detail panel: title with
-/// state and number, author, repository and branches, then Summary
-/// (reviewers, checks, description) and Code (changed files with diffs).
+/// A pull request's detail in the workspace page's language: a large title
+/// with one quiet subtitle, the shared content switcher, and plain rows for
+/// the linked workspace, checks and reviews above the description. Code lists
+/// the changed files with their diffs.
 struct PullRequestDetailView: View {
     nonisolated enum Tab: String, CaseIterable {
         case code = "Code"
@@ -16,13 +17,15 @@ struct PullRequestDetailView: View {
     let onOpenWorkspace: (String) -> Void
     @State private var tab: Tab = .summary
     @State private var showsChecks = false
+    @State private var showsReviews = false
     @State private var expandedFiles: Set<String> = []
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .body) private var avatarSize: CGFloat = 22
-    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 16
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .body) private var avatarSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .title) private var titleTracking = WorkspaceDetailStyle.titleTracking
 
     init(
         item: PullRequestListItem,
@@ -35,141 +38,92 @@ struct PullRequestDetailView: View {
         self.onOpenWorkspace = onOpenWorkspace
     }
 
-    private var item: PullRequestListItem { store.item }
-    private var secondary: Color { Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: contrast) }
-    private var foreground: Color { Theme.foreground(for: colorScheme) }
+    var item: PullRequestListItem { store.item }
+    var secondary: Color { WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast) }
+    var foreground: Color { WorkspaceDetailStyle.foreground(for: colorScheme) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            tabBar
-            Divider()
-            ScrollView {
-                Group {
-                    switch tab {
-                    case .summary: summary
-                    case .code: code
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                heading
+                IntentContentSwitcher(
+                    selection: $tab,
+                    options: Tab.allCases.map { IntentContentSwitcher<Tab>.Option(value: $0, title: $0.rawValue) },
+                    accessibilityLabel: "Pull request content",
+                    identifierPrefix: "pullRequest.tab"
+                )
+                .padding(.bottom, WorkspaceDetailStyle.sectionHeadingSpacing)
+                switch tab {
+                case .summary: summary
+                case .code: code
                 }
-                .padding(Style.inset)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+            .padding(.bottom, WorkspaceDetailStyle.pageInset)
         }
         .background(WorkspaceDetailStyle.background(for: colorScheme))
+        .overlay(alignment: .topTrailing) { overflowMenu }
+        .presentationDragIndicator(.visible)
+        .accessibilityAction(.escape) { dismiss() }
         .task { await store.loadAll() }
         .accessibilityIdentifier("pullRequest.detail")
     }
 }
 
-// MARK: - Header
+// MARK: - Heading
 
 private extension PullRequestDetailView {
-    var header: some View {
-        VStack(alignment: .leading, spacing: Style.metaSpacing) {
-            HStack(alignment: .top, spacing: Style.metaSpacing) {
-                Text(item.title)
-                    .interFont(Constants.Typography.bodyM.withFace(.semibold))
-                    .foregroundStyle(foreground)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityAddTraits(.isHeader)
-                Group {
-                    if let url = item.url {
-                        IntentIconButton(icon: .external, label: "Open on GitHub", showsBackground: false) { openURL(url) }
-                            .accessibilityIdentifier("pullRequest.openOnGitHub")
-                    }
-                    IntentIconButton(icon: .close, label: "Close", showsBackground: false) { dismiss() }
-                        .accessibilityIdentifier("pullRequest.close")
-                }
-                // Center the buttons on the title's first line, not its box.
-                .alignmentGuide(.top) { $0[.top] + Style.controlLift }
+    var heading: some View {
+        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
+            Text(item.title)
+                .interFont(Constants.Typography.heading2)
+                .tracking(titleTracking)
+                .foregroundStyle(foreground)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            HStack(spacing: Style.subtitleSpacing) {
+                Image(WorkspaceRowView.pillImage(for: item.status))
+                    .resizable().scaledToFit()
+                    .frame(width: Style.subtitleIconSize, height: Style.subtitleIconSize)
+                    .foregroundStyle(PullRequestRowView.stateColor(item.status, colorScheme: colorScheme, contrast: contrast))
+                    .accessibilityHidden(true)
+                Text("\(item.owner)/\(item.repo) · #\(item.number)")
+                    .interFont(Constants.Typography.subtextXXS)
+                    .foregroundStyle(secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
-            HStack(spacing: Style.metaSpacing) {
-                HStack(spacing: Style.iconTextSpacing) {
-                    Image(WorkspaceRowView.pillImage(for: item.status))
-                        .resizable().scaledToFit()
-                        .frame(width: iconSize, height: iconSize)
-                        .foregroundStyle(PullRequestRowView.stateColor(item.status, colorScheme: colorScheme, contrast: contrast))
-                        .accessibilityHidden(true)
-                    metaText("#\(item.number)")
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(item.status.rawValue.capitalized) pull request #\(item.number)")
-                if let author = item.author {
-                    HStack(spacing: Style.iconTextSpacing) {
-                        RepoOwnerAvatarView(owner: author, size: avatarSize, fallbackSymbol: "person.fill", cornerRadius: avatarSize / 2)
-                            .accessibilityHidden(true)
-                        metaText(author)
-                    }
-                }
-                metaItem(.folder, "\(item.owner)/\(item.repo)")
-            }
-            if let head = store.detail?.headRef ?? item.headRef {
-                metaItem(.gitBranch, store.detail?.baseRef.map { "\(head) → \($0)" } ?? head)
-            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(item.status.rawValue.capitalized) pull request #\(item.number) in \(item.owner)/\(item.repo)")
         }
-        .padding(.horizontal, Style.inset)
-        .padding(.top, Style.inset)
-        .padding(.bottom, Style.metaSpacing)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Leaves the overflow menu its own corner.
+        .padding(.trailing, Constants.Accessibility.minimumTapTarget)
+        .padding(.top, Style.headingTopSpacing)
+        .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
     }
 
-    func metaItem(_ icon: ImageResource, _ text: String) -> some View {
-        HStack(spacing: Style.iconTextSpacing) {
-            Image(icon).resizable().scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(secondary)
-                .accessibilityHidden(true)
-            metaText(text)
-        }
-    }
-
-    func metaText(_ text: String) -> some View {
-        Text(text)
-            .interFont(Constants.Typography.bodyXS)
-            .foregroundStyle(secondary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-    }
-
-    var tabBar: some View {
-        HStack(alignment: .center, spacing: Style.tabSpacing) {
-            ForEach(Tab.allCases, id: \.self) { candidate in
-                Button { tab = candidate } label: {
-                    Text(candidate.rawValue)
-                        .interFont(Constants.Typography.bodyS)
-                        .foregroundStyle(tab == candidate ? foreground : secondary)
-                        .padding(.vertical, Style.tabVerticalPadding)
-                        .overlay(alignment: .bottom) {
-                            if tab == candidate {
-                                Rectangle().fill(foreground).frame(height: Style.tabIndicatorHeight)
-                            }
-                        }
-                }
-                .buttonStyle(IntentContentButtonStyle())
-                .accessibilityAddTraits(tab == candidate ? .isSelected : [])
-                .accessibilityIdentifier("pullRequest.tab.\(candidate.rawValue)")
+    var overflowMenu: some View {
+        Menu {
+            if let url = item.url {
+                Button("Open on GitHub", systemImage: "safari") { openURL(url) }
+                    .accessibilityIdentifier("pullRequest.openOnGitHub")
+                ShareLink(item: url)
             }
-            Spacer(minLength: Style.metaSpacing)
             if let linkedWorkspace {
-                Button { onOpenWorkspace(linkedWorkspace.id) } label: {
-                    HStack(spacing: Style.iconTextSpacing) {
-                        Image(.folders).resizable().scaledToFit()
-                            .frame(width: iconSize, height: iconSize)
-                            .accessibilityHidden(true)
-                        Text(linkedWorkspace.title)
-                            .interFont(Constants.Typography.bodyXS)
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(foreground)
-                    .padding(.horizontal, Style.chipHorizontalPadding)
-                    .padding(.vertical, Style.chipVerticalPadding)
-                    .background(Capsule().fill(Constants.WorkspaceList.controlSurface(for: colorScheme)))
-                }
-                .buttonStyle(IntentContentButtonStyle())
-                .accessibilityLabel("Open workspace \(linkedWorkspace.title)")
-                .accessibilityIdentifier("pullRequest.workspace")
+                Button("Open workspace", systemImage: "folder") { onOpenWorkspace(linkedWorkspace.id) }
             }
+            Divider()
+            Button("Close", systemImage: "xmark") { dismiss() }
+                .accessibilityIdentifier("pullRequest.close")
+        } label: {
+            ToolbarOverflowLabel()
         }
-        .padding(.horizontal, Style.inset)
+        .buttonStyle(IntentContentButtonStyle())
+        .accessibilityLabel("Pull request options")
+        .accessibilityIdentifier("pullRequest.menu")
+        .padding(.top, Style.menuTopInset)
+        .padding(.trailing, Style.menuTrailingInset)
     }
 }
 
@@ -177,113 +131,89 @@ private extension PullRequestDetailView {
 
 private extension PullRequestDetailView {
     var summary: some View {
-        VStack(alignment: .leading, spacing: Style.sectionSpacing) {
-            reviewersSection
-            Divider()
-            checksSection
-            Divider()
+        VStack(alignment: .leading, spacing: 0) {
+            if let linkedWorkspace {
+                row(icon: .folders, title: linkedWorkspace.title, accessory: .chevron) {
+                    onOpenWorkspace(linkedWorkspace.id)
+                }
+                .accessibilityLabel("Open workspace \(linkedWorkspace.title)")
+                .accessibilityIdentifier("pullRequest.workspace")
+            }
+            checksRow
+            if showsChecks { checkList }
+            reviewsRow
+            if showsReviews { reviewerList }
             description
+                .padding(.top, WorkspaceDetailStyle.sectionHeadingSpacing)
         }
     }
 
-    var reviewersSection: some View {
-        VStack(alignment: .leading, spacing: Style.rowSpacing) {
-            Text("Reviewers")
-                .interFont(Constants.Typography.bodySEmphasized)
-                .foregroundStyle(foreground)
-                .accessibilityAddTraits(.isHeader)
-            if store.loading.contains(.reviews), store.reviewers.isEmpty {
-                ProgressView().frame(maxWidth: .infinity, alignment: .leading)
-            } else if let error = store.errors[.reviews] {
-                failure(error) { Task { await store.load(.reviews) } }
-            } else if store.reviewers.isEmpty {
-                muted("No reviews yet")
-            } else {
-                ForEach(store.reviewers) { reviewer in
-                    HStack(spacing: Style.iconTextSpacing) {
-                        RepoOwnerAvatarView(owner: reviewer.login, size: avatarSize, fallbackSymbol: "person.fill", cornerRadius: avatarSize / 2)
-                            .accessibilityHidden(true)
-                        Text(reviewer.login)
-                            .interFont(Constants.Typography.bodyXS)
-                            .foregroundStyle(foreground)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(reviewer.verdict)
-                            .interFont(Constants.Typography.bodyXS)
-                            .foregroundStyle(verdictColor(reviewer.state))
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
-        }
-    }
-
-    func verdictColor(_ state: String) -> Color {
-        switch state {
-        case "approved": Constants.Colors.WorkspaceStatus.prOpen
-        case "changes_requested", "changes-requested": Theme.destructive(for: colorScheme)
-        default: secondary
-        }
-    }
-
-    @ViewBuilder var checksSection: some View {
-        if store.loading.contains(.checks), store.checks.isEmpty {
-            ProgressView().frame(maxWidth: .infinity, alignment: .leading)
-        } else if let error = store.errors[.checks] {
-            failure(error) { Task { await store.load(.checks) } }
+    @ViewBuilder var checksRow: some View {
+        if let error = store.errors[.checks] {
+            failure("Checks", error) { Task { await store.load(.checks) } }
         } else if let summary = PullRequestCheck.summary(store.checks) {
-            VStack(alignment: .leading, spacing: Style.rowSpacing) {
-                Button { withAnimation(.snappy) { showsChecks.toggle() } } label: {
-                    HStack(spacing: Style.iconTextSpacing) {
-                        checkIcon(summary.state)
-                        Text(summary.label)
-                            .interFont(Constants.Typography.bodyS)
-                            .foregroundStyle(foreground)
-                        Spacer()
-                        Image(.chevronRight).resizable().scaledToFit()
-                            .frame(width: iconSize, height: iconSize)
-                            .rotationEffect(.degrees(showsChecks ? Style.expandedRotation : 0))
-                            .foregroundStyle(secondary)
-                            .accessibilityHidden(true)
-                    }
-                    .contentShape(.rect)
-                }
-                .buttonStyle(IntentContentButtonStyle())
-                .accessibilityValue(showsChecks ? "Expanded" : "Collapsed")
-                .accessibilityIdentifier("pullRequest.checks")
-                if showsChecks {
-                    ForEach(store.checks) { check in
-                        Button { if let url = check.url { openURL(url) } } label: {
-                            HStack(spacing: Style.iconTextSpacing) {
-                                checkIcon(check.state)
-                                Text(check.name)
-                                    .interFont(Constants.Typography.bodyXS)
-                                    .foregroundStyle(foreground)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        .buttonStyle(IntentContentButtonStyle())
-                        .disabled(check.url == nil)
-                    }
-                }
+            row(icon: checkAppearance(summary.state).icon, tint: checkAppearance(summary.state).color, title: summary.label,
+                accessory: .disclosure(showsChecks)) {
+                withAnimation(.snappy) { showsChecks.toggle() }
             }
+            .accessibilityIdentifier("pullRequest.checks")
         } else {
-            muted("No checks")
+            row(icon: .infoCircle, title: store.loading.contains(.checks) ? "Loading checks…" : "No checks", accessory: .none) {}
+                .disabled(true)
         }
     }
 
-    func checkIcon(_ state: PullRequestCheck.State) -> some View {
-        let appearance: (ImageResource, Color) = switch state {
-        case .success: (.checkCircle, Constants.Colors.WorkspaceStatus.prOpen)
-        case .failure, .cancelled: (.closeCircle, Theme.destructive(for: colorScheme))
-        case .pending: (.historyCircle3, secondary)
-        case .neutral: (.infoCircle, secondary)
+    var checkList: some View {
+        ForEach(store.checks) { check in
+            let appearance = checkAppearance(check.state)
+            row(icon: appearance.icon, tint: appearance.color, title: check.name, indented: true,
+                accessory: check.url == nil ? .none : .external) {
+                if let url = check.url { openURL(url) }
+            }
         }
-        return Image(appearance.0).resizable().scaledToFit()
-            .frame(width: iconSize, height: iconSize)
-            .foregroundStyle(appearance.1)
-            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder var reviewsRow: some View {
+        if let error = store.errors[.reviews] {
+            failure("Reviews", error) { Task { await store.load(.reviews) } }
+        } else if store.reviewers.isEmpty {
+            row(icon: .messageCheck, title: store.loading.contains(.reviews) ? "Loading reviews…" : "No reviews yet", accessory: .none) {}
+                .disabled(true)
+        } else {
+            row(icon: .messageCheck, title: reviewSummary, accessory: .disclosure(showsReviews)) {
+                withAnimation(.snappy) { showsReviews.toggle() }
+            }
+            .accessibilityIdentifier("pullRequest.reviews")
+        }
+    }
+
+    /// "Approved by mona", "2 reviewers": the one verdict that matters first.
+    var reviewSummary: String {
+        let reviewers = store.reviewers
+        if reviewers.count == 1, let only = reviewers.first {
+            return only.state == "requested" ? "Review requested from \(only.login)" : "\(only.verdict) by \(only.login)"
+        }
+        return "\(reviewers.count) reviewers"
+    }
+
+    var reviewerList: some View {
+        ForEach(store.reviewers) { reviewer in
+            HStack(spacing: Style.rowIconSpacing) {
+                RepoOwnerAvatarView(owner: reviewer.login, size: avatarSize, fallbackSymbol: "person.fill", cornerRadius: avatarSize / 2)
+                    .accessibilityHidden(true)
+                Text(reviewer.login)
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(foreground)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(reviewer.verdict)
+                    .interFont(Constants.Typography.subtextXXS)
+                    .foregroundStyle(secondary)
+            }
+            .padding(.leading, iconSize + Style.rowIconSpacing)
+            .padding(.vertical, Style.childRowPadding)
+            .accessibilityElement(children: .combine)
+        }
     }
 
     @ViewBuilder var description: some View {
@@ -294,9 +224,77 @@ private extension PullRequestDetailView {
                 MarkdownTextView(text: detail.body)
             }
         } else if let error = store.errors[.detail] {
-            failure(error) { Task { await store.load(.detail) } }
+            failure("Description", error) { Task { await store.load(.detail) } }
         } else {
             ProgressView().frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    func checkAppearance(_ state: PullRequestCheck.State) -> (icon: ImageResource, color: Color) {
+        switch state {
+        case .success: (.checkCircle, Constants.Colors.WorkspaceStatus.prOpen)
+        case .failure, .cancelled: (.closeCircle, Theme.destructive(for: colorScheme))
+        case .pending: (.historyCircle3, secondary)
+        case .neutral: (.infoCircle, secondary)
+        }
+    }
+}
+
+// MARK: - Rows
+
+private extension PullRequestDetailView {
+    enum Accessory: Equatable {
+        case chevron
+        case disclosure(Bool)
+        case external
+        case none
+    }
+
+    /// The one row shape for the summary: icon, body-sized title, trailing cue.
+    func row(
+        icon: ImageResource,
+        tint: Color? = nil,
+        title: String,
+        indented: Bool = false,
+        accessory: Accessory,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: Style.rowIconSpacing) {
+                Image(icon).resizable().scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+                    .foregroundStyle(tint ?? secondary)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .interFont(indented ? Constants.Typography.bodyXS : Constants.Typography.bodyS)
+                    .foregroundStyle(foreground)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                accessoryView(accessory)
+            }
+            .padding(.leading, indented ? iconSize + Style.rowIconSpacing : 0)
+            .padding(.vertical, indented ? Style.childRowPadding : Style.rowPadding)
+            .contentShape(.rect)
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .accessibilityValue(accessory == .disclosure(true) ? "Expanded" : accessory == .disclosure(false) ? "Collapsed" : "")
+    }
+
+    @ViewBuilder func accessoryView(_ accessory: Accessory) -> some View {
+        switch accessory {
+        case .chevron, .disclosure:
+            Image(.chevronRight).resizable().scaledToFit()
+                .frame(width: Style.accessorySize, height: Style.accessorySize)
+                .rotationEffect(.degrees(accessory == .disclosure(true) ? Style.expandedRotation : 0))
+                .foregroundStyle(secondary)
+                .accessibilityHidden(true)
+        case .external:
+            Image(.external).resizable().scaledToFit()
+                .frame(width: Style.accessorySize, height: Style.accessorySize)
+                .foregroundStyle(secondary)
+                .accessibilityHidden(true)
+        case .none:
+            EmptyView()
         }
     }
 }
@@ -305,10 +303,23 @@ private extension PullRequestDetailView {
 
 private extension PullRequestDetailView {
     @ViewBuilder var code: some View {
+        if let head = store.detail?.headRef ?? item.headRef {
+            HStack(spacing: Style.subtitleSpacing) {
+                Image(.gitBranch).resizable().scaledToFit()
+                    .frame(width: Style.subtitleIconSize, height: Style.subtitleIconSize)
+                    .accessibilityHidden(true)
+                Text(store.detail?.baseRef.map { "\(head) → \($0)" } ?? head)
+                    .interFont(Constants.Typography.subtextXXS)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .foregroundStyle(secondary)
+            .padding(.bottom, Style.rowPadding)
+        }
         if store.loading.contains(.files), store.files.isEmpty {
             ProgressView().frame(maxWidth: .infinity, alignment: .leading)
         } else if let error = store.errors[.files] {
-            failure(error) { Task { await store.load(.files) } }
+            failure("Files", error) { Task { await store.load(.files) } }
         } else if store.files.isEmpty {
             muted("No changed files")
         } else {
@@ -319,7 +330,7 @@ private extension PullRequestDetailView {
                 }
                 if store.filesTruncated {
                     muted("Showing the first \(PullRequestDetailStore.filesLimit) files. Open on GitHub for the rest.")
-                        .padding(.top, Style.rowSpacing)
+                        .padding(.top, Style.rowPadding)
                 }
             }
         }
@@ -333,7 +344,7 @@ private extension PullRequestDetailView {
                     if expanded { expandedFiles.remove(file.id) } else { expandedFiles.insert(file.id) }
                 }
             } label: {
-                HStack(spacing: Style.iconTextSpacing) {
+                HStack(spacing: Style.rowIconSpacing) {
                     Text(file.filename)
                         .font(.footnote.monospaced())
                         .foregroundStyle(foreground)
@@ -342,7 +353,7 @@ private extension PullRequestDetailView {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
                     Image(.chevronRight).resizable().scaledToFit()
-                        .frame(width: iconSize, height: iconSize)
+                        .frame(width: Style.accessorySize, height: Style.accessorySize)
                         .rotationEffect(.degrees(expanded ? Style.expandedRotation : 0))
                         .foregroundStyle(secondary)
                         .accessibilityHidden(true)
@@ -377,28 +388,33 @@ private extension PullRequestDetailView {
             .foregroundStyle(secondary)
     }
 
-    func failure(_ message: String, retry: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: Style.rowSpacing) {
-            muted(message)
+    func failure(_ title: String, _ message: String, retry: @escaping () -> Void) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Style.rowIconSpacing) {
+            VStack(alignment: .leading, spacing: Style.childRowPadding) {
+                Text(title)
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(foreground)
+                muted(message)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Button("Retry", action: retry)
                 .buttonStyle(IntentButtonStyle(variant: .muted))
         }
+        .padding(.vertical, Style.rowPadding)
     }
 }
 
 private enum Style {
-    static let inset: CGFloat = 20
-    static let metaSpacing: CGFloat = 12
-    static let iconTextSpacing: CGFloat = 8
-    static let controlLift: CGFloat = 10
-    static let tabSpacing: CGFloat = 24
-    static let tabVerticalPadding: CGFloat = 12
-    static let tabIndicatorHeight: CGFloat = 2
-    static let chipHorizontalPadding: CGFloat = 12
-    static let chipVerticalPadding: CGFloat = 6
-    static let sectionSpacing: CGFloat = 20
-    static let rowSpacing: CGFloat = 10
-    static let fileRowPadding: CGFloat = 12
+    static let headingTopSpacing: CGFloat = 40
+    static let menuTopInset: CGFloat = 20
+    static let menuTrailingInset: CGFloat = 12
+    static let subtitleSpacing: CGFloat = 6
+    static let subtitleIconSize: CGFloat = 14
+    static let rowIconSpacing: CGFloat = 14
+    static let rowPadding: CGFloat = 14
+    static let childRowPadding: CGFloat = 8
+    static let accessorySize: CGFloat = 16
+    static let fileRowPadding: CGFloat = 14
     static let diffCornerRadius: CGFloat = 12
     static let expandedRotation: Double = 90
 }
