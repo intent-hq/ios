@@ -1,14 +1,14 @@
 import SwiftUI
 
 struct WorkspaceFileDiffView: View {
-    /// Nil when `patchHunks` supplies the diff (a pull request file's patch).
+    /// Nil when `patch` supplies the diff (a pull request file's GitHub patch).
     let loader: WorkspaceDiffLoader?
     let path: String
     var staged = false
     var isBinary = false
     var commitHash: String?
     var embedded = false
-    var patchHunks: [WorkspaceDiffHunk]?
+    var patch: String?
     @State private var presentation: WorkspaceDiffPresentation?
     @State private var syntax: [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] = [:]
     @State private var syntaxIsDark = false
@@ -196,8 +196,8 @@ struct WorkspaceFileDiffView: View {
         syntax = [:]
         defer { if !Task.isCancelled { isLoading = false } }
         if isBinary { return }
-        if let patchHunks {
-            presentation = WorkspaceDiffPresentation(hunks: patchHunks)
+        if let patch {
+            presentation = WorkspaceDiffPresentation(hunks: WorkspaceDiffBuilder.hunks(patch: patch))
             return
         }
         guard let loader else { return }

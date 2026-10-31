@@ -161,8 +161,8 @@ private extension PullRequestDetailView {
         if let error = store.errors[.checks] {
             failure("Checks", error) { Task { await store.load(.checks) } }
         } else if let summary = PullRequestCheck.summary(store.checks) {
-            row(icon: checkAppearance(summary.state).icon, tint: checkAppearance(summary.state).color, title: summary.label,
-                accessory: .disclosure(showsChecks)) {
+            let appearance = checkAppearance(summary.state)
+            row(icon: appearance.icon, title: summary.label, accessory: .disclosure(showsChecks), tint: appearance.color) {
                 withAnimation(.snappy) { showsChecks.toggle() }
             }
             .accessibilityIdentifier("pullRequest.checks")
@@ -175,8 +175,13 @@ private extension PullRequestDetailView {
     var checkList: some View {
         ForEach(store.checks) { check in
             let appearance = checkAppearance(check.state)
-            row(icon: appearance.icon, tint: appearance.color, title: check.name, indented: true,
-                accessory: check.url == nil ? .none : .external) {
+            row(
+                icon: appearance.icon,
+                title: check.name,
+                accessory: check.url == nil ? .none : .external,
+                tint: appearance.color,
+                indented: true
+            ) {
                 if let url = check.url { openURL(url) }
             }
         }
@@ -262,10 +267,10 @@ private extension PullRequestDetailView {
     /// The one row shape for the summary: icon, body-sized title, trailing cue.
     func row(
         icon: ImageResource,
-        tint: Color? = nil,
         title: String,
-        indented: Bool = false,
         accessory: Accessory,
+        tint: Color? = nil,
+        indented: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -348,43 +353,47 @@ private extension PullRequestDetailView {
     func fileRow(_ file: PullRequestFile) -> some View {
         let expanded = expandedFiles.contains(file.id)
         return VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.snappy) {
-                    if expanded { expandedFiles.remove(file.id) } else { expandedFiles.insert(file.id) }
-                }
-            } label: {
-                HStack(spacing: Style.rowIconSpacing) {
-                    Text(file.filename)
-                        .font(.footnote.monospaced())
-                        .foregroundStyle(foreground)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
-                    Image(.chevronRight).resizable().scaledToFit()
-                        .frame(width: Style.accessorySize, height: Style.accessorySize)
-                        .rotationEffect(.degrees(expanded ? Style.expandedRotation : 0))
-                        .foregroundStyle(secondary)
-                        .accessibilityHidden(true)
-                }
-                .padding(.vertical, Style.fileRowPadding)
-                .contentShape(.rect)
-            }
-            .buttonStyle(IntentContentButtonStyle())
-            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
-            .accessibilityIdentifier("pullRequest.file.\(file.filename)")
+            fileHeader(file, expanded: expanded)
             if expanded {
                 WorkspaceFileDiffView(
                     loader: nil,
                     path: file.filename,
                     isBinary: file.patch == nil,
                     embedded: true,
-                    patchHunks: file.patch.map(WorkspaceDiffBuilder.hunks(patch:))
+                    patch: file.patch
                 )
                 .clipShape(.rect(cornerRadius: Style.diffCornerRadius))
                 .padding(.bottom, Style.fileRowPadding)
             }
         }
+    }
+
+    func fileHeader(_ file: PullRequestFile, expanded: Bool) -> some View {
+        Button {
+            withAnimation(.snappy) {
+                if expanded { expandedFiles.remove(file.id) } else { expandedFiles.insert(file.id) }
+            }
+        } label: {
+            HStack(spacing: Style.rowIconSpacing) {
+                Text(file.filename)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(foreground)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
+                Image(.chevronRight).resizable().scaledToFit()
+                    .frame(width: Style.accessorySize, height: Style.accessorySize)
+                    .rotationEffect(.degrees(expanded ? Style.expandedRotation : 0))
+                    .foregroundStyle(secondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, Style.fileRowPadding)
+            .contentShape(.rect)
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+        .accessibilityIdentifier("pullRequest.file.\(file.filename)")
     }
 }
 

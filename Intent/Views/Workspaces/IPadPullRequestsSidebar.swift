@@ -38,27 +38,7 @@ struct IPadPullRequestsSidebar: View {
                 identifierPrefix: "pullRequests.filter",
                 accessibilityTitle: "Pull request filter"
             )
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    PullRequestListContent(
-                        store: session.pullRequestListStore,
-                        query: query,
-                        workspaces: workspaces,
-                        groupsByProject: groupsByProject
-                    ) { workspaceId in
-                        openWorkspace(workspaceId)
-                    } onOpenDetail: { item in
-                        detail = item
-                    } onOpenAgent: { workspaceId in
-                        coordinator.onSelectIPadSection(.workspaces)
-                        coordinator.onOpenRecentWorkspaceAgent(workspaceId)
-                    } onCreateWorkspace: { item in
-                        if coordinator.canCreateWorkspace { creation = item }
-                    }
-                }
-                .padding(.top, IPadSidebarStyle.compactSectionSpacing)
-            }
-            .refreshable { await session.pullRequestListStore.load(query) }
+            list
         }
         .background(IPadSidebarStyle.background(for: colorScheme))
         .task(id: query) { await PullRequestListContent.sync(session.pullRequestListStore, to: query) }
@@ -78,6 +58,30 @@ struct IPadPullRequestsSidebar: View {
                 .environment(coordinator)
         }
         .accessibilityIdentifier("ipad.pullRequests")
+    }
+
+    private var list: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                PullRequestListContent(
+                    store: session.pullRequestListStore,
+                    query: query,
+                    workspaces: workspaces,
+                    groupsByProject: groupsByProject
+                ) { workspaceId in
+                    openWorkspace(workspaceId)
+                } onOpenDetail: { item in
+                    detail = item
+                } onOpenAgent: { workspaceId in
+                    coordinator.onSelectIPadSection(.workspaces)
+                    coordinator.onOpenRecentWorkspaceAgent(workspaceId)
+                } onCreateWorkspace: { item in
+                    if coordinator.canCreateWorkspace { creation = item }
+                }
+            }
+            .padding(.top, IPadSidebarStyle.compactSectionSpacing)
+        }
+        .refreshable { await session.pullRequestListStore.load(query) }
     }
 
     private var optionsMenu: some View {
