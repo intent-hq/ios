@@ -84,6 +84,27 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
     }
 
     @MainActor
+    func testTypeScriptFileOpensInTextViewerNotVideoPreview() {
+        let app = openContext(appearance: "light")
+        let notes = app.buttons["context.section.notes"].firstMatch
+        reveal(notes, in: app)
+        notes.tap()
+        let web = app.buttons["files.folder.Web"].firstMatch
+        reveal(web, in: app)
+        web.tap()
+        let file = app.buttons["files.file.Web/collector.ts"].firstMatch
+        reveal(file, in: app)
+        file.tap()
+        let text = app.textViews["text.content"].firstMatch
+        XCTAssertTrue(text.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertEqual((text.value as? String)?.contains("export function collect"), true)
+        XCTAssertTrue(app.buttons["text.close"].exists)
+        XCTAssertFalse(app.staticTexts["Loading file…"].exists)
+        XCTAssertFalse(app.staticTexts["File unavailable"].exists)
+        XCTAssertFalse(app.buttons["Close video"].exists)
+    }
+
+    @MainActor
     private func openContext(appearance: String) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "-appThemePreference", appearance]

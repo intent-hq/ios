@@ -24,6 +24,7 @@ enum DemoFilesFixtures {
             ["name": "README.md", "type": "file"],
             ["name": "Sources", "type": "directory"],
             ["name": "Tests", "type": "directory"],
+            ["name": "Web", "type": "directory"],
             ["name": "docs", "type": "directory"],
             ["name": ".gitignore", "type": "file"]
         ],
@@ -33,6 +34,7 @@ enum DemoFilesFixtures {
         ],
         "Sources/Analytics": [["name": "Events.swift", "type": "file"]],
         "Tests": [["name": "AnalyticsTests.swift", "type": "file"]],
+        "Web": [["name": "collector.ts", "type": "file"]],
         "docs": []
     ]
 
@@ -41,6 +43,21 @@ enum DemoFilesFixtures {
         ".gitignore": ".build/\n.DS_Store\n",
         "Sources/Analytics.swift": "struct Analytics {\n    let enabled = true\n}\n",
         "Sources/Analytics/Events.swift": "enum Event {\n    case workspaceOpened\n}\n",
-        "Tests/AnalyticsTests.swift": "import Testing\n\n@Test func analyticsIsEnabled() {\n    #expect(Analytics().enabled)\n}\n"
+        "Tests/AnalyticsTests.swift": "import Testing\n\n@Test func analyticsIsEnabled() {\n    #expect(Analytics().enabled)\n}\n",
+        "Web/collector.ts": """
+            export interface AnalyticsEvent {
+              name: string;
+              workspaceId: string;
+            }
+
+            export function collect(events: AnalyticsEvent[]): Map<string, number> {
+              const counts = new Map<string, number>();
+              for (const event of events) {
+                counts.set(event.name, (counts.get(event.name) ?? 0) + 1);
+              }
+              return counts;
+            }
+
+            """
     ]
 }
