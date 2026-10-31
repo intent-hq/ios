@@ -4,8 +4,8 @@ import SwiftUI
 struct HomeActionTiles: View {
     enum Action: String, CaseIterable {
         case assistant
-        case workspaces
         case workspace
+        case workspaces
         case pullRequests
         case connections
         case appearance
