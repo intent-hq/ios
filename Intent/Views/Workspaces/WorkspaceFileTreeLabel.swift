@@ -4,6 +4,8 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
     let name: String
     var isDirectory = false
     var isExpanded = false
+    /// Draws the start of the guide that runs down to this folder's children.
+    var showsChildGuide = false
     var count: Int?
     var lineStats: (additions: Int, deletions: Int)?
     @ViewBuilder let detail: () -> Detail
@@ -56,22 +58,27 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
         .multilineTextAlignment(.leading)
         .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
         .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
+        .background {
+            if showsChildGuide {
+                FileTreeGuideShape(offsets: [], ownGuide: (iconSize / 2, iconSize / 2 + WorkspaceFileTreeLayout.guideIconGap))
+                    .fileTreeGuideStroke(colorScheme: colorScheme, contrast: contrast)
+            }
+        }
         .contentShape(.rect)
     }
 }
 
 enum WorkspaceFileTreeLayout {
     static let maximumIndentationDepth = 3
-    static let indentation: CGFloat = 16
+    static let indentation: CGFloat = 22
     static let guideOpacity = 0.3
     static let guideWidth: CGFloat = 1
-    static let guideLeadingShift: CGFloat = 5
-    /// Reaches into the row above so the first child's guide meets its folder icon.
-    static let guideTopExtension: CGFloat = 6
+    /// Measured from the icon frame; the folder glyph sits about 2pt inside it.
+    static let guideIconGap: CGFloat = 3
 
-    /// Rows that open a folder's children, i.e. sit deeper than the row above.
-    static func firstChildIDs<Row: Identifiable>(_ rows: [Row], depth: (Row) -> Int) -> Set<Row.ID> {
-        Set(zip(rows.dropFirst(), rows).filter { depth($0) > depth($1) }.map(\.0.id))
+    /// Whether an open folder's children sit deeper than it, so a guide can lead to them.
+    static func showsChildGuide(depth: Int, isExpanded: Bool) -> Bool {
+        isExpanded && depth < maximumIndentationDepth
     }
 
     static func indentation(for depth: Int, accessibility: Bool) -> CGFloat {
@@ -82,16 +89,26 @@ enum WorkspaceFileTreeLayout {
 
 extension View {
     /// Draws a vertical guide under each ancestor folder's icon. Rows stack
-    /// without spacing, so the guides join into one line per open folder.
-    /// `isFirstChild` reaches the parent's guide up to its folder icon.
-    func fileTreeGuides(depth: Int, isFirstChild: Bool) -> some View {
-        modifier(FileTreeGuides(depth: depth, isFirstChild: isFirstChild))
+    /// without spacing, so the guides join into one line per open folder;
+    /// the folder's own label starts the line just below its icon.
+    func fileTreeGuides(depth: Int) -> some View {
+        modifier(FileTreeGuides(depth: depth))
+    }
+}
+
+private extension Shape {
+    func fileTreeGuideStroke(colorScheme: ColorScheme, contrast: ColorSchemeContrast) -> some View {
+        stroke(
+            WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast)
+                .opacity(WorkspaceFileTreeLayout.guideOpacity),
+            lineWidth: WorkspaceFileTreeLayout.guideWidth
+        )
+        .accessibilityHidden(true)
     }
 }
 
 private struct FileTreeGuides: ViewModifier {
     let depth: Int
-    let isFirstChild: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -99,39 +116,34 @@ private struct FileTreeGuides: ViewModifier {
 
     func body(content: Content) -> some View {
         content.background {
-            FileTreeGuideShape(
-                offsets: offsets,
-                topExtension: isFirstChild && depth <= WorkspaceFileTreeLayout.maximumIndentationDepth
-                    ? WorkspaceFileTreeLayout.guideTopExtension : 0
-            )
-                .stroke(
-                    WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast)
-                        .opacity(WorkspaceFileTreeLayout.guideOpacity),
-                    lineWidth: WorkspaceFileTreeLayout.guideWidth
-                )
-                .accessibilityHidden(true)
+            FileTreeGuideShape(offsets: offsets)
+                .fileTreeGuideStroke(colorScheme: colorScheme, contrast: contrast)
         }
     }
 
     private var offsets: [CGFloat] {
         let accessibility = dynamicTypeSize.isAccessibilitySize
         return (0..<min(depth, WorkspaceFileTreeLayout.maximumIndentationDepth)).map {
-            WorkspaceFileTreeLayout.indentation(for: $0, accessibility: accessibility)
-                + iconSize / 2 - WorkspaceFileTreeLayout.guideLeadingShift
+            WorkspaceFileTreeLayout.indentation(for: $0, accessibility: accessibility) + iconSize / 2
         }
     }
 }
 
+/// `ownGuide` is an x offset and a distance below the vertical center where
+/// a folder's line starts.
 nonisolated private struct FileTreeGuideShape: Shape {
     let offsets: [CGFloat]
-    let topExtension: CGFloat
+    var ownGuide: (x: CGFloat, belowCenter: CGFloat)?
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        for (index, offset) in offsets.enumerated() {
-            let top = index == offsets.count - 1 ? rect.minY - topExtension : rect.minY
-            path.move(to: CGPoint(x: rect.minX + offset, y: top))
+        for offset in offsets {
+            path.move(to: CGPoint(x: rect.minX + offset, y: rect.minY))
             path.addLine(to: CGPoint(x: rect.minX + offset, y: rect.maxY))
+        }
+        if let ownGuide, rect.midY + ownGuide.belowCenter < rect.maxY {
+            path.move(to: CGPoint(x: rect.minX + ownGuide.x, y: rect.midY + ownGuide.belowCenter))
+            path.addLine(to: CGPoint(x: rect.minX + ownGuide.x, y: rect.maxY))
         }
         return path
     }

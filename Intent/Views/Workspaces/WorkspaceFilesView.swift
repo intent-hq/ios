@@ -16,7 +16,6 @@ struct WorkspaceFilesView: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             directoryState(path: ".")
-            let firstChildren = WorkspaceFileTreeLayout.firstChildIDs(store.rows, depth: \.depth)
             ForEach(store.rows) { row in
                 VStack(alignment: .leading, spacing: 0) {
                     entryButton(row)
@@ -26,7 +25,7 @@ struct WorkspaceFilesView: View {
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
-                .fileTreeGuides(depth: row.depth, isFirstChild: firstChildren.contains(row.id))
+                .fileTreeGuides(depth: row.depth)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -48,7 +47,8 @@ struct WorkspaceFilesView: View {
             WorkspaceFileTreeLabel(
                 name: row.depth >= WorkspaceFileTreeLayout.maximumIndentationDepth ? row.path : row.name,
                 isDirectory: row.isDirectory,
-                isExpanded: isExpanded
+                isExpanded: isExpanded,
+                showsChildGuide: WorkspaceFileTreeLayout.showsChildGuide(depth: row.depth, isExpanded: isExpanded)
             ) { EmptyView() }
         }
         .buttonStyle(IntentContentButtonStyle())
