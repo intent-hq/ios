@@ -95,7 +95,7 @@ struct PullRequestReviewer: Identifiable, Equatable {
     }
 }
 
-struct PullRequestFile: Identifiable, Equatable {
+struct PullRequestFile: Identifiable, Hashable {
     let filename: String
     let status: String
     let additions: Int

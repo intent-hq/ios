@@ -136,6 +136,8 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             file.tap()
             XCTAssertTrue(app.scrollViews["changes.diff.scroll"].waitForExistence(timeout: Self.timeout))
             capture(app, named: "pull-request-detail-code-\(appearance)")
+            app.buttons["pullRequest.file.back"].tap()
+            XCTAssertTrue(file.waitForExistence(timeout: Self.timeout))
 
             app.buttons["pullRequest.back"].tap()
             XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))

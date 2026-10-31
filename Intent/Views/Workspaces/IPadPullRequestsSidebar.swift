@@ -43,14 +43,16 @@ struct IPadPullRequestsSidebar: View {
         .background(IPadSidebarStyle.background(for: colorScheme))
         .task(id: query) { await PullRequestListContent.sync(session.pullRequestListStore, to: query) }
         .sheet(item: $detail) { item in
-            PullRequestDetailView(
-                item: item,
-                connection: session.connection,
-                linkedWorkspace: PullRequestListItem.linkedWorkspaces(workspaces)[item.id],
-                isModal: true
-            ) { workspaceId in
-                detail = nil
-                openWorkspace(workspaceId)
+            NavigationStack {
+                PullRequestDetailView(
+                    item: item,
+                    connection: session.connection,
+                    linkedWorkspace: PullRequestListItem.linkedWorkspaces(workspaces)[item.id],
+                    isModal: true
+                ) { workspaceId in
+                    detail = nil
+                    openWorkspace(workspaceId)
+                }
             }
         }
         .sheet(item: $creation) { item in

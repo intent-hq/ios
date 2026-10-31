@@ -20,7 +20,9 @@ private struct PullRequestLinkRouting: ViewModifier {
         content
             .environment(\.openURL, OpenURLAction(handler: open))
             .navigationDestination(item: $pushed) { detail($0, isModal: false) }
-            .sheet(item: $presented) { detail($0, isModal: true) }
+            .sheet(item: $presented) { item in
+                NavigationStack { detail(item, isModal: true) }
+            }
     }
 
     private func open(_ url: URL) -> OpenURLAction.Result {

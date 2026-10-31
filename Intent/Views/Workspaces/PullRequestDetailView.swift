@@ -20,7 +20,7 @@ struct PullRequestDetailView: View {
     @State private var tab: Tab = .summary
     @State private var showsChecks = false
     @State private var showsReviews = false
-    @State private var expandedFiles: Set<String> = []
+    @State private var selectedFile: PullRequestFile?
     @State private var collapsedDirectories: Set<String> = []
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -86,6 +86,7 @@ struct PullRequestDetailView: View {
         .nativeNavigationBackGesture()
         .accessibilityAction(.escape) { dismiss() }
         .task { await store.loadAll() }
+        .navigationDestination(item: $selectedFile) { PullRequestFileDiffPage(file: $0) }
         .accessibilityIdentifier("pullRequest.detail")
     }
 }
@@ -400,38 +401,22 @@ private extension PullRequestDetailView {
     }
 
     func fileRow(_ file: PullRequestFile, row: ChangeTree<PullRequestFile>.TreeRow) -> some View {
-        let expanded = expandedFiles.contains(file.id)
-        return VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.snappy) {
-                    if expanded { expandedFiles.remove(file.id) } else { expandedFiles.insert(file.id) }
+        Button {
+            selectedFile = file
+        } label: {
+            WorkspaceFileTreeLabel(name: WorkspaceFileTreeLayout.displayName(path: row.node.path, depth: row.depth), lineStats: (file.additions, file.deletions)) {
+                if file.status != "modified" {
+                    Text(file.status.capitalized)
+                        .font(Constants.Typography.subtextXXS.font)
+                        .foregroundStyle(secondary)
                 }
-            } label: {
-                WorkspaceFileTreeLabel(name: WorkspaceFileTreeLayout.displayName(path: row.node.path, depth: row.depth), lineStats: (file.additions, file.deletions)) {
-                    if file.status != "modified" {
-                        Text(file.status.capitalized)
-                            .font(Constants.Typography.subtextXXS.font)
-                            .foregroundStyle(secondary)
-                    }
-                }
-            }
-            .buttonStyle(IntentContentButtonStyle())
-            .padding(.leading, indentation(row))
-            .fileTreeGuides(depth: row.depth)
-            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
-            .accessibilityIdentifier("pullRequest.file.\(file.filename)")
-            if expanded {
-                WorkspaceFileDiffView(
-                    loader: nil,
-                    path: file.filename,
-                    isBinary: file.patch == nil,
-                    embedded: true,
-                    patch: file.patch
-                )
-                .clipShape(.rect(cornerRadius: Style.diffCornerRadius))
-                .padding(.bottom, Style.childRowPadding)
             }
         }
+        .buttonStyle(IntentContentButtonStyle())
+        .padding(.leading, indentation(row))
+        .fileTreeGuides(depth: row.depth)
+        .accessibilityHint("Opens the diff for \(file.filename)")
+        .accessibilityIdentifier("pullRequest.file.\(file.filename)")
     }
 }
 
@@ -468,6 +453,5 @@ private enum Style {
     static let rowPadding: CGFloat = 14
     static let childRowPadding: CGFloat = 8
     static let accessorySize: CGFloat = 16
-    static let diffCornerRadius: CGFloat = 12
     static let expandedRotation: Double = 90
 }

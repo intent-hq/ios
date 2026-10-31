@@ -9,6 +9,8 @@ struct WorkspaceFileDiffView: View {
     var commitHash: String?
     var embedded = false
     var patch: String?
+    /// Off when the page's own header already names the file.
+    var showsPath = true
     @State private var presentation: WorkspaceDiffPresentation?
     @State private var syntax: [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] = [:]
     @State private var syntaxIsDark = false
@@ -39,7 +41,7 @@ struct WorkspaceFileDiffView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if !embedded {
+            if !embedded, showsPath {
                 Text(path)
                     .font(.subheadline.monospaced())
                     .textSelection(.enabled)
