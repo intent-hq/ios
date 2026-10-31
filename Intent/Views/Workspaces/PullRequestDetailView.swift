@@ -72,6 +72,7 @@ struct PullRequestDetailView: View {
             }
             .padding(.horizontal, WorkspaceDetailStyle.pageInset)
             .padding(.bottom, WorkspaceDetailStyle.pageInset)
+            .iPadDetailColumn()
         }
         .background(WorkspaceDetailStyle.background(for: colorScheme))
         .safeAreaInset(edge: .top, spacing: 0) {
