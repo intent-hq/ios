@@ -12,6 +12,7 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var iconSize = WorkspaceChangesLayout.treeIconSize
+    @ScaledMetric(relativeTo: .body) private var fileIconSize = WorkspaceFileTreeLayout.fileIconSize
 
     private var secondary: Color {
         WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast)
@@ -22,7 +23,8 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
             Image(isDirectory ? .folder : .file)
                 .resizable()
                 .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
+                .frame(width: isDirectory ? iconSize : fileIconSize, height: isDirectory ? iconSize : fileIconSize)
+                .padding(isDirectory ? 0 : (iconSize - fileIconSize) / 2)
                 .foregroundStyle(secondary)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
@@ -56,8 +58,8 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
         }
         .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
         .multilineTextAlignment(.leading)
-        .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
+        .padding(.vertical, WorkspaceFileTreeLayout.rowVerticalPadding)
+        .frame(maxWidth: .infinity, minHeight: WorkspaceFileTreeLayout.rowHeight, alignment: .leading)
         .background {
             if showsChildGuide {
                 FileTreeGuideShape(offsets: [], ownGuide: (iconSize / 2, iconSize / 2 + WorkspaceFileTreeLayout.guideIconGap))
@@ -71,6 +73,9 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
 enum WorkspaceFileTreeLayout {
     static let maximumIndentationDepth = 3
     static let indentation: CGFloat = 22
+    static let rowHeight: CGFloat = 36
+    static let rowVerticalPadding: CGFloat = 7
+    static let fileIconSize: CGFloat = 13
     static let guideOpacity = 0.3
     static let guideWidth: CGFloat = 1
     /// Measured from the icon frame; the folder glyph sits about 2pt inside it.
