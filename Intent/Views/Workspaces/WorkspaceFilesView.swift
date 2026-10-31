@@ -25,6 +25,7 @@ struct WorkspaceFilesView: View {
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
+                .fileTreeGuides(depth: row.depth)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

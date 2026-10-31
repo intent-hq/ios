@@ -42,6 +42,7 @@ struct WorkspaceChangesFileTree: View {
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
+                .fileTreeGuides(depth: row.depth)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -79,7 +80,10 @@ struct WorkspaceChangesFileTree: View {
     }
 
     private func fileLabel(_ file: WorkspaceChange, name: String) -> some View {
-        WorkspaceFileTreeLabel(name: name) {
+        WorkspaceFileTreeLabel(
+            name: name,
+            lineStats: file.hasLineStats && !file.isBinary ? (file.additions, file.deletions) : nil
+        ) {
             fileMetadata(file)
                 .font(Constants.Typography.subtextXXS.font)
                 .foregroundStyle(secondary)
@@ -89,28 +93,11 @@ struct WorkspaceChangesFileTree: View {
     @ViewBuilder
     private func fileMetadata(_ file: WorkspaceChange) -> some View {
         let status = file.status == "modified" ? nil : file.status.capitalized
-        let label = [status, file.agentName].compactMap { $0 }.joined(separator: " · ")
-        if !label.isEmpty || file.isBinary || file.hasLineStats {
-            metadataLayout {
-                if !label.isEmpty {
-                    Text(label)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if file.isBinary {
-                    Text("Binary")
-                } else if file.hasLineStats {
-                    WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
-                        .fixedSize()
-                }
-            }
+        let label = ([status, file.agentName] + [file.isBinary ? "Binary" : nil]).compactMap { $0 }.joined(separator: " · ")
+        if !label.isEmpty {
+            Text(label)
+                .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private var metadataLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: WorkspaceChangesLayout.statsSpacing))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: CreateWorkspaceFormStyle.rowSpacing))
     }
 
     private func indentation(for depth: Int) -> CGFloat {

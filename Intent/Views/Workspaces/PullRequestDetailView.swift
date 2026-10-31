@@ -378,6 +378,7 @@ private extension PullRequestDetailView {
         }
         .buttonStyle(IntentContentButtonStyle())
         .padding(.leading, indentation(row))
+        .fileTreeGuides(depth: row.depth)
         .accessibilityLabel("Folder \(path), \(row.node.fileCount) files")
         .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
         .accessibilityIdentifier("pullRequest.folder.\(path)")
@@ -391,20 +392,17 @@ private extension PullRequestDetailView {
                     if expanded { expandedFiles.remove(file.id) } else { expandedFiles.insert(file.id) }
                 }
             } label: {
-                WorkspaceFileTreeLabel(name: row.node.name) {
-                    HStack(spacing: Style.subtitleSpacing) {
-                        if file.status != "modified" {
-                            Text(file.status.capitalized)
-                        }
-                        WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
-                            .fixedSize()
+                WorkspaceFileTreeLabel(name: row.node.name, lineStats: (file.additions, file.deletions)) {
+                    if file.status != "modified" {
+                        Text(file.status.capitalized)
+                            .font(Constants.Typography.subtextXXS.font)
+                            .foregroundStyle(secondary)
                     }
-                    .font(Constants.Typography.subtextXXS.font)
-                    .foregroundStyle(secondary)
                 }
             }
             .buttonStyle(IntentContentButtonStyle())
             .padding(.leading, indentation(row))
+            .fileTreeGuides(depth: row.depth)
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             .accessibilityIdentifier("pullRequest.file.\(file.filename)")
             if expanded {
