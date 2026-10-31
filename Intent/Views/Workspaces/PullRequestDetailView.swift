@@ -77,8 +77,9 @@ struct PullRequestDetailView: View {
                 backLabel: isModal ? "Close" : "Back to pull requests",
                 backIdentifier: "pullRequest.back",
                 leadingIcon: isModal ? .close : .arrowLeft,
-                onBack: { dismiss() }
-            ) { overflowMenu }
+                onBack: { dismiss() },
+                actions: { overflowMenu }
+            )
         }
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden()

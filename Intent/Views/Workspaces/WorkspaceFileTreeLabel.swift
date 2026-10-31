@@ -100,6 +100,7 @@ enum WorkspaceFileTreeLayout {
 
         return components.suffix(max(depth - maximumIndentationDepth, 0) + 1).joined(separator: "/")
     }
+
     static let guideOpacity = 0.3
     static let guideWidth: CGFloat = 1
     /// Measured from the icon frame; the folder glyph sits about 2pt inside it.

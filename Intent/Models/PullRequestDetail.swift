@@ -121,15 +121,18 @@ extension WorkspaceDiffBuilder {
     /// Hunks of a GitHub file `patch` (unified diff hunks without file headers).
     nonisolated static func hunks(patch: String) -> [WorkspaceDiffHunk] {
         var hunks: [WorkspaceDiffHunk] = []
-        var header: (oldStart: Int, oldLines: Int, newStart: Int, newLines: Int)?
+        var header: HunkHeader?
         var lines: [WorkspaceDiffLine] = []
         var oldLine = 0
         var newLine = 0
         func flush() {
             guard let header else { return }
             hunks.append(WorkspaceDiffHunk(
-                oldStart: header.oldStart, oldLines: header.oldLines,
-                newStart: header.newStart, newLines: header.newLines, lines: lines
+                oldStart: header.oldStart,
+                oldLines: header.oldLines,
+                newStart: header.newStart,
+                newLines: header.newLines,
+                lines: lines
             ))
         }
         for raw in patch.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -164,7 +167,14 @@ extension WorkspaceDiffBuilder {
     }
 
     /// `@@ -a,b +c,d @@ …`; a missing count means one line.
-    private nonisolated static func hunkHeader(_ line: String) -> (oldStart: Int, oldLines: Int, newStart: Int, newLines: Int)? {
+    nonisolated private struct HunkHeader {
+        let oldStart: Int
+        let oldLines: Int
+        let newStart: Int
+        let newLines: Int
+    }
+
+    nonisolated private static func hunkHeader(_ line: String) -> HunkHeader? {
         let ranges = line.split(separator: " ").dropFirst().prefix(2)
         guard ranges.count == 2 else { return nil }
         func parse(_ token: Substring) -> (Int, Int)? {
@@ -173,6 +183,6 @@ extension WorkspaceDiffBuilder {
             return (start, parts.count > 1 ? Int(parts[1]) ?? 1 : 1)
         }
         guard let old = parse(ranges[ranges.startIndex]), let new = parse(ranges[ranges.index(after: ranges.startIndex)]) else { return nil }
-        return (old.0, old.1, new.0, new.1)
+        return HunkHeader(oldStart: old.0, oldLines: old.1, newStart: new.0, newLines: new.1)
     }
 }
