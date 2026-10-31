@@ -16,6 +16,7 @@ struct WorkspaceFilesView: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             directoryState(path: ".")
+            let firstChildren = WorkspaceFileTreeLayout.firstChildIDs(store.rows, depth: \.depth)
             ForEach(store.rows) { row in
                 VStack(alignment: .leading, spacing: 0) {
                     entryButton(row)
@@ -25,7 +26,7 @@ struct WorkspaceFilesView: View {
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
-                .fileTreeGuides(depth: row.depth)
+                .fileTreeGuides(depth: row.depth, isFirstChild: firstChildren.contains(row.id))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

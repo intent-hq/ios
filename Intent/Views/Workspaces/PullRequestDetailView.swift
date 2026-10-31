@@ -341,12 +341,14 @@ private extension PullRequestDetailView {
         } else {
             LazyVStack(alignment: .leading, spacing: 0) {
                 let rows = ChangeTree(files: store.files).visibleRows(collapsedPaths: collapsedDirectories)
+                let firstChildren = WorkspaceFileTreeLayout.firstChildIDs(rows, depth: \.depth)
                 ForEach(rows) { row in
+                    let isFirstChild = firstChildren.contains(row.id)
                     switch row.node {
                     case .directory:
-                        directoryRow(row)
+                        directoryRow(row, isFirstChild: isFirstChild)
                     case .file(let file):
-                        fileRow(file, row: row)
+                        fileRow(file, row: row, isFirstChild: isFirstChild)
                     }
                 }
                 if store.filesTruncated {
@@ -361,7 +363,7 @@ private extension PullRequestDetailView {
         WorkspaceFileTreeLayout.indentation(for: row.depth, accessibility: dynamicTypeSize.isAccessibilitySize)
     }
 
-    func directoryRow(_ row: ChangeTree<PullRequestFile>.TreeRow) -> some View {
+    func directoryRow(_ row: ChangeTree<PullRequestFile>.TreeRow, isFirstChild: Bool) -> some View {
         let path = row.node.path
         let collapsed = collapsedDirectories.contains(path)
         return Button {
@@ -378,13 +380,13 @@ private extension PullRequestDetailView {
         }
         .buttonStyle(IntentContentButtonStyle())
         .padding(.leading, indentation(row))
-        .fileTreeGuides(depth: row.depth)
+        .fileTreeGuides(depth: row.depth, isFirstChild: isFirstChild)
         .accessibilityLabel("Folder \(path), \(row.node.fileCount) files")
         .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
         .accessibilityIdentifier("pullRequest.folder.\(path)")
     }
 
-    func fileRow(_ file: PullRequestFile, row: ChangeTree<PullRequestFile>.TreeRow) -> some View {
+    func fileRow(_ file: PullRequestFile, row: ChangeTree<PullRequestFile>.TreeRow, isFirstChild: Bool) -> some View {
         let expanded = expandedFiles.contains(file.id)
         return VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -402,7 +404,7 @@ private extension PullRequestDetailView {
             }
             .buttonStyle(IntentContentButtonStyle())
             .padding(.leading, indentation(row))
-            .fileTreeGuides(depth: row.depth)
+            .fileTreeGuides(depth: row.depth, isFirstChild: isFirstChild)
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             .accessibilityIdentifier("pullRequest.file.\(file.filename)")
             if expanded {

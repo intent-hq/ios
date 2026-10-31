@@ -31,6 +31,7 @@ struct WorkspaceChangesFileTree: View {
 
     private var tree: some View {
         let rows = WorkspaceChangeTree(files: files).visibleRows(collapsedPaths: collapsedDirectories)
+        let firstChildren = WorkspaceFileTreeLayout.firstChildIDs(rows, depth: \.depth)
         return LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(rows) { row in
                 Group {
@@ -42,7 +43,7 @@ struct WorkspaceChangesFileTree: View {
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
-                .fileTreeGuides(depth: row.depth)
+                .fileTreeGuides(depth: row.depth, isFirstChild: firstChildren.contains(row.id))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
