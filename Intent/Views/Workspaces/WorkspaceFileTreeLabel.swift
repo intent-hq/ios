@@ -6,6 +6,7 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
     var isExpanded = false
     /// Draws the start of the guide that runs down to this folder's children.
     var showsChildGuide = false
+    var showsChevron = true
     var count: Int?
     var lineStats: (additions: Int, deletions: Int)?
     @ViewBuilder let detail: () -> Detail
@@ -34,6 +35,7 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
                         .tracking(isDirectory ? 0 : CreateWorkspaceRepoStyle.nameTracking)
                         .fixedSize(horizontal: false, vertical: true)
                     if let lineStats {
+                        Spacer(minLength: 0)
                         WorkspaceChangeStats(additions: lineStats.additions, deletions: lineStats.deletions)
                             .font(Constants.Typography.subtextXXS.font)
                             .fixedSize()
@@ -47,7 +49,7 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
                     .interFont(Constants.Typography.subtextXXS)
                     .foregroundStyle(secondary)
             }
-            if isDirectory {
+            if isDirectory, showsChevron {
                 Image(isExpanded ? .chevronDown : .chevronRight)
                     .resizable()
                     .scaledToFit()

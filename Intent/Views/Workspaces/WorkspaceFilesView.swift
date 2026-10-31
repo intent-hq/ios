@@ -48,7 +48,8 @@ struct WorkspaceFilesView: View {
                 name: row.depth >= WorkspaceFileTreeLayout.maximumIndentationDepth ? row.path : row.name,
                 isDirectory: row.isDirectory,
                 isExpanded: isExpanded,
-                showsChildGuide: WorkspaceFileTreeLayout.showsChildGuide(depth: row.depth, isExpanded: isExpanded)
+                showsChildGuide: WorkspaceFileTreeLayout.showsChildGuide(depth: row.depth, isExpanded: isExpanded),
+                showsChevron: false
             ) { EmptyView() }
         }
         .buttonStyle(IntentContentButtonStyle())
