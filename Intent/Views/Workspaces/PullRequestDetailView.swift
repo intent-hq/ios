@@ -76,14 +76,13 @@ struct PullRequestDetailView: View {
         }
         .background(WorkspaceDetailStyle.background(for: colorScheme))
         .safeAreaInset(edge: .top, spacing: 0) {
-            // The workspace page's header: back, title, overflow menu.
-            // The iPad main pane drops the title, which the large heading repeats.
+            // The workspace page's header: back and overflow menu; the large heading carries the title.
             WorkspaceNavigationHeader(
                 title: item.title,
-                subtitle: onClose == nil ? "Pull request" : nil,
+                subtitle: nil,
                 backLabel: "Back to pull requests",
                 backIdentifier: "pullRequest.back",
-                showsTitle: onClose == nil,
+                showsTitle: false,
                 usesConversationLayout: true,
                 onBack: close
             ) { overflowMenu }
