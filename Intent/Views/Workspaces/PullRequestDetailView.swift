@@ -342,12 +342,15 @@ private extension PullRequestDetailView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 let rows = ChangeTree(files: store.files).visibleRows(collapsedPaths: collapsedDirectories)
                 ForEach(rows) { row in
-                    switch row.node {
-                    case .directory:
-                        directoryRow(row)
-                    case .file(let file):
-                        fileRow(file, row: row)
+                    Group {
+                        switch row.node {
+                        case .directory:
+                            directoryRow(row)
+                        case .file(let file):
+                            fileRow(file, row: row)
+                        }
                     }
+                    .fileTreeOutdent()
                 }
                 if store.filesTruncated {
                     muted("Showing the first \(PullRequestDetailStore.filesLimit) files. Open on GitHub for the rest.")
@@ -370,7 +373,7 @@ private extension PullRequestDetailView {
             }
         } label: {
             WorkspaceFileTreeLabel(
-                name: row.depth >= WorkspaceFileTreeLayout.maximumIndentationDepth ? path : row.node.name,
+                name: WorkspaceFileTreeLayout.displayName(path: path, depth: row.depth),
                 isDirectory: true,
                 isExpanded: !collapsed,
                 showsChildGuide: WorkspaceFileTreeLayout.showsChildGuide(depth: row.depth, isExpanded: !collapsed),
@@ -393,7 +396,7 @@ private extension PullRequestDetailView {
                     if expanded { expandedFiles.remove(file.id) } else { expandedFiles.insert(file.id) }
                 }
             } label: {
-                WorkspaceFileTreeLabel(name: row.node.name, lineStats: (file.additions, file.deletions)) {
+                WorkspaceFileTreeLabel(name: WorkspaceFileTreeLayout.displayName(path: row.node.path, depth: row.depth), lineStats: (file.additions, file.deletions)) {
                     if file.status != "modified" {
                         Text(file.status.capitalized)
                             .font(Constants.Typography.subtextXXS.font)

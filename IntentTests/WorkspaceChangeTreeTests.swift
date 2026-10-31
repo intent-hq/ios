@@ -9,6 +9,13 @@ struct WorkspaceChangeTreeTests {
         #expect(tree.visibleRows(collapsedPaths: []).isEmpty)
     }
 
+    @Test func rowsPastTheDeepestIndentationKeepTheirPathBelowIt() {
+        let path = "a/b/c/d/e/f/g.swift"
+        #expect(WorkspaceFileTreeLayout.displayName(path: "a/b", depth: 1) == "b")
+        #expect(WorkspaceFileTreeLayout.displayName(path: "a/b/c/d/e/f", depth: 5) == "f")
+        #expect(WorkspaceFileTreeLayout.displayName(path: path, depth: 6) == "f/g.swift")
+    }
+
     @Test func groupsDirectoriesBeforeFilesAndSortsNamesNaturally() {
         let files = ["z.txt", "src/file10.swift", "src/nested/child.swift", "README.md", "src/file2.swift", "docs/guide.md"].map { file($0) }
         let tree = WorkspaceChangeTree(files: files)

@@ -14,6 +14,7 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var iconSize = WorkspaceChangesLayout.treeIconSize
     @ScaledMetric(relativeTo: .body) private var fileIconSize = WorkspaceFileTreeLayout.fileIconSize
+    @ScaledMetric(relativeTo: .body) private var nameSize = WorkspaceFileTreeLayout.nameSize
 
     private var secondary: Color {
         WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast)
@@ -31,8 +32,7 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
             VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
                 HStack(alignment: .firstTextBaseline, spacing: CreateWorkspaceFormStyle.rowSpacing) {
                     Text(name)
-                        .interFont(Constants.Typography.bodySEmphasized)
-                        .tracking(isDirectory ? 0 : CreateWorkspaceRepoStyle.nameTracking)
+                        .font(.system(size: nameSize, weight: .medium, design: .monospaced))
                         .fixedSize(horizontal: false, vertical: true)
                     if let lineStats {
                         Spacer(minLength: 0)
@@ -73,11 +73,20 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
 }
 
 enum WorkspaceFileTreeLayout {
-    static let maximumIndentationDepth = 3
+    static let maximumIndentationDepth = 5
     static let indentation: CGFloat = 22
     static let rowHeight: CGFloat = 36
     static let rowVerticalPadding: CGFloat = 7
     static let fileIconSize: CGFloat = 13
+    static let nameSize: CGFloat = 14
+    /// Trees sit closer to the screen edge than page text to fit deeper nesting.
+    static let leadingOutdent: CGFloat = 12
+
+    /// Rows past the deepest indentation keep the path below their last indented ancestor.
+    static func displayName(path: String, depth: Int) -> String {
+        let components = path.split(separator: "/", omittingEmptySubsequences: false)
+        return components.suffix(max(depth - maximumIndentationDepth, 0) + 1).joined(separator: "/")
+    }
     static let guideOpacity = 0.3
     static let guideWidth: CGFloat = 1
     /// Measured from the icon frame; the folder glyph sits about 2pt inside it.
@@ -95,6 +104,10 @@ enum WorkspaceFileTreeLayout {
 }
 
 extension View {
+    func fileTreeOutdent() -> some View {
+        padding(.leading, -WorkspaceFileTreeLayout.leadingOutdent)
+    }
+
     /// Draws a vertical guide under each ancestor folder's icon. Rows stack
     /// without spacing, so the guides join into one line per open folder;
     /// the folder's own label starts the line just below its icon.

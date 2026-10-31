@@ -38,7 +38,7 @@ struct WorkspaceChangesFileTree: View {
                     case .directory:
                         directoryRow(row)
                     case .file(let file):
-                        fileRow(file, name: row.node.name)
+                        fileRow(file, name: WorkspaceFileTreeLayout.displayName(path: row.node.path, depth: row.depth))
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
@@ -46,6 +46,7 @@ struct WorkspaceChangesFileTree: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .fileTreeOutdent()
     }
 
     private func directoryRow(_ row: WorkspaceChangeTree.TreeRow) -> some View {
@@ -63,7 +64,7 @@ struct WorkspaceChangesFileTree: View {
 
     private func directoryLabel(_ row: WorkspaceChangeTree.TreeRow, isCollapsed: Bool) -> some View {
         WorkspaceFileTreeLabel(
-            name: row.depth >= WorkspaceFileTreeLayout.maximumIndentationDepth ? row.node.path : row.node.name,
+            name: WorkspaceFileTreeLayout.displayName(path: row.node.path, depth: row.depth),
             isDirectory: true,
             isExpanded: !isCollapsed,
             showsChildGuide: WorkspaceFileTreeLayout.showsChildGuide(depth: row.depth, isExpanded: !isCollapsed),
