@@ -75,6 +75,9 @@ struct WorkspaceListView: View {
         }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
+            // The Intent menu switches between the two lists.
+            onWorkspaces: showsPullRequests ? { listContent = .workspaces } : nil,
+            onPullRequests: showsPullRequests ? nil : { listContent = .pullRequests },
             onCreateWorkspace: createWorkspace
         ) {
             showingConnectionSwitcher = false

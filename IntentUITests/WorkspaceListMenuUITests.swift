@@ -65,16 +65,14 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         addTeardownBlock { @MainActor [self] () async in
             let app = launchWorkspaces()
             if app.staticTexts["workspaces.title"].label == "Pull requests" {
-                app.buttons["workspaces.menu"].tap()
-                app.buttons["workspaces.menu.content"].tap()
+                switchList(in: app, to: "workspaces")
             }
         }
         for appearance in ["light", "dark"] {
             let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
             let linked = app.buttons["pullRequests.row.nova-labs/console#482"]
             let reviewOnly = app.buttons["pullRequests.row.nova-labs/gateway#311"]
-            app.buttons["workspaces.menu"].tap()
-            app.buttons["workspaces.menu.content"].tap()
+            switchList(in: app, to: "pullRequests")
             XCTAssertTrue(linked.waitForExistence(timeout: Self.timeout))
             XCTAssertEqual(app.staticTexts["workspaces.title"].label, "Pull requests")
             XCTAssertTrue(linked.label.contains("Workspace Add usage analytics dashboard"))
@@ -104,8 +102,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             XCTAssertTrue(source.waitForNonExistence(timeout: Self.timeout))
 
             app.buttons["pullRequests.filter.Mine"].tap()
-            app.buttons["workspaces.menu"].tap()
-            app.buttons["workspaces.menu.content"].tap()
+            switchList(in: app, to: "workspaces")
             XCTAssertTrue(app.staticTexts["Add usage analytics dashboard"].waitForExistence(timeout: Self.timeout))
             XCTAssertFalse(linked.exists)
             app.terminate()
@@ -118,14 +115,12 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         addTeardownBlock { @MainActor [self] () async in
             let app = launchWorkspaces()
             if app.staticTexts["workspaces.title"].label == "Pull requests" {
-                app.buttons["workspaces.menu"].tap()
-                app.buttons["workspaces.menu.content"].tap()
+                switchList(in: app, to: "workspaces")
             }
         }
         for appearance in ["light", "dark"] {
             let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
-            app.buttons["workspaces.menu"].tap()
-            app.buttons["workspaces.menu.content"].tap()
+            switchList(in: app, to: "pullRequests")
             let row = app.buttons["pullRequests.row.nova-labs/console#482"]
             XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
             row.tap()
@@ -144,10 +139,18 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
 
             app.buttons["pullRequest.close"].tap()
             XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
-            app.buttons["workspaces.menu"].tap()
-            app.buttons["workspaces.menu.content"].tap()
+            switchList(in: app, to: "workspaces")
             app.terminate()
         }
+    }
+
+    /// The Intent menu switches between the Workspaces and Pull requests lists.
+    @MainActor
+    private func switchList(in app: XCUIApplication, to list: String) {
+        app.buttons["intent.menu.open"].tap()
+        let tile = app.buttons["intent.menu.\(list)"]
+        XCTAssertTrue(tile.waitForExistence(timeout: Self.timeout))
+        tile.tap()
     }
 
     @MainActor

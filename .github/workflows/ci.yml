@@ -939,6 +939,7 @@ jobs:
             IntentUITests/WorkspaceSearchUITests/testIPadSearchSurvivesCollapseAndSectionChanges
             IntentUITests/IPadSidebarUITests/testSectionsAndPairingRestoreConversationInBothThemes
             IntentUITests/IPadSidebarUITests/testRailRemainsReachableWithAccessibilityText
+            IntentUITests/IPadSidebarUITests/testPullRequestsSectionListsAndOpensDetailInBothThemes
             IntentUITests/IPadSidebarUITests/testRepeatedAgentSelectionReturnsFromChildAndPreservesDraft
             IntentUITests/IPadSidebarUITests/testRepeatedSidebarTogglesWithAgentHistoryPreserveDraft
             IntentUITests/WorkspaceChangesUITests/testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes

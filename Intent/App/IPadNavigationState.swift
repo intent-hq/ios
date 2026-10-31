@@ -3,6 +3,7 @@ import Foundation
 enum IPadSidebarSection: String, CaseIterable {
     case assistant
     case connections
+    case pullRequests
     case settings
     case workspaces
 }
@@ -52,7 +53,7 @@ struct IPadNavigationState: Equatable {
         case .workspaces:
             detail = .workspace
             pairing = nil
-        case .connections, .settings:
+        case .connections, .pullRequests, .settings:
             break
         }
         revealSidebar()
@@ -114,7 +115,8 @@ struct IPadNavigationState: Equatable {
         // opening a drawer over the conversation in a narrow window.
         isDrawerPresented = false
         if usesCompactNavigation, pairing == nil,
-           section == .settings || section == .connections || (detail == .workspace && showsWorkspaceList) {
+           section == .settings || section == .connections || section == .pullRequests
+           || (detail == .workspace && showsWorkspaceList) {
             revealSidebar()
         }
     }

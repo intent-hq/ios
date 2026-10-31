@@ -11,6 +11,7 @@ struct WorkspaceActionLauncher: ViewModifier {
     var floatingVerticalBarButtonEdge: HorizontalEdge = .trailing
     var onWorkspaces: (() -> Void)?
     var onAssistant: (() -> Void)?
+    var onPullRequests: (() -> Void)?
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -135,7 +136,8 @@ struct WorkspaceActionLauncher: ViewModifier {
                     onSelect: select,
                     allowsWorkspaceCreation: coordinator.canCreateWorkspace,
                     allowsAssistant: coordinator.canUseAssistant,
-                    showsWorkspaceList: onWorkspaces != nil
+                    showsWorkspaceList: onWorkspaces != nil,
+                    showsPullRequests: onPullRequests != nil
                 )
                     .padding(.horizontal, AssistantLauncherLayout.current.tileExtraInset)
                     .visionActionMenuDepth()
@@ -195,6 +197,7 @@ struct WorkspaceActionLauncher: ViewModifier {
         case .assistant:
             if let onAssistant { onAssistant() } else { coordinator.onSelectAssistant() }
         case .workspaces: onWorkspaces?()
+        case .pullRequests: onPullRequests?()
         case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
         case .settings: coordinator.onOpenSettings()

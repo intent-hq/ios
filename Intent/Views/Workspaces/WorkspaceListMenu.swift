@@ -25,9 +25,6 @@ struct WorkspaceListMenu: View {
         Menu {
             newWorkspaceAction
             Divider()
-            if let content {
-                contentSwitch(content)
-            }
             Button(action: onRecentAgents) {
                 Label {
                     Text("Recent agents").interFont(Constants.Typography.bodyS)
@@ -119,19 +116,5 @@ struct WorkspaceListMenu: View {
             }
         }
         .accessibilityIdentifier("workspaces.menu.archived")
-    }
-
-    private func contentSwitch(_ content: Binding<WorkspaceListContentKind>) -> some View {
-        Button {
-            content.wrappedValue = showsPullRequests ? .workspaces : .pullRequests
-        } label: {
-            Label {
-                Text(showsPullRequests ? "Workspaces" : "Pull requests")
-                    .interFont(Constants.Typography.bodyS)
-            } icon: {
-                Image(showsPullRequests ? ImageResource.folders : ImageResource.pullRequestOpen)
-            }
-        }
-        .accessibilityIdentifier("workspaces.menu.content")
     }
 }
