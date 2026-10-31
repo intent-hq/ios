@@ -10,7 +10,8 @@ import Observation
         case checks, detail, files, reviews
     }
 
-    let item: PullRequestListItem
+    /// Links open with only a number; the loaded pull request fills in its title and state.
+    private(set) var item: PullRequestListItem
     private(set) var detail: PullRequestDetail?
     private(set) var checks: [PullRequestCheck] = []
     private(set) var reviewers: [PullRequestReviewer] = []
@@ -51,7 +52,11 @@ import Observation
             switch section {
             case .detail:
                 let result = try await connection.request("github.pulls.get", params: address) as? [String: Any]
-                detail = (result?["pull"] as? [String: Any]).flatMap(PullRequestDetail.init(wire:)) ?? PullRequestDetail()
+                let pull = result?["pull"] as? [String: Any]
+                detail = pull.flatMap(PullRequestDetail.init(wire:)) ?? PullRequestDetail()
+                if let pull, let loaded = PullRequestListItem(wire: pull, owner: item.owner, repo: item.repo) {
+                    item = loaded.filling(from: item)
+                }
             case .checks:
                 let result = try await connection.request("github.pulls.checks", params: address) as? [String: Any]
                 checks = (result?["checks"] as? [[String: Any]] ?? []).compactMap(PullRequestCheck.init(wire:))

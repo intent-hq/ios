@@ -92,12 +92,63 @@ struct PullRequestListItem: Identifiable, Hashable {
         static let number = 3
     }
 
+    /// A github.com pull request link, titled by its number until details load.
+    init?(githubURL url: URL) {
+        guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              ["github.com", "www.github.com"].contains(url.host()?.lowercased() ?? "") else { return nil }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count > PullPath.number, parts[PullPath.kind] == "pull",
+              let number = Int(parts[PullPath.number]) else { return nil }
+        let owner = parts[PullPath.owner]
+        let repo = parts[PullPath.repo]
+        self.init(
+            owner: owner,
+            repo: repo,
+            number: number,
+            title: "#\(number)",
+            url: URL(string: "https://github.com/\(owner)/\(repo)/pull/\(number)")
+        )
+    }
+
+    /// `self` with fields the loaded pull request lacks kept from `other`.
+    func filling(from other: Self) -> Self {
+        Self(
+            owner: owner,
+            repo: repo,
+            number: number,
+            title: title,
+            url: url ?? other.url,
+            status: status,
+            author: author ?? other.author,
+            updatedAt: updatedAt ?? other.updatedAt,
+            headRef: headRef ?? other.headRef
+        )
+    }
+
+    /// The pull request a link points at when one of `workspaces` tracks it,
+    /// carrying the workspace's title and state for that pull request.
+    static func tracked(url: URL, in workspaces: [Workspace]) -> (item: Self, workspace: Workspace)? {
+        guard let link = Self(githubURL: url) else { return nil }
+        for workspace in workspaces {
+            let pulls = workspace.pullRequests + [workspace.activePullRequest].compactMap { $0 }
+            guard let pull = pulls.first(where: { linkKey($0, workspace: workspace) == link.id }) else { continue }
+            let item = Self(
+                owner: link.owner,
+                repo: link.repo,
+                number: link.number,
+                title: pull.title.flatMap { $0.isEmpty ? nil : $0 } ?? link.title,
+                url: link.url,
+                status: WorkspacePrPill.Status(wire: pull.status),
+                updatedAt: pull.updatedAt
+            )
+            return (item, workspace)
+        }
+        return nil
+    }
+
     private static func linkKey(_ pull: WorkspacePullRequest, workspace: Workspace) -> String? {
-        if let url = pull.url.flatMap(URL.init(string:)), url.host()?.lowercased() == "github.com" {
-            let parts = url.pathComponents.filter { $0 != "/" }
-            if parts.count > PullPath.number, parts[PullPath.kind] == "pull", let number = Int(parts[PullPath.number]) {
-                return key(owner: parts[PullPath.owner], repo: parts[PullPath.repo], number: number)
-            }
+        if let link = pull.url.flatMap(URL.init(string:)).flatMap(Self.init(githubURL:)) {
+            return link.id
         }
         guard let owner = workspace.repositoryOwner, let repo = workspace.repositoryName,
               !owner.isEmpty, !repo.isEmpty else { return nil }

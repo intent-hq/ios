@@ -553,6 +553,7 @@ $(SRCROOT)/Intent/Views/Workspaces/NewWorkspaceBrowserView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderModelStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestDetailView.swift
+$(SRCROOT)/Intent/Views/Workspaces/PullRequestLinkRouting.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestListContent.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestSwipeRow.swift

@@ -14,6 +14,7 @@ struct MarkdownTextView: View {
     private let mermaidSources: [String: String]
     private let pendingDiagram: MermaidMarkdownContent.PendingDiagram?
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.openURL) private var inheritedOpenURL
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.assistantMessageStreaming) private var isStreaming
     @Environment(\.conversationComposerFocus) private var composerFocus
@@ -166,7 +167,9 @@ struct MarkdownTextView: View {
         } catch {
             return .discarded
         }
-        return onOpenURL?(url) ?? .systemAction
+        if let onOpenURL { return onOpenURL(url) }
+        inheritedOpenURL(url)
+        return .handled
     }
 
     static func workspaceBrowser(

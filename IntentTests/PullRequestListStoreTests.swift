@@ -56,6 +56,33 @@ struct PullRequestListStoreTests {
         #expect(links["acme/app#7"] == nil)
     }
 
+    @Test func onlyLinksToWorkspaceTrackedPullRequestsResolve() throws {
+        let workspace = Workspace(
+            id: "ws",
+            title: "Dashboard",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            repositoryOwner: "Acme",
+            repositoryName: "App",
+            activePullRequest: WorkspacePullRequest(number: 9, status: "Merged", title: "feat: dashboard")
+        )
+        let link = try #require(URL(string: "https://github.com/acme/app/pull/9/files"))
+        let tracked = try #require(PullRequestListItem.tracked(url: link, in: [workspace]))
+        #expect(tracked.workspace.id == "ws")
+        #expect(tracked.item.id == "acme/app#9")
+        #expect(tracked.item.title == "feat: dashboard")
+        #expect(tracked.item.status == .merged)
+        #expect(tracked.item.url?.absoluteString == "https://github.com/acme/app/pull/9")
+
+        let untracked = ["https://github.com/acme/app/pull/10", "https://github.com/acme/app/issues/9", "https://example.com/acme/app/pull/9"]
+        for string in untracked {
+            #expect(PullRequestListItem.tracked(url: try #require(URL(string: string)), in: [workspace]) == nil)
+        }
+    }
+
     @Test func groupsByProjectInNewestFirstOrderAndQualifiesSharedNames() {
         let items = [
             PullRequestListItem(owner: "acme", repo: "api", number: 1, title: "a"),

@@ -90,6 +90,7 @@ struct ContentBlockBody: View, Equatable {
     var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.conversationComposerFocus) private var composerFocus
@@ -224,7 +225,8 @@ struct ContentBlockBody: View, Equatable {
                 coordinator.onSelectNote(noteId, workspaceId: targetWorkspaceId, noteTitle: "Note")
             }
         case .system:
-            return .systemAction
+            // Defer to the inherited handler, which opens tracked pull requests in the app.
+            openURL(url)
         }
         return .handled
     }
