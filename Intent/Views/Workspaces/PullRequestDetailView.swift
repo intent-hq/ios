@@ -14,6 +14,8 @@ struct PullRequestDetailView: View {
 
     @State private var store: PullRequestDetailStore
     let linkedWorkspace: Workspace?
+    /// A sheet (the iPad sidebar) closes instead of going back.
+    var isModal = false
     let onOpenWorkspace: (String) -> Void
     @State private var tab: Tab = .summary
     @State private var showsChecks = false
@@ -31,10 +33,12 @@ struct PullRequestDetailView: View {
         item: PullRequestListItem,
         connection: any ConnectionManagerRouting,
         linkedWorkspace: Workspace?,
+        isModal: Bool = false,
         onOpenWorkspace: @escaping (String) -> Void
     ) {
         _store = State(initialValue: PullRequestDetailStore(item: item, connection: connection))
         self.linkedWorkspace = linkedWorkspace
+        self.isModal = isModal
         self.onOpenWorkspace = onOpenWorkspace
     }
 
@@ -62,8 +66,20 @@ struct PullRequestDetailView: View {
             .padding(.bottom, WorkspaceDetailStyle.pageInset)
         }
         .background(WorkspaceDetailStyle.background(for: colorScheme))
-        .overlay(alignment: .topTrailing) { overflowMenu }
-        .presentationDragIndicator(.visible)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            // The workspace page's header: back (or close in a sheet), title, overflow menu.
+            WorkspaceNavigationHeader(
+                title: item.title,
+                subtitle: "Pull request",
+                backLabel: isModal ? "Close" : "Back to pull requests",
+                backIdentifier: "pullRequest.back",
+                leadingIcon: isModal ? .close : .arrowLeft,
+                onBack: { dismiss() }
+            ) { overflowMenu }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden()
+        .nativeNavigationBackGesture()
         .accessibilityAction(.escape) { dismiss() }
         .task { await store.loadAll() }
         .accessibilityIdentifier("pullRequest.detail")
@@ -97,8 +113,6 @@ private extension PullRequestDetailView {
             .accessibilityLabel("\(item.status.rawValue.capitalized) pull request #\(item.number) in \(item.owner)/\(item.repo)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Leaves the overflow menu its own corner.
-        .padding(.trailing, Constants.Accessibility.minimumTapTarget)
         .padding(.top, Style.headingTopSpacing)
         .padding(.bottom, WorkspaceDetailStyle.headingBottomSpacing)
     }
@@ -113,17 +127,12 @@ private extension PullRequestDetailView {
             if let linkedWorkspace {
                 Button("Open workspace", systemImage: "folder") { onOpenWorkspace(linkedWorkspace.id) }
             }
-            Divider()
-            Button("Close", systemImage: "xmark") { dismiss() }
-                .accessibilityIdentifier("pullRequest.close")
         } label: {
             ToolbarOverflowLabel()
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Pull request options")
         .accessibilityIdentifier("pullRequest.menu")
-        .padding(.top, Style.menuTopInset)
-        .padding(.trailing, Style.menuTrailingInset)
     }
 }
 
@@ -405,9 +414,7 @@ private extension PullRequestDetailView {
 }
 
 private enum Style {
-    static let headingTopSpacing: CGFloat = 40
-    static let menuTopInset: CGFloat = 20
-    static let menuTrailingInset: CGFloat = 12
+    static let headingTopSpacing: CGFloat = 16
     static let subtitleSpacing: CGFloat = 6
     static let subtitleIconSize: CGFloat = 14
     static let rowIconSpacing: CGFloat = 14

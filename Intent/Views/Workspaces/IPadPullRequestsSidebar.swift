@@ -66,7 +66,8 @@ struct IPadPullRequestsSidebar: View {
             PullRequestDetailView(
                 item: item,
                 connection: session.connection,
-                linkedWorkspace: PullRequestListItem.linkedWorkspaces(workspaces)[item.id]
+                linkedWorkspace: PullRequestListItem.linkedWorkspaces(workspaces)[item.id],
+                isModal: true
             ) { workspaceId in
                 detail = nil
                 openWorkspace(workspaceId)

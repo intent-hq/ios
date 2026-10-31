@@ -267,8 +267,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             let checks = app.buttons["pullRequest.checks"]
             XCTAssertTrue(checks.waitForExistence(timeout: Self.timeout))
             capture(app, name: "iPad pull request detail \(appearance)")
-            app.buttons["pullRequest.menu"].tap()
-            app.buttons["pullRequest.close"].tap()
+            app.buttons["pullRequest.back"].tap()
             XCTAssertTrue(checks.waitForNonExistence(timeout: Self.timeout))
             app.buttons["ipad.rail.workspaces"].tap()
             XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)

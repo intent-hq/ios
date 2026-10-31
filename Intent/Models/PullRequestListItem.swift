@@ -2,7 +2,7 @@ import Foundation
 
 /// One row of the pull requests list: a lenient parse of a
 /// `github.pulls.search` result (FE Home `PullWire` parity).
-struct PullRequestListItem: Identifiable, Equatable {
+struct PullRequestListItem: Identifiable, Hashable {
     let owner: String
     let repo: String
     let number: Int

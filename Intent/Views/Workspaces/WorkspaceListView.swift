@@ -99,7 +99,7 @@ struct WorkspaceListView: View {
             CreateWorkspaceView(session: session, coordinator: coordinator, pullRequest: item)
                 .environment(coordinator)
         }
-        .sheet(item: $detailPullRequest) { item in
+        .navigationDestination(item: $detailPullRequest) { item in
             PullRequestDetailView(
                 item: item,
                 connection: session.connection,
