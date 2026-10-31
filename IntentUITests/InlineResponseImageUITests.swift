@@ -178,16 +178,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             app.otherElements["ActivityListView"].firstMatch.waitForExistence(timeout: Fixture.timeout),
             "Share must present the native activity sheet"
         )
-        // ios#803: the share item keeps the original document name, never the cache name.
-        let activity = app.otherElements["ActivityListView"].firstMatch
-        let named = activity.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@", "Demo brief")
-        ).firstMatch
-        XCTAssertTrue(named.waitForExistence(timeout: Fixture.timeout), "Share sheet must show the original PDF name")
-        let cacheNamed = activity.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@", "chat-pdf-")
-        ).firstMatch
-        XCTAssertFalse(cacheNamed.exists, "Share sheet must not expose the cache filename")
+        assertPDFShareKeepsOriginalName(in: app, timeout: Fixture.timeout)
         captureMedia(app, named: "PDF share sheet")
     }
 }
