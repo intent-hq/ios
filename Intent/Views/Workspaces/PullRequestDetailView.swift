@@ -74,6 +74,8 @@ struct PullRequestDetailView: View {
             .padding(.bottom, WorkspaceDetailStyle.pageInset)
             .iPadDetailColumn()
         }
+        // On the scroll view only, so header controls keep their own identifiers.
+        .accessibilityIdentifier("pullRequest.detail")
         .background(WorkspaceDetailStyle.background(for: colorScheme))
         .safeAreaInset(edge: .top, spacing: 0) {
             // The workspace page's header: back and overflow menu; the large heading carries the title.
@@ -93,7 +95,6 @@ struct PullRequestDetailView: View {
         .accessibilityAction(.escape) { close() }
         .task { await store.loadAll() }
         .navigationDestination(item: $selectedFile) { PullRequestFileDiffPage(file: $0) }
-        .accessibilityIdentifier("pullRequest.detail")
     }
 }
 

@@ -149,10 +149,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     /// The Intent menu switches between the Workspaces and Pull requests lists.
     @MainActor
     private func switchList(in app: XCUIApplication, to list: String) {
-        app.buttons["intent.menu.open"].tap()
-        let tile = app.buttons["intent.menu.\(list)"]
-        XCTAssertTrue(tile.waitForExistence(timeout: Self.timeout))
-        tile.tap()
+        app.openHomeAction(list)
     }
 
     @MainActor

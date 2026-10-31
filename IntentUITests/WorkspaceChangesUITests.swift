@@ -161,11 +161,11 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         reveal(nested, in: app)
         nested.tap()
         XCTAssertEqual(nested.value as? String, "Collapsed")
-        XCTAssertFalse(child.exists)
+        XCTAssertTrue(child.waitForNonExistence(timeout: Fixture.timeout))
         let parent = app.buttons["changes.folder.unstaged.Sources"].firstMatch
         reveal(parent, in: app, towardTop: true)
         parent.tap()
-        XCTAssertFalse(nested.exists)
+        XCTAssertTrue(nested.waitForNonExistence(timeout: Fixture.timeout))
         parent.tap()
         reveal(nested, in: app)
         XCTAssertEqual(nested.value as? String, "Collapsed")
