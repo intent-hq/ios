@@ -107,7 +107,7 @@ private struct FileTreeGuides: ViewModifier {
     }
 }
 
-private struct FileTreeGuideShape: Shape {
+nonisolated private struct FileTreeGuideShape: Shape {
     let offsets: [CGFloat]
 
     func path(in rect: CGRect) -> Path {
