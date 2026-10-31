@@ -19,6 +19,7 @@ struct PullRequestFileDiffPage: View {
                     subtitle: folder.isEmpty ? nil : LocalizedStringKey(folder),
                     backLabel: "Back to pull request",
                     backIdentifier: "pullRequest.file.back",
+                    usesConversationLayout: true,
                     onBack: { dismiss() },
                     actions: {
                         Color.clear

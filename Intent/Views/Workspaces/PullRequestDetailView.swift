@@ -14,8 +14,6 @@ struct PullRequestDetailView: View {
 
     @State private var store: PullRequestDetailStore
     let linkedWorkspace: Workspace?
-    /// A sheet (the iPad sidebar) closes instead of going back.
-    var isModal = false
     /// Replaces dismissal where the page is not presented (the iPad main pane).
     var onClose: (() -> Void)?
     let onOpenWorkspace: (String) -> Void
@@ -38,13 +36,11 @@ struct PullRequestDetailView: View {
         item: PullRequestListItem,
         connection: any ConnectionManagerRouting,
         linkedWorkspace: Workspace?,
-        isModal: Bool = false,
         onClose: (() -> Void)? = nil,
         onOpenWorkspace: @escaping (String) -> Void
     ) {
         _store = State(initialValue: PullRequestDetailStore(item: item, connection: connection))
         self.linkedWorkspace = linkedWorkspace
-        self.isModal = isModal
         self.onClose = onClose
         self.onOpenWorkspace = onOpenWorkspace
     }
@@ -79,13 +75,15 @@ struct PullRequestDetailView: View {
         }
         .background(WorkspaceDetailStyle.background(for: colorScheme))
         .safeAreaInset(edge: .top, spacing: 0) {
-            // The workspace page's header: back (or close in a sheet), title, overflow menu.
+            // The workspace page's header: back, title, overflow menu.
+            // The iPad main pane drops the title, which the large heading repeats.
             WorkspaceNavigationHeader(
                 title: item.title,
-                subtitle: "Pull request",
-                backLabel: isModal ? "Close" : "Back to pull requests",
+                subtitle: onClose == nil ? "Pull request" : nil,
+                backLabel: "Back to pull requests",
                 backIdentifier: "pullRequest.back",
-                leadingIcon: isModal ? .close : .arrowLeft,
+                showsTitle: onClose == nil,
+                usesConversationLayout: true,
                 onBack: close
             ) { overflowMenu }
         }

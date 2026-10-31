@@ -112,7 +112,6 @@ struct IPadPullRequestDetail: View {
                 item: item,
                 connection: session.connection,
                 linkedWorkspace: PullRequestListItem.linkedWorkspaces(session.workspaceStore.workspaces)[item.id],
-                isModal: true,
                 onClose: coordinator.onCloseIPadPullRequest
             ) { workspaceId in
                 coordinator.onCloseIPadPullRequest()
