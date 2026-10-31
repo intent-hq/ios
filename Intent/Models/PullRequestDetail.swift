@@ -103,6 +103,7 @@ struct PullRequestFile: Identifiable, Equatable {
     let patch: String?
 
     var id: String { filename }
+    var path: String { filename }
 
     init?(wire: [String: Any]) {
         guard let filename = wire["filename"] as? String else { return nil }
@@ -113,6 +114,8 @@ struct PullRequestFile: Identifiable, Equatable {
         patch = wire["patch"] as? String
     }
 }
+
+extension PullRequestFile: @MainActor ChangeTreeFile {}
 
 extension WorkspaceDiffBuilder {
     /// Hunks of a GitHub file `patch` (unified diff hunks without file headers).

@@ -21,10 +21,12 @@ struct PullRequestDetailView: View {
     @State private var showsChecks = false
     @State private var showsReviews = false
     @State private var expandedFiles: Set<String> = []
+    @State private var collapsedDirectories: Set<String> = []
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 20
     @ScaledMetric(relativeTo: .body) private var avatarSize: CGFloat = 20
     @ScaledMetric(relativeTo: .title) private var titleTracking = WorkspaceDetailStyle.titleTracking
@@ -338,9 +340,14 @@ private extension PullRequestDetailView {
             muted("No changed files")
         } else {
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(store.files) { file in
-                    fileRow(file)
-                    Divider()
+                let rows = ChangeTree(files: store.files).visibleRows(collapsedPaths: collapsedDirectories)
+                ForEach(rows) { row in
+                    switch row.node {
+                    case .directory:
+                        directoryRow(row)
+                    case .file(let file):
+                        fileRow(file, row: row)
+                    }
                 }
                 if store.filesTruncated {
                     muted("Showing the first \(PullRequestDetailStore.filesLimit) files. Open on GitHub for the rest.")
@@ -350,10 +357,56 @@ private extension PullRequestDetailView {
         }
     }
 
-    func fileRow(_ file: PullRequestFile) -> some View {
+    func indentation(_ row: ChangeTree<PullRequestFile>.TreeRow) -> CGFloat {
+        WorkspaceFileTreeLayout.indentation(for: row.depth, accessibility: dynamicTypeSize.isAccessibilitySize)
+    }
+
+    func directoryRow(_ row: ChangeTree<PullRequestFile>.TreeRow) -> some View {
+        let path = row.node.path
+        let collapsed = collapsedDirectories.contains(path)
+        return Button {
+            withAnimation(.snappy) {
+                if collapsed { collapsedDirectories.remove(path) } else { collapsedDirectories.insert(path) }
+            }
+        } label: {
+            WorkspaceFileTreeLabel(
+                name: row.depth >= WorkspaceFileTreeLayout.maximumIndentationDepth ? path : row.node.name,
+                isDirectory: true,
+                isExpanded: !collapsed,
+                count: row.node.fileCount
+            ) { EmptyView() }
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .padding(.leading, indentation(row))
+        .accessibilityLabel("Folder \(path), \(row.node.fileCount) files")
+        .accessibilityValue(collapsed ? "Collapsed" : "Expanded")
+        .accessibilityIdentifier("pullRequest.folder.\(path)")
+    }
+
+    func fileRow(_ file: PullRequestFile, row: ChangeTree<PullRequestFile>.TreeRow) -> some View {
         let expanded = expandedFiles.contains(file.id)
         return VStack(alignment: .leading, spacing: 0) {
-            fileHeader(file, expanded: expanded)
+            Button {
+                withAnimation(.snappy) {
+                    if expanded { expandedFiles.remove(file.id) } else { expandedFiles.insert(file.id) }
+                }
+            } label: {
+                WorkspaceFileTreeLabel(name: row.node.name) {
+                    HStack(spacing: Style.subtitleSpacing) {
+                        if file.status != "modified" {
+                            Text(file.status.capitalized)
+                        }
+                        WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
+                            .fixedSize()
+                    }
+                    .font(Constants.Typography.subtextXXS.font)
+                    .foregroundStyle(secondary)
+                }
+            }
+            .buttonStyle(IntentContentButtonStyle())
+            .padding(.leading, indentation(row))
+            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+            .accessibilityIdentifier("pullRequest.file.\(file.filename)")
             if expanded {
                 WorkspaceFileDiffView(
                     loader: nil,
@@ -363,37 +416,9 @@ private extension PullRequestDetailView {
                     patch: file.patch
                 )
                 .clipShape(.rect(cornerRadius: Style.diffCornerRadius))
-                .padding(.bottom, Style.fileRowPadding)
+                .padding(.bottom, Style.childRowPadding)
             }
         }
-    }
-
-    func fileHeader(_ file: PullRequestFile, expanded: Bool) -> some View {
-        Button {
-            withAnimation(.snappy) {
-                if expanded { expandedFiles.remove(file.id) } else { expandedFiles.insert(file.id) }
-            }
-        } label: {
-            HStack(spacing: Style.rowIconSpacing) {
-                Text(file.filename)
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(foreground)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
-                Image(.chevronRight).resizable().scaledToFit()
-                    .frame(width: Style.accessorySize, height: Style.accessorySize)
-                    .rotationEffect(.degrees(expanded ? Style.expandedRotation : 0))
-                    .foregroundStyle(secondary)
-                    .accessibilityHidden(true)
-            }
-            .padding(.vertical, Style.fileRowPadding)
-            .contentShape(.rect)
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .accessibilityValue(expanded ? "Expanded" : "Collapsed")
-        .accessibilityIdentifier("pullRequest.file.\(file.filename)")
     }
 }
 
@@ -430,7 +455,6 @@ private enum Style {
     static let rowPadding: CGFloat = 14
     static let childRowPadding: CGFloat = 8
     static let accessorySize: CGFloat = 16
-    static let fileRowPadding: CGFloat = 14
     static let diffCornerRadius: CGFloat = 12
     static let expandedRotation: Double = 90
 }
