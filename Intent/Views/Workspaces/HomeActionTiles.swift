@@ -5,8 +5,8 @@ struct HomeActionTiles: View {
     enum Action: String, CaseIterable {
         case assistant
         case workspaces
-        case pullRequests
         case workspace
+        case pullRequests
         case connections
         case appearance
         case settings
