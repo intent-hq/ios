@@ -11,6 +11,7 @@ struct WorkspaceChangesFileTree: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         WorkspaceChangesSection(title: title, count: files.count, identifier: identifier, isExpanded: $isExpanded) {
@@ -107,10 +108,13 @@ struct WorkspaceChangesFileTree: View {
     }
 
     private func toggleDirectory(_ path: String) {
-        if collapsedDirectories.contains(path) {
-            collapsedDirectories.remove(path)
-        } else {
-            collapsedDirectories.insert(path)
+        let opening = collapsedDirectories.contains(path)
+        withAnimation(WorkspaceFileTreeLayout.folderToggleAnimation(opening: opening, reduceMotion: reduceMotion)) {
+            if opening {
+                collapsedDirectories.remove(path)
+            } else {
+                collapsedDirectories.insert(path)
+            }
         }
     }
 }

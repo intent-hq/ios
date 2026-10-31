@@ -27,6 +27,7 @@ struct PullRequestDetailView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 20
     @ScaledMetric(relativeTo: .body) private var avatarSize: CGFloat = 20
     @ScaledMetric(relativeTo: .title) private var titleTracking = WorkspaceDetailStyle.titleTracking
@@ -368,7 +369,7 @@ private extension PullRequestDetailView {
         let path = row.node.path
         let collapsed = collapsedDirectories.contains(path)
         return Button {
-            withAnimation(.snappy) {
+            withAnimation(WorkspaceFileTreeLayout.folderToggleAnimation(opening: collapsed, reduceMotion: reduceMotion)) {
                 if collapsed { collapsedDirectories.remove(path) } else { collapsedDirectories.insert(path) }
             }
         } label: {

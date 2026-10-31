@@ -82,6 +82,14 @@ enum WorkspaceFileTreeLayout {
     /// Trees sit closer to the screen edge than page text to fit deeper nesting.
     static let leadingOutdent: CGFloat = 12
 
+    static let folderOpenDuration = 0.25
+    /// Closing runs a little faster than opening so collapsing feels immediate.
+    static let folderCloseDuration = 0.18
+
+    static func folderToggleAnimation(opening: Bool, reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .snappy(duration: opening ? folderOpenDuration : folderCloseDuration)
+    }
+
     /// Rows past the deepest indentation keep the path below their last indented ancestor.
     static func displayName(path: String, depth: Int) -> String {
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
