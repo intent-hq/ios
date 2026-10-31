@@ -235,7 +235,7 @@ struct HomeActionTiles: View {
         switch action {
         case .assistant: .intentDandelion
         case .workspaces: .agentGeneral1
-        case .pullRequests: .pullRequestOpen
+        case .pullRequests: .pullRequests
         case .workspace: .addIcon
         case .connections: .connectionLaptop
         case .appearance:

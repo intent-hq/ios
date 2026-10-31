@@ -244,6 +244,10 @@ struct IPadShellView: View {
                     AssistantView(session: session)
                 }
             }
+            if let pullRequest = coordinator.iPadPullRequest, navigation.detail == .pullRequest, navigation.pairing == nil {
+                IPadPullRequestDetail(item: pullRequest, session: session)
+                    .id(pullRequest.id)
+            }
             if let pairing = navigation.pairing {
                 IPadPairingDetail(mode: pairing) { coordinator.iPadNavigation.cancelPairing() }
                     .accessibilityHidden(true, isEnabled: isDrawerVisible)

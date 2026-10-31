@@ -2,27 +2,23 @@ import SwiftUI
 
 extension View {
     /// Opens links to pull requests a workspace tracks in the pull request
-    /// page, pushed on a stack or as a sheet; other links keep their handler.
-    func pullRequestLinkRouting(asSheet: Bool = false) -> some View {
-        modifier(PullRequestLinkRouting(asSheet: asSheet))
+    /// page, pushed on the stack or in the iPad main pane; other links keep their handler.
+    func pullRequestLinkRouting(inIPadDetail: Bool = false) -> some View {
+        modifier(PullRequestLinkRouting(inIPadDetail: inIPadDetail))
     }
 }
 
 private struct PullRequestLinkRouting: ViewModifier {
-    let asSheet: Bool
+    let inIPadDetail: Bool
     @Environment(BackendSession.self) private var session
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.openURL) private var inheritedOpenURL
     @State private var pushed: PullRequestListItem?
-    @State private var presented: PullRequestListItem?
 
     func body(content: Content) -> some View {
         content
             .environment(\.openURL, OpenURLAction(handler: open))
-            .navigationDestination(item: $pushed) { detail($0, isModal: false) }
-            .sheet(item: $presented) { item in
-                NavigationStack { detail(item, isModal: true) }
-            }
+            .navigationDestination(item: $pushed) { detail($0) }
     }
 
     private func open(_ url: URL) -> OpenURLAction.Result {
@@ -30,23 +26,21 @@ private struct PullRequestLinkRouting: ViewModifier {
             inheritedOpenURL(url)
             return .handled
         }
-        if asSheet {
-            presented = tracked.item
+        if inIPadDetail {
+            coordinator.onSelectIPadPullRequest(tracked.item)
         } else {
             pushed = tracked.item
         }
         return .handled
     }
 
-    private func detail(_ item: PullRequestListItem, isModal: Bool) -> some View {
+    private func detail(_ item: PullRequestListItem) -> some View {
         PullRequestDetailView(
             item: item,
             connection: session.connection,
-            linkedWorkspace: PullRequestListItem.linkedWorkspaces(session.workspaceStore.workspaces)[item.id],
-            isModal: isModal
+            linkedWorkspace: PullRequestListItem.linkedWorkspaces(session.workspaceStore.workspaces)[item.id]
         ) { workspaceId in
             pushed = nil
-            presented = nil
             coordinator.onSelectWorkspace(workspaceId)
         }
     }

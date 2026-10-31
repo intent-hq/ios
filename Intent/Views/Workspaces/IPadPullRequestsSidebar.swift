@@ -10,7 +10,6 @@ struct IPadPullRequestsSidebar: View {
     @AppStorage("pullRequests.filter") private var filter: PullRequestListStore.Filter = .created
     @AppStorage("pullRequests.groupsByProject") private var groupsByProject = false
     @State private var showsClosed = false
-    @State private var detail: PullRequestListItem?
     @State private var creation: PullRequestListItem?
 
     private var workspaces: [Workspace] { session.workspaceStore.workspaces }
@@ -42,19 +41,6 @@ struct IPadPullRequestsSidebar: View {
         }
         .background(IPadSidebarStyle.background(for: colorScheme))
         .task(id: query) { await PullRequestListContent.sync(session.pullRequestListStore, to: query) }
-        .sheet(item: $detail) { item in
-            NavigationStack {
-                PullRequestDetailView(
-                    item: item,
-                    connection: session.connection,
-                    linkedWorkspace: PullRequestListItem.linkedWorkspaces(workspaces)[item.id],
-                    isModal: true
-                ) { workspaceId in
-                    detail = nil
-                    openWorkspace(workspaceId)
-                }
-            }
-        }
         .sheet(item: $creation) { item in
             CreateWorkspaceView(session: session, coordinator: coordinator, pullRequest: item)
                 .environment(coordinator)
@@ -73,7 +59,7 @@ struct IPadPullRequestsSidebar: View {
                 ) { workspaceId in
                     openWorkspace(workspaceId)
                 } onOpenDetail: { item in
-                    detail = item
+                    coordinator.onSelectIPadPullRequest(item)
                 } onOpenAgent: { workspaceId in
                     coordinator.onSelectIPadSection(.workspaces)
                     coordinator.onOpenRecentWorkspaceAgent(workspaceId)
@@ -111,5 +97,28 @@ struct IPadPullRequestsSidebar: View {
     private func openWorkspace(_ workspaceId: String) {
         coordinator.onSelectIPadSection(.workspaces)
         coordinator.onSelectWorkspace(workspaceId)
+    }
+}
+
+/// The selected pull request in the iPad main pane, with its own stack for file diffs.
+struct IPadPullRequestDetail: View {
+    let item: PullRequestListItem
+    let session: BackendSession
+    @Environment(AppCoordinator.self) private var coordinator
+
+    var body: some View {
+        NavigationStack {
+            PullRequestDetailView(
+                item: item,
+                connection: session.connection,
+                linkedWorkspace: PullRequestListItem.linkedWorkspaces(session.workspaceStore.workspaces)[item.id],
+                isModal: true,
+                onClose: coordinator.onCloseIPadPullRequest
+            ) { workspaceId in
+                coordinator.onCloseIPadPullRequest()
+                coordinator.onSelectIPadSection(.workspaces)
+                coordinator.onSelectWorkspace(workspaceId)
+            }
+        }
     }
 }

@@ -16,6 +16,8 @@ struct PullRequestDetailView: View {
     let linkedWorkspace: Workspace?
     /// A sheet (the iPad sidebar) closes instead of going back.
     var isModal = false
+    /// Replaces dismissal where the page is not presented (the iPad main pane).
+    var onClose: (() -> Void)?
     let onOpenWorkspace: (String) -> Void
     @State private var tab: Tab = .summary
     @State private var showsChecks = false
@@ -37,15 +39,22 @@ struct PullRequestDetailView: View {
         connection: any ConnectionManagerRouting,
         linkedWorkspace: Workspace?,
         isModal: Bool = false,
+        onClose: (() -> Void)? = nil,
         onOpenWorkspace: @escaping (String) -> Void
     ) {
         _store = State(initialValue: PullRequestDetailStore(item: item, connection: connection))
         self.linkedWorkspace = linkedWorkspace
         self.isModal = isModal
+        self.onClose = onClose
         self.onOpenWorkspace = onOpenWorkspace
     }
 
     var item: PullRequestListItem { store.item }
+
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
+    }
+
     var secondary: Color { WorkspaceDetailStyle.secondary(for: colorScheme, contrast: contrast) }
     var foreground: Color { WorkspaceDetailStyle.foreground(for: colorScheme) }
 
@@ -77,14 +86,13 @@ struct PullRequestDetailView: View {
                 backLabel: isModal ? "Close" : "Back to pull requests",
                 backIdentifier: "pullRequest.back",
                 leadingIcon: isModal ? .close : .arrowLeft,
-                onBack: { dismiss() },
-                actions: { overflowMenu }
-            )
+                onBack: close
+            ) { overflowMenu }
         }
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden()
         .nativeNavigationBackGesture()
-        .accessibilityAction(.escape) { dismiss() }
+        .accessibilityAction(.escape) { close() }
         .task { await store.loadAll() }
         .navigationDestination(item: $selectedFile) { PullRequestFileDiffPage(file: $0) }
         .accessibilityIdentifier("pullRequest.detail")

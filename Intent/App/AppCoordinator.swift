@@ -84,6 +84,8 @@ class AppCoordinator {
     var usesIPadShell = false
     var iPadNavigation = IPadNavigationState()
     var workspaceChange: WorkspaceChangeDestination?
+    /// The pull request in the iPad main pane.
+    var iPadPullRequest: PullRequestListItem?
     var workspaceSidebarAgents = WorkspaceSidebarAgents()
     var assistantAgentId: String?
     var workspaceCreationDraft: WorkspaceCreationDraft?

@@ -14,7 +14,7 @@ struct IPadWorkspaceDetailView: View {
         @Bindable var coordinator = coordinator
         NavigationStack(path: $notePath) {
             content
-                .pullRequestLinkRouting(asSheet: true)
+                .pullRequestLinkRouting(inIPadDetail: true)
                 .paneSwipe(isSwiping: $isSwiping, onBack: swipeBack, onForward: swipeForward)
                 .onPreferenceChange(WorkspaceFirstAgentPreference.self) { firstAgent = $0 }
                 .navigationDestination(for: NoteDestination.self) { destination in

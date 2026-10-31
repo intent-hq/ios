@@ -10,6 +10,7 @@ enum IPadSidebarSection: String, CaseIterable {
 
 enum IPadDetailSelection: Equatable {
     case assistant
+    case pullRequest
     case workspace
 }
 
@@ -72,6 +73,18 @@ struct IPadNavigationState: Equatable {
         hasOpenedAssistant = true
         pairing = nil
         detailWasSelected()
+    }
+
+    mutating func showPullRequestDetail() {
+        section = .pullRequests
+        detail = .pullRequest
+        pairing = nil
+        detailWasSelected()
+    }
+
+    /// Closing a pull request returns the main pane to the workspace and keeps the sidebar.
+    mutating func closePullRequestDetail() {
+        if detail == .pullRequest { detail = .workspace }
     }
 
     mutating func presentPairing(_ mode: IPadPairingMode) {

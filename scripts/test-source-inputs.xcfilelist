@@ -204,6 +204,7 @@ $(SRCROOT)/Intent/Assets.xcassets/PullRequestClosed.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PullRequestDraft.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PullRequestMerged.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PullRequestOpen.imageset
+$(SRCROOT)/Intent/Assets.xcassets/PullRequests.imageset
 $(SRCROOT)/Intent/Assets.xcassets/QRCode.imageset
 $(SRCROOT)/Intent/Assets.xcassets/QuestionCircle.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Redo.imageset
