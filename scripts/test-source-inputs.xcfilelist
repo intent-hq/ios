@@ -326,6 +326,7 @@ $(SRCROOT)/Intent/Models/NewRepositoryDraft.swift
 $(SRCROOT)/Intent/Models/Note.swift
 $(SRCROOT)/Intent/Models/PendingFile.swift
 $(SRCROOT)/Intent/Models/PrMonitorWakeAttribution.swift
+$(SRCROOT)/Intent/Models/PullRequestDetail.swift
 $(SRCROOT)/Intent/Models/PullRequestListItem.swift
 $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
@@ -519,6 +520,7 @@ $(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
 $(SRCROOT)/Intent/Services/PerMessageDeflate.swift
 $(SRCROOT)/Intent/Services/ProposalActionStore.swift
+$(SRCROOT)/Intent/Services/PullRequestDetailStore.swift
 $(SRCROOT)/Intent/Services/PullRequestListStore.swift
 $(SRCROOT)/Intent/Services/RemoteImageLoader.swift
 $(SRCROOT)/Intent/Services/SkillCatalogStore.swift
@@ -824,6 +826,7 @@ $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
 $(SRCROOT)/Intent/Views/Workspaces/NewWorkspaceBrowserView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderModelStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderPicker.swift
+$(SRCROOT)/Intent/Views/Workspaces/PullRequestDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestListContent.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestSwipeRow.swift
@@ -1178,6 +1181,7 @@ $(SRCROOT)/IntentTests/PlatformGuardAllowlistTests.swift
 $(SRCROOT)/IntentTests/PrivacyManifestDriftTests.swift
 $(SRCROOT)/IntentTests/ProposalActionStoreTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
+$(SRCROOT)/IntentTests/PullRequestDetailTests.swift
 $(SRCROOT)/IntentTests/PullRequestListStoreTests.swift
 $(SRCROOT)/IntentTests/QuestionAttachmentLifecycleTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift

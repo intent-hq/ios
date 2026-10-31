@@ -113,6 +113,44 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     }
 
     @MainActor
+    func testPullRequestDetailShowsSummaryAndCodeInBothThemes() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "The iPad sidebar has no pull requests mode yet")
+        addTeardownBlock { @MainActor [self] () async in
+            let app = launchWorkspaces()
+            if app.staticTexts["workspaces.title"].label == "Pull requests" {
+                app.buttons["workspaces.menu"].tap()
+                app.buttons["workspaces.menu.content"].tap()
+            }
+        }
+        for appearance in ["light", "dark"] {
+            let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
+            app.buttons["workspaces.menu"].tap()
+            app.buttons["workspaces.menu.content"].tap()
+            let row = app.buttons["pullRequests.row.nova-labs/console#482"]
+            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+            row.tap()
+            XCTAssertTrue(app.buttons["pullRequest.workspace"].waitForExistence(timeout: Self.timeout))
+            let checks = app.buttons["pullRequest.checks"]
+            XCTAssertTrue(checks.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(checks.label.contains("4 Passed"))
+            capture(app, named: "pull-request-detail-summary-\(appearance)")
+
+            app.buttons["pullRequest.tab.Code"].tap()
+            let file = app.buttons["pullRequest.file.Sources/Dashboard/UsageChart.swift"]
+            XCTAssertTrue(file.waitForExistence(timeout: Self.timeout))
+            file.tap()
+            XCTAssertTrue(app.scrollViews["changes.diff.scroll"].waitForExistence(timeout: Self.timeout))
+            capture(app, named: "pull-request-detail-code-\(appearance)")
+
+            app.buttons["pullRequest.close"].tap()
+            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+            app.buttons["workspaces.menu"].tap()
+            app.buttons["workspaces.menu.content"].tap()
+            app.terminate()
+        }
+    }
+
+    @MainActor
     private func checkPullRequestGrouping(in app: XCUIApplication, row: XCUIElement, appearance: String) {
         app.buttons["workspaces.menu"].tap()
         app.buttons["workspaces.menu.pullRequestGrouping"].tap()

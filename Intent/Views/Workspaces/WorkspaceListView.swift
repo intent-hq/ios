@@ -30,6 +30,7 @@ struct WorkspaceListView: View {
     @State private var showsClosedPullRequests = false
     @State private var pullRequestSearchText = ""
     @State private var creationPullRequest: PullRequestListItem?
+    @State private var detailPullRequest: PullRequestListItem?
     @State private var trailingSafeArea: CGFloat = 0
     @State private var leadingSafeArea: CGFloat = 0
     @FocusState private var searchFocused: Bool
@@ -45,7 +46,7 @@ struct WorkspaceListView: View {
 
     private var canSwitchConnections: Bool {
         guard case .workspaceList = coordinator.currentScreen else { return false }
-        return !showingConnections && !showingCreateWorkspace && creationPullRequest == nil && pendingAction == nil && actionError == nil
+        return !showingConnections && !showingCreateWorkspace && creationPullRequest == nil && detailPullRequest == nil && pendingAction == nil && actionError == nil
             && !isAgentHistoryOpen
     }
 
@@ -94,6 +95,16 @@ struct WorkspaceListView: View {
         .sheet(item: $creationPullRequest) { item in
             CreateWorkspaceView(session: session, coordinator: coordinator, pullRequest: item)
                 .environment(coordinator)
+        }
+        .sheet(item: $detailPullRequest) { item in
+            PullRequestDetailView(
+                item: item,
+                connection: session.connection,
+                linkedWorkspace: PullRequestListItem.linkedWorkspaces(viewModel.workspaces)[item.id]
+            ) { workspaceId in
+                detailPullRequest = nil
+                coordinator.onSelectWorkspace(workspaceId)
+            }
         }
         .sheet(isPresented: $showingConnections) {
             ConnectionsView()
@@ -422,6 +433,9 @@ private extension WorkspaceListView {
             ) { workspaceId in
                 searchFocused = false
                 coordinator.onSelectWorkspace(workspaceId)
+            } onOpenDetail: { item in
+                searchFocused = false
+                detailPullRequest = item
             } onOpenAgent: { workspaceId in
                 searchFocused = false
                 coordinator.onOpenRecentWorkspaceAgent(workspaceId)

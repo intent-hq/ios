@@ -32,6 +32,7 @@ enum DemoPullRequestFixtures {
     // swiftlint:enable no_magic_numbers
 
     static func response(for method: String, params: [String: Any]) -> Any? {
+        if let detail = detailResponse(for: method, params: params) { return detail }
         guard method == "github.pulls.search" else { return nil }
         var repos: Set<String> = []
         if let repo = params["repo"] as? String { repos.insert(repo) }
@@ -66,4 +67,65 @@ enum DemoPullRequestFixtures {
             "headRef": "feature/pr-\(pull.number)"
         ]
     }
+
+    // MARK: - Detail
+
+    private static func detailResponse(for method: String, params: [String: Any]) -> Any? {
+        guard method.hasPrefix("github.pulls."), method != "github.pulls.search",
+              let number = params["number"] as? Int,
+              let pull = pulls.first(where: { $0.number == number }) else { return nil }
+        switch method {
+        case "github.pulls.get":
+            var detail = wire(pull)
+            detail["body"] = body(for: pull)
+            detail["baseRef"] = "main"
+            return ["pull": detail]
+        case "github.pulls.checks":
+            let names = ["SwiftLint", "iOS Build & Test", "iOS UI Tests", "visionOS Build"]
+            let checks = names.map { ["name": $0, "state": pull.draft ? "pending" : "success", "url": "https://github.com/\(owner)/\(pull.repo)/actions"] }
+            return ["headSha": "demo", "checks": checks, "requestedReviewers": pull.reviewRequested ? ["octocat"] : ["mona"]]
+        case "github.pulls.reviews":
+            let reviews: [[String: Any]] = pull.mine ? [["id": 1, "author": "mona", "state": "APPROVED"]] : []
+            return ["reviews": reviews]
+        case "github.pulls.files":
+            return ["headSha": "demo", "truncated": false, "files": files]
+        default:
+            return nil
+        }
+    }
+
+    private static func body(for pull: Pull) -> String {
+        """
+        ## Summary
+        \(pull.title.prefix(1).uppercased() + pull.title.dropFirst()). This keeps the existing flow \
+        and adds focused tests.
+
+        ## What Changed
+        - Add the `\(pull.repo)` changes behind a feature flag.
+        - Update fixtures and **accessibility** labels.
+        - Remove an obsolete migration path.
+        """
+    }
+
+    // swiftlint:disable no_magic_numbers
+    private static let files: [[String: Any]] = [
+        [
+            "filename": "Sources/Dashboard/UsageChart.swift", "status": "modified", "additions": 6, "deletions": 2,
+            "patch": """
+            @@ -12,6 +12,10 @@ struct UsageChart: View {
+                 let points: [UsagePoint]
+            -    var body: some View { Chart(points) { LineMark(x: .value("Day", $0.day), y: .value("Calls", $0.calls)) } }
+            +    var body: some View {
+            +        Chart(points) { point in
+            +            LineMark(x: .value("Day", point.day), y: .value("Calls", point.calls))
+            +        }
+            +        .chartYAxis { AxisMarks(position: .leading) }
+            +    }
+             }
+            """
+        ],
+        ["filename": "Sources/Dashboard/CSVExporter.swift", "status": "added", "additions": 42, "deletions": 0],
+        ["filename": "Tests/DashboardTests/CSVExporterTests.swift", "status": "added", "additions": 28, "deletions": 0]
+    ]
+    // swiftlint:enable no_magic_numbers
 }

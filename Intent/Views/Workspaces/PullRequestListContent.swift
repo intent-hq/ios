@@ -9,6 +9,7 @@ struct PullRequestListContent: View {
     let workspaces: [Workspace]
     let groupsByProject: Bool
     let onOpenWorkspace: (String) -> Void
+    let onOpenDetail: (PullRequestListItem) -> Void
     let onOpenAgent: (String) -> Void
     let onCreateWorkspace: (PullRequestListItem) -> Void
     @State private var revealedTarget: WorkspaceSwipeTarget?
@@ -65,11 +66,7 @@ struct PullRequestListContent: View {
             linkedWorkspace: linkedWorkspace,
             revealedTarget: $revealedTarget
         ) {
-            if let linkedWorkspace {
-                onOpenWorkspace(linkedWorkspace.id)
-            } else if let url = item.url {
-                openURL(url)
-            }
+            onOpenDetail(item)
         } onSwipe: {
             startWork(on: item, linkedWorkspace: linkedWorkspace)
         } menuItems: {

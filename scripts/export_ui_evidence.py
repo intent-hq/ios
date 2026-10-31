@@ -333,6 +333,11 @@ CAPTURES = {
             for appearance in ("light", "dark")
             for state in ("", "-grouped", "-review", "-new-workspace")
         ),
+        "testPullRequestDetailShowsSummaryAndCodeInBothThemes": tuple(
+            f"pull-request-detail-{tab}-{appearance}"
+            for appearance in ("light", "dark")
+            for tab in ("summary", "code")
+        ),
         "testRecentAgentsOpensAndClosesExistingDrawer": (
             "workspace-list-menu", "workspace-menu-recent-agents",
         ),
