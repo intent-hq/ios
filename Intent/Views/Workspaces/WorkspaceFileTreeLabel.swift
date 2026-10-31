@@ -30,17 +30,7 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
                 .foregroundStyle(secondary)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                HStack(alignment: .firstTextBaseline, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                    Text(name)
-                        .font(.system(size: nameSize, weight: .medium, design: .monospaced))
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let lineStats {
-                        Spacer(minLength: 0)
-                        WorkspaceChangeStats(additions: lineStats.additions, deletions: lineStats.deletions)
-                            .font(Constants.Typography.subtextXXS.font)
-                            .fixedSize()
-                    }
-                }
+                nameLine
                 detail()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -70,6 +60,20 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
         }
         .contentShape(.rect)
     }
+
+    private var nameLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: CreateWorkspaceFormStyle.rowSpacing) {
+            Text(name)
+                .font(.system(size: nameSize, weight: .medium, design: .monospaced))
+                .fixedSize(horizontal: false, vertical: true)
+            if let lineStats {
+                Spacer(minLength: 0)
+                WorkspaceChangeStats(additions: lineStats.additions, deletions: lineStats.deletions)
+                    .font(Constants.Typography.subtextXXS.font)
+                    .fixedSize()
+            }
+        }
+    }
 }
 
 enum WorkspaceFileTreeLayout {
@@ -93,6 +97,7 @@ enum WorkspaceFileTreeLayout {
     /// Rows past the deepest indentation keep the path below their last indented ancestor.
     static func displayName(path: String, depth: Int) -> String {
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
+
         return components.suffix(max(depth - maximumIndentationDepth, 0) + 1).joined(separator: "/")
     }
     static let guideOpacity = 0.3
@@ -151,8 +156,8 @@ private struct FileTreeGuides: ViewModifier {
 
     private var offsets: [CGFloat] {
         let accessibility = dynamicTypeSize.isAccessibilitySize
-        return (0..<min(depth, WorkspaceFileTreeLayout.maximumIndentationDepth)).map {
-            WorkspaceFileTreeLayout.indentation(for: $0, accessibility: accessibility) + iconSize / 2
+        return (0..<min(depth, WorkspaceFileTreeLayout.maximumIndentationDepth)).map { level in
+            WorkspaceFileTreeLayout.indentation(for: level, accessibility: accessibility) + iconSize / 2
         }
     }
 }

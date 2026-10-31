@@ -102,7 +102,8 @@ private extension PullRequestDetailView {
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: Style.subtitleSpacing) {
                 Image(WorkspaceRowView.pillImage(for: item.status))
-                    .resizable().scaledToFit()
+                    .resizable()
+                    .scaledToFit()
                     .frame(width: Style.subtitleIconSize, height: Style.subtitleIconSize)
                     .foregroundStyle(PullRequestRowView.stateColor(item.status, colorScheme: colorScheme, contrast: contrast))
                     .accessibilityHidden(true)
@@ -278,7 +279,9 @@ private extension PullRequestDetailView {
     ) -> some View {
         Button(action: action) {
             HStack(spacing: Style.rowIconSpacing) {
-                Image(icon).resizable().scaledToFit()
+                Image(icon)
+                    .resizable()
+                    .scaledToFit()
                     .frame(width: iconSize, height: iconSize)
                     .foregroundStyle(tint ?? secondary)
                     .accessibilityHidden(true)
@@ -300,13 +303,17 @@ private extension PullRequestDetailView {
     @ViewBuilder func accessoryView(_ accessory: Accessory) -> some View {
         switch accessory {
         case .chevron, .disclosure:
-            Image(.chevronRight).resizable().scaledToFit()
+            Image(.chevronRight)
+                .resizable()
+                .scaledToFit()
                 .frame(width: Style.accessorySize, height: Style.accessorySize)
                 .rotationEffect(.degrees(accessory == .disclosure(true) ? Style.expandedRotation : 0))
                 .foregroundStyle(secondary)
                 .accessibilityHidden(true)
         case .external:
-            Image(.external).resizable().scaledToFit()
+            Image(.external)
+                .resizable()
+                .scaledToFit()
                 .frame(width: Style.accessorySize, height: Style.accessorySize)
                 .foregroundStyle(secondary)
                 .accessibilityHidden(true)
@@ -322,7 +329,9 @@ private extension PullRequestDetailView {
     @ViewBuilder var code: some View {
         if let head = store.detail?.headRef ?? item.headRef {
             HStack(spacing: Style.subtitleSpacing) {
-                Image(.gitBranch).resizable().scaledToFit()
+                Image(.gitBranch)
+                    .resizable()
+                    .scaledToFit()
                     .frame(width: Style.subtitleIconSize, height: Style.subtitleIconSize)
                     .accessibilityHidden(true)
                 Text(store.detail?.baseRef.map { "\(head) → \($0)" } ?? head)
