@@ -356,6 +356,32 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(self.export(source), {"review": 1, "agent-groups": 0, "recovery": 0})
         self.assertEqual(self.manifest()["files"][0]["capture"], "nested-file-tree")
 
+    def test_ipad_empty_detail_allowlist_matches_its_fixture_captures(self):
+        suite = "IPadWorkspaceSidebarUITests"
+        test = "testDetailPaneShowsPlaceholderWithoutSelectedWorkspaceInBothThemes"
+        source = (ROOT / "IntentUITests" / f"{suite}.swift").read_text()
+        body = source.split(f"func {test}()", 1)[1].split("\n    }\n", 1)[0]
+        self.assertIn('"--demo-empty-workspaces"', body)
+        appearances = re.search(r'for appearance in \[([^\]]+)\]', body).group(1)
+        captures = {
+            prefix + appearance
+            for prefix in re.findall(r'capture\("([^"\\]+)\\\(appearance\)"\)', body)
+            for appearance in re.findall(r'"(\w+)"', appearances)
+        }
+        self.assertEqual(len(captures), 4)
+        self.assertEqual(captures, set(evidence.CAPTURES[suite][test]))
+        names = sorted(captures)
+        files = {f"{index}.png": png(255) for index, _ in enumerate(names)}
+        files["automatic.png"] = png(0)
+        bundle = self.bundle(records=[record(test=f"{suite}/{test}()", attachments=[
+            *(attachment(name, f"{index}.png") for index, name in enumerate(names)),
+            attachment("Automatic failure screenshot", "automatic.png"),
+        ])], files=files)
+        self.export(bundle)
+        manifest = self.manifest()
+        self.assertEqual(manifest["missingCaptures"], [])
+        self.assertEqual({item["capture"] for item in manifest["files"]}, captures)
+
     def test_parameterized_shell_fixtures_keep_only_their_named_captures(self):
         launch = "AppCoordinatorTests/iPadCompactLaunchShowsListAndMenuDestinations(appearance:)"
         resize = "IntentTests/AppCoordinatorTests/iPadCompactResizeRetainsComposerAndDismissesOpenMenu(detail:)"

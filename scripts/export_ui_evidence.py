@@ -149,6 +149,13 @@ CAPTURES = {
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
     },
+    "IPadWorkspaceSidebarUITests": {
+        "testDetailPaneShowsPlaceholderWithoutSelectedWorkspaceInBothThemes": tuple(
+            f"ipad-empty-detail-{orientation}-{appearance}"
+            for appearance in ("light", "dark")
+            for orientation in ("landscape", "portrait")
+        ),
+    },
     "IPadAssistantSwipeUITests": {
         "testSwipeDeletionPreservesSelectionAndSupportsCancellationInBothThemes": (
             "iPad Assistant swipe delete light", "iPad Assistant swipe delete dark",
