@@ -17,6 +17,7 @@ struct MessageInputView: View {
     @Environment(\.conversationComposerFocus) private var conversationFocus
     @ScaledMetric(relativeTo: .title2) private var controlIconSide: CGFloat = 22
     @ScaledMetric(relativeTo: .caption) var attachmentIconSide: CGFloat = 12
+    @ScaledMetric(relativeTo: .body) var menuIconSide: CGFloat = 17
     @ScaledMetric(relativeTo: .callout) private var suggestedPromptIconSide: CGFloat = 16
     private let sendArrowScale: CGFloat = 0.75
 
@@ -209,19 +210,11 @@ private extension MessageInputView {
 
     var attachmentMenu: some View {
         Menu {
-            Button {
-                isPhotoPickerPresented = true
-            } label: {
-                Label("Photos", systemImage: "photo.on.rectangle")
+            Button { isPhotoPickerPresented = true } label: {
+                photosAttachmentLabel
             }
-            Button {
-                isFilePickerPresented = true
-            } label: {
-                Label {
-                    Text("Files")
-                } icon: {
-                    Image(.folder)
-                }
+            Button { isFilePickerPresented = true } label: {
+                filesAttachmentLabel
             }
         } label: {
             Image(.addCircle)
@@ -342,8 +335,10 @@ private extension MessageInputView {
                         .scaledToFit()
                         .frame(width: controlIconSide, height: controlIconSide)
                 } else {
-                    Image(systemName: "mic.fill")
-                        .font(.title2)
+                    Image(.audio)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: controlIconSide, height: controlIconSide)
                 }
             }
                 .foregroundStyle(
@@ -401,8 +396,10 @@ private extension MessageInputView {
 
     private func dictationHintRow(_ hint: String) -> some View {
         HStack(spacing: Constants.Conversation.Composer.dictationHintSpacing) {
-            Image(systemName: "mic.slash")
-                .font(.caption)
+            Image(.audioMute)
+                .resizable()
+                .scaledToFit()
+                .frame(width: attachmentIconSide, height: attachmentIconSide)
                 .accessibilityHidden(true)
             Text(hint)
                 .interFont(Constants.Typography.subtextXXS)

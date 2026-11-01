@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootView: View {
+    @ScaledMetric(relativeTo: .body) private var warningIconSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .title) var emptyStateIconSize: CGFloat = 48
     var networkAvailability: NetworkAvailability = .shared
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
@@ -268,7 +270,10 @@ struct RootView: View {
                session.connection.connectionState == .connected,
                !coordinator.isDisconnected {
                 HStack(spacing: Constants.Root.reconnectButtonTopPadding) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    Image(.attentionCircleFill)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: warningIconSize, height: warningIconSize)
                         .foregroundStyle(.orange)
                         .accessibilityHidden(true)
                     Text("Live updates unavailable")

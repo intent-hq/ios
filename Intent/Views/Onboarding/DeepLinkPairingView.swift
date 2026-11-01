@@ -9,6 +9,7 @@ import SwiftUI
 /// wss; no fingerprint → cert probe + user trust confirmation; never plain
 /// ws://.
 struct DeepLinkPairingView: View {
+    @ScaledMetric(relativeTo: .body) private var connectionIconSize: CGFloat = 17
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     let payload: PairingPayload
@@ -76,7 +77,10 @@ struct DeepLinkPairingView: View {
                         .lineLimit(1)
                         .accessibilityLabel(tcAddress)
                 } icon: {
-                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                    Image(.connection)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: connectionIconSize, height: connectionIconSize)
                 }
             }
         } header: {

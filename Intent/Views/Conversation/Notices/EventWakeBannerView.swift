@@ -3,11 +3,14 @@ import SwiftUI
 struct EventWakeBannerView: View {
     let attribution: EventWakeAttribution
     @Environment(\.colorScheme) var colorScheme
+    @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 11
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.DividerNotice.labelSpacing) {
-            Image(systemName: "bell.fill")
-                .font(.caption2)
+            Image(.notification)
+                .resizable()
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
                 .accessibilityHidden(true)
             Text(attribution.summaryLabel)
                 .interFont(Constants.Typography.subtextXXS)

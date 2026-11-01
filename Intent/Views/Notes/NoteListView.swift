@@ -2,6 +2,7 @@ import CoreText
 import SwiftUI
 
 struct NoteListView: View {
+    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     let workspaceId: String
     @Environment(AppCoordinator.self) var coordinator
     var noteStore: NoteStore
@@ -26,7 +27,10 @@ struct NoteListView: View {
                     Label {
                         Text("No Notes").interFont(Constants.Typography.bodyM)
                     } icon: {
-                        Image(systemName: "doc.text")
+                        Image(.note)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: emptyStateIconSize, height: emptyStateIconSize)
                     }
                 } description: {
                     Text("Notes will appear here when created.")

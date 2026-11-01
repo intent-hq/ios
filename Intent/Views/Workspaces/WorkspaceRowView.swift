@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkspaceRowView: View {
+    @ScaledMetric(relativeTo: .body) private var warningIconSize: CGFloat = 17
     let workspace: Workspace
     let colorScheme: ColorScheme
     var showRepo: Bool = true
@@ -52,7 +53,10 @@ struct WorkspaceRowView: View {
             Button {
                 Task { await monitorsSource.refetch(workspaceId: workspace.id) }
             } label: {
-                Image(systemName: "exclamationmark.triangle")
+                Image(.attentionCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: warningIconSize, height: warningIconSize)
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("PR monitors may be out of date. Retry refresh")

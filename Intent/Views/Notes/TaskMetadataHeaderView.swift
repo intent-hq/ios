@@ -195,6 +195,7 @@ enum ChipVariant {
 /// live status icon (dependency) or warning triangle (conflict), title, and
 /// an hourglass marker on unmet dependencies.
 private struct TaskRelationChip: View {
+    @ScaledMetric(relativeTo: .caption2) private var warningIconSize: CGFloat = 11
     let relatedNote: Note?
     let fallbackId: String
     let variant: ChipVariant
@@ -259,8 +260,10 @@ private struct TaskRelationChip: View {
     @ViewBuilder
     private var relationIcon: some View {
         if variant == .conflict {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.caption2.weight(.semibold))
+            Image(.attentionCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: warningIconSize, height: warningIconSize)
                 .foregroundStyle(Self.warning)
                 .accessibilityHidden(true)
         } else {

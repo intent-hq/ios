@@ -10,6 +10,7 @@ struct SystemNoticeBannerView: View {
     let message: String
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @ScaledMetric(relativeTo: .subheadline) private var iconSize: CGFloat = 15
 
     static let defaultMessage = "This conversation was interrupted because intentd restarted."
 
@@ -21,8 +22,10 @@ struct SystemNoticeBannerView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: Constants.Conversation.NoticeCard.contentSpacing) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.subheadline)
+            Image(.attentionCircleFill)
+                .resizable()
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
                 .foregroundStyle(.orange)
                 .accessibilityHidden(true)
                 .padding(.top, Constants.Conversation.NoticeCard.iconTopPadding)

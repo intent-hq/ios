@@ -58,7 +58,7 @@ struct WorkspaceStatusIconView: View {
             }
 
             if differentiateWithoutColor {
-                Image(systemName: differentiatedSymbol)
+                differentiatedIcon
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(displayStatus == .notStarted ? statusColor : .white)
                     .accessibilityHidden(true)
@@ -67,19 +67,31 @@ struct WorkspaceStatusIconView: View {
         .frame(width: size, height: size)
     }
 
-    private var differentiatedSymbol: String {
+    @ViewBuilder
+    private var differentiatedIcon: some View {
         switch displayStatus {
-        case .failed: "xmark"
-        case .blocked: "minus"
-        case .needsAttention: "exclamationmark"
-        case .idle: "pause.fill"
-        case .notStarted: "stop.fill"
-        case .inProgress: "play.fill"
-        case .complete, .prReady: "checkmark"
-        case .prOpen: "arrow.triangle.pull"
-        case .prQueued: "hourglass"
-        case .prMerged: "arrow.triangle.merge"
-        case .unknown: "questionmark"
+        case .failed: assetGlyph(.close)
+        case .blocked: Image(systemName: "minus").accessibilityHidden(true)
+        case .needsAttention: Image(systemName: "exclamationmark").accessibilityHidden(true)
+        case .idle: assetGlyph(.pause)
+        case .notStarted: assetGlyph(.stopFill)
+        case .inProgress: assetGlyph(.playFill)
+        case .complete, .prReady: assetGlyph(.check)
+        case .prOpen: assetGlyph(.gitPr)
+        case .prQueued: Image(systemName: "hourglass").accessibilityHidden(true)
+        case .prMerged: assetGlyph(.gitMerge)
+        case .unknown: Image(systemName: "questionmark").accessibilityHidden(true)
         }
+    }
+
+    private func assetGlyph(_ resource: ImageResource) -> some View {
+        Image(resource)
+            .resizable()
+            .scaledToFit()
+            .frame(
+                width: size * Constants.WorkspaceRow.statusGlyphScale,
+                height: size * Constants.WorkspaceRow.statusGlyphScale
+            )
+            .accessibilityHidden(true)
     }
 }

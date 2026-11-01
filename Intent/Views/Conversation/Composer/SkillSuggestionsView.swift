@@ -10,6 +10,7 @@ struct SkillSuggestionsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @State private var retry = 0
+    @ScaledMetric(relativeTo: .body) private var menuIconSide: CGFloat = 17
 
     private typealias Palette = Constants.Conversation.Design.Palette
 
@@ -84,7 +85,14 @@ struct SkillSuggestionsView: View {
         .buttonStyle(IntentContentButtonStyle())
         .contextMenu {
             Button { completion.insert(skill) } label: {
-                Label("Use", systemImage: "arrow.turn.down.left")
+                Label {
+                    Text("Use")
+                } icon: {
+                    Image(.enter)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: menuIconSide, height: menuIconSide)
+                }
             }
         } preview: {
             skillPreview(skill)

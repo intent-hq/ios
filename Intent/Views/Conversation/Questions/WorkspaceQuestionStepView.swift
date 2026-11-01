@@ -15,6 +15,7 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .subheadline) private var collapseIconSide: CGFloat = Constants.Typography.bodyXSEmphasized.size
 
     private typealias Design = Constants.Conversation.Design
 
@@ -37,6 +38,22 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
         .scrollBounceBehavior(.basedOnSize)
     }
 
+    private func collapseButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label {
+                Text("Collapse questions")
+            } icon: {
+                Image(.chevronDown)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: collapseIconSide, height: collapseIconSide)
+            }
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(WorkspaceQuestionButtonStyle())
+        .accessibilityIdentifier("question.collapse")
+    }
+
     // The fit candidates contain only stateless controls. The free-text editor
     // lives outside this panel, so a layout change cannot replace its responder.
     // The final candidate scrolls the complete content, keeping the footer reachable.
@@ -56,10 +73,7 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
                 }
                 if let onCollapse {
                     Spacer(minLength: 0)
-                    Button("Collapse questions", systemImage: "chevron.down", action: onCollapse)
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(WorkspaceQuestionButtonStyle())
-                        .accessibilityIdentifier("question.collapse")
+                    collapseButton(action: onCollapse)
                 }
             }
             VStack(alignment: .leading, spacing: Design.Question.footerSpacing) {

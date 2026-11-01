@@ -71,9 +71,7 @@ struct WatcherMessageBodyView: View {
 
     private func checkRow(_ check: WatcherMessagePresentation.Check) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Design.Watcher.rowSpacing) {
-            Image(systemName: check.symbol)
-                .font(.subheadline)
-                .frame(width: Design.toolIconSize)
+            checkIcon(check)
                 .foregroundStyle(check.needsAttention
                     ? Theme.destructive(for: colorScheme)
                     : Theme.mutedForeground(for: colorScheme))
@@ -85,6 +83,22 @@ struct WatcherMessageBodyView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func checkIcon(_ check: WatcherMessagePresentation.Check) -> some View {
+        if let iconName = check.iconName {
+            Image(iconName)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: "circle.dashed")
+                .font(.subheadline)
+                .frame(width: Design.toolIconSize)
+                .accessibilityHidden(true)
+        }
     }
 
     private func disclosure(_ details: String) -> some View {

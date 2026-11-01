@@ -4,6 +4,8 @@ import SwiftUI
 struct QuestionAttachmentTray: View {
     let attachments: ConversationAttachmentPipeline
     @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .body) private var imageRemoveIconSide: CGFloat = 17
+    @ScaledMetric(relativeTo: .caption) private var fileIconSide: CGFloat = Constants.Typography.subtextXXS.size
 
     private typealias Layout = Constants.Conversation.Composer
 
@@ -48,8 +50,13 @@ struct QuestionAttachmentTray: View {
                 .clipShape(.rect(cornerRadius: Layout.pendingImageCornerRadius))
                 .accessibilityLabel("Attached image \(index + 1)")
             Button { attachments.removeImage(at: index) } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.white, .black)
+                Image(.closeCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: imageRemoveIconSide, height: imageRemoveIconSide)
+                    .accessibilityHidden(true)
+                    .foregroundStyle(.white)
+                    .background(.black, in: Circle())
                     .frame(minWidth: Layout.controlTarget, minHeight: Layout.controlTarget)
                     .contentShape(.rect)
             }
@@ -61,8 +68,17 @@ struct QuestionAttachmentTray: View {
 
     private func filePreview(_ file: PendingFile, index: Int) -> some View {
         HStack(spacing: Layout.pendingFileContentSpacing) {
-            Image(systemName: file.video == nil ? "doc" : "video")
-                .accessibilityHidden(true)
+            Group {
+                if file.video == nil {
+                    Image(.file)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: fileIconSide, height: fileIconSide)
+                } else {
+                    Image(systemName: "video")
+                }
+            }
+            .accessibilityHidden(true)
             VStack(alignment: .leading) {
                 Text(file.displayName).lineLimit(1)
                 if let progress = attachments.fileUploadProgress[file.id] {
@@ -72,7 +88,10 @@ struct QuestionAttachmentTray: View {
                 }
             }
             Button { attachments.removePendingFile(at: index) } label: {
-                Image(systemName: "xmark.circle.fill")
+                Image(.closeCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: fileIconSide, height: fileIconSide)
                     .frame(minWidth: Layout.controlTarget, minHeight: Layout.controlTarget)
                     .contentShape(.rect)
             }

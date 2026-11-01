@@ -114,7 +114,14 @@ struct MonitoredScriptsRow: View {
         Button {
             Task { await viewModel.retryScriptMonitors() }
         } label: {
-            Label("Script watches unavailable · Retry", systemImage: "exclamationmark.triangle")
+            Label {
+                Text("Script watches unavailable · Retry")
+            } icon: {
+                Image(.attentionCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: headingIconSize, height: headingIconSize)
+            }
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(minHeight: Constants.Accessibility.minimumTapTarget)

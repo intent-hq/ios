@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct QRScannerOverlay: View {
+    @ScaledMetric(relativeTo: .subheadline) private var warningIconSize: CGFloat = 15
     let showsGuide: Bool
     let isValidating: Bool
     let errorMessage: String?
@@ -60,7 +61,10 @@ struct QRScannerOverlay: View {
                     Text("Connecting…")
                         .interFont(Constants.Typography.bodyXS)
                 } else if let error = errorMessage {
-                    Image(systemName: "exclamationmark.triangle")
+                    Image(.attentionCircle)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: warningIconSize, height: warningIconSize)
                         .foregroundStyle(.orange)
                         .accessibilityHidden(true)
                     Text(error)

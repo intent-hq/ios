@@ -121,6 +121,7 @@ struct WorkspaceAttachmentMenu: View {
     let onFiles: () -> Void
     var photosEnabled = true
     var glyphAlignment: Alignment = .center
+    @ScaledMetric(relativeTo: .body) private var menuIconSide: CGFloat = 17
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -129,8 +130,17 @@ struct WorkspaceAttachmentMenu: View {
 
     var body: some View {
         Menu {
-            Button(action: onPhotos) { Label("Photos", systemImage: "photo.on.rectangle") }
-                .disabled(!photosEnabled)
+            Button(action: onPhotos) {
+                Label {
+                    Text("Photos")
+                } icon: {
+                    Image(.image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: menuIconSide, height: menuIconSide)
+                }
+            }
+            .disabled(!photosEnabled)
             Button(action: onFiles) { Label("Files", image: "Folder") }
         } label: {
             Image(.paperclip)

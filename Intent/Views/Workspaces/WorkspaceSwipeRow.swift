@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkspaceSwipeRow: View {
+    @ScaledMetric(relativeTo: .body) private var menuIconSize: CGFloat = 17
     let workspace: Workspace
     let showRepo: Bool
     let isUpdating: Bool
@@ -167,16 +168,37 @@ struct WorkspaceSwipeRow: View {
 
     private var menuActions: some View {
         Group {
-            Button("Open most recent agent", systemImage: "bubble.left") {
+            Button {
                 revealedTarget = nil
                 onOpenRecentAgent()
+            } label: {
+                menuLabel("Open most recent agent", icon: .message)
             }
             if showsTrailingActions {
-                Button("Archive workspace", systemImage: "archivebox") { select(.archive) }
-                Button("Delete workspace", systemImage: "trash", role: .destructive) { select(.delete) }
+                Button {
+                    select(.archive)
+                } label: {
+                    menuLabel("Archive workspace", icon: .archive)
+                }
+                Button(role: .destructive) {
+                    select(.delete)
+                } label: {
+                    menuLabel("Delete workspace", icon: .delete)
+                }
             }
         }
         .disabled(isUpdating)
+    }
+
+    private func menuLabel(_ title: LocalizedStringKey, icon: ImageResource) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: menuIconSize, height: menuIconSize)
+        }
     }
 
     private func select(_ action: WorkspaceAction) {

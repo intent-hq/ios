@@ -11,6 +11,7 @@ struct ModelChangeNoticeView: View {
     /// absent.
     let fallbackText: String
     @Environment(\.colorScheme) var colorScheme
+    @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 11
 
     private var label: String {
         notice.label(fallbackText: fallbackText)
@@ -20,8 +21,11 @@ struct ModelChangeNoticeView: View {
         HStack(spacing: Constants.Conversation.DividerNotice.outerSpacing) {
             line
             HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.DividerNotice.labelSpacing) {
-                Image(systemName: "arrow.left.arrow.right")
-                    .font(.caption2)
+                Image(.transfer)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+                    .accessibilityHidden(true)
                 Text(label)
                     .interFont(Constants.Typography.subtextXXS)
                     .multilineTextAlignment(.center)

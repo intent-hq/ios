@@ -145,8 +145,10 @@ struct TaskStatusIconView: View {
                 .foregroundStyle(neutralColor)
                 .accessibilityHidden(true)
         case .waiting:
-            Image(systemName: "clock")
-                .font(.system(size: Metrics.secondaryGlyphSize * scale, weight: .medium))
+            Image(.historyCircle3)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Metrics.secondaryGlyphSize * scale, height: Metrics.secondaryGlyphSize * scale)
                 .foregroundStyle(neutralColor)
                 .accessibilityHidden(true)
         case .discussionNeeded:
@@ -174,8 +176,10 @@ struct TaskStatusIconView: View {
                 )
                 .offset(y: Metrics.blockedDotOffset * scale)
         case .reviewRequired:
-            Image(systemName: "eye.fill")
-                .font(.system(size: Metrics.eyeGlyphSize * scale, weight: .regular))
+            Image(.eye)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Metrics.eyeGlyphSize * scale, height: Metrics.eyeGlyphSize * scale)
                 .foregroundStyle(.white)
                 .accessibilityHidden(true)
         case .complete:

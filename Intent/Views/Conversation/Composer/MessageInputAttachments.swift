@@ -1,6 +1,25 @@
 import SwiftUI
 
 extension MessageInputView {
+    var photosAttachmentLabel: some View {
+        Label {
+            Text("Photos")
+        } icon: {
+            Image(.image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: menuIconSide, height: menuIconSide)
+        }
+    }
+
+    var filesAttachmentLabel: some View {
+        Label {
+            Text("Files")
+        } icon: {
+            Image(.folder)
+        }
+    }
+
     @ViewBuilder
     var pendingImagesRow: some View {
         ScrollView(.horizontal) {
@@ -150,7 +169,10 @@ extension MessageInputView {
             } else {
                 Rectangle().fill(Theme.mutedForeground(for: colorScheme))
             }
-            Image(systemName: "play.fill")
+            Image(.playFill)
+                .resizable()
+                .scaledToFit()
+                .frame(width: menuIconSide, height: menuIconSide)
                 .foregroundStyle(.white)
         }
         .frame(

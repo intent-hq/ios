@@ -12,6 +12,7 @@ struct HTMLLinkPreviewView: View {
     @State private var rules: WKContentRuleList?
     @State private var hasFailed = false
     @State private var attempt = 0
+    @ScaledMetric(relativeTo: .largeTitle) private var unavailableIconSide: CGFloat = 48
     @ScaledMetric(relativeTo: .body) private var closeIconSide: CGFloat = 17
 
     private var fileLoader: WorkspaceFileImageLoader {
@@ -30,7 +31,14 @@ struct HTMLLinkPreviewView: View {
                     if let file {
                         ToolbarItem(placement: .primaryAction) {
                             ShareLink(item: file.url) {
-                                Label("Share HTML file", systemImage: "square.and.arrow.up")
+                                Label {
+                                    Text("Share HTML file")
+                                } icon: {
+                                    Image(.upload)
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: closeIconSide, height: closeIconSide)
+                                }
                             }
                             .buttonStyle(IntentContentButtonStyle())
                         }
@@ -66,7 +74,14 @@ struct HTMLLinkPreviewView: View {
     private var content: some View {
         if hasFailed {
             ContentUnavailableView {
-                Label("HTML file unavailable", systemImage: "doc.text")
+                Label {
+                    Text("HTML file unavailable")
+                } icon: {
+                    Image(.fileList)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: unavailableIconSide, height: unavailableIconSide)
+                }
             } description: {
                 Text("Could not open this file as HTML. This viewer supports UTF-8 text files up to 5 MiB, not binary files.")
             } actions: {

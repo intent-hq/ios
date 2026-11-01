@@ -67,6 +67,7 @@ $(SRCROOT)/Intent/Assets.xcassets/ArrowRight.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ArrowUp.imageset
 $(SRCROOT)/Intent/Assets.xcassets/AssistantAccent.colorset
 $(SRCROOT)/Intent/Assets.xcassets/AttentionCircle.imageset
+$(SRCROOT)/Intent/Assets.xcassets/AttentionCircleFill.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Audio.imageset
 $(SRCROOT)/Intent/Assets.xcassets/AudioMute.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Battery1Bar.imageset
@@ -155,6 +156,7 @@ $(SRCROOT)/Intent/Assets.xcassets/HistoryCircle4.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Hold.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Home.imageset
 $(SRCROOT)/Intent/Assets.xcassets/HomeSmall.imageset
+$(SRCROOT)/Intent/Assets.xcassets/Image.imageset
 $(SRCROOT)/Intent/Assets.xcassets/InfoCircle.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Input1.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Input2.imageset
@@ -186,6 +188,7 @@ $(SRCROOT)/Intent/Assets.xcassets/More.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Mouse1.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Mouse2.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Night.imageset
+$(SRCROOT)/Intent/Assets.xcassets/Note.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Notification.imageset
 $(SRCROOT)/Intent/Assets.xcassets/OpenAI.imageset
 $(SRCROOT)/Intent/Assets.xcassets/PanelHorizontal.imageset
@@ -249,6 +252,7 @@ $(SRCROOT)/Intent/Assets.xcassets/ThemeSidebarSelection.colorset
 $(SRCROOT)/Intent/Assets.xcassets/Thinking.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Toggle.imageset
 $(SRCROOT)/Intent/Assets.xcassets/ToggleSquare.imageset
+$(SRCROOT)/Intent/Assets.xcassets/Transfer.imageset
 $(SRCROOT)/Intent/Assets.xcassets/TruckOne.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Undo.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Upload.imageset
