@@ -24,8 +24,9 @@ struct WorkspaceSidebarEditableTitle: View {
             titleEditor: titleEditor,
             titleFocus: titleFocus,
             usesSidebarTitle: true,
+            showsOnlyTitle: true,
             onSaveTitle: onSaveTitle
-        ).editableTitle
+        )
     }
 }
 

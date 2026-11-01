@@ -15,6 +15,7 @@ struct WorkspaceDetailHeading: View {
     var usesLargeTitle = false
     var showsTitle = true
     var usesSidebarTitle = false
+    var showsOnlyTitle = false
     let onSaveTitle: () -> Void
     @FocusState private var titleFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -36,6 +37,14 @@ struct WorkspaceDetailHeading: View {
     }
 
     var body: some View {
+        if showsOnlyTitle {
+            editableTitle
+        } else {
+            headingContent
+        }
+    }
+
+    private var headingContent: some View {
         VStack(alignment: .leading, spacing: titleEditor.isEditing
             ? WorkspaceDetailStyle.headingSpacing : WorkspaceDetailStyle.headingTextSpacing) {
             if showsTitle { editableTitle }
@@ -78,7 +87,7 @@ struct WorkspaceDetailHeading: View {
     }
 
     @ViewBuilder
-    var editableTitle: some View {
+    private var editableTitle: some View {
         if titleEditor.isEditing {
             TextField("New Workspace", text: $titleEditor.draft)
                 .textFieldStyle(.plain)
