@@ -71,16 +71,16 @@ struct WorkspaceStatusIconView: View {
     private var differentiatedIcon: some View {
         switch displayStatus {
         case .failed: assetGlyph(.close)
-        case .blocked: Image(systemName: "minus")
-        case .needsAttention: Image(systemName: "exclamationmark")
+        case .blocked: Image(systemName: "minus").accessibilityHidden(true)
+        case .needsAttention: Image(systemName: "exclamationmark").accessibilityHidden(true)
         case .idle: assetGlyph(.pause)
         case .notStarted: assetGlyph(.stopFill)
         case .inProgress: assetGlyph(.playFill)
         case .complete, .prReady: assetGlyph(.check)
         case .prOpen: assetGlyph(.gitPr)
-        case .prQueued: Image(systemName: "hourglass")
+        case .prQueued: Image(systemName: "hourglass").accessibilityHidden(true)
         case .prMerged: assetGlyph(.gitMerge)
-        case .unknown: Image(systemName: "questionmark")
+        case .unknown: Image(systemName: "questionmark").accessibilityHidden(true)
         }
     }
 

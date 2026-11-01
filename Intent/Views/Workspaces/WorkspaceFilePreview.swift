@@ -44,12 +44,8 @@ struct WorkspaceFilePreview: View {
                 Group {
                     if hasFailed {
                         ContentUnavailableView {
-                            Label {
-                                Text("File unavailable")
-                            } icon: {
-                                Image(.file)
-                                    .resizable()
-                                    .scaledToFit()
+                            Label { Text("File unavailable") } icon: {
+                                Image(.file).resizable().scaledToFit()
                                     .frame(width: emptyStateIconSize, height: emptyStateIconSize)
                             }
                         } description: {

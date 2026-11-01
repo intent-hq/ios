@@ -172,43 +172,33 @@ struct WorkspaceSwipeRow: View {
                 revealedTarget = nil
                 onOpenRecentAgent()
             } label: {
-                Label {
-                    Text("Open most recent agent")
-                } icon: {
-                    Image(.message)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: menuIconSize, height: menuIconSize)
-                }
+                menuLabel("Open most recent agent", icon: .message)
             }
             if showsTrailingActions {
                 Button {
                     select(.archive)
                 } label: {
-                    Label {
-                        Text("Archive workspace")
-                    } icon: {
-                        Image(.archive)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: menuIconSize, height: menuIconSize)
-                    }
+                    menuLabel("Archive workspace", icon: .archive)
                 }
                 Button(role: .destructive) {
                     select(.delete)
                 } label: {
-                    Label {
-                        Text("Delete workspace")
-                    } icon: {
-                        Image(.delete)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: menuIconSize, height: menuIconSize)
-                    }
+                    menuLabel("Delete workspace", icon: .delete)
                 }
             }
         }
         .disabled(isUpdating)
+    }
+
+    private func menuLabel(_ title: LocalizedStringKey, icon: ImageResource) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: menuIconSize, height: menuIconSize)
+        }
     }
 
     private func select(_ action: WorkspaceAction) {

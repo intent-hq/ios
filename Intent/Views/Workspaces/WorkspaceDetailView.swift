@@ -462,17 +462,10 @@ private extension WorkspaceDetailView {
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
             } else if !viewModel.hasAgentSections, !hasWorkspaceResources {
                 ContentUnavailableView {
-                    Label {
-                        Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold))
-                    } icon: {
-                        Image(.agents)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: emptyStateIconSize, height: emptyStateIconSize)
+                    Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: {
+                        Image(.agents).resizable().scaledToFit().frame(width: emptyStateIconSize, height: emptyStateIconSize)
                     }
-                } description: {
-                    Text("Agents will appear here when active.").interFont(Constants.Typography.bodyS)
-                }
+                } description: { Text("Agents will appear here when active.").interFont(Constants.Typography.bodyS) }
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
             } else {
                 agentListContent
