@@ -1,13 +1,13 @@
 import SwiftUI
 
 /// Circular GitHub repo-owner avatar loaded from the public
-/// `https://github.com/{owner}.png` endpoint, with an SF Symbol fallback
+/// `https://github.com/{owner}.png` endpoint, with a folder icon fallback
 /// while loading and when the owner is unknown or the image fails to load. Mirrors the
 /// avatar treatment in the desktop `RepoSelector`.
 struct RepoOwnerAvatarView: View {
     let owner: String?
     var size: CGFloat = Constants.RepoOwnerAvatar.defaultSize
-    var fallbackSymbol: String = "folder.fill"
+    var fallbackIconResource: ImageResource = .folder
     var cornerRadius: CGFloat?
 
     @Environment(\.colorScheme) private var colorScheme
@@ -51,8 +51,10 @@ struct RepoOwnerAvatarView: View {
     }
 
     private var fallbackIcon: some View {
-        Image(systemName: fallbackSymbol)
-            .font(.system(size: size * Constants.RepoOwnerAvatar.fallbackScale))
+        Image(fallbackIconResource)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size * Constants.RepoOwnerAvatar.fallbackScale, height: size * Constants.RepoOwnerAvatar.fallbackScale)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .accessibilityHidden(true)
     }

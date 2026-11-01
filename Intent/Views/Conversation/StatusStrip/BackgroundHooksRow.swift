@@ -14,6 +14,7 @@ struct BackgroundHooksRow: View {
     let viewModel: ConversationViewModel
     private let hookStore: BackgroundHookStore
     @Environment(\.colorScheme) var colorScheme
+    @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 11
 
     private typealias Layout = Constants.Conversation.StatusStrip.BackgroundHooks
 
@@ -25,8 +26,10 @@ struct BackgroundHooksRow: View {
     var body: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Constants.Conversation.StatusStrip.contentSpacing) {
-                Image(systemName: "bolt.fill")
-                    .font(.caption2)
+                Image(.bolt1)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("Running hooks")
@@ -37,7 +40,14 @@ struct BackgroundHooksRow: View {
                     Button {
                         Task { await hookStore.refetch() }
                     } label: {
-                        Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
+                        Label {
+                            Text("Status unavailable · Retry")
+                        } icon: {
+                            Image(.attentionCircle)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: iconSize, height: iconSize)
+                        }
                     }
                     .buttonStyle(IntentContentButtonStyle())
                     .font(.caption2)
@@ -92,8 +102,10 @@ struct BackgroundHooksRow: View {
                 .interFont(Constants.Typography.subtextXXS)
                 .lineLimit(1)
             if hook.perpetual {
-                Image(systemName: "repeat")
-                    .font(.system(size: Layout.repeatIconFontSize))
+                Image(.clockwiseArrow)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Layout.repeatIconFontSize, height: Layout.repeatIconFontSize)
                     .accessibilityLabel("Repeating hook")
             }
             if hook.state == .running {

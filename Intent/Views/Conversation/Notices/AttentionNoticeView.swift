@@ -12,6 +12,7 @@ struct AttentionNoticeView: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .subheadline) private var iconSize: CGFloat = 15
     var disclosure = TranscriptDisclosure()
     private var isExpanded: Bool {
         get { disclosure.binding(for: .attentionNotice, default: true).wrappedValue }
@@ -29,11 +30,11 @@ struct AttentionNoticeView: View {
         }
     }
 
-    private var iconName: String {
+    private var icon: ImageResource {
         switch notice.kind {
-        case .discussionRequest: return "bubble.left.and.bubble.right.fill"
-        case .blockerReport: return "exclamationmark.triangle.fill"
-        case .turnFailure: return "xmark.circle.fill"
+        case .discussionRequest: return .message
+        case .blockerReport: return .attentionCircleFill
+        case .turnFailure: return .closeCircle
         }
     }
 
@@ -99,8 +100,10 @@ struct AttentionNoticeView: View {
 
     private var legacyNotice: some View {
         HStack(alignment: .top, spacing: Constants.Conversation.NoticeCard.contentSpacing) {
-            Image(systemName: iconName)
-                .font(.subheadline)
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: iconSize, height: iconSize)
                 .foregroundStyle(tint)
                 .accessibilityHidden(true)
                 .padding(.top, Constants.Conversation.NoticeCard.iconTopPadding)

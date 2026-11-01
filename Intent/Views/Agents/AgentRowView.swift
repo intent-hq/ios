@@ -12,10 +12,10 @@ extension AgentAttentionKind {
 
 extension AgentAvatarState {
     /// Discussion and blocker cues; questions use the row's status text.
-    var cornerSymbol: String? {
+    var cornerIcon: String? {
         switch self {
-        case .attentionDiscussion: return AgentAttentionKind.discussion.systemImage
-        case .attentionBlocker: return AgentAttentionKind.blocker.systemImage
+        case .attentionDiscussion: return AgentAttentionKind.discussion.iconName
+        case .attentionBlocker: return AgentAttentionKind.blocker.iconName
         case .idle, .running, .waiting, .failed, .completed, .question: return nil
         }
     }
@@ -76,8 +76,8 @@ struct AgentRowView: View {
     private var avatarState: AgentAvatarState { AgentAvatarState.state(for: agent) }
 
     /// Muting hides attention cues but preserves the running dot.
-    private var cornerSymbol: String? {
-        agent.notificationsMuted ? nil : avatarState.cornerSymbol
+    private var cornerIcon: String? {
+        agent.notificationsMuted ? nil : avatarState.cornerIcon
     }
 
     var body: some View {
@@ -111,9 +111,11 @@ struct AgentRowView: View {
                         height: Constants.AgentRow.activeDotSize
                     )
                     .offset(x: Constants.AgentRow.activeDotOffset, y: -Constants.AgentRow.activeDotOffset)
-            } else if let symbol = cornerSymbol {
-                Image(systemName: symbol)
-                    .font(.system(size: Constants.AgentRow.attentionIconSize))
+            } else if let icon = cornerIcon {
+                Image(icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Constants.AgentRow.attentionIconSize, height: Constants.AgentRow.attentionIconSize)
                     .foregroundStyle(avatarState.cornerColor)
                     .offset(x: Constants.AgentRow.attentionIconOffset, y: -Constants.AgentRow.attentionIconOffset)
             }

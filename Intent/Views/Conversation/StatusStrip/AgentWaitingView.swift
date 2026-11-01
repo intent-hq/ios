@@ -138,21 +138,23 @@ struct AgentWaitingView: View {
     private func agentStatusBadge(_ row: WatchedAgentRow) -> some View {
         let agent = row.agent
         if row.isDeleted {
-            statusBadge(systemName: "minus.circle.fill", color: .gray)
+            statusBadge(Image(systemName: "minus.circle.fill"), color: .gray)
         } else if agent.isErrored {
-            statusBadge(systemName: "xmark.circle.fill", color: .red)
+            statusBadge(Image(.closeCircle), color: .red)
         } else if let attention = agent.pendingAttentionRequest {
-            statusBadge(systemName: attention.kind.systemImage, color: attention.kind.color)
+            statusBadge(Image(attention.kind.iconName), color: attention.kind.color)
         } else if row.isCompleted || agent.status == "completed" {
-            statusBadge(systemName: "checkmark.circle.fill", color: .green)
+            statusBadge(Image(.checkCircle), color: .green)
         } else if agent.isActive {
             activeStatusDot
         }
     }
 
-    private func statusBadge(systemName: String, color: Color) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: Constants.Conversation.AgentWaiting.badgeFontSize))
+    private func statusBadge(_ image: Image, color: Color) -> some View {
+        image
+            .resizable()
+            .scaledToFit()
+            .frame(width: Layout.badgeFontSize, height: Layout.badgeFontSize)
             .foregroundStyle(color)
             .accessibilityHidden(true)
             .background(Circle().fill(Theme.card(for: colorScheme)).frame(

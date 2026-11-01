@@ -139,7 +139,10 @@ struct ErrorMessageView: View {
 
     var body: some View {
         HStack(spacing: Layout.spacing) {
-            Image(systemName: "exclamationmark.triangle.fill")
+            Image(.attentionCircleFill)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Constants.Conversation.Design.toolIconSize, height: Constants.Conversation.Design.toolIconSize)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .accessibilityHidden(true)
             Text(message.error ?? "An error occurred")

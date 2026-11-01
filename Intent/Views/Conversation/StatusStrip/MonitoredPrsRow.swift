@@ -19,6 +19,7 @@ struct MonitoredPrsRow: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.openURL) private var openURL
+    @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 11
 
     private typealias Layout = Constants.Conversation.StatusStrip.MonitoredPrs
 
@@ -63,8 +64,10 @@ struct MonitoredPrsRow: View {
     private var legacyRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Constants.Conversation.StatusStrip.contentSpacing) {
-                Image(systemName: "arrow.triangle.pull")
-                    .font(.caption2)
+                Image(.gitPr)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("Monitored PRs")
@@ -89,7 +92,14 @@ struct MonitoredPrsRow: View {
         Button {
             Task { await monitoredPrStore.refetch() }
         } label: {
-            Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
+            Label {
+                Text("Status unavailable · Retry")
+            } icon: {
+                Image(.attentionCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+            }
         }
         .buttonStyle(IntentContentButtonStyle())
         .font(.caption2)
