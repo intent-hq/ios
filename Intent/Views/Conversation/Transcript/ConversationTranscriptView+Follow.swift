@@ -6,9 +6,10 @@ extension ConversationTranscriptView {
     /// stored, then every effect is executed in order. `animated` is the
     /// animation of the `.scrollToEnd` the event issues and of the follow a
     /// `.startFollowTask` begins: a follow's own, none for a recovery's
-    /// corrections. Returns the effects.
+    /// corrections; Reduce Motion drops it for every effect. Returns the effects.
     @discardableResult
     func send(_ event: Lifecycle.Event, proxy: ScrollViewProxy, animated: Bool = true) -> [Lifecycle.Effect] {
+        let animated = ConversationTranscriptScrollPolicy.animatesFollow(requested: animated, reduceMotion: reduceMotion)
         recordDemoRecoveryResizeFollowBack(event)
         let (state, effects) = Lifecycle.transition(lifecycle, event)
         traceEvent("RecoveryTransition", "event=\(event) visibility=\(state.visibility) ownerBefore=\(lifecycle.owner) ownerAfter=\(state.owner)"

@@ -33,6 +33,16 @@ extension ConversationTranscriptScrollPolicyTests {
         }
     }
 
+    /// Reduce Motion (#426) swaps the Go to End slide for a fade and turns
+    /// every follow into a jump; the default keeps both movements.
+    @Test(arguments: [false, true])
+    func reduceMotionKeepsGoToEndAndFollowsInPlace(reduceMotion: Bool) {
+        typealias Policy = ConversationTranscriptScrollPolicy
+        #expect(Policy.goToEndVisibilityTransition(reduceMotion: reduceMotion) == (reduceMotion ? .fade : .slideAndFade))
+        #expect(Policy.animatesFollow(requested: true, reduceMotion: reduceMotion) == !reduceMotion)
+        #expect(!Policy.animatesFollow(requested: false, reduceMotion: reduceMotion))
+    }
+
     func executeFollow(
         forced: Bool = false,
         userIsScrolledAway: Bool = false,
