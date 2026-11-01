@@ -154,7 +154,7 @@ struct ManualTokenEntryView: View {
             ManualConnectionField(label: hostLabel) {
                 TextField("192.168.1.42", text: $host, prompt: placeholder("192.168.1.42"))
                     .interFont(Constants.Typography.bodySEmphasized)
-                    .accessibilityLabel("Host / Tailcat Address")
+                    .accessibilityLabel(hostAccessibilityLabel)
                     .accessibilityIdentifier("manual.host")
                     .focused($focusedField, equals: .host)
                     .submitLabel(.next)
@@ -176,6 +176,15 @@ struct ManualTokenEntryView: View {
         "HOST"
         #else
         "HOST / TAILCAT ADDRESS"
+        #endif
+    }
+
+    /// VoiceOver name matching the visible field label, not the example placeholder.
+    private var hostAccessibilityLabel: LocalizedStringKey {
+        #if os(visionOS)
+        "Host"
+        #else
+        "Host / Tailcat Address"
         #endif
     }
 
@@ -295,7 +304,7 @@ struct ManualTokenEntryView: View {
     private func validateAndConnect() {
         guard let portNum = Int(port) else {
             PairingDiagnostics.invalidInput()
-            errorMessage = "Invalid port number"
+            showError("Invalid port number")
             return
         }
         let input = ManualConnectionInput.classify(host)
@@ -304,7 +313,7 @@ struct ManualTokenEntryView: View {
         // address fails fast here instead of spinning through the dialer.
         if case .tailcat = input {
             PairingDiagnostics.phase(.input, .failed, failure: DiagnosticFailure(origin: .localOperation, classification: .unavailable))
-            errorMessage = "Tailcat addresses aren't supported on visionOS yet — pair over your local network."
+            showError("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
             return
         }
         #endif
@@ -332,7 +341,7 @@ struct ManualTokenEntryView: View {
                     // or unreachable addresses.
                     guard !Task.isCancelled else { return }
                     PairingDiagnostics.phase(.probe, .failed, failure: TransportDiagnosticFailure.classify(error))
-                    errorMessage = "Could not reach the Tailcat address: \(error.localizedDescription)"
+                    showError("Could not reach the Tailcat address: \(error.localizedDescription)")
                     isValidating = false
                     return
                 }
@@ -355,10 +364,19 @@ struct ManualTokenEntryView: View {
                 // Never connect unpinned: without a probed certificate there is
                 // no way to verify the server's identity. The message names
                 // the stage the probe failed at (ios#233).
-                errorMessage = message
+                showError(message)
                 isValidating = false
             }
         }
+    }
+
+    /// Shows a validation or connection failure and speaks it, because VoiceOver
+    /// focus stays on the Connect button and would not otherwise reach the new text.
+    private func showError(_ message: String) {
+        errorMessage = message
+        var announcement = AttributedString(message)
+        announcement.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(announcement).post()
     }
 
     private func connectWithFingerprint() {
@@ -386,7 +404,7 @@ struct ManualTokenEntryView: View {
             }
         } catch {
             guard !Task.isCancelled else { return }
-            errorMessage = "Connection failed: \(error.localizedDescription)"
+            showError("Connection failed: \(error.localizedDescription)")
             isValidating = false
         }
     }
