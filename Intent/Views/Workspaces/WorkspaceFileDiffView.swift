@@ -3,12 +3,16 @@ import SwiftUI
 struct WorkspaceFileDiffView: View {
     @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     @ScaledMetric(relativeTo: .subheadline) private var statusIconSize: CGFloat = 15
-    let loader: WorkspaceDiffLoader
+    /// Nil when `patch` supplies the diff (a pull request file's GitHub patch).
+    let loader: WorkspaceDiffLoader?
     let path: String
     var staged = false
     var isBinary = false
     var commitHash: String?
     var embedded = false
+    var patch: String?
+    /// Off when the page's own header already names the file.
+    var showsPath = true
     @State private var presentation: WorkspaceDiffPresentation?
     @State private var syntax: [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] = [:]
     @State private var syntaxIsDark = false
@@ -39,7 +43,7 @@ struct WorkspaceFileDiffView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if !embedded {
+            if !embedded, showsPath {
                 Text(path)
                     .font(.subheadline.monospaced())
                     .textSelection(.enabled)
@@ -50,8 +54,8 @@ struct WorkspaceFileDiffView: View {
         }
         .background(usesPanel ? IPadShellStyle.panel(for: colorScheme) : WorkspaceDetailStyle.background(for: colorScheme))
         .task(id: LoadID(
-            workspace: loader.workspaceId,
-            root: loader.gitRootId,
+            workspace: loader?.workspaceId ?? "",
+            root: loader?.gitRootId,
             path: path,
             staged: staged,
             binary: isBinary,
@@ -214,6 +218,11 @@ struct WorkspaceFileDiffView: View {
         syntax = [:]
         defer { if !Task.isCancelled { isLoading = false } }
         if isBinary { return }
+        if let patch {
+            presentation = WorkspaceDiffPresentation(hunks: WorkspaceDiffBuilder.hunks(patch: patch))
+            return
+        }
+        guard let loader else { return }
         do {
             let loaded: WorkspaceDiffPresentation
             if let commitHash {

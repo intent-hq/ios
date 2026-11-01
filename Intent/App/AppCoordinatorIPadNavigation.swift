@@ -11,6 +11,16 @@ extension AppCoordinator {
         revealIPadWorkspaceRoute()
     }
 
+    func onSelectIPadPullRequest(_ item: PullRequestListItem) {
+        iPadPullRequest = item
+        iPadNavigation.showPullRequestDetail()
+    }
+
+    func onCloseIPadPullRequest() {
+        iPadNavigation.closePullRequestDetail()
+        iPadPullRequest = nil
+    }
+
     func updateShellPresentation(_ enabled: Bool) {
         usesIPadShell = enabled
         guard enabled else { return }

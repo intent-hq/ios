@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Which list the workspace page shows; switched from its overflow menu.
+nonisolated enum WorkspaceListContentKind: String {
+    case pullRequests
+    case workspaces
+}
+
 struct WorkspaceListMenu: View {
     @Binding var showArchived: Bool
     // Native toolbar hosts must not rely on inherited observable objects (#745).
@@ -9,6 +15,11 @@ struct WorkspaceListMenu: View {
     let onRecentConnections: () -> Void
 
     var showsSidebarTitle = false
+    var content: Binding<WorkspaceListContentKind>?
+    var showsClosedPullRequests: Binding<Bool>?
+    var groupsPullRequestsByProject: Binding<Bool>?
+
+    private var showsPullRequests: Bool { content?.wrappedValue == .pullRequests }
 
     var body: some View {
         Menu {
@@ -30,17 +41,12 @@ struct WorkspaceListMenu: View {
                 }
             }
             .accessibilityIdentifier("workspaces.menu.recentConnections")
-            Button {
-                showArchived.toggle()
-            } label: {
-                Label {
-                    Text(showArchived ? "Hide archived" : "Show archived")
-                        .interFont(Constants.Typography.bodyS)
-                } icon: {
-                    Image(.archive)
-                }
+            if showsPullRequests {
+                Divider()
+                pullRequestOptions
+            } else {
+                archivedToggle
             }
-            .accessibilityIdentifier("workspaces.menu.archived")
         } label: {
             if showsSidebarTitle {
                 IPadSidebarTitle(title: "Workspaces")
@@ -63,5 +69,52 @@ struct WorkspaceListMenu: View {
         }
         .disabled(!canCreateWorkspace)
         .accessibilityIdentifier("workspaces.menu.create")
+    }
+
+    @ViewBuilder private var pullRequestOptions: some View {
+        if let groupsPullRequestsByProject {
+            Button {
+                groupsPullRequestsByProject.wrappedValue.toggle()
+            } label: {
+                Label {
+                    Text(groupsPullRequestsByProject.wrappedValue ? "List by recent" : "Group by project")
+                        .interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(groupsPullRequestsByProject.wrappedValue ? ImageResource.list : ImageResource.folders)
+                }
+            }
+            .accessibilityIdentifier("workspaces.menu.pullRequestGrouping")
+        }
+        if let showsClosedPullRequests {
+            closedToggle(showsClosedPullRequests)
+        }
+    }
+
+    private func closedToggle(_ showsClosed: Binding<Bool>) -> some View {
+        Button {
+            showsClosed.wrappedValue.toggle()
+        } label: {
+            Label {
+                Text(showsClosed.wrappedValue ? "Hide closed" : "Show closed")
+                    .interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(.pullRequestClosed)
+            }
+        }
+        .accessibilityIdentifier("workspaces.menu.closedPullRequests")
+    }
+
+    private var archivedToggle: some View {
+        Button {
+            showArchived.toggle()
+        } label: {
+            Label {
+                Text(showArchived ? "Hide archived" : "Show archived")
+                    .interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(.archive)
+            }
+        }
+        .accessibilityIdentifier("workspaces.menu.archived")
     }
 }

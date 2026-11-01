@@ -32,7 +32,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(waitUntilHittable(assistant))
         XCTAssertTrue(waitUntilHittable(workspace))
         XCTAssertLessThan(assistant.frame.minX, workspace.frame.minX)
-        let actions = ["assistant", "workspace", "connections", "appearance", "settings"]
+        let actions = ["assistant", "workspace", "pullRequests", "connections", "appearance", "settings"]
         let viewport = app.scrollViews["intent.menu.tiles"].frame.intersection(app.frame)
         for action in actions {
             let tile = reveal(action, in: app)

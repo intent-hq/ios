@@ -24,6 +24,13 @@ struct WorkspaceListView: View {
     @State private var isSearching = false
     @State private var isFilterPinned = false
     @State private var pageHeaderHeight: CGFloat = 0
+    @AppStorage("workspaceList.content") private var listContent: WorkspaceListContentKind = .workspaces
+    @AppStorage("pullRequests.filter") private var pullRequestFilter: PullRequestListStore.Filter = .created
+    @AppStorage("pullRequests.groupsByProject") private var groupsPullRequestsByProject = false
+    @State private var showsClosedPullRequests = false
+    @State private var pullRequestSearchText = ""
+    @State private var creationPullRequest: PullRequestListItem?
+    @State private var detailPullRequest: PullRequestListItem?
     @State private var trailingSafeArea: CGFloat = 0
     @State private var leadingSafeArea: CGFloat = 0
     @FocusState private var searchFocused: Bool
@@ -39,7 +46,7 @@ struct WorkspaceListView: View {
 
     private var canSwitchConnections: Bool {
         guard case .workspaceList = coordinator.currentScreen else { return false }
-        return !showingConnections && !showingCreateWorkspace && pendingAction == nil && actionError == nil
+        return !showingConnections && !showingCreateWorkspace && creationPullRequest == nil && detailPullRequest == nil && pendingAction == nil && actionError == nil
             && !isAgentHistoryOpen
     }
 
@@ -68,6 +75,9 @@ struct WorkspaceListView: View {
         }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
+            // The Intent menu switches between the two lists.
+            onWorkspaces: showsPullRequests ? { listContent = .workspaces } : nil,
+            onPullRequests: showsPullRequests ? nil : { listContent = .pullRequests },
             onCreateWorkspace: createWorkspace
         ) {
             showingConnectionSwitcher = false
@@ -76,11 +86,28 @@ struct WorkspaceListView: View {
         .navigationTitle("Workspaces")
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
-            if shouldDismiss { showingCreateWorkspace = false }
+            if shouldDismiss {
+                showingCreateWorkspace = false
+                creationPullRequest = nil
+            }
         }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView(session: session, coordinator: coordinator)
                 .environment(coordinator)
+        }
+        .sheet(item: $creationPullRequest) { item in
+            CreateWorkspaceView(session: session, coordinator: coordinator, pullRequest: item)
+                .environment(coordinator)
+        }
+        .navigationDestination(item: $detailPullRequest) { item in
+            PullRequestDetailView(
+                item: item,
+                connection: session.connection,
+                linkedWorkspace: PullRequestListItem.linkedWorkspaces(viewModel.workspaces)[item.id]
+            ) { workspaceId in
+                detailPullRequest = nil
+                coordinator.onSelectWorkspace(workspaceId)
+            }
         }
         .sheet(isPresented: $showingConnections) {
             ConnectionsView()
@@ -118,12 +145,7 @@ struct WorkspaceListView: View {
                     workspaceContent
                 } header: {
                     if !isSearching {
-                        WorkspaceSearchBar(
-                            viewMode: $viewModel.viewMode,
-                            isSearching: $isSearching,
-                            horizontalPadding: Constants.WorkspaceList.pageInset,
-                            isCompact: isFilterPinned
-                        )
+                        filterBar
                         .modifier(WorkspaceListDuoLeadingInset())
                         .background(Constants.WorkspaceList.canvas(for: colorScheme))
                         .transition(.opacity)
@@ -150,15 +172,28 @@ struct WorkspaceListView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
-                WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
+                searchInput
                     .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
         .refreshable {
-            await workspaceStore.fetchAll()
+            if showsPullRequests {
+                await session.pullRequestListStore.load(pullRequestQuery)
+            } else {
+                await workspaceStore.fetchAll()
+            }
+        }
+        .task(id: showsPullRequests ? pullRequestQuery : nil) {
+            guard showsPullRequests else { return }
+            await PullRequestListContent.sync(session.pullRequestListStore, to: pullRequestQuery)
+        }
+        .onChange(of: listContent) { _, _ in
+            searchFocused = false
+            isSearching = false
+            revealedSwipeTarget = nil
         }
         .overlay {
-            if viewModel.filteredWorkspaces.isEmpty,
+            if !showsPullRequests, viewModel.filteredWorkspaces.isEmpty,
                !(viewModel.isLoading && viewModel.workspaces.isEmpty) {
                 if viewModel.hasSearchQuery {
                     WorkspaceSearchEmptyState()
@@ -180,46 +215,6 @@ struct WorkspaceListView: View {
             .buttonStyle(IntentButtonStyle(variant: .muted))
             .disabled(!coordinator.canCreateWorkspace)
             .accessibilityIdentifier("workspaces.empty.create")
-    }
-
-    @ViewBuilder private var workspaceContent: some View {
-        if viewModel.isLoading, viewModel.workspaces.isEmpty {
-            ProgressView {
-                Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
-            }
-            .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
-        } else if !viewModel.filteredWorkspaces.isEmpty {
-            workspaceSections
-        }
-    }
-
-    @ViewBuilder
-    private var workspaceSections: some View {
-        switch viewModel.viewMode {
-        case .recent:
-            if !isSearching {
-                Color.clear
-                    .frame(height: Constants.WorkspaceList.recentTopSpacing)
-                    .accessibilityHidden(true)
-            }
-            workspaceRows(viewModel.filteredWorkspaces)
-        case .repo:
-            let groups = viewModel.groupedByRepo.map { repoName, workspaces in
-                (id: repoName, heading: groupHeading(repoName), rows: workspaceRows(workspaces, showRepo: false))
-            }
-            ForEach(groups, id: \.id) { @Sendable group in
-                group.heading
-                group.rows
-            }
-        case .status:
-            let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
-                (id: statusLabel, heading: groupHeading(statusLabel), rows: workspaceRows(workspaces, usesVisionHitTarget: false))
-            }
-            ForEach(groups, id: \.id) { @Sendable group in
-                group.heading
-                group.rows
-            }
-        }
     }
 
     private func workspaceRows(
@@ -332,7 +327,7 @@ private extension WorkspaceListView {
         let font = CTFontCreateWithName(face.rawValue as CFString, isSearching ? compactHeadingSize : headingSize, nil)
         return HStack {
             WorkspaceTextTrimLayout(capHeight: CTFontGetCapHeight(font)) {
-                Text("Workspaces")
+                Text(showsPullRequests ? "Pull requests" : "Workspaces")
                     .interFont(style)
                     .tracking(isSearching ? compactHeadingTracking : headingTracking)
                     .fixedSize(horizontal: false, vertical: true)
@@ -365,12 +360,128 @@ private extension WorkspaceListView {
     }
 
     var pageMenu: some View {
-        WorkspaceListMenu(showArchived: $viewModel.showArchived, canCreateWorkspace: coordinator.canCreateWorkspace, onCreateWorkspace: createWorkspace) {
-            prepareConnectionSwitcher()
-            openAgentHistory()
-        } onRecentConnections: {
-            prepareConnectionSwitcher()
-            showingConnectionSwitcher = true
+        WorkspaceListMenu(
+            showArchived: $viewModel.showArchived,
+            canCreateWorkspace: coordinator.canCreateWorkspace,
+            onCreateWorkspace: createWorkspace,
+            onRecentAgents: {
+                prepareConnectionSwitcher()
+                openAgentHistory()
+            },
+            onRecentConnections: {
+                prepareConnectionSwitcher()
+                showingConnectionSwitcher = true
+            },
+            content: $listContent,
+            showsClosedPullRequests: $showsClosedPullRequests,
+            groupsPullRequestsByProject: $groupsPullRequestsByProject
+        )
+    }
+
+    var showsPullRequests: Bool { listContent == .pullRequests }
+
+    var pullRequestQuery: PullRequestListStore.Query {
+        PullRequestListStore.Query(
+            repositories: PullRequestListRepository.scope(viewModel.workspaces),
+            filter: pullRequestFilter,
+            showsClosed: showsClosedPullRequests,
+            text: pullRequestSearchText
+        )
+    }
+
+    @ViewBuilder var filterBar: some View {
+        if showsPullRequests {
+            WorkspaceSearchBar(
+                viewMode: $pullRequestFilter,
+                isSearching: $isSearching,
+                horizontalPadding: Constants.WorkspaceList.pageInset,
+                isCompact: isFilterPinned,
+                identifierPrefix: "pullRequests.filter",
+                accessibilityTitle: "Pull request filter",
+                searchLabel: "Search pull requests"
+            )
+        } else {
+            WorkspaceSearchBar(
+                viewMode: $viewModel.viewMode,
+                isSearching: $isSearching,
+                horizontalPadding: Constants.WorkspaceList.pageInset,
+                isCompact: isFilterPinned
+            )
+        }
+    }
+
+    @ViewBuilder var searchInput: some View {
+        if showsPullRequests {
+            WorkspaceSearchInput(
+                text: $pullRequestSearchText,
+                isSearching: $isSearching,
+                isFocused: $searchFocused,
+                placeholder: "Search pull requests",
+                identifierPrefix: "pullRequests.search"
+            )
+        } else {
+            WorkspaceSearchInput(text: $viewModel.searchText, isSearching: $isSearching, isFocused: $searchFocused)
+        }
+    }
+}
+
+private extension WorkspaceListView {
+    @ViewBuilder var workspaceContent: some View {
+        if showsPullRequests {
+            PullRequestListContent(
+                store: session.pullRequestListStore,
+                query: pullRequestQuery,
+                workspaces: viewModel.workspaces,
+                groupsByProject: groupsPullRequestsByProject
+            ) { workspaceId in
+                searchFocused = false
+                coordinator.onSelectWorkspace(workspaceId)
+            } onOpenDetail: { item in
+                searchFocused = false
+                detailPullRequest = item
+            } onOpenAgent: { workspaceId in
+                searchFocused = false
+                coordinator.onOpenRecentWorkspaceAgent(workspaceId)
+            } onCreateWorkspace: { item in
+                searchFocused = false
+                if coordinator.canCreateWorkspace { creationPullRequest = item }
+            }
+        } else if viewModel.isLoading, viewModel.workspaces.isEmpty {
+            ProgressView {
+                Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+            }
+            .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
+        } else if !viewModel.filteredWorkspaces.isEmpty {
+            workspaceSections
+        }
+    }
+
+    @ViewBuilder
+    var workspaceSections: some View {
+        switch viewModel.viewMode {
+        case .recent:
+            if !isSearching {
+                Color.clear
+                    .frame(height: Constants.WorkspaceList.recentTopSpacing)
+                    .accessibilityHidden(true)
+            }
+            workspaceRows(viewModel.filteredWorkspaces)
+        case .repo:
+            let groups = viewModel.groupedByRepo.map { repoName, workspaces in
+                (id: repoName, heading: groupHeading(repoName), rows: workspaceRows(workspaces, showRepo: false))
+            }
+            ForEach(groups, id: \.id) { @Sendable group in
+                group.heading
+                group.rows
+            }
+        case .status:
+            let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
+                (id: statusLabel, heading: groupHeading(statusLabel), rows: workspaceRows(workspaces, usesVisionHitTarget: false))
+            }
+            ForEach(groups, id: \.id) { @Sendable group in
+                group.heading
+                group.rows
+            }
         }
     }
 }

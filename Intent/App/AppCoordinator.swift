@@ -84,6 +84,8 @@ class AppCoordinator {
     var usesIPadShell = false
     var iPadNavigation = IPadNavigationState()
     var workspaceChange: WorkspaceChangeDestination?
+    /// The pull request in the iPad main pane.
+    var iPadPullRequest: PullRequestListItem?
     var workspaceSidebarAgents = WorkspaceSidebarAgents()
     var assistantAgentId: String?
     var workspaceCreationDraft: WorkspaceCreationDraft?
@@ -153,7 +155,18 @@ class AppCoordinator {
     }
 
     func makeWorkspaceCreationDraft() -> WorkspaceCreationDraft {
-        workspaceCreationDraft ?? WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
+        workspaceCreationDraft ?? makeFreshWorkspaceCreationDraft()
+    }
+
+    func makeFreshWorkspaceCreationDraft() -> WorkspaceCreationDraft {
+        WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
+    }
+
+    /// A fresh prefilled draft; the saved ordinary draft stays untouched.
+    func makeWorkspaceCreationDraft(for pullRequest: PullRequestListItem) -> WorkspaceCreationDraft {
+        var draft = makeFreshWorkspaceCreationDraft()
+        draft.prefill(pullRequest: pullRequest)
+        return draft
     }
 
     /// Temporary transport recovery keeps the draft while submission remains
