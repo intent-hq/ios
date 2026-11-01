@@ -36,25 +36,35 @@ struct ConversationDesignTests {
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
-    func standardAnswerCardsRenderSelectedFillAndSubtleUnselectedOutline(scheme: ColorScheme) throws {
+    func standardAnswerCardsRenderSelectedFillAndSubtleOutlineOnEveryEdge(scheme: ColorScheme) throws {
         // Independent design values: white selection in light mode, neutral raised
-        // fill in dark mode, and a 10% outline only on unselected standard cards.
+        // fill in dark mode, and a 10% outline on every edge of both selected and
+        // unselected standard cards (#756).
         let shell: [Double] = scheme == .light ? [240, 240, 235] : [39, 39, 39]
         let raised: [Double] = scheme == .light ? [255, 255, 255] : [61, 61, 60]
         let outline = scheme == .light ? 0.0 : 255.0
         for selected in [false, true] {
-            let pixels = try standardAnswerCardPixels(scheme: scheme, selected: selected)
-            let edge = selected ? raised : shell.map { $0 * 0.9 + outline * 0.1 }
             let interior = selected ? raised : shell
-            for channel in 0..<3 {
-                #expect(abs(Double(pixels[channel]) - edge[channel]) <= 2)
-                #expect(abs(Double(pixels[7 * 4 + channel]) - interior[channel]) <= 2)
+            let edge = interior.map { $0 * 0.9 + outline * 0.1 }
+            for side in CardEdge.allCases {
+                let pixels = try standardAnswerCardPixels(scheme: scheme, selected: selected, edge: side)
+                for channel in 0..<3 {
+                    #expect(
+                        abs(Double(pixels[channel]) - edge[channel]) <= 2,
+                        "\(side) edge, selected: \(selected), channel \(channel): \(pixels[channel])"
+                    )
+                    #expect(abs(Double(pixels[7 * 4 + channel]) - interior[channel]) <= 2)
+                }
+                #expect(pixels[3] == 255 && pixels[7 * 4 + 3] == 255)
             }
-            #expect(pixels[3] == 255 && pixels[7 * 4 + 3] == 255)
         }
     }
 
-    private func standardAnswerCardPixels(scheme: ColorScheme, selected: Bool) throws -> [UInt8] {
+    private enum CardEdge: CaseIterable {
+        case leading, trailing, top, bottom
+    }
+
+    private func standardAnswerCardPixels(scheme: ColorScheme, selected: Bool, edge: CardEdge) throws -> [UInt8] {
         // ImageRenderer starts with the standard environment; no device-level
         // contrast override is injected. Increased Contrast remains a separate policy.
         let renderer = ImageRenderer(content: WorkspaceQuestionAnswerCards(
@@ -67,23 +77,38 @@ struct ConversationDesignTests {
             .environment(\.colorScheme, scheme))
         renderer.scale = 1
         let image = try #require(renderer.cgImage)
-        // Sample the straight left edge and blank inset, away from text and corners.
-        let strip = try #require(image.cropping(to: CGRect(x: 0, y: image.height / 2, width: 8, height: 1)))
+        // Sample 8 pixels inward from the middle of a straight edge, away from text
+        // and corners; pixel 0 is the outline and pixel 7 is the blank inset.
+        let midX = image.width / 2
+        let midY = image.height / 2
+        let rect: CGRect = switch edge {
+        case .leading: CGRect(x: 0, y: midY, width: 8, height: 1)
+        case .trailing: CGRect(x: image.width - 8, y: midY, width: 8, height: 1)
+        case .top: CGRect(x: midX, y: 0, width: 1, height: 8)
+        case .bottom: CGRect(x: midX, y: image.height - 8, width: 1, height: 8)
+        }
+        let strip = try #require(image.cropping(to: rect))
         var pixels = [UInt8](repeating: 0, count: 8 * 4)
         let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
         try pixels.withUnsafeMutableBytes { bytes in
             let context = try #require(CGContext(
                 data: bytes.baseAddress,
-                width: 8,
-                height: 1,
+                width: strip.width,
+                height: strip.height,
                 bitsPerComponent: 8,
-                bytesPerRow: 8 * 4,
+                bytesPerRow: strip.width * 4,
                 space: colorSpace,
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             ))
-            context.draw(strip, in: CGRect(x: 0, y: 0, width: 8, height: 1))
+            context.draw(strip, in: CGRect(x: 0, y: 0, width: strip.width, height: strip.height))
         }
-        return pixels
+        // Order samples from the outer edge inward.
+        let pixelCount = 8
+        let ordered: [Int] = switch edge {
+        case .leading, .top: Array(0..<pixelCount)
+        case .trailing, .bottom: Array((0..<pixelCount).reversed())
+        }
+        return ordered.flatMap { pixels[$0 * 4..<$0 * 4 + 4] }
     }
 
     private func surfaces(for scheme: ColorScheme) -> [Color] {
