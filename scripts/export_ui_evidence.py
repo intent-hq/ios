@@ -11,6 +11,13 @@ import tempfile
 
 
 CAPTURES = {
+    "PairingDesignUITests": {
+        "testConnectRowsStackLabelsAtLargestAccessibilityTextSize": tuple(
+            f"connect-design-ax5-{state}-{appearance}"
+            for appearance in ("light", "dark")
+            for state in ("top", "qr", "bottom")
+        ),
+    },
     "IPadWorkspaceSidebarUITests": {
         "testOpenAgentAndNoteMoveTheWorkspaceIntoTheSidebarInBothThemes": tuple(
             f"ipad-workspace-{state}-{appearance}"

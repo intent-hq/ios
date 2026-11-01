@@ -209,12 +209,25 @@ struct PairingOptionButton: View {
     var isProminent = false
     let colorScheme: ColorScheme
     let action: () -> Void
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var nativeLeading = PairingTextMetrics.bodyNativeLeading
 
     var body: some View {
+        // Accessibility sizes stack the tile above the labels so words get the
+        // full row width instead of breaking beside a fixed icon column (ios#471).
+        let isStacked = dynamicTypeSize.isAccessibilitySize
+        let layout = isStacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Constants.Pairing.optionSpacing))
+            : AnyLayout(HStackLayout(spacing: Constants.Pairing.optionSpacing))
+        // Figma draws the 40pt QR row with circular corners (ios#506).
+        let shape = RoundedRectangle(
+            cornerRadius: Constants.Pairing.optionCornerRadius,
+            style: isProminent ? .circular : .continuous
+        )
         Button(action: action) {
-            HStack(spacing: Constants.Pairing.optionSpacing) {
-                iconTile
+            layout {
+                PairingOptionIcon(icon: icon, isProminent: isProminent, isStacked: isStacked, colorScheme: colorScheme)
+                    .dynamicTypeSize(...Constants.Pairing.maximumIconTypeSize)
 
                 VStack(alignment: .leading, spacing: max(0, Constants.Pairing.optionTextSpacing - nativeLeading)) {
                     Text(title)
@@ -233,23 +246,34 @@ struct PairingOptionButton: View {
             .padding(.horizontal, Constants.Pairing.optionPadding)
             .padding(.vertical, isProminent ? Constants.Pairing.optionPadding : 0)
             .background(isProminent ? Constants.Pairing.surface(for: colorScheme) : .clear)
-            .clipShape(.rect(cornerRadius: Constants.Pairing.optionCornerRadius))
-            .contentShape(.rect(cornerRadius: Constants.Pairing.optionCornerRadius))
+            .clipShape(shape)
+            .contentShape(shape)
         }
         .buttonStyle(IntentContentButtonStyle())
         .visionCardRowButton(cornerRadius: Constants.Pairing.optionCornerRadius)
     }
+}
 
-    private var iconTile: some View {
+/// The glyph follows Dynamic Type inside a fixed 64pt column beside the labels;
+/// once stacked, the whole tile scales because it no longer narrows them.
+private struct PairingOptionIcon: View {
+    let icon: ImageResource
+    let isProminent: Bool
+    let isStacked: Bool
+    let colorScheme: ColorScheme
+    @ScaledMetric(relativeTo: .body) private var glyphSize = Constants.Pairing.glyphSize
+
+    var body: some View {
+        let scale = isStacked ? glyphSize / Constants.Pairing.glyphSize : 1
         Image(icon)
             .renderingMode(.template)
             .resizable()
             .scaledToFit()
-            .frame(width: Constants.Pairing.glyphSize, height: Constants.Pairing.glyphSize)
+            .frame(width: glyphSize, height: glyphSize)
             .foregroundStyle(isProminent ? Constants.Pairing.onAccent : Constants.Pairing.foreground(for: colorScheme))
-            .frame(width: Constants.Pairing.iconTileSize, height: Constants.Pairing.iconTileSize)
+            .frame(width: Constants.Pairing.iconTileSize * scale, height: Constants.Pairing.iconTileSize * scale)
             .background(isProminent ? Constants.Pairing.accent : Constants.Pairing.surface(for: colorScheme))
-            .clipShape(.rect(cornerRadius: Constants.Pairing.iconTileCornerRadius))
+            .clipShape(.rect(cornerRadius: Constants.Pairing.iconTileCornerRadius * scale))
             .accessibilityHidden(true)
     }
 }

@@ -114,6 +114,53 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         capture(app, named: "saved-off")
     }
 
+    /// ios#471: at the largest text size the tile stacks above full-width labels
+    /// and every Connect row stays reachable by scrolling in both appearances.
+    @MainActor
+    func testConnectRowsStackLabelsAtLargestAccessibilityTextSize() throws {
+        for appearance in ["light", "dark"] {
+            let app = try launchAtHome(arguments: [
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+                "-appThemePreference", appearance
+            ])
+            XCTAssertTrue(app.staticTexts["Connect to Intent"].waitForExistence(timeout: Self.timeout))
+            capture(app, named: "ax5-top-\(appearance)")
+            for (title, subtitle) in [
+                ("Scan QR Code", "Go to Settings -> Mobile in the desktop app"),
+                ("Manual Connection", "Enter IP, port, and token"),
+                ("Saved Connections", "1 available backend")
+            ] {
+                let row = option(title, in: app)
+                XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+                reveal(row, in: app)
+                XCTAssertTrue(row.isHittable, title)
+                XCTAssertLessThanOrEqual(row.frame.maxX, app.frame.maxX + 0.5, title)
+                for text in [title, subtitle] {
+                    let label = row.staticTexts[text]
+                    XCTAssertTrue(label.exists, text)
+                    XCTAssertEqual(label.frame.minX - row.frame.minX, 24, accuracy: 1, "\(text) must use the full row width")
+                    XCTAssertLessThanOrEqual(label.frame.maxX, row.frame.maxX - 23, text)
+                }
+                if title == "Scan QR Code" { capture(app, named: "ax5-qr-\(appearance)") }
+            }
+            capture(app, named: "ax5-bottom-\(appearance)")
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testConnectRowsKeepSideBySideIconAtDefaultTextSize() throws {
+        let app = try launchAtHome()
+        for title in ["Scan QR Code", "Manual Connection", "Saved Connections"] {
+            let row = option(title, in: app)
+            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+            let label = row.staticTexts[title]
+            XCTAssertTrue(label.exists, title)
+            // 24pt padding + 64pt tile + 24pt spacing (Figma 3051:54405).
+            XCTAssertEqual(label.frame.minX - row.frame.minX, 112, accuracy: 1, title)
+        }
+    }
+
     @MainActor
     private func verifySavedCardGeometry(_ machine: XCUIElement, in app: XCUIApplication) {
         let appWidth = app.frame.width
@@ -246,9 +293,9 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchAtHome() throws -> XCUIApplication {
+    private func launchAtHome(arguments: [String] = []) throws -> XCUIApplication {
         let directory = try makeDemoDirectory()
-        let app = try launchConnected(directory: directory)
+        let app = try launchConnected(arguments: arguments, directory: directory)
         try Data().write(to: directory.appendingPathComponent("loss"))
         let home = app.buttons["connection-loss.home"]
         XCTAssertTrue(home.waitForExistence(timeout: Self.timeout))

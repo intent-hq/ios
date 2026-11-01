@@ -353,6 +353,8 @@ extension Constants.Pairing {
     static let optionSpacing: CGFloat = 24
     static let glyphSize: CGFloat = 24
     static let iconTileSize: CGFloat = 64
+    /// Caps icon growth so stacked accessibility rows keep labels near the top.
+    static let maximumIconTypeSize = DynamicTypeSize.accessibility1
     static let iconTileCornerRadius: CGFloat = 16
     static let optionTextSpacing: CGFloat = 12
     static let optionPadding: CGFloat = 24

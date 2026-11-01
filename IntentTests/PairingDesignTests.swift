@@ -86,6 +86,28 @@ struct PairingDesignTests {
         }
     }
 
+    @Test(arguments: [ColorScheme.light, .dark])
+    func qrRowUsesFigmaCircularCornerContour(scheme: ColorScheme) throws {
+        // Figma 3051:54210/3051:54412: the first point row is ~34.5pt inward;
+        // SwiftUI's default continuous curve measured 41.5pt (ios#506).
+        let image = try renderedRowImage(width: 354, prominent: true, category: .large, colorScheme: scheme)
+        let alpha = try alphaChannel(image)
+        let radius = Constants.Pairing.optionCornerRadius
+        let width = image.width
+        let height = image.height
+        for row in 0..<Int(radius) {
+            let offset = radius - CGFloat(row) - 0.5
+            let expected = radius - (radius * radius - offset * offset).squareRoot()
+            for y in [row, height - 1 - row] {
+                let opaque = (0..<width).filter { alpha[y * width + $0] >= 128 }
+                let leading = CGFloat(try #require(opaque.first))
+                let trailing = CGFloat(width - 1 - (try #require(opaque.last)))
+                #expect(abs(leading + 0.5 - expected) <= 1, "row \(y) leading inset \(leading)")
+                #expect(abs(trailing + 0.5 - expected) <= 1, "row \(y) trailing inset \(trailing)")
+            }
+        }
+    }
+
     private func renderedRowSize(width: CGFloat, prominent: Bool, category: DynamicTypeSize) throws -> CGSize {
         let image = try renderedRowImage(width: width, prominent: prominent, category: category)
         return CGSize(width: image.width, height: image.height)
@@ -95,20 +117,38 @@ struct PairingDesignTests {
         width: CGFloat,
         prominent: Bool,
         category: DynamicTypeSize,
-        legibilityWeight: LegibilityWeight = .regular
+        legibilityWeight: LegibilityWeight = .regular,
+        colorScheme: ColorScheme = .dark
     ) throws -> CGImage {
         let row = PairingOptionButton(
             icon: prominent ? .connectQR : .connectManual,
             title: prominent ? "Scan QR Code" : "Manual Connection",
             subtitle: prominent ? "Fastest way to connect" : "Enter IP, port, and token",
             isProminent: prominent,
-            colorScheme: .dark
+            colorScheme: colorScheme
         ) {}
         let renderer = ImageRenderer(content: row.frame(width: width)
             .environment(\.dynamicTypeSize, category)
             .environment(\.legibilityWeight, legibilityWeight))
         renderer.scale = 1
         return try #require(renderer.cgImage)
+    }
+
+    private func alphaChannel(_ image: CGImage) throws -> [UInt8] {
+        var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        try pixels.withUnsafeMutableBytes { bytes in
+            let context = try #require(CGContext(
+                data: bytes.baseAddress,
+                width: image.width,
+                height: image.height,
+                bitsPerComponent: 8,
+                bytesPerRow: image.width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        return stride(from: 3, to: pixels.count, by: 4).map { pixels[$0] }
     }
 
     private func rgb(_ color: Color) -> [CGFloat] {
