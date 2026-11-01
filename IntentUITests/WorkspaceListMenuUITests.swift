@@ -59,6 +59,112 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     }
 
     @MainActor
+    func testPullRequestsListSwitchesFromMenuInBothThemes() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "The iPad sidebar has no pull requests mode yet")
+        // The list choice persists; never leave later tests on pull requests.
+        addTeardownBlock { @MainActor [self] () async in
+            let app = launchWorkspaces()
+            if app.staticTexts["workspaces.title"].label == "Pull requests" {
+                switchList(in: app, to: "workspaces")
+            }
+        }
+        for appearance in ["light", "dark"] {
+            let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
+            let linked = app.buttons["pullRequests.row.nova-labs/console#482"]
+            let reviewOnly = app.buttons["pullRequests.row.nova-labs/gateway#311"]
+            switchList(in: app, to: "pullRequests")
+            XCTAssertTrue(linked.waitForExistence(timeout: Self.timeout))
+            XCTAssertEqual(app.staticTexts["workspaces.title"].label, "Pull requests")
+            XCTAssertTrue(linked.label.contains("Workspace Add usage analytics dashboard"))
+            capture(app, named: "pull-requests-\(appearance)")
+
+            checkPullRequestGrouping(in: app, row: linked, appearance: appearance)
+
+            app.buttons["pullRequests.filter.Review"].tap()
+            XCTAssertTrue(linked.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(reviewOnly.exists)
+            capture(app, named: "pull-requests-review-\(appearance)")
+
+            // "New workspace" is a wide pill; the swipe must travel past it.
+            let start = reviewOnly.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 320, dy: 0)))
+            let source = app.buttons["creation.sourceCard"]
+            XCTAssertTrue(source.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(source.label.contains("nova-labs/gateway"))
+            XCTAssertTrue(source.label.contains("feature/pr-311"))
+            let prompt = app.textViews["creation.prompt"].value as? String ?? ""
+            XCTAssertTrue(prompt.contains("/gateway/pull/311"))
+            capture(app, named: "pull-requests-new-workspace-\(appearance)")
+            app.buttons["creation.back"].tap()
+            XCTAssertTrue(app.buttons["creation.branch.feature/pr-311"].waitForExistence(timeout: Self.timeout))
+            app.buttons["creation.branchBack"].tap()
+            app.buttons["creation.close"].tap()
+            XCTAssertTrue(source.waitForNonExistence(timeout: Self.timeout))
+
+            app.buttons["pullRequests.filter.Mine"].tap()
+            switchList(in: app, to: "workspaces")
+            XCTAssertTrue(app.staticTexts["Add usage analytics dashboard"].waitForExistence(timeout: Self.timeout))
+            XCTAssertFalse(linked.exists)
+            app.terminate()
+        }
+    }
+
+    @MainActor
+    func testPullRequestDetailShowsSummaryAndCodeInBothThemes() throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "The iPad sidebar has no pull requests mode yet")
+        addTeardownBlock { @MainActor [self] () async in
+            let app = launchWorkspaces()
+            if app.staticTexts["workspaces.title"].label == "Pull requests" {
+                switchList(in: app, to: "workspaces")
+            }
+        }
+        for appearance in ["light", "dark"] {
+            let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
+            switchList(in: app, to: "pullRequests")
+            let row = app.buttons["pullRequests.row.nova-labs/console#482"]
+            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+            row.tap()
+            XCTAssertTrue(app.buttons["pullRequest.workspace"].waitForExistence(timeout: Self.timeout))
+            let checks = app.buttons["pullRequest.checks"]
+            XCTAssertTrue(checks.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(checks.label.contains("4 Passed"))
+            capture(app, named: "pull-request-detail-summary-\(appearance)")
+
+            app.buttons["pullRequest.tab.Code"].tap()
+            let file = app.buttons["pullRequest.file.Sources/Dashboard/UsageChart.swift"]
+            XCTAssertTrue(file.waitForExistence(timeout: Self.timeout))
+            file.tap()
+            XCTAssertTrue(app.scrollViews["changes.diff.scroll"].waitForExistence(timeout: Self.timeout))
+            capture(app, named: "pull-request-detail-code-\(appearance)")
+            app.buttons["pullRequest.file.back"].tap()
+            XCTAssertTrue(file.waitForExistence(timeout: Self.timeout))
+
+            app.buttons["pullRequest.back"].tap()
+            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+            switchList(in: app, to: "workspaces")
+            app.terminate()
+        }
+    }
+
+    /// The Intent menu switches between the Workspaces and Pull requests lists.
+    @MainActor
+    private func switchList(in app: XCUIApplication, to list: String) {
+        app.openHomeAction(list)
+    }
+
+    @MainActor
+    private func checkPullRequestGrouping(in app: XCUIApplication, row: XCUIElement, appearance: String) {
+        app.buttons["workspaces.menu"].tap()
+        app.buttons["workspaces.menu.pullRequestGrouping"].tap()
+        XCTAssertTrue(app.staticTexts["CONSOLE"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.staticTexts["#482"].waitForExistence(timeout: Self.timeout), "Grouped rows drop the repository")
+        capture(app, named: "pull-requests-grouped-\(appearance)")
+        app.buttons["workspaces.menu"].tap()
+        app.buttons["workspaces.menu.pullRequestGrouping"].tap()
+        XCTAssertTrue(app.staticTexts["CONSOLE"].waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
     func testRecentAgentsOpensAndClosesExistingDrawer() {
         let app = launchWorkspaces()
         app.buttons["workspaces.menu"].tap()

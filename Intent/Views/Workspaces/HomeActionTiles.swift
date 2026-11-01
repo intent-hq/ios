@@ -4,8 +4,9 @@ import SwiftUI
 struct HomeActionTiles: View {
     enum Action: String, CaseIterable {
         case assistant
-        case workspaces
         case workspace
+        case workspaces
+        case pullRequests
         case connections
         case appearance
         case settings
@@ -18,6 +19,7 @@ struct HomeActionTiles: View {
     var allowsWorkspaceCreation = true
     var allowsAssistant = true
     var showsWorkspaceList = false
+    var showsPullRequests = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
@@ -124,7 +126,7 @@ struct HomeActionTiles: View {
     private var actions: [Action] {
         Action.allCases.filter { action in
             (action != .workspace || allowsWorkspaceCreation) && (action != .assistant || allowsAssistant)
-                && (action != .workspaces || showsWorkspaceList)
+                && (action != .workspaces || showsWorkspaceList) && (action != .pullRequests || showsPullRequests)
         }
     }
 
@@ -221,6 +223,7 @@ struct HomeActionTiles: View {
         switch action {
         case .assistant: "Chat With\nAssistant"
         case .workspaces: "Workspaces"
+        case .pullRequests: "Pull\nRequests"
         case .workspace: "New\nWorkspace"
         case .connections: "Connections:\n\(connectionCount) \(connectionCount == 1 ? "Device" : "Devices")"
         case .appearance: "Appearance:\n\(appearance)"
@@ -232,6 +235,7 @@ struct HomeActionTiles: View {
         switch action {
         case .assistant: .intentDandelion
         case .workspaces: .agentGeneral1
+        case .pullRequests: .pullRequests
         case .workspace: .addIcon
         case .connections: .connectionLaptop
         case .appearance:

@@ -146,6 +146,7 @@ struct IPadShellView: View {
             floatingVerticalBarButtonEdge: verticalBarEdge ?? .trailing,
             onWorkspaces: { coordinator.onSelectIPadSection(.workspaces) },
             onAssistant: { coordinator.onSelectIPadSection(.assistant) },
+            onPullRequests: { coordinator.onSelectIPadSection(.pullRequests) },
             onCreateWorkspace: createWorkspace,
             onConnections: showConnections
         ))
@@ -243,6 +244,10 @@ struct IPadShellView: View {
                     AssistantView(session: session)
                 }
             }
+            if let pullRequest = coordinator.iPadPullRequest, navigation.detail == .pullRequest, navigation.pairing == nil {
+                IPadPullRequestDetail(item: pullRequest, session: session)
+                    .id(pullRequest.id)
+            }
             if let pairing = navigation.pairing {
                 IPadPairingDetail(mode: pairing) { coordinator.iPadNavigation.cancelPairing() }
                     .accessibilityHidden(true, isEnabled: isDrawerVisible)
@@ -270,6 +275,9 @@ struct IPadShellView: View {
                         onCollapse: collapseSidebar
                     ) { coordinator.onSelectAssistant(agentId: $0) }
                 }
+            }
+            RetainedIPadPane(isVisible: navigation.section == .pullRequests, keepsCoveredContentVisible: true) {
+                IPadPullRequestsSidebar(session: session, onCollapse: collapseSidebar)
             }
             RetainedIPadPane(isVisible: navigation.section == .connections, keepsCoveredContentVisible: true) {
                 IPadConnectionsSidebar(

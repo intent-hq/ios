@@ -65,7 +65,7 @@ struct FileLineIndexTests {
         #expect(view.contentSize.width < 10_000)
         let labels = view.visibleLineLabels()
         try #require(labels.count >= 2)
-        #expect(abs(labels[1].baseline - labels[0].baseline - view.numberFont.lineHeight) < 2)
+        #expect(abs(labels[1].baseline - labels[0].baseline - view.linePitch) < 2)
         view.setContentOffset(CGPoint(x: 200, y: 0), animated: false)
         view.layoutIfNeeded()
         #expect(view.visibleLineLabels().first?.number == 1)
@@ -91,7 +91,7 @@ struct FileLineIndexTests {
         #expect(view.contentSize.width > view.bounds.width)
         let labels = view.visibleLineLabels()
         try #require(labels.count >= 2)
-        #expect(abs(labels[1].baseline - labels[0].baseline - view.numberFont.lineHeight) < 2)
+        #expect(abs(labels[1].baseline - labels[0].baseline - view.linePitch) < 2)
     }
 
     @MainActor
@@ -104,12 +104,13 @@ struct FileLineIndexTests {
         view.layoutIfNeeded()
         view.setContentOffset(CGPoint(x: 0, y: 800), animated: false)
         view.layoutIfNeeded()
-        let original = try #require(view.visibleLineLabels().first?.number)
+        var anchor = try #require(view.visibleLineLabels().first)
         for wraps in [false, true] {
             view.setWrapLines(wraps)
             view.layoutIfNeeded()
-            let current = try #require(view.visibleLineLabels().first?.number)
-            #expect(abs(current - original) <= 1)
+            let current = try #require(view.visibleLineLabels().first { $0.number == anchor.number })
+            #expect(abs(current.baseline - anchor.baseline) < 1)
+            anchor = try #require(view.visibleLineLabels().first)
         }
     }
 

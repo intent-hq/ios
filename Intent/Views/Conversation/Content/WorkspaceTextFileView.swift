@@ -15,7 +15,7 @@ struct WorkspaceTextFileView: UIViewRepresentable {
         view.isEditable = false
         view.isSelectable = true
         view.isScrollEnabled = true
-        view.alwaysBounceVertical = true
+        view.bouncesVertically = false
         view.font = UIFontMetrics(forTextStyle: .body).scaledFont(
             for: .monospacedSystemFont(ofSize: UIFont.systemFontSize, weight: .regular)
         )

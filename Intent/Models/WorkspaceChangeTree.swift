@@ -1,9 +1,19 @@
 import Foundation
 
-struct WorkspaceChangeTree {
+/// A changed file placed in a `ChangeTree` by its slash-separated path.
+protocol ChangeTreeFile: Equatable {
+    var id: String { get }
+    var path: String { get }
+}
+
+extension WorkspaceChange: @MainActor ChangeTreeFile {}
+
+typealias WorkspaceChangeTree = ChangeTree<WorkspaceChange>
+
+struct ChangeTree<File: ChangeTreeFile> {
     enum Node: Identifiable, Equatable {
         case directory(path: String, children: [Self])
-        case file(WorkspaceChange)
+        case file(File)
 
         var id: String {
             switch self {
@@ -38,13 +48,13 @@ struct WorkspaceChangeTree {
     }
 
     private struct Entry {
-        let file: WorkspaceChange
+        let file: File
         let components: [String]
     }
 
     let roots: [Node]
 
-    init(files: [WorkspaceChange]) {
+    init(files: [File]) {
         roots = Self.build(files.map { Entry(file: $0, components: $0.path.components(separatedBy: "/")) }, depth: 0)
     }
 

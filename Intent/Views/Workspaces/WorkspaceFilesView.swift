@@ -25,6 +25,8 @@ struct WorkspaceFilesView: View {
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
+                .fileTreeGuides(depth: row.depth)
+                .fileTreeOutdent()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -44,9 +46,11 @@ struct WorkspaceFilesView: View {
             }
         } label: {
             WorkspaceFileTreeLabel(
-                name: row.depth >= WorkspaceFileTreeLayout.maximumIndentationDepth ? row.path : row.name,
+                name: WorkspaceFileTreeLayout.displayName(path: row.path, depth: row.depth),
                 isDirectory: row.isDirectory,
-                isExpanded: isExpanded
+                isExpanded: isExpanded,
+                showsChildGuide: WorkspaceFileTreeLayout.showsChildGuide(depth: row.depth, isExpanded: isExpanded),
+                showsChevron: false
             ) { EmptyView() }
         }
         .buttonStyle(IntentContentButtonStyle())

@@ -68,6 +68,12 @@ struct TextLinkPreviewView: View {
                     Label("Copy path", image: "File")
                 }
                 .accessibilityIdentifier("text.copyPath")
+                if let file {
+                    ShareLink(item: file.url) {
+                        Label("Share", image: "Upload")
+                    }
+                    .accessibilityIdentifier("text.share")
+                }
             }
             Section {
                 Toggle("Wrap lines", isOn: $wrapLines)

@@ -3,12 +3,14 @@ import Foundation
 enum IPadSidebarSection: String, CaseIterable {
     case assistant
     case connections
+    case pullRequests
     case settings
     case workspaces
 }
 
 enum IPadDetailSelection: Equatable {
     case assistant
+    case pullRequest
     case workspace
 }
 
@@ -52,7 +54,7 @@ struct IPadNavigationState: Equatable {
         case .workspaces:
             detail = .workspace
             pairing = nil
-        case .connections, .settings:
+        case .connections, .pullRequests, .settings:
             break
         }
         revealSidebar()
@@ -71,6 +73,18 @@ struct IPadNavigationState: Equatable {
         hasOpenedAssistant = true
         pairing = nil
         detailWasSelected()
+    }
+
+    mutating func showPullRequestDetail() {
+        section = .pullRequests
+        detail = .pullRequest
+        pairing = nil
+        detailWasSelected()
+    }
+
+    /// Closing a pull request returns the main pane to the workspace and keeps the sidebar.
+    mutating func closePullRequestDetail() {
+        if detail == .pullRequest { detail = .workspace }
     }
 
     mutating func presentPairing(_ mode: IPadPairingMode) {
@@ -114,7 +128,8 @@ struct IPadNavigationState: Equatable {
         // opening a drawer over the conversation in a narrow window.
         isDrawerPresented = false
         if usesCompactNavigation, pairing == nil,
-           section == .settings || section == .connections || (detail == .workspace && showsWorkspaceList) {
+           section == .settings || section == .connections || section == .pullRequests
+           || (detail == .workspace && showsWorkspaceList) {
             revealSidebar()
         }
     }

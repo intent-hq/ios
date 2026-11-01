@@ -20,6 +20,7 @@ struct IPadNavigationRail: View {
                 destination(.assistant, asset: .dandelion, label: "Assistant")
                     .disabled(!canUseAssistant)
                 destination(.workspaces, asset: .agentGeneral1, label: "Workspaces")
+                destination(.pullRequests, asset: .pullRequests, label: "Pull requests")
                 destination(.connections, asset: .connectionLaptop, label: "Connections")
                 railButton(asset: appearanceAsset, label: "Appearance", identifier: "ipad.rail.appearance") {
                     themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"

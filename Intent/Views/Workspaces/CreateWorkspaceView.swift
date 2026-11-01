@@ -11,6 +11,7 @@ struct CreateWorkspaceView: View {
     /// listing, specialist/provider/model options, workspace.create) go
     /// through its connection so pinned windows never hit the default backend.
     private let session: BackendSession
+    private let persistsDraft: Bool
     @State private var form: WorkspaceCreationDraft
     @State private var branchSearchText = ""
     @State private var completedBranchQuery: String?
@@ -29,9 +30,10 @@ struct CreateWorkspaceView: View {
     @State private var catalogConsumer = UUID()
     @State private var catalogIsVisible = true
 
-    init(session: BackendSession, coordinator: AppCoordinator) {
+    init(session: BackendSession, coordinator: AppCoordinator, pullRequest: PullRequestListItem? = nil) {
         self.session = session
-        _form = State(initialValue: coordinator.makeWorkspaceCreationDraft())
+        persistsDraft = pullRequest == nil
+        _form = State(initialValue: pullRequest.map(coordinator.makeWorkspaceCreationDraft(for:)) ?? coordinator.makeWorkspaceCreationDraft())
     }
 
     /// The session-owned repo cache: it outlives this sheet so a reopen
@@ -105,7 +107,7 @@ struct CreateWorkspaceView: View {
         navigationContent
         .onAppear { catalogIsVisible = true }
         .onDisappear {
-            coordinator.workspaceCreationDraft = form.resumable
+            if persistsDraft { coordinator.workspaceCreationDraft = form.resumable }
             catalogIsVisible = false
             optionsStore.releaseCatalogs(consumer: catalogConsumer)
             form.images.cancelImport()
@@ -262,6 +264,7 @@ extension CreateWorkspaceView {
     }
 
     private func reconcileBranchSelection(with listing: GitHubBranchListing) {
+        if let pinned = form.pinnedBranch, form.selectedBranch == pinned { return }
         form.selectedBranch = Self.preselectedBranch(
             current: form.selectedBranch,
             branches: Self.orderedBranches(listing.branches, defaultBranch: listing.defaultBranch),
@@ -271,7 +274,7 @@ extension CreateWorkspaceView {
 
     private var displayedBranches: [String] {
         Self.displayedBranches(
-            loaded: branchListing?.branches ?? [],
+            loaded: Self.including(form.pinnedBranch, in: branchListing?.branches ?? []),
             defaultBranch: branchListing?.defaultBranch,
             query: branchSearchText,
             searchResults: branchSearchResults,

@@ -10,8 +10,10 @@ extension RootView {
                     session: session,
                     isSidebarVisible: usesVerticalBar
                 )
+                    .pullRequestLinkRouting()
                     .navigationDestination(isPresented: $showingConversation) {
                         conversationDestination
+                            .pullRequestLinkRouting()
                     }
                     .navigationDestination(for: NoteDestination.self) { dest in
                         NoteDetailView(
