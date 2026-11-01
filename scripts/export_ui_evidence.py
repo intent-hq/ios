@@ -420,6 +420,10 @@ CAPTURES = {
             "agent-group-evidence-Background group loading",
             "agent-group-evidence-Background group failure with retry",
         ),
+        "testDelegatedSummaryKeepsFullTouchTargetAroundCompactStack": (
+            "agent-group-evidence-Delegated summary light",
+            "agent-group-evidence-Delegated summary dark",
+        ),
     },
 }
 RECOVERY_SUITES = {
