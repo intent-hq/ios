@@ -138,15 +138,13 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         app.buttons["ipad.focus.close"].tap()
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         verifyPopulatedHistory(in: app)
-        let collapse = app.buttons["ipad.sidebar.collapse"]
         let expand = app.buttons["ipad.sidebar.expand"]
         for _ in 0..<12 {
-            XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-            collapse.tap()
+            app.hideWorkspaceSidebar()
             XCTAssertTrue(expand.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
             expand.tap()
         }
-        XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Workspace actions"].firstMatch.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         // History reopened the conversation, so resolve its composer again.
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         verifyPopulatedHistory(in: app)
