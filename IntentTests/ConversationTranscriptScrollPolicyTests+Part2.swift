@@ -43,6 +43,32 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(!Policy.animatesFollow(requested: false, reduceMotion: reduceMotion))
     }
 
+    /// The view must route every follow and the Go to End transition through
+    /// the Reduce Motion policy above (#426); the transcript view is not
+    /// hostable in unit tests, so the wiring is checked in the packaged source.
+    @Test func transcriptViewAppliesReduceMotionPolicyToFollowsAndGoToEnd() throws {
+        func source(_ path: String) throws -> String {
+            try String(contentsOf: TestSourceInputs.url(for: path), encoding: .utf8)
+        }
+        let dir = "Intent/Views/Conversation/Transcript/"
+        let view = try source(dir + "ConversationTranscriptView.swift")
+        #expect(view.contains("@Environment(\\.accessibilityReduceMotion) var reduceMotion"))
+
+        let follow = try source(dir + "ConversationTranscriptView+Follow.swift")
+        let send = try #require(follow.components(separatedBy: "func send(_ event: Lifecycle.Event").dropFirst().first)
+            .components(separatedBy: "for effect in effects")[0]
+        #expect(
+            send.contains("let animated = ConversationTranscriptScrollPolicy.animatesFollow(requested: animated, reduceMotion: reduceMotion)"),
+            "send() must apply Reduce Motion before any effect issues a scroll"
+        )
+        #expect(follow.contains("perform(effect, proxy: proxy, animated: animated)"))
+
+        let presentation = try source(dir + "ConversationTranscriptView+Presentation.swift")
+        #expect(presentation.contains(".transition(goToEndTransition)"))
+        #expect(presentation.contains("ConversationTranscriptScrollPolicy.goToEndVisibilityTransition(reduceMotion: reduceMotion)"))
+        #expect(!presentation.contains(".transition(.opacity.combined(with: .move(edge: .bottom)))"))
+    }
+
     func executeFollow(
         forced: Bool = false,
         userIsScrolledAway: Bool = false,
