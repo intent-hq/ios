@@ -54,6 +54,7 @@ struct QuestionAttachmentTray: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: imageRemoveIconSide, height: imageRemoveIconSide)
+                    .accessibilityHidden(true)
                     .foregroundStyle(.white)
                     .background(.black, in: Circle())
                     .frame(minWidth: Layout.controlTarget, minHeight: Layout.controlTarget)

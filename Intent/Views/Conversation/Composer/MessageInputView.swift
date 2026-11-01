@@ -210,26 +210,11 @@ private extension MessageInputView {
 
     var attachmentMenu: some View {
         Menu {
-            Button {
-                isPhotoPickerPresented = true
-            } label: {
-                Label {
-                    Text("Photos")
-                } icon: {
-                    Image(.image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: menuIconSide, height: menuIconSide)
-                }
+            Button { isPhotoPickerPresented = true } label: {
+                photosAttachmentLabel
             }
-            Button {
-                isFilePickerPresented = true
-            } label: {
-                Label {
-                    Text("Files")
-                } icon: {
-                    Image(.folder)
-                }
+            Button { isFilePickerPresented = true } label: {
+                filesAttachmentLabel
             }
         } label: {
             Image(.addCircle)
