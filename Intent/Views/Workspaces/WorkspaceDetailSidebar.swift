@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 /// Chrome for the workspace overview while it sits in the iPad shell's sidebar
@@ -33,13 +34,23 @@ struct WorkspaceSidebarHeader<Title: View, Actions: View>: View {
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
+    @Environment(\.legibilityWeight) private var legibilityWeight
+    @ScaledMetric(relativeTo: .title2) private var titleSize = IPadSidebarStyle.titleSize
+
+    private var titleTopInset: CGFloat {
+        let face = legibilityWeight == .bold ? IPadSidebarStyle.titleStyle.face.legibleFace : IPadSidebarStyle.titleStyle.face
+        let font = CTFontCreateWithName(face.rawValue as CFString, titleSize, nil)
+        return max(0, (WorkspaceDetailStyle.controlSize - CTFontGetCapHeight(font)) / 2)
+    }
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             title()
+                .padding(.top, titleTopInset)
                 .frame(maxWidth: .infinity, alignment: .leading)
             actions()
         }
+        .frame(minHeight: WorkspaceDetailStyle.controlSize, alignment: .top)
         .opacity(isPaneVisible ? 1 : 0)
         .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
         .padding(.horizontal, IPadSidebarStyle.inset)
