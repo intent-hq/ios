@@ -21,8 +21,7 @@ struct SavedConnectionDetails: View {
                 if let tcAddress = connection.server.tcAddress {
                     VStack(alignment: .leading, spacing: Constants.Connections.infoSpacing) {
                         Label { Text("Tailcat").interFont(Constants.Typography.bodyXS) } icon: {
-                            Image(.connection).resizable().scaledToFit()
-                                .frame(width: connectionIconSize, height: connectionIconSize)
+                            Image(.connection).resizable().scaledToFit().frame(width: connectionIconSize, height: connectionIconSize)
                         }
                         Text(tcAddress)
                             .interFont(Constants.Typography.bodyXS)

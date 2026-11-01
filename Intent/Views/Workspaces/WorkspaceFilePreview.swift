@@ -45,8 +45,7 @@ struct WorkspaceFilePreview: View {
                     if hasFailed {
                         ContentUnavailableView {
                             Label { Text("File unavailable") } icon: {
-                                Image(.file).resizable().scaledToFit()
-                                    .frame(width: emptyStateIconSize, height: emptyStateIconSize)
+                                Image(.file).resizable().scaledToFit().frame(width: emptyStateIconSize, height: emptyStateIconSize)
                             }
                         } description: {
                             Text("Could not preview this file. Check your connection and try again.")
