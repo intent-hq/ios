@@ -92,10 +92,12 @@ struct WatcherMessageBodyView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                .accessibilityHidden(true)
         } else {
             Image(systemName: "circle.dashed")
                 .font(.subheadline)
                 .frame(width: Design.toolIconSize)
+                .accessibilityHidden(true)
         }
     }
 

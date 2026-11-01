@@ -138,23 +138,29 @@ struct AgentWaitingView: View {
     private func agentStatusBadge(_ row: WatchedAgentRow) -> some View {
         let agent = row.agent
         if row.isDeleted {
-            statusBadge(Image(systemName: "minus.circle.fill"), color: .gray)
+            statusBadge(Image(systemName: "minus.circle.fill").accessibilityHidden(true), color: .gray)
         } else if agent.isErrored {
-            statusBadge(Image(.closeCircle), color: .red)
+            statusBadge(badgeIcon(.closeCircle), color: .red)
         } else if let attention = agent.pendingAttentionRequest {
-            statusBadge(Image(attention.kind.iconName), color: attention.kind.color)
+            statusBadge(badgeIcon(attention.kind == .blocker ? .attentionCircleFill : .message), color: attention.kind.color)
         } else if row.isCompleted || agent.status == "completed" {
-            statusBadge(Image(.checkCircle), color: .green)
+            statusBadge(badgeIcon(.checkCircle), color: .green)
         } else if agent.isActive {
             activeStatusDot
         }
     }
 
-    private func statusBadge(_ image: Image, color: Color) -> some View {
-        image
+    private func badgeIcon(_ resource: ImageResource) -> some View {
+        Image(resource)
             .resizable()
             .scaledToFit()
             .frame(width: Layout.badgeFontSize, height: Layout.badgeFontSize)
+            .accessibilityHidden(true)
+    }
+
+    private func statusBadge(_ icon: some View, color: Color) -> some View {
+        icon
+            .font(.system(size: Layout.badgeFontSize))
             .foregroundStyle(color)
             .accessibilityHidden(true)
             .background(Circle().fill(Theme.card(for: colorScheme)).frame(

@@ -116,6 +116,7 @@ struct AgentRowView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: Constants.AgentRow.attentionIconSize, height: Constants.AgentRow.attentionIconSize)
+                    .accessibilityHidden(true)
                     .foregroundStyle(avatarState.cornerColor)
                     .offset(x: Constants.AgentRow.attentionIconOffset, y: -Constants.AgentRow.attentionIconOffset)
             }

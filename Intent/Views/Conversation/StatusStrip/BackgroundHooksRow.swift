@@ -37,21 +37,7 @@ struct BackgroundHooksRow: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
                 if hookStore.error != nil {
-                    Button {
-                        Task { await hookStore.refetch() }
-                    } label: {
-                        Label {
-                            Text("Status unavailable · Retry")
-                        } icon: {
-                            Image(.attentionCircle)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: iconSize, height: iconSize)
-                        }
-                    }
-                    .buttonStyle(IntentContentButtonStyle())
-                    .font(.caption2)
-                    .accessibilityLabel("Hooks may be out of date. Retry refresh")
+                    retryButton
                 }
 
                 ForEach(hookStore.activeHooks.filter { $0.agentId == viewModel.agentId }) { hook in
@@ -67,6 +53,24 @@ struct BackgroundHooksRow: View {
     }
 
     // MARK: - Chip
+
+    private var retryButton: some View {
+        Button {
+            Task { await hookStore.refetch() }
+        } label: {
+            Label {
+                Text("Status unavailable · Retry")
+            } icon: {
+                Image(.attentionCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+            }
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .font(.caption2)
+        .accessibilityLabel("Hooks may be out of date. Retry refresh")
+    }
 
     @ViewBuilder
     private func hookChip(_ hook: BackgroundHook) -> some View {
