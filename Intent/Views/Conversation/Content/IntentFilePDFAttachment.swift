@@ -39,12 +39,20 @@ struct IntentFilePDFFailureAttachment: Attachment {
     let name: String
     let workspaceId: String?
     let path: String
+    @ScaledMetric(relativeTo: .caption) private var fileIconSide: CGFloat = Constants.Typography.subtextXXS.size
 
     var description: String { String(localized: "PDF unavailable: \(name)") }
 
     var body: some View {
         VStack(spacing: Constants.Conversation.ImagePlaceholder.failureLabelSpacing) {
-            Label("PDF", systemImage: "doc.richtext")
+            Label {
+                Text("PDF")
+            } icon: {
+                Image(.fileList)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: fileIconSide, height: fileIconSide)
+            }
             Text(name)
                 .lineLimit(2)
                 .truncationMode(.middle)

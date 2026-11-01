@@ -150,7 +150,10 @@ extension MessageInputView {
             } else {
                 Rectangle().fill(Theme.mutedForeground(for: colorScheme))
             }
-            Image(systemName: "play.fill")
+            Image(.playFill)
+                .resizable()
+                .scaledToFit()
+                .frame(width: menuIconSide, height: menuIconSide)
                 .foregroundStyle(.white)
         }
         .frame(

@@ -18,6 +18,7 @@ struct AttachmentReferenceVideoView<Fallback: View>: View {
     @State private var lightboxPresented = false
     @ScaledMetric(relativeTo: .caption) private var retryIconSide: CGFloat = 12
     private let playBackdropOpacity = 0.6
+    @ScaledMetric(relativeTo: .largeTitle) private var playIconSide: CGFloat = 34
 
     private var loadKey: [String] { [workspaceId, attachmentId ?? "", mimeType ?? ""] }
 
@@ -36,10 +37,12 @@ struct AttachmentReferenceVideoView<Fallback: View>: View {
             Button { lightboxPresented = true } label: {
                 SquareImageThumbnail(image: video.poster, side: ImageAttachmentThumbnail.side)
                     .overlay {
-                        Image(systemName: "play.circle.fill")
-                            .font(.largeTitle)
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .black.opacity(playBackdropOpacity))
+                        Image(.play)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: playIconSide, height: playIconSide)
+                            .foregroundStyle(.white)
+                            .background(.black.opacity(playBackdropOpacity), in: Circle())
                             .accessibilityHidden(true)
                     }
                     .copyContextMenuPassthrough()

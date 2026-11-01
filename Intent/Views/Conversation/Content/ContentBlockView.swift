@@ -93,6 +93,7 @@ struct ContentBlockBody: View, Equatable {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.conversationComposerFocus) private var composerFocus
+    @ScaledMetric(relativeTo: .caption) private var contentIconSide: CGFloat = 12
     var disclosure = TranscriptDisclosure()
     private var thinkingExpanded: Bool {
         get { disclosure.binding(for: .thinking(block.id), default: false).wrappedValue }
@@ -248,8 +249,10 @@ struct ContentBlockBody: View, Equatable {
                 .padding(.top, Constants.Conversation.ContentBlock.thinkingTopPadding)
         } label: {
             HStack(spacing: Constants.Conversation.ContentBlock.thinkingLabelSpacing) {
-                Image(systemName: "brain")
-                    .font(.caption)
+                Image(.thinking)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: contentIconSide, height: contentIconSide)
                     .accessibilityHidden(true)
                 Text("Thinking")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
@@ -350,7 +353,10 @@ struct ContentBlockBody: View, Equatable {
                         Text("Loading image…")
                             .interFont(Constants.Typography.subtextXXS)
                     } else {
-                        Image(systemName: "photo")
+                        Image(.image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: contentIconSide, height: contentIconSide)
                             .accessibilityHidden(true)
                         Text(imageNeedsHydration ? "Tap to load image" : "Image")
                             .interFont(Constants.Typography.subtextXXS)
@@ -370,8 +376,10 @@ struct ContentBlockBody: View, Equatable {
     @ViewBuilder
     private var fileView: some View {
         HStack(spacing: Constants.Conversation.ContentBlock.fileLabelSpacing) {
-            Image(systemName: "doc")
-                .font(.caption)
+            Image(.file)
+                .resizable()
+                .scaledToFit()
+                .frame(width: contentIconSide, height: contentIconSide)
                 .accessibilityHidden(true)
             Text(block.fileName ?? "File")
                 .font(.caption.monospaced())

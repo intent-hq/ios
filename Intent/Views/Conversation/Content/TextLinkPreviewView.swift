@@ -16,6 +16,7 @@ struct TextLinkPreviewView: View {
     @State private var file: WorkspaceTextFile?
     @State private var hasFailed = false
     @State private var attempt = 0
+    @ScaledMetric(relativeTo: .largeTitle) private var unavailableIconSide: CGFloat = 48
     @AppStorage("fileViewerWrapLines") private var wrapLines = true
     @AppStorage("fileViewerShowLineNumbers") private var showLineNumbers = true
 
@@ -95,7 +96,14 @@ struct TextLinkPreviewView: View {
             WorkspaceTextFileView(file: file, wrapLines: wrapLines, showLineNumbers: showLineNumbers)
         } else if hasFailed {
             ContentUnavailableView {
-                Label("Text file unavailable", systemImage: "doc.text")
+                Label {
+                    Text("Text file unavailable")
+                } icon: {
+                    Image(.fileList)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: unavailableIconSide, height: unavailableIconSide)
+                }
             } description: {
                 Text("Could not open this file as text. This viewer supports UTF-8 text files up to 5 MiB, not binary files.")
             } actions: {

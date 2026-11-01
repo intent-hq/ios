@@ -171,7 +171,7 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             let text = text
             return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
                 UIMenu(children: [
-                    UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in
+                    UIAction(title: "Copy", image: UIImage(resource: .copy).withRenderingMode(.alwaysTemplate)) { _ in
                         HapticManager.impact(.light)
                         UIPasteboard.general.string = text
                     }

@@ -15,6 +15,7 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @ScaledMetric(relativeTo: .subheadline) private var collapseIconSide: CGFloat = Constants.Typography.bodyXSEmphasized.size
 
     private typealias Design = Constants.Conversation.Design
 
@@ -56,10 +57,19 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
                 }
                 if let onCollapse {
                     Spacer(minLength: 0)
-                    Button("Collapse questions", systemImage: "chevron.down", action: onCollapse)
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(WorkspaceQuestionButtonStyle())
-                        .accessibilityIdentifier("question.collapse")
+                    Button(action: onCollapse) {
+                        Label {
+                            Text("Collapse questions")
+                        } icon: {
+                            Image(.chevronDown)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: collapseIconSide, height: collapseIconSide)
+                        }
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(WorkspaceQuestionButtonStyle())
+                    .accessibilityIdentifier("question.collapse")
                 }
             }
             VStack(alignment: .leading, spacing: Design.Question.footerSpacing) {
