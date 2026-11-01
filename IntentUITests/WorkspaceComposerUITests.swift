@@ -140,10 +140,10 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, "Keep this draft")
     }
 
-    /// #861: pending images keep their slots, so Photos is unavailable once
-    /// the composer already holds the five-image limit.
+    /// #861: pending images keep their slots, but library videos import as
+    /// files. At the five-image limit Photos stays available for videos only.
     @MainActor
-    func testPhotosIsDisabledAtTheImageLimit() {
+    func testPhotosOffersOnlyVideosAtTheImageLimit() {
         let app = launch(scenario: "composer")
         let composer = app.textViews["composer.textView"]
         composer.tap()
@@ -164,12 +164,17 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         attachment.tap()
         let photos = app.buttons["Photos"]
         XCTAssertTrue(photos.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertFalse(photos.isEnabled, "Photos must be disabled with no image slots left")
+        XCTAssertTrue(photos.isEnabled, "Library videos do not use image slots")
         XCTAssertTrue(app.buttons["Files"].isEnabled)
+        photos.tap()
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: Fixture.timeout), "Photos must open at the image limit")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Composer Photos disabled at image limit"
+        screenshot.name = "Composer Photos offers videos at image limit"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        cancel.tap()
+        XCTAssertTrue(app.buttons["Remove image \(colors.count)"].waitForExistence(timeout: Fixture.timeout))
     }
 
     @MainActor

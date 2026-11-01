@@ -3,6 +3,19 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// Classifies and loads picked library videos, which import as files.
+struct PhotoLibraryVideos {
+    var isVideo: (PhotosPickerItem) -> Bool
+    var load: (PhotosPickerItem) async throws -> ImportedPhotoVideo?
+
+    static var live: Self {
+        Self(
+            isVideo: { item in item.supportedContentTypes.contains { $0.conforms(to: .movie) } },
+            load: { item in try await item.loadTransferable(type: ImportedPhotoVideo.self) }
+        )
+    }
+}
+
 extension ConversationAttachmentPipeline {
     var remainingPhotoImageCount: Int? {
         maximumPhotoImageCount.map { max(0, $0 - pendingImages.count) }
@@ -37,18 +50,19 @@ extension ConversationAttachmentPipeline {
             guard !Task.isCancelled else { return }
             let items = selectedPhotoItems
             selectedPhotoItems.removeAll()
-            let imageCount = items.filter { item in
-                !item.supportedContentTypes.contains { $0.conforms(to: .movie) }
-            }.count
-            guard canImportPhotoImages(imageCount) else { continue }
-            if maximumPhotoImageCount != nil {
+            let imageCount = items.filter { !photoVideos.isVideo($0) }.count
+            // Videos never use image slots. A batch with too many images keeps
+            // its videos but rejects all of its images, with the limit alert.
+            let imagesFit = canImportPhotoImages(imageCount)
+            guard imagesFit || imageCount < items.count else { continue }
+            if imagesFit, maximumPhotoImageCount != nil {
                 imagePlacementError = nil
             }
             for item in items {
                 guard !Task.isCancelled else { return }
-                if item.supportedContentTypes.contains(where: { $0.conforms(to: .movie) }) {
+                if photoVideos.isVideo(item) {
                     await loadVideo(item, workspaceId: workspaceId)
-                } else if let data = await loadPhotoData(item),
+                } else if imagesFit, let data = await loadPhotoData(item),
                           let image = UIImage(data: data), !Task.isCancelled {
                     // Paste or another selection can consume capacity while
                     // Photos is loading the transferable data.
@@ -101,7 +115,7 @@ extension ConversationAttachmentPipeline {
             guard workspaceId != Workspace.chiefWorkspaceId else {
                 throw FilePlacementError.videoUnavailableInAssistant
             }
-            let video = try await item.loadTransferable(type: ImportedPhotoVideo.self)
+            let video = try await photoVideos.load(item)
             try Task.checkCancellation()
             guard let video else {
                 filePlacementError = "This video could not be loaded from Photos. Please try again."

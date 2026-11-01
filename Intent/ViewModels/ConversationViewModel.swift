@@ -95,10 +95,6 @@ import SwiftUI
         get { attachmentPipeline.selectedPhotoItems }
         set { attachmentPipeline.selectedPhotoItems = newValue }
     }
-    /// Photos picks left before the composer reaches its image limit (#861).
-    var remainingPhotoImageCount: Int {
-        attachmentPipeline.remainingPhotoImageCount ?? Constants.Conversation.Composer.maximumImageSelectionCount
-    }
     var pendingFiles: [PendingFile] {
         get { attachmentPipeline.pendingFiles }
         set { attachmentPipeline.pendingFiles = newValue }

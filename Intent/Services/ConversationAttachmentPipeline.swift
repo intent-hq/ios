@@ -81,9 +81,9 @@ enum ComposerImageRecovery {
     @ObservationIgnored var photoImportTask: Task<Void, Never>?
     /// Loads one picked photo's bytes. A seam so tests can hold an import in
     /// flight; production reads the item's transferable data.
-    @ObservationIgnored var loadPhotoData: (PhotosPickerItem) async -> Data? = { item in
-        try? await item.loadTransferable(type: Data.self)
-    }
+    @ObservationIgnored var loadPhotoData: (PhotosPickerItem) async -> Data? = { try? await $0.loadTransferable(type: Data.self) }
+    /// A seam so tests can pick library videos, which import as files.
+    @ObservationIgnored var photoVideos = PhotoLibraryVideos.live
     var pendingFiles: [PendingFile] = []
     var fileUploadProgress: [UUID: Double] = [:]
     var imagePlacementError: String?
