@@ -102,12 +102,30 @@ final class LineNumberTextView: UITextView {
     }
 
     private func restoreAnchor(_ anchor: LineLabel?, horizontalOffset: CGFloat = 0) {
-        var proposedY = contentOffset.y
-        if let anchor, let manager = textLayoutManager, let content = manager.textContentManager,
-           let location = content.location(content.documentRange.location, offsetBy: lineIndex.starts[anchor.number - 1]) {
-            let origin = manager.textViewportLayoutController.relocateViewport(to: location)
-            proposedY = origin + textContainerInset.top + numberFont.ascender - anchor.baseline
+        var location: NSTextLocation?
+        if let anchor, let manager = textLayoutManager, let content = manager.textContentManager {
+            location = content.location(content.documentRange.location, offsetBy: lineIndex.starts[anchor.number - 1])
+            if let location {
+                let origin = manager.textViewportLayoutController.relocateViewport(to: location)
+                scrollAnchor(to: origin + textContainerInset.top + firstBaseline - anchor.baseline, horizontalOffset: horizontalOffset)
+            }
+        } else {
+            scrollAnchor(to: contentOffset.y, horizontalOffset: horizontalOffset)
         }
+        // TextKit 2 repositions estimated fragments once the viewport lays out; correct to the measured baseline.
+        guard let anchor, let location, let measured = laidOutBaseline(at: location) else { return }
+        let target = textContainerInset.top + measured - anchor.baseline
+        if abs(target - contentOffset.y) > 0.5 { scrollAnchor(to: target, horizontalOffset: horizontalOffset) }
+    }
+
+    private func laidOutBaseline(at location: NSTextLocation) -> CGFloat? {
+        guard let manager = textLayoutManager else { return nil }
+        manager.ensureLayout(for: NSTextRange(location: location))
+        guard let fragment = manager.textLayoutFragment(for: location), let line = fragment.textLineFragments.first else { return nil }
+        return fragment.layoutFragmentFrame.minY + line.typographicBounds.minY + line.glyphOrigin.y
+    }
+
+    private func scrollAnchor(to proposedY: CGFloat, horizontalOffset: CGFloat) {
         let maximumY = max(-adjustedContentInset.top, contentSize.height - bounds.height + adjustedContentInset.bottom)
         let maximumX = max(0, contentSize.width - bounds.width)
         let offset = CGPoint(
@@ -123,7 +141,7 @@ final class LineNumberTextView: UITextView {
     /// A fixed line height keeps empty lines as tall as text lines; TextKit 2
     /// spaces empty paragraphs unevenly with `lineSpacing`. Reapplied when Dynamic Type changes the font.
     private func applyLineHeight() {
-        let height = ceil(numberFont.lineHeight) + Layout.lineSpacing
+        let height = linePitch
         guard height != appliedLineHeight else { return }
         appliedLineHeight = height
         let paragraph = NSMutableParagraphStyle()
@@ -160,6 +178,11 @@ final class LineNumberTextView: UITextView {
         gutter.setNeedsDisplay()
     }
 
+    /// Every row, including empty ones, is this tall; fixed-height rows put the extra space above the text.
+    var linePitch: CGFloat { ceil(numberFont.lineHeight) + Layout.lineSpacing }
+
+    private var firstBaseline: CGFloat { linePitch + numberFont.descender }
+
     var numberFont: UIFont {
         font ?? .monospacedSystemFont(ofSize: UIFont.systemFontSize, weight: .regular)
     }
@@ -171,7 +194,7 @@ final class LineNumberTextView: UITextView {
 
     func visibleLineLabels() -> [LineLabel] {
         if text.isEmpty {
-            return [LineLabel(number: 1, baseline: textContainerInset.top - bounds.minY + numberFont.ascender)]
+            return [LineLabel(number: 1, baseline: textContainerInset.top - bounds.minY + firstBaseline)]
         }
         guard let manager = textLayoutManager,
               let content = manager.textContentManager,
@@ -181,7 +204,7 @@ final class LineNumberTextView: UITextView {
         if !wrapsLines {
             // TextKit's horizontal viewport can exclude short source lines.
             let offset = content.offset(from: content.documentRange.location, to: start)
-            let precedingRows = Int(ceil(bounds.height / numberFont.lineHeight)) + 1
+            let precedingRows = Int(ceil(bounds.height / linePitch)) + 1
             let firstLine = max(1, lineIndex.line(at: offset) - precedingRows)
             start = content.location(content.documentRange.location, offsetBy: lineIndex.starts[firstLine - 1]) ?? start
         }
@@ -195,7 +218,7 @@ final class LineNumberTextView: UITextView {
                 let number = self.lineIndex.line(at: position)
                 guard self.lineIndex.starts[number - 1] == position else { continue }
                 let baseline = origin + line.typographicBounds.minY + line.glyphOrigin.y
-                if baseline >= 0, baseline <= self.bounds.height + self.numberFont.lineHeight {
+                if baseline >= 0, baseline <= self.bounds.height + self.linePitch {
                     labels.append(LineLabel(number: number, baseline: baseline))
                 }
             }
