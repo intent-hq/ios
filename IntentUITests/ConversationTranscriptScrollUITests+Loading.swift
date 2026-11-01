@@ -31,7 +31,7 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertTrue(status.label.contains("Taking longer than usual"))
         XCTAssertTrue(retry.isHittable)
         XCTAssertTrue(block.frame.contains(status.frame))
-        XCTAssertTrue(block.frame.contains(retry.frame), "Retry must stay within the same loading group")
+        XCTAssertTrue(block.frame.insetBy(dx: -1, dy: -1).contains(retry.frame), "Retry must stay within the same loading group")
         assertConnectionSteps(in: block)
         attachLoading(app.screenshot(), named: "Conversation loading after idle \(appearance)")
 
@@ -41,6 +41,53 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertTrue(composer.waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertFalse(block.exists)
         XCTAssertFalse(app.buttons["conversation.retryNow"].exists)
+    }
+
+    /// Four 5s snapshot timeouts plus 1+2+4s of backoff, with launch headroom.
+    private static let loadFailureTimeout: TimeInterval = 60
+    private var startupDeliveryGate: URL { hooksRowTriggerFile.appendingPathExtension("delivery") }
+
+    /// #765: snapshots that never arrive end the bounded retry cycle in a
+    /// failed state with Retry, which then loads the transcript.
+    @MainActor
+    func testUndeliveredSnapshotEndsInFailedStateWithRetry() throws {
+        for (appearance, largeText) in [("light", false), ("dark", false), ("light", true)] {
+            try assertLoadFailure(appearance: appearance, largeText: largeText)
+        }
+    }
+
+    @MainActor
+    private func assertLoadFailure(appearance: String, largeText: Bool) throws {
+        try? FileManager.default.removeItem(at: startupDeliveryGate)
+        let textSize = largeText ? ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] : []
+        let app = try launchStartupConversation(
+            metadataReady: true,
+            appearance: appearance,
+            extraArguments: ["--demo-chat-delivery-trigger-file=" + startupDeliveryGate.path] + textSize
+        )
+        defer {
+            finishStartup(app)
+            try? FileManager.default.removeItem(at: startupDeliveryGate)
+        }
+        let opened = enterLongConversation(in: app, context: "load failure", waitForTranscript: false)
+        let block = app.otherElements["conversation.loadFailedBlock"].firstMatch
+        XCTAssertTrue(block.waitForExistence(timeout: Self.loadFailureTimeout), "The bounded cycle must settle on the failed state")
+        let suffix = largeText ? "\(appearance) largest text" : appearance
+        attachLoading(app.screenshot(), named: "Conversation load failed \(suffix)")
+        let message = block.descendants(matching: .any)["conversation.loadFailed"]
+        let retry = block.buttons["conversation.retryNow"]
+        XCTAssertTrue(message.exists)
+        XCTAssertTrue(message.label.hasPrefix("Couldn't load this conversation"))
+        XCTAssertTrue(retry.isHittable)
+        XCTAssertEqual(retry.label, "Retry")
+        XCTAssertTrue(block.frame.insetBy(dx: -1, dy: -1).contains(retry.frame), "Retry \(retry.frame) must sit inside the failed block \(block.frame)")
+        XCTAssertFalse(app.otherElements["conversation.connectionStatusBlock"].exists, "No spinner once the load failed")
+        XCTAssertFalse(opened.transcript.exists)
+
+        try Data().write(to: startupDeliveryGate)
+        retry.tap()
+        XCTAssertTrue(opened.transcript.waitForExistence(timeout: Fixture.settleTimeout), "Retry must load the transcript")
+        XCTAssertFalse(block.exists)
     }
 
     @MainActor

@@ -182,12 +182,44 @@ private struct ConversationConnectionStepRow<Phase: Equatable>: View {
     }
 }
 
+/// Terminal outcome of a bounded load (#765): no spinner, an explanation and
+/// a Retry that starts a fresh cycle.
+struct ConversationConnectionFailedBlock: View {
+    let onRetry: () async -> Void
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    private typealias Palette = Constants.Conversation.Design.Palette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Constants.Conversation.Column.Loading.rowSpacing) {
+            VStack(alignment: .leading, spacing: Constants.Conversation.Column.Loading.contentSpacing) {
+                Text("Couldn't load this conversation")
+                    .interFont(Constants.Typography.bodyS)
+                    .foregroundStyle(Palette.foreground(for: colorScheme))
+                    .accessibilityAddTraits(.isHeader)
+                Text("The server didn't respond. Check your connection, then try again.")
+                    .interFont(Constants.Typography.bodyXS)
+                    .foregroundStyle(Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("conversation.loadFailed")
+            ConversationConnectionRetryButton(title: "Retry", onRetry: onRetry)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("conversation.loadFailedBlock")
+    }
+}
+
 private struct ConversationConnectionRetryButton: View {
+    var title: LocalizedStringResource = "Retry Now"
     let onRetry: () async -> Void
     @State private var retryInProgress = false
 
     var body: some View {
-        Button("Retry Now") {
+        Button(title) {
             retryInProgress = true
             Task {
                 await onRetry()

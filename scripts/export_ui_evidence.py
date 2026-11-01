@@ -226,6 +226,9 @@ CAPTURES = {
             "Conversation loading before idle light", "Conversation loading after idle light",
             "Conversation loading before idle dark", "Conversation loading after idle dark",
         ),
+        "testUndeliveredSnapshotEndsInFailedStateWithRetry": (
+            "Conversation load failed light", "Conversation load failed dark", "Conversation load failed light largest text",
+        ),
     },
     "QuestionWizardUITests": {
         "testSkipClearsAnEarlierSelection": ("questions-submitted-transcript",),

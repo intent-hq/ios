@@ -94,6 +94,9 @@ final class ConversationLiveTranscript {
     /// transport reconnects (mirrors cloudlands-fe's `LiveChatClient`).
     @ObservationIgnored var initialRetryDelay = ConversationLiveTranscript.defaultInitialRetryDelay
     @ObservationIgnored var maxRetryDelay = ConversationLiveTranscript.defaultMaxRetryDelay
+    /// Registrations per load before the stage settles on `.failed` instead of
+    /// retrying forever; a manual retry or reconnect starts a fresh cycle.
+    @ObservationIgnored var maxSubscriptionAttempts = ConversationLiveTranscript.defaultMaxSubscriptionAttempts
     /// Delay of the next scheduled retry; `nil` until the first failure after
     /// a reset, so it starts from `initialRetryDelay`.
     @ObservationIgnored var nextRetryDelay: Duration?
@@ -152,6 +155,8 @@ final class ConversationLiveTranscript {
     static let defaultSnapshotTimeout: Duration = .seconds(defaultSnapshotTimeoutSeconds)
     static let defaultInitialRetryDelay: Duration = .seconds(defaultInitialRetryDelaySeconds)
     static let defaultMaxRetryDelay: Duration = .seconds(defaultMaxRetryDelaySeconds)
+    /// Four unacked 10s requests plus 1+2+4s of backoff settle in under a minute.
+    static let defaultMaxSubscriptionAttempts = 4
 
     init(connectionManager: ConnectionManagerRouting) {
         self.connectionManager = connectionManager

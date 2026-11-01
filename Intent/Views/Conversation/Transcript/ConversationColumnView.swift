@@ -433,18 +433,25 @@ private struct ConversationConnectionLoadingView: View {
         case .requesting: "Requesting messages"
         case .receiving: "Receiving messages"
         case .retrying(let attempt): "Retrying (attempt \(attempt))"
+        case .failed: "Couldn't load this conversation"
         }
     }
 
     var body: some View {
         ScrollView {
-            ConversationConnectionStatusBlock(
-                phase: viewModel.loadingStage,
-                message: message,
-                currentStep: ConversationConnectionStep(stage: viewModel.loadingStage),
-                startedAt: viewModel.loadingStartedAt,
-                onRetry: viewModel.retryNow
-            )
+            Group {
+                if viewModel.loadingStage == .failed {
+                    ConversationConnectionFailedBlock(onRetry: viewModel.retryNow)
+                } else {
+                    ConversationConnectionStatusBlock(
+                        phase: viewModel.loadingStage,
+                        message: message,
+                        currentStep: ConversationConnectionStep(stage: viewModel.loadingStage),
+                        startedAt: viewModel.loadingStartedAt,
+                        onRetry: viewModel.retryNow
+                    )
+                }
+            }
             .id(viewModel.conversationConsumer)
             .padding(.horizontal, horizontalInset)
             .padding(.vertical, Constants.Conversation.Transcript.transcriptTopPadding)
