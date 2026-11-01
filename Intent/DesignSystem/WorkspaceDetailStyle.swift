@@ -31,8 +31,12 @@ enum WorkspaceDetailStyle {
     static let avatarArtRatio: CGFloat = 0.625
     static let avatarCornerRatio: CGFloat = 0.25
     static let stackAvatarSize: CGFloat = 24
+    /// Figma 3012:33555 gives the 24 pt delegated tiles a 4 pt radius, not the 32 pt tiles' 25 % ratio.
+    static let stackAvatarCornerRadius: CGFloat = 4
     static let stackSpacing: CGFloat = 16
-    static let stackTopSpacing: CGFloat = 16
+    static let stackTopSpacing: CGFloat = 32
+    /// Gap between an agent row's title line and its status message.
+    static let agentMessageSpacing: CGFloat = 16
     static let stackBorderWidth: CGFloat = 1
     static let noteIndentation: CGFloat = 48
     static let accessibilityIndentation: CGFloat = 8

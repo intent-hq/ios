@@ -10,6 +10,8 @@ struct AgentAvatarView: View {
     var isActive: Bool = false
     var state: AgentAvatarState = .idle
     var workspaceStyle = false
+    /// Overrides the size-derived radius where a design fixes it (delegated stacks).
+    var tileCornerRadius: CGFloat?
     @Environment(\.colorScheme) private var colorScheme
 
     private var design: AgentAvatarDesign {
@@ -22,7 +24,8 @@ struct AgentAvatarView: View {
         size * (workspaceStyle ? WorkspaceDetailStyle.avatarArtRatio : Constants.AgentAvatar.artSizeRatio)
     }
     private var cornerRadius: CGFloat {
-        size * (workspaceStyle ? WorkspaceDetailStyle.avatarCornerRatio : Constants.AgentAvatar.cornerRadiusRatio)
+        if let tileCornerRadius { return tileCornerRadius }
+        return size * (workspaceStyle ? WorkspaceDetailStyle.avatarCornerRatio : Constants.AgentAvatar.cornerRadiusRatio)
     }
 
     var body: some View {
@@ -107,6 +110,7 @@ struct AgentGroupAvatarStack: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private let size = WorkspaceDetailStyle.stackAvatarSize
+    private let cornerRadius = WorkspaceDetailStyle.stackAvatarCornerRadius
 
     private var visibleCount: Int {
         min(Constants.AgentRow.maximumHeaderAvatars, max(agents.count, totalCount ?? 0))
@@ -116,11 +120,9 @@ struct AgentGroupAvatarStack: View {
         HStack(spacing: Constants.AgentRow.avatarOverlap) {
             ForEach(0..<visibleCount, id: \.self) { index in
                 avatar(at: index)
-                    .clipShape(RoundedRectangle(
-                        cornerRadius: size * WorkspaceDetailStyle.avatarCornerRatio, style: .continuous
-                    ))
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                     .overlay {
-                        RoundedRectangle(cornerRadius: size * WorkspaceDetailStyle.avatarCornerRatio, style: .continuous)
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .strokeBorder(
                                 WorkspaceDetailStyle.background(for: colorScheme),
                                 lineWidth: WorkspaceDetailStyle.stackBorderWidth
@@ -141,7 +143,8 @@ struct AgentGroupAvatarStack: View {
                 size: size,
                 specialist: agent.specialist,
                 state: AgentAvatarState.state(for: agent),
-                workspaceStyle: true
+                workspaceStyle: true,
+                tileCornerRadius: cornerRadius
             )
         } else {
             Image(.agents)

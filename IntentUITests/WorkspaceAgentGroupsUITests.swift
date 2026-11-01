@@ -1,6 +1,9 @@
 import XCTest
 
 nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
+    private static let stackTapInset: CGFloat = 70
+    private static let touchOutset: CGFloat = 19
+
     override func setUpWithError() throws {
         try super.setUpWithError()
         continueAfterFailure = false
@@ -86,6 +89,25 @@ nonisolated final class WorkspaceAgentGroupsUITests: XCTestCase {
         capture(app, name: "Retired section expanded")
         reveal(app, id: "workspace.agents.retired").tap()
         XCTAssertTrue(app.buttons["workspace.agent.groups-retired"].waitForNonExistence(timeout: 15))
+    }
+
+    /// #576: the delegated summary shows only its 24 pt stack but keeps a 44 pt touch target.
+    @MainActor
+    func testDelegatedSummaryKeepsFullTouchTargetAroundCompactStack() {
+        for appearance in ["light", "dark"] {
+            let app = launch(scenario: "agent-groups", arguments: ["-appThemePreference", appearance])
+            let children = app.buttons["workspace.agents.children.groups-parent"]
+            XCTAssertEqual(children.value as? String, "Collapsed")
+            capture(app, name: "Delegated summary " + appearance)
+            // 19 pt from the stack's center lies outside the 24 pt tiles but inside the 44 pt target.
+            let center = children.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+                .withOffset(CGVector(dx: Self.stackTapInset, dy: 0))
+            center.withOffset(CGVector(dx: 0, dy: -Self.touchOutset)).tap()
+            XCTAssertEqual(children.value as? String, "Expanded")
+            center.withOffset(CGVector(dx: 0, dy: Self.touchOutset)).tap()
+            XCTAssertEqual(children.value as? String, "Collapsed")
+            app.terminate()
+        }
     }
 
     @MainActor

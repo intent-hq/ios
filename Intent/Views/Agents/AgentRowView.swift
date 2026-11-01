@@ -126,7 +126,7 @@ struct AgentRowView: View {
     }
 
     private var agentDetails: some View {
-        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
+        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.agentMessageSpacing) {
             titleAndTimestamp
             agentStatusDescription
         }
@@ -270,27 +270,47 @@ struct DelegatedAgentsRow: View {
     let colorScheme: ColorScheme
     let onToggle: () -> Void
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// Extends the 24 pt visible stack to the 44 pt touch target without adding visible space.
+    private static let hitOutset = (Constants.Accessibility.minimumTapTarget - WorkspaceDetailStyle.stackAvatarSize) / 2
 
     var body: some View {
         Button(action: onToggle) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: WorkspaceDetailStyle.stackSpacing) {
-                    avatarStack
-                    summaryLabel
-                }
-                VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
-                    avatarStack
-                    summaryLabel
-                }
-            }
-            .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget, alignment: .leading)
-            .padding(.leading, WorkspaceDetailStyle.avatarSize + WorkspaceDetailStyle.avatarSpacing)
-            .contentShape(Rectangle())
+            summary
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, WorkspaceDetailStyle.avatarSize + WorkspaceDetailStyle.avatarSpacing)
+                .padding(.vertical, Self.hitOutset)
+                .contentShape(Rectangle())
+                .padding(.vertical, -Self.hitOutset)
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(summaryTitle)
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .visionListRowHitTarget()
+    }
+
+    /// Accessibility sizes always stack; otherwise the label stays inline when it fits.
+    @ViewBuilder
+    private var summary: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            stackedSummary
+        } else {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: WorkspaceDetailStyle.stackSpacing) {
+                    avatarStack
+                    summaryLabel
+                }
+                stackedSummary
+            }
+        }
+    }
+
+    private var stackedSummary: some View {
+        VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
+            avatarStack
+            summaryLabel
+        }
     }
 
     private var summaryLabel: some View {
