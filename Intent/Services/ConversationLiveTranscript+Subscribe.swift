@@ -40,7 +40,10 @@ extension ConversationLiveTranscript {
         bind(agentId: agentId, workspaceId: workspaceId)
         let generation = openRegistration()
         subscriptionAttempt += 1
-        subscriptionLoadingStage = .requesting
+        // A retry keeps reporting its attempt while its own request is in
+        // flight; otherwise the stage would show "requesting" for the whole
+        // request timeout and never visibly advance (#765).
+        subscriptionLoadingStage = subscriptionAttempt > 1 ? .retrying(attempt: subscriptionAttempt) : .requesting
         chatChannelActive = true
         chatSeeded = false
         snapshotPending = true

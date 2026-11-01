@@ -69,6 +69,40 @@ struct ConversationRetryNowTests {
         live.reset()
     }
 
+    /// #765: a `chat.subscribe` that is never acked times out, and the retry's
+    /// own unacked request must keep showing "Retrying (attempt N)" instead of
+    /// falling back to "Requesting" for its whole request timeout.
+    @Test func unackedSubscribeKeepsRetryingStageVisibleWhileRetryIsInFlight() async throws {
+        let fake = FakeConnectionManager()
+        fake.connectionState = .connected
+        fake.pendingMethods = ["chat.subscribe"]
+        let live = ConversationLiveTranscript(connectionManager: fake)
+        live.initialRetryDelay = .milliseconds(10)
+        let timedOut = NSError(domain: "WebSocket", code: -2, userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+
+        let first = Task { await live.subscribe(agentId: "agent") }
+        try await fake.waitForPendingRequests("chat.subscribe")
+        #expect(live.loadingStage == .requesting)
+
+        fake.failPending("chat.subscribe", with: timedOut)
+        await first.value
+        #expect(live.loadingStage == .retrying(attempt: 2))
+
+        try await fake.waitForRequests("chat.subscribe", count: 2)
+        try await fake.waitForPendingRequests("chat.subscribe")
+        #expect(live.loadingStage == .retrying(attempt: 2), "the in-flight retry must not report a fresh request")
+
+        fake.failPending("chat.subscribe", with: timedOut)
+        try await waitUntil("the second timeout to schedule the next retry") {
+            live.loadingStage == .retrying(attempt: 3)
+        }
+        try await fake.waitForRequests("chat.subscribe", count: 3)
+        try await fake.waitForPendingRequests("chat.subscribe")
+        #expect(live.loadingStage == .retrying(attempt: 3))
+        #expect(live.isLoading)
+        live.reset()
+    }
+
     @Test(arguments: [ConnectionState.disconnected, .connecting, .reconnecting(attempt: 2)])
     func retryNowRequestsTransportReconnectInsteadOfRegistering(state: ConnectionState) async throws {
         let fake = FakeConnectionManager()
