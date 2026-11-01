@@ -140,6 +140,38 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, "Keep this draft")
     }
 
+    /// #861: pending images keep their slots, so Photos is unavailable once
+    /// the composer already holds the five-image limit.
+    @MainActor
+    func testPhotosIsDisabledAtTheImageLimit() {
+        let app = launch(scenario: "composer")
+        let composer = app.textViews["composer.textView"]
+        composer.tap()
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30))
+        let colors: [UIColor] = [.systemRed, .systemOrange, .systemGreen, .systemBlue, .systemPurple]
+        UIPasteboard.general.images = colors.map { color in
+            renderer.image { context in
+                color.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
+            }
+        }
+        defer { UIPasteboard.general.items = [] }
+        pasteClipboard(into: composer, in: app)
+        XCTAssertTrue(app.buttons["Remove image \(colors.count)"].waitForExistence(timeout: Fixture.timeout))
+
+        let attachment = app.buttons["composer.attachment"]
+        assertReachable(attachment, in: app)
+        attachment.tap()
+        let photos = app.buttons["Photos"]
+        XCTAssertTrue(photos.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertFalse(photos.isEnabled, "Photos must be disabled with no image slots left")
+        XCTAssertTrue(app.buttons["Files"].isEnabled)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Composer Photos disabled at image limit"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     @MainActor
     private func pasteClipboard(into editor: XCUIElement, in app: XCUIApplication) {
         editor.press(forDuration: 1.2)

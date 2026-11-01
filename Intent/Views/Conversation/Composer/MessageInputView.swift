@@ -62,7 +62,8 @@ struct MessageInputView: View {
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
-            maxSelectionCount: Constants.Conversation.Composer.maximumImageSelectionCount,
+            // Earlier picks stay pending after import; offer only the remaining slots.
+            maxSelectionCount: max(1, viewModel.remainingPhotoImageCount),
             matching: viewModel.workspaceId == Workspace.chiefWorkspaceId ? .images : .any(of: [.images, .videos])
         )
         .onChange(of: viewModel.selectedPhotoItems) { _, _ in
@@ -122,6 +123,7 @@ private extension MessageInputView {
                     },
                     onPhotos: { isPhotoPickerPresented = true },
                     onFiles: { isFilePickerPresented = true },
+                    photosEnabled: viewModel.remainingPhotoImageCount > 0,
                     onPasteImages: viewModel.pasteImages,
                     skillCompletion: skillCompletion
                 )
@@ -213,6 +215,7 @@ private extension MessageInputView {
             Button { isPhotoPickerPresented = true } label: {
                 photosAttachmentLabel
             }
+            .disabled(viewModel.remainingPhotoImageCount == 0)
             Button { isFilePickerPresented = true } label: {
                 filesAttachmentLabel
             }

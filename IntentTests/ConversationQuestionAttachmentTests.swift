@@ -400,6 +400,71 @@ extension ConversationViewModelTests {
         #expect(attachments.imagePlacementError?.contains("up to \(limit) images") == true)
     }
 
+    /// #861: the ordinary composer keeps imported photos pending, so a repeat
+    /// Photos pick must only fill the remaining slots.
+    @Test func composerPhotoImportsCountPendingImagesAcrossBatches() async throws {
+        let (viewModel, _) = makeFakeBackedVM()
+        let pipeline = viewModel.attachmentPipeline
+        let limit = Constants.Conversation.Composer.maximumImageSelectionCount
+        let data = try #require(UIImage(systemName: "star")?.pngData())
+        var loadedPhotos = 0
+        pipeline.loadPhotoData = { _ in
+            loadedPhotos += 1
+            return data
+        }
+        #expect(viewModel.remainingPhotoImageCount == limit)
+        viewModel.selectedPhotoItems = (0..<limit).map { PhotosPickerItem(itemIdentifier: "first-\($0)") }
+        viewModel.loadSelectedPhotos()
+        await pipeline.photoImportTask?.value
+        #expect(viewModel.pendingImages.count == limit)
+        #expect(viewModel.remainingPhotoImageCount == 0)
+
+        viewModel.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "repeat-batch")]
+        viewModel.loadSelectedPhotos()
+        await pipeline.photoImportTask?.value
+        #expect(viewModel.pendingImages.count == limit)
+        #expect(loadedPhotos == limit, "over-cap selections are rejected before loading")
+        #expect(viewModel.imagePlacementError?.contains("up to \(limit) images") == true)
+
+        viewModel.removeImage(at: 0)
+        #expect(viewModel.remainingPhotoImageCount == 1)
+        viewModel.imagePlacementError = nil
+        viewModel.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "replacement")]
+        viewModel.loadSelectedPhotos()
+        await pipeline.photoImportTask?.value
+        #expect(viewModel.pendingImages.count == limit)
+        #expect(loadedPhotos == limit + 1)
+        #expect(viewModel.imagePlacementError == nil)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func composerPhotoImportRechecksCapacityAfterLoading() async throws {
+        let (viewModel, _) = makeFakeBackedVM()
+        let pipeline = viewModel.attachmentPipeline
+        let limit = Constants.Conversation.Composer.maximumImageSelectionCount
+        let image = try #require(UIImage(systemName: "star"))
+        let data = try #require(image.pngData())
+        let (started, didStart) = AsyncStream.makeStream(of: Void.self)
+        let (gate, release) = AsyncStream.makeStream(of: Void.self)
+        defer { didStart.finish(); release.finish() }
+        pipeline.loadPhotoData = { _ in
+            didStart.yield()
+            for await _ in gate { break }
+            return data
+        }
+        viewModel.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "in-flight")]
+        viewModel.loadSelectedPhotos()
+        let importTask = try #require(pipeline.photoImportTask)
+        defer { importTask.cancel() }
+        for await _ in started { break }
+        for _ in 0..<limit { pipeline.addImage(image) }
+        release.yield()
+        await importTask.value
+
+        #expect(viewModel.pendingImages.count == limit)
+        #expect(viewModel.pendingImages.allSatisfy { $0 === image }, "the late import must not replace existing images")
+        #expect(viewModel.imagePlacementError?.contains("up to \(limit) images") == true)
+    }
+
     private func questionAnswerRequest(_ fake: FakeConnectionManager) throws -> [String: Any] {
         let requests = fake.paramsForMethod("agent.sendMessage")
         #expect(requests.count == 1)
