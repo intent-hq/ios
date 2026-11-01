@@ -108,7 +108,9 @@ struct IPadWorkspaceDetailView: View {
             WorkspaceDetailView(workspaceId: workspaceId, session: session)
                 .transition(pageTransition(isOverview: true))
         default:
-            IPadShellStyle.panel(for: colorScheme)
+            WorkspaceDetailPlaceholder()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(IPadShellStyle.panel(for: colorScheme))
         }
     }
 

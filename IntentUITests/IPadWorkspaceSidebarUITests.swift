@@ -63,6 +63,30 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         }
     }
 
+    /// #908: with no workspace to select, the detail pane shows a placeholder instead of a blank panel.
+    @MainActor
+    func testDetailPaneShowsPlaceholderWithoutSelectedWorkspaceInBothThemes() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent sidebar")
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            XCUIDevice.shared.orientation = .landscapeLeft
+            let app = XCUIApplication()
+            app.launchArguments = ["--demo-data", "--demo-empty-workspaces", "-appThemePreference", appearance]
+            app.launch()
+            let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+            if allowNotifications.waitForExistence(timeout: 2) { allowNotifications.tap() }
+            let placeholder = app.descendants(matching: .any)["workspace.detail.placeholder"]
+            XCTAssertTrue(placeholder.waitForExistence(timeout: Self.timeout), "Landscape detail pane placeholder")
+            XCTAssertTrue(placeholder.label.contains("Select a Workspace"), "VoiceOver reads the placeholder title")
+            capture("ipad-empty-detail-landscape-\(appearance)")
+
+            XCUIDevice.shared.orientation = .portrait
+            XCTAssertTrue(placeholder.waitForExistence(timeout: Self.timeout), "Portrait detail pane placeholder")
+            capture("ipad-empty-detail-portrait-\(appearance)")
+            app.terminate()
+        }
+    }
+
     @MainActor
     func testGroupedAgentsStayListedAndNamedInTheSidebar() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent sidebar")

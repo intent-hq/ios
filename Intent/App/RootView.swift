@@ -2,7 +2,6 @@ import SwiftUI
 
 struct RootView: View {
     @ScaledMetric(relativeTo: .body) private var warningIconSize: CGFloat = 17
-    @ScaledMetric(relativeTo: .title) var emptyStateIconSize: CGFloat = 48
     var networkAvailability: NetworkAvailability = .shared
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
