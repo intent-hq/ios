@@ -33,8 +33,9 @@ struct SavedConnectionCardTests {
         let card = SavedConnectionCard(name: "Demo Mac", address: "demo.invalid:8080", isCurrentWindow: true)
             .frame(width: 354)
         let colors = try pixelColors(card, scheme: scheme)
+        // Light "Connected" uses the text-safe green (#45752F, >= 4.5:1 on white; #728).
         let expected = scheme == .light
-            ? [[255, 255, 255], [8, 8, 8], [140, 140, 137], [111, 163, 86], [217, 217, 217]]
+            ? [[255, 255, 255], [8, 8, 8], [140, 140, 137], [69, 117, 47], [217, 217, 217]]
             : [[39, 39, 39], [240, 240, 235], [140, 140, 137], [111, 163, 86], [71, 71, 71]]
         for color in expected {
             #expect(pixelCount(color, in: colors) > 20, "Missing rendered Saved color: \(color), \(scheme)")
