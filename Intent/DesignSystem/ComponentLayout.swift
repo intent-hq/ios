@@ -46,6 +46,18 @@ extension Constants {
         static let horizontalPadding: CGFloat = 12
         static let backgroundOpacity: Double = 0.12
         static let cornerRadius: CGFloat = 12
+
+        // System orange is about 2:1 over its own light tint; light mode uses a deep
+        // amber so the caption keeps 4.5:1. Dark keeps system orange's dark variant.
+        // swiftlint:disable no_magic_numbers
+        private static let lightWarningText = Color(.sRGB, red: 154 / 255, green: 74 / 255, blue: 0)
+        private static let darkWarningText = Color(.sRGB, red: 255 / 255, green: 159 / 255, blue: 10 / 255)
+        // swiftlint:enable no_magic_numbers
+
+        /// Text role for the "Certificate mismatch" caption and its icon.
+        static func warningForeground(for scheme: ColorScheme) -> Color {
+            scheme == .dark ? darkWarningText : lightWarningText
+        }
     }
 }
 

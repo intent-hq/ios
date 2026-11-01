@@ -12,7 +12,8 @@ struct CertMismatchListView: View {
 
     @Environment(\.colorScheme) var colorScheme
     let mismatches: [HostCertMismatch]
-    var warningForeground: Color = .orange
+    /// Overrides the text-safe warning color (for example, on the connecting screen).
+    var warningForeground: Color?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
@@ -23,7 +24,7 @@ struct CertMismatchListView: View {
                 Image(systemName: "exclamationmark.shield")
                     .font(.caption.weight(.semibold))
             }
-            .foregroundStyle(warningForeground)
+            .foregroundStyle(warningForeground ?? Layout.warningForeground(for: colorScheme))
 
             ForEach(mismatches, id: \.host) { mismatch in
                 VStack(alignment: .leading, spacing: Layout.hostSpacing) {

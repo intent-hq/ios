@@ -27,7 +27,11 @@ extension Constants.Connections {
     private static let lightForeground = Color(.sRGB, red: 8 / 255, green: 8 / 255, blue: 8 / 255)
     private static let lightMutedForeground = Color(.sRGB, red: 140 / 255, green: 140 / 255, blue: 137 / 255)
     private static let lightDivider = Color.black.opacity(dividerOpacity)
-    private static let connectedGreen = Color(.sRGB, red: 111 / 255, green: 163 / 255, blue: 86 / 255)
+    private static let darkConnectedGreen = Color(.sRGB, red: 111 / 255, green: 163 / 255, blue: 86 / 255)
+    // Text-safe status variants: small status captions keep at least 4.5:1 on the card surface.
+    private static let lightConnectedGreen = Color(.sRGB, red: 69 / 255, green: 117 / 255, blue: 47 / 255)
+    private static let lightStatusMuted = Color(.sRGB, red: 107 / 255, green: 107 / 255, blue: 104 / 255)
+    private static let darkStatusMuted = Color(.sRGB, red: 163 / 255, green: 163 / 255, blue: 160 / 255)
     // swiftlint:enable no_magic_numbers
 
     static func background(for scheme: ColorScheme) -> Color {
@@ -54,7 +58,13 @@ extension Constants.Connections {
         scheme == .dark ? Color.white.opacity(dividerOpacity) : lightDivider
     }
 
-    static func connectedForeground(for _: ColorScheme) -> Color {
-        connectedGreen
+    /// Text role for the "Connected" status caption and its dot.
+    static func connectedForeground(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? darkConnectedGreen : lightConnectedGreen
+    }
+
+    /// Text role for the other status captions; the address keeps `mutedForeground`.
+    static func statusMutedForeground(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? darkStatusMuted : lightStatusMuted
     }
 }

@@ -4,14 +4,19 @@ import Textual
 /// Textual port of the app's previous compact markdown theme: same relative font
 /// scales, weights, margins, and paddings, expressed as a `StructuredText.Style`.
 struct CompactMarkdownStyle: StructuredText.Style {
-    /// Inline-code colors from the old `.markdownTextStyle(\.code)` override.
+    /// Inline-code colors from the old `.markdownTextStyle(\.code)` override. Textual resolves
+    /// the increased-contrast variants from the environment's `colorSchemeContrast`.
     static let codeForeground = DynamicColor(
         light: Constants.Colors.Markdown.inlineCodeForeground(for: .light),
-        dark: Constants.Colors.Markdown.inlineCodeForeground(for: .dark)
+        dark: Constants.Colors.Markdown.inlineCodeForeground(for: .dark),
+        highContrastLight: Constants.Colors.Markdown.inlineCodeForeground(for: .light, contrast: .increased),
+        highContrastDark: Constants.Colors.Markdown.inlineCodeForeground(for: .dark, contrast: .increased)
     )
     static let codeBackground = DynamicColor(
         light: Constants.Colors.Markdown.inlineCodeBackground(for: .light),
-        dark: Constants.Colors.Markdown.inlineCodeBackground(for: .dark)
+        dark: Constants.Colors.Markdown.inlineCodeBackground(for: .dark),
+        highContrastLight: Constants.Colors.Markdown.inlineCodeBackground(for: .light, contrast: .increased),
+        highContrastDark: Constants.Colors.Markdown.inlineCodeBackground(for: .dark, contrast: .increased)
     )
 
     let inlineStyle = InlineStyle()
@@ -89,9 +94,11 @@ struct CompactBlockQuoteStyle: StructuredText.BlockQuoteStyle {
 /// The old `.markdownBlockStyle(\.codeBlock)` override: 12pt padding, muted
 /// rounded box, monospaced 0.85em, no horizontal scroller.
 struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
-    private static let background = DynamicColor(
+    static let background = DynamicColor(
         light: Constants.Colors.Markdown.codeBlockBackground(for: .light),
-        dark: Constants.Colors.Markdown.codeBlockBackground(for: .dark)
+        dark: Constants.Colors.Markdown.codeBlockBackground(for: .dark),
+        highContrastLight: Constants.Colors.Markdown.codeBlockBackground(for: .light, contrast: .increased),
+        highContrastDark: Constants.Colors.Markdown.codeBlockBackground(for: .dark, contrast: .increased)
     )
 
     func makeBody(configuration: Configuration) -> some View {

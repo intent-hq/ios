@@ -107,7 +107,9 @@ struct SavedConnectionCard: View {
     }
 
     private var statusForeground: Color {
-        status == .connected ? Constants.Connections.connectedForeground(for: colorScheme) : mutedForeground
+        status == .connected
+            ? Constants.Connections.connectedForeground(for: colorScheme)
+            : Constants.Connections.statusMutedForeground(for: colorScheme)
     }
 
     private var statusTitle: LocalizedStringKey? {

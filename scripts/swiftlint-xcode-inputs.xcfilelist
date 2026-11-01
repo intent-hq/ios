@@ -663,6 +663,7 @@ $(SRCROOT)/IntentTests/BrowserTunnelRelayTests.swift
 $(SRCROOT)/IntentTests/BrowserTunnelURLTests.swift
 $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
 $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
+$(SRCROOT)/IntentTests/ColorContrastTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/ComposerDraftBindingTests.swift

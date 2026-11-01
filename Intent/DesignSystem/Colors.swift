@@ -3,9 +3,18 @@ import UIKit
 
 extension Constants {
     enum Colors {
-        private static func resolvedColor(_ color: UIColor, for scheme: ColorScheme) -> Color {
+        private static func resolvedColor(
+            _ color: UIColor,
+            for scheme: ColorScheme,
+            contrast: ColorSchemeContrast = .standard
+        ) -> Color {
             let style: UIUserInterfaceStyle = scheme == .dark ? .dark : .light
-            let traits = UITraitCollection(userInterfaceStyle: style)
+            let level: UIAccessibilityContrast = contrast == .increased ? .high : .normal
+            // Keep both traits: dropping accessibilityContrast resolves the normal variant.
+            let traits = UITraitCollection { traits in
+                traits.userInterfaceStyle = style
+                traits.accessibilityContrast = level
+            }
             return Color(uiColor: color.resolvedColor(with: traits))
         }
     }
@@ -58,16 +67,16 @@ extension Constants.Colors {
     }
 
     enum Markdown {
-        static func inlineCodeForeground(for scheme: ColorScheme) -> Color {
-            Constants.Colors.resolvedColor(UIColor(resource: .markdownInlineCodeForeground), for: scheme)
+        static func inlineCodeForeground(for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard) -> Color {
+            Constants.Colors.resolvedColor(UIColor(resource: .markdownInlineCodeForeground), for: scheme, contrast: contrast)
         }
 
-        static func inlineCodeBackground(for scheme: ColorScheme) -> Color {
-            Constants.Colors.resolvedColor(UIColor(resource: .markdownInlineCodeBackground), for: scheme)
+        static func inlineCodeBackground(for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard) -> Color {
+            Constants.Colors.resolvedColor(UIColor(resource: .markdownInlineCodeBackground), for: scheme, contrast: contrast)
         }
 
-        static func codeBlockBackground(for scheme: ColorScheme) -> Color {
-            Constants.Colors.resolvedColor(UIColor(resource: .markdownCodeBlockBackground), for: scheme)
+        static func codeBlockBackground(for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard) -> Color {
+            Constants.Colors.resolvedColor(UIColor(resource: .markdownCodeBlockBackground), for: scheme, contrast: contrast)
         }
     }
 
