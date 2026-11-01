@@ -88,6 +88,25 @@ struct WorkspaceVideoDownloadTests {
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
+    // #883: UTType treats .ts/.mts as MPEG transport streams.
+    @Test(arguments: ["Web/collector.ts", "src/index.mts", "LIB/TYPES.TS"])
+    func typeScriptPathsWithoutVideoMIMEAreNotVideo(_ path: String) {
+        #expect(!WorkspaceVideo.isVideo(path: path))
+        #expect(!WorkspaceVideo.isVideo(path: path, mimeType: "text/plain"))
+        #expect(!WorkspaceVideo.isVideo(path: path, mimeType: "application/typescript"))
+    }
+
+    @Test(arguments: ["video/mp2t", "VIDEO/MP2T; charset=binary"])
+    func typeScriptExtensionWithExplicitVideoMIMEIsVideo(_ mimeType: String) {
+        #expect(WorkspaceVideo.isVideo(path: "capture.ts", mimeType: mimeType))
+        #expect(WorkspaceVideo.isVideo(path: "capture.mts", mimeType: mimeType))
+    }
+
+    @Test(arguments: ["clip.mp4", "clip.mov", "clip.m4v", "clip.webm", "CLIP.MOV"])
+    func realVideoExtensionsRemainVideo(_ path: String) {
+        #expect(WorkspaceVideo.isVideo(path: path))
+    }
+
     private static func chunk(_ data: Data, size: Int) -> [String: Any] {
         ["content": data.base64EncodedString(), "bytesRead": data.count, "size": size]
     }

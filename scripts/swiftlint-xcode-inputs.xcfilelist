@@ -1103,6 +1103,7 @@ $(SRCROOT)/IntentUITests/IPadPullRequestsUITests.swift
 $(SRCROOT)/IntentUITests/IPadSidebarUITests.swift
 $(SRCROOT)/IntentUITests/IPadWorkspaceSidebarUITests.swift
 $(SRCROOT)/IntentUITests/IPhoneAssistantHistoryUITests.swift
+$(SRCROOT)/IntentUITests/InlineResponseImageUITests+PDF.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift

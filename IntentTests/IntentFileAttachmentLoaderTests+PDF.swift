@@ -134,6 +134,49 @@ extension IntentFileAttachmentLoaderTests {
         }
     }
 
+    /// ios#803: the share sheet must name the original document, not the cache file.
+    @Test func pdfSharesUnderOriginalNameWhileCacheKeepsUniqueNameAndCleanup() async throws {
+        let bytes = Self.pdfBytes()
+        let connection = FakeConnectionManager()
+        connection.responseMap["file.readChunk"] = Self.pdfChunk(bytes, size: bytes.count)
+        let loader = WorkspaceFileImageLoader(connection: connection)
+        var owner: WorkspacePDF? = try await loader.pdf(workspaceId: "ws", path: "docs/Demo brief.pdf")
+        let cacheURL = try #require(owner?.url)
+        let shareURL = try #require(owner?.shareURL)
+        #expect(shareURL.lastPathComponent == "Demo brief.pdf")
+        #expect(cacheURL.lastPathComponent.hasPrefix("chat-pdf-"))
+        #expect(shareURL != cacheURL)
+        #expect(try Data(contentsOf: shareURL) == bytes)
+        #expect(try Data(contentsOf: cacheURL) == bytes)
+        let shareDirectory = shareURL.deletingLastPathComponent()
+        #expect(shareDirectory == WorkspacePDF.shareDirectory(for: cacheURL))
+        withExtendedLifetime(owner) {}
+        owner = nil
+        for index in 1...8 {
+            _ = try await loader.pdf(workspaceId: "ws", path: "evict-\(index).pdf")
+        }
+        try await waitUntil("Cache file and named share copy removed with the PDF") {
+            !FileManager.default.fileExists(atPath: cacheURL.path)
+                && !FileManager.default.fileExists(atPath: shareDirectory.path)
+        }
+    }
+
+    @Test(arguments: [
+        ("Demo brief.pdf", "Demo brief.pdf"),
+        ("Review notes.PDF", "Review notes.PDF"),
+        ("  Q3: plan.pdf ", "Q3- plan.pdf"),
+        ("a/b\\c\nd.pdf", "a-b-c-d.pdf"),
+        ("..hidden.pdf", "hidden.pdf"),
+        ("report", "report.pdf"),
+        (".pdf", "pdf.pdf"),
+        ("   ", "Document.pdf"),
+        ("..", "Document.pdf"),
+        (String(repeating: "x", count: 300) + ".pdf", String(repeating: "x", count: 200) + ".pdf")
+    ])
+    func pdfExportFileNameIsASafeSingleComponent(_ name: String, expected: String) {
+        #expect(WorkspacePDF.exportFileName(for: name) == expected)
+    }
+
     @Test(arguments: [Data("not a PDF".utf8), Data("%PDF-invalid".utf8)])
     func nonPDFPreparationRejectsAndRemovesTemporaryFile(_ bytes: Data) async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("pdf-test-\(UUID()).pdf")
