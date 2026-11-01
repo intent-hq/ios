@@ -155,7 +155,9 @@ final class ConversationLiveTranscript {
     static let defaultSnapshotTimeout: Duration = .seconds(defaultSnapshotTimeoutSeconds)
     static let defaultInitialRetryDelay: Duration = .seconds(defaultInitialRetryDelaySeconds)
     static let defaultMaxRetryDelay: Duration = .seconds(defaultMaxRetryDelaySeconds)
-    /// Four unacked 10s requests plus 1+2+4s of backoff settle in under a minute.
+    /// Worst case per attempt: an ack arriving just inside the 10s request
+    /// timeout plus the 5s `snapshotTimeout`. Four attempts plus 1+2+4s of
+    /// backoff settle in about 67s (about 47s when acks never arrive).
     static let defaultMaxSubscriptionAttempts = 4
 
     init(connectionManager: ConnectionManagerRouting) {
