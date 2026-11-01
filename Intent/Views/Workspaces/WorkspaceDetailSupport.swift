@@ -14,6 +14,7 @@ struct WorkspaceDetailHeading: View {
     var topSpacing: CGFloat?
     var usesLargeTitle = false
     var showsTitle = true
+    var usesSidebarTitle = false
     let onSaveTitle: () -> Void
     @FocusState private var titleFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -23,10 +24,10 @@ struct WorkspaceDetailHeading: View {
 
     private var focusBinding: FocusState<Bool>.Binding { titleFocus ?? $titleFocused }
     private var titleStyle: Constants.Typography.Style {
-        usesLargeTitle ? Constants.Typography.heading1 : Constants.Typography.heading2
+        usesSidebarTitle ? IPadSidebarStyle.titleStyle : (usesLargeTitle ? Constants.Typography.heading1 : Constants.Typography.heading2)
     }
     private var titleTracking: CGFloat {
-        usesLargeTitle ? WorkspaceDetailStyle.largeTitleTracking : WorkspaceDetailStyle.titleTracking
+        usesSidebarTitle ? IPadSidebarStyle.titleTracking : (usesLargeTitle ? WorkspaceDetailStyle.largeTitleTracking : WorkspaceDetailStyle.titleTracking)
     }
 
     private var headingTopSpacing: CGFloat {
@@ -77,7 +78,7 @@ struct WorkspaceDetailHeading: View {
     }
 
     @ViewBuilder
-    private var editableTitle: some View {
+    var editableTitle: some View {
         if titleEditor.isEditing {
             TextField("New Workspace", text: $titleEditor.draft)
                 .textFieldStyle(.plain)
@@ -206,6 +207,7 @@ struct WorkspaceActionsMenu: View {
     let onCreateTerminal: () -> Void
     let onCreateBrowser: () -> Void
     var onTransfer: (() -> Void)?
+    var onCollapseSidebar: (() -> Void)?
     let onArchive: () -> Void
     let onDelete: () -> Void
 
@@ -223,6 +225,7 @@ struct WorkspaceActionsMenu: View {
             }
             WorkspaceScriptsMenu(workspaceId: workspaceId, store: scriptStore)
             Divider()
+            sidebarAction
             if let onTransfer {
                 Button(action: onTransfer) {
                     Label { Text("Transfer workspace").interFont(Constants.Typography.bodyS) } icon: {
@@ -242,6 +245,17 @@ struct WorkspaceActionsMenu: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Workspace actions")
+    }
+
+    @ViewBuilder
+    private var sidebarAction: some View {
+        if let onCollapseSidebar {
+            Button(action: onCollapseSidebar) {
+                Label { Text("Hide sidebar") } icon: { Image(.collapseLeft) }
+            }
+            .accessibilityIdentifier("ipad.sidebar.collapse")
+            Divider()
+        }
     }
 }
 

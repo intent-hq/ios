@@ -38,6 +38,16 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
             XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout), "The open agent is marked in the sidebar")
             capture("ipad-workspace-sidebar-agent-\(appearance)")
 
+            XCTAssertFalse(app.buttons["ipad.sidebar.collapse"].exists)
+            app.buttons["Workspace actions"].firstMatch.tap()
+            let collapse = app.buttons["ipad.sidebar.collapse"]
+            XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            collapse.tap()
+            let expand = app.buttons["ipad.sidebar.expand"]
+            XCTAssertTrue(expand.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            expand.tap()
+            XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+
             app.buttons["Context"].firstMatch.tap()
             let note = app.buttons[Self.note]
             XCTAssertTrue(note.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))

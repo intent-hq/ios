@@ -6,21 +6,38 @@ struct WorkspaceDetailSidebar {
     let onCollapse: () -> Void
 }
 
-/// Collapse leads, where the list's title would be; workspace actions trail.
-struct WorkspaceSidebarHeader<Actions: View>: View {
-    let onCollapse: () -> Void
+struct WorkspaceSidebarEditableTitle: View {
+    let workspaceId: String
+    let workspace: Workspace?
+    let titleEditor: WorkspaceTitleEditor
+    let titleFocus: FocusState<Bool>.Binding
+    let onSaveTitle: () -> Void
+
+    var body: some View {
+        WorkspaceDetailHeading(
+            workspaceId: workspaceId,
+            title: workspace?.title ?? "",
+            createdAt: workspace?.createdAt,
+            repositoryOwner: nil,
+            repositoryName: nil,
+            titleEditor: titleEditor,
+            titleFocus: titleFocus,
+            usesSidebarTitle: true,
+            onSaveTitle: onSaveTitle
+        ).editableTitle
+    }
+}
+
+struct WorkspaceSidebarHeader<Title: View, Actions: View>: View {
+    @ViewBuilder let title: () -> Title
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
 
     var body: some View {
         HStack(spacing: 0) {
-            IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: onCollapse)
-                .accessibilityIdentifier("ipad.sidebar.collapse")
-                .accessibilityAction(.escape, onCollapse)
-                // Align the icon, not its tap target, with the sidebar's content edge.
-                .padding(.leading, (WorkspaceDetailStyle.iconSize - WorkspaceDetailStyle.controlSize) / 2)
-            Spacer(minLength: 0)
+            title()
+                .frame(maxWidth: .infinity, alignment: .leading)
             actions()
         }
         .opacity(isPaneVisible ? 1 : 0)
