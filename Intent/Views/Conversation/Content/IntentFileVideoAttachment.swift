@@ -4,8 +4,6 @@ import Textual
 struct IntentFileVideoAttachment: Attachment {
     let video: WorkspaceVideo
     let name: String
-    private static let playBackdropOpacity = 0.6
-    @ScaledMetric(relativeTo: .largeTitle) private var playIconSide: CGFloat = 34
 
     var description: String { "Video: \(name)" }
 
@@ -18,12 +16,7 @@ struct IntentFileVideoAttachment: Attachment {
             }
             .clipShape(.rect(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
             .overlay {
-                Image(.play)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: playIconSide, height: playIconSide)
-                    .foregroundStyle(.white)
-                    .background(.black.opacity(Self.playBackdropOpacity), in: Circle())
+                VideoAttachmentPlayIcon()
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Video: \(name)")
@@ -97,5 +90,20 @@ struct IntentFileVideoFailureAttachment: Attachment {
             return false
         }
         return true
+    }
+}
+
+private struct VideoAttachmentPlayIcon: View {
+    @ScaledMetric(relativeTo: .largeTitle) private var iconSide: CGFloat = 34
+    private static let backdropOpacity = 0.6
+
+    var body: some View {
+        Image(.play)
+            .resizable()
+            .scaledToFit()
+            .frame(width: iconSide, height: iconSide)
+            .foregroundStyle(.white)
+            .background(.black.opacity(Self.backdropOpacity), in: Circle())
+            .accessibilityHidden(true)
     }
 }
