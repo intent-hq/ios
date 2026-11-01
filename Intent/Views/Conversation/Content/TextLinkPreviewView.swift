@@ -70,7 +70,7 @@ struct TextLinkPreviewView: View {
                 .accessibilityIdentifier("text.copyPath")
                 if let file {
                     ShareLink(item: file.url) {
-                        Label("Share", systemImage: "square.and.arrow.up")
+                        Label("Share", image: "Upload")
                     }
                     .accessibilityIdentifier("text.share")
                 }
