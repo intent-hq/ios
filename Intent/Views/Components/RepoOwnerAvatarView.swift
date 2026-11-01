@@ -7,7 +7,7 @@ import SwiftUI
 struct RepoOwnerAvatarView: View {
     let owner: String?
     var size: CGFloat = Constants.RepoOwnerAvatar.defaultSize
-    var fallbackIconResource: ImageResource = .folder
+    var fallbackSymbol: String?
     var cornerRadius: CGFloat?
 
     @Environment(\.colorScheme) private var colorScheme
@@ -51,11 +51,18 @@ struct RepoOwnerAvatarView: View {
     }
 
     private var fallbackIcon: some View {
-        Image(fallbackIconResource)
-            .resizable()
-            .scaledToFit()
-            .frame(width: size * Constants.RepoOwnerAvatar.fallbackScale, height: size * Constants.RepoOwnerAvatar.fallbackScale)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .accessibilityHidden(true)
+        Group {
+            if let fallbackSymbol {
+                Image(systemName: fallbackSymbol)
+                    .font(.system(size: size * Constants.RepoOwnerAvatar.fallbackScale))
+            } else {
+                Image(.folder)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size * Constants.RepoOwnerAvatar.fallbackScale, height: size * Constants.RepoOwnerAvatar.fallbackScale)
+            }
+        }
+        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        .accessibilityHidden(true)
     }
 }
