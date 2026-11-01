@@ -71,14 +71,14 @@ struct PullRequestListContent: View {
             startWork(on: item, linkedWorkspace: linkedWorkspace)
         } menuItems: {
             if let url = item.url {
-                Button("Open on GitHub", systemImage: "safari") { openURL(url) }
-                ShareLink(item: url)
+                Button { openURL(url) } label: { Label("Open on GitHub", image: "Github") }
+                ShareLink(item: url) { Label("Share", image: "Upload") }
             }
             if let linkedWorkspace {
-                Button("Open workspace", systemImage: "arrow.right.circle") { onOpenWorkspace(linkedWorkspace.id) }
-                Button("Open agent", systemImage: "bubble.left") { onOpenAgent(linkedWorkspace.id) }
+                Button { onOpenWorkspace(linkedWorkspace.id) } label: { Label("Open workspace", image: "Spaces") }
+                Button { onOpenAgent(linkedWorkspace.id) } label: { Label("Open agent", image: "Agents") }
             } else {
-                Button("New workspace", systemImage: "plus") { onCreateWorkspace(item) }
+                Button { onCreateWorkspace(item) } label: { Label("New workspace", image: "AddIcon") }
             }
         }
         .visionListRowHitTarget()

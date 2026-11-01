@@ -133,12 +133,12 @@ private extension PullRequestDetailView {
     var overflowMenu: some View {
         Menu {
             if let url = item.url {
-                Button("Open on GitHub", systemImage: "safari") { openURL(url) }
+                Button { openURL(url) } label: { Label("Open on GitHub", image: "Github") }
                     .accessibilityIdentifier("pullRequest.openOnGitHub")
-                ShareLink(item: url)
+                ShareLink(item: url) { Label("Share", image: "Upload") }
             }
             if let linkedWorkspace {
-                Button("Open workspace", systemImage: "folder") { onOpenWorkspace(linkedWorkspace.id) }
+                Button { onOpenWorkspace(linkedWorkspace.id) } label: { Label("Open workspace", image: "Spaces") }
             }
         } label: {
             ToolbarOverflowLabel()
