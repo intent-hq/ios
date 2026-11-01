@@ -1,3 +1,4 @@
+import AVFAudio
 import Foundation
 
 /// Synthesizes the agent-notification chime as a WAV file on disk.
@@ -7,6 +8,8 @@ import Foundation
 /// file, and the bundle ships no audio assets. The chime (two decaying
 /// sine tones) is generated once and cached in the temporary directory.
 enum NotificationChime {
+    static var outputVolume: Float { AVAudioSession.sharedInstance().outputVolume }
+
     /// 16-bit mono PCM.
     private static let sampleRate = 44_100
     private static let duration = 0.6

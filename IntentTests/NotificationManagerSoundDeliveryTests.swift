@@ -5,6 +5,35 @@ import UIKit
 import UserNotifications
 
 extension NotificationManagerTests {
+    @Test(arguments: [Float(0), 1], [Float(0), 0.01, 1])
+    func deliveryUsesCurrentVolumeAndKeepsToastAndHaptics(initialVolume: Float, deliveryVolume: Float) async throws {
+        var volume = initialVolume
+        var feedbackCount = 0
+        let center = NotificationManagerFakeCenter()
+        let service = LocalNotificationService(center: center, outputVolume: { volume })
+        let manager = NotificationManager(
+            localNotificationService: service,
+            applicationState: { .active },
+            activeConnectionId: { Self.connectionId },
+            presentFeedback: { feedbackCount += 1 },
+            registerEvents: false
+        )
+        manager.presentIdleAlert(
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
+        let request = try #require(center.requests.first)
+        #expect((request.content.sound != nil) == (initialVolume > 0))
+        volume = deliveryVolume
+
+        let options = await deliver(request, through: service)
+
+        #expect(options == (deliveryVolume > 0 ? [.sound] : []))
+        #expect(manager.currentToast?.agentId == "agent-1")
+        #expect(feedbackCount == 1)
+    }
+
     @Test(arguments: [false, true])
     func foregroundSoundDeliveryDoesNotRepeatPresentation(dismissToast: Bool) async throws {
         var feedbackCount = 0
@@ -35,7 +64,7 @@ extension NotificationManagerTests {
         var state: UIApplication.State = .background
         var feedbackCount = 0
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center)
+        let service = LocalNotificationService(center: center, outputVolume: { 1 })
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { state },

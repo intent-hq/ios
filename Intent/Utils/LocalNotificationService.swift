@@ -75,9 +75,14 @@ final class LocalNotificationService: NSObject {
     var onNotificationResponse: ((Response) -> Void)?
 
     private let center: any LocalNotificationCenter
+    private let outputVolume: () -> Float
 
-    init(center: any LocalNotificationCenter = SystemLocalNotificationCenter()) {
+    init(
+        center: any LocalNotificationCenter = SystemLocalNotificationCenter(),
+        outputVolume: @escaping () -> Float = { NotificationChime.outputVolume }
+    ) {
         self.center = center
+        self.outputVolume = outputVolume
         super.init()
         center.delegate = self
     }
@@ -100,7 +105,7 @@ final class LocalNotificationService: NSObject {
         let content = UNMutableNotificationContent()
         content.title = agentName
         content.body = "Finished in \(workspaceName)"
-        content.sound = .default
+        content.sound = outputVolume() > 0 ? .default : nil
         content.interruptionLevel = .active
         content.userInfo = [
             "agentId": agentId,
@@ -158,7 +163,10 @@ final class LocalNotificationService: NSObject {
         completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
     ) {
         Task { @MainActor [weak self] in
-            let options = self?.onWillPresentNotification?(response) ?? []
+            var options = self?.onWillPresentNotification?(response) ?? []
+            if let self, !(self.outputVolume() > 0) {
+                options.remove(.sound)
+            }
             completionHandler(options)
         }
     }
