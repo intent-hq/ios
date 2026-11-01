@@ -26,6 +26,7 @@ final class LineNumberTextView: UITextView {
         static let horizontalPadding: CGFloat = 8
         static let gutterGap: CGFloat = 12
         static let minimumDigits = 2
+        static let lineSpacing: CGFloat = 4
     }
 
     let gutter = FileLineNumberGutter()
@@ -67,6 +68,9 @@ final class LineNumberTextView: UITextView {
         unwrappedWidth = 0
         lineIndex = index ?? FileLineIndex(source)
         text = source
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = Layout.lineSpacing
+        textStorage.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: textStorage.length))
         setNeedsLayout()
     }
 
