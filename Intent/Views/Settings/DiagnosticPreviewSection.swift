@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DiagnosticPreviewSection: View {
+    @ScaledMetric(relativeTo: .body) private var warningIconSize: CGFloat = 17
     let preview: DiagnosticPreview
 
     var body: some View {
@@ -14,7 +15,10 @@ struct DiagnosticPreviewSection: View {
                     Text("Some history could not be read or saved. This report may be incomplete.")
                         .interFont(Constants.Typography.bodyS)
                 } icon: {
-                    Image(systemName: "exclamationmark.triangle")
+                    Image(.attentionCircle)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: warningIconSize, height: warningIconSize)
                 }
             }
             if preview.rows.isEmpty {

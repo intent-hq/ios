@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkspaceSwipeRow: View {
+    @ScaledMetric(relativeTo: .body) private var menuIconSize: CGFloat = 17
     let workspace: Workspace
     let showRepo: Bool
     let isUpdating: Bool
@@ -167,13 +168,44 @@ struct WorkspaceSwipeRow: View {
 
     private var menuActions: some View {
         Group {
-            Button("Open most recent agent", systemImage: "bubble.left") {
+            Button {
                 revealedTarget = nil
                 onOpenRecentAgent()
+            } label: {
+                Label {
+                    Text("Open most recent agent")
+                } icon: {
+                    Image(.message)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: menuIconSize, height: menuIconSize)
+                }
             }
             if showsTrailingActions {
-                Button("Archive workspace", systemImage: "archivebox") { select(.archive) }
-                Button("Delete workspace", systemImage: "trash", role: .destructive) { select(.delete) }
+                Button {
+                    select(.archive)
+                } label: {
+                    Label {
+                        Text("Archive workspace")
+                    } icon: {
+                        Image(.archive)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: menuIconSize, height: menuIconSize)
+                    }
+                }
+                Button(role: .destructive) {
+                    select(.delete)
+                } label: {
+                    Label {
+                        Text("Delete workspace")
+                    } icon: {
+                        Image(.delete)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: menuIconSize, height: menuIconSize)
+                    }
+                }
             }
         }
         .disabled(isUpdating)

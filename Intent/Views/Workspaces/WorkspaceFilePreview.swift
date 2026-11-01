@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkspaceFilePreview: View {
+    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     let link: TextLinkPreviewView.Link
     @State private var loader: WorkspaceFileImageLoader
     @State private var image: UIImage?
@@ -43,7 +44,14 @@ struct WorkspaceFilePreview: View {
                 Group {
                     if hasFailed {
                         ContentUnavailableView {
-                            Label("File unavailable", systemImage: "doc")
+                            Label {
+                                Text("File unavailable")
+                            } icon: {
+                                Image(.file)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: emptyStateIconSize, height: emptyStateIconSize)
+                            }
                         } description: {
                             Text("Could not preview this file. Check your connection and try again.")
                         } actions: {

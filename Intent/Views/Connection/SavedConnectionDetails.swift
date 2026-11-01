@@ -3,6 +3,7 @@ import SwiftUI
 /// Secondary metadata reached through the card's existing context-menu affordance.
 /// Never renders the saved API token or certificate fingerprint.
 struct SavedConnectionDetails: View {
+    @ScaledMetric(relativeTo: .subheadline) private var connectionIconSize: CGFloat = 15
     @Environment(\.colorScheme) private var colorScheme
     let connection: StoredConnection
 
@@ -22,8 +23,10 @@ struct SavedConnectionDetails: View {
                         Label {
                             Text("Tailcat").interFont(Constants.Typography.bodyXS)
                         } icon: {
-                            Image(systemName: "point.3.connected.trianglepath.dotted")
-                                .font(.subheadline)
+                            Image(.connection)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: connectionIconSize, height: connectionIconSize)
                         }
                         Text(tcAddress)
                             .interFont(Constants.Typography.bodyXS)

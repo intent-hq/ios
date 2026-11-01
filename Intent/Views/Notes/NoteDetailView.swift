@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct NoteDetailView: View {
+    @ScaledMetric(relativeTo: .largeTitle) private var emptyStateIconSize: CGFloat = 34
     private static let linkedNotePathComponentCount = 3
     private static let linkedNoteKindIndex = 1
 
@@ -113,8 +114,10 @@ struct NoteDetailView: View {
             ScrollView { noteStack(note) }
         } else {
             VStack(spacing: Constants.Notes.Detail.contentSpacing) {
-                Image(systemName: "doc.text")
-                    .font(.largeTitle)
+                Image(.note)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: emptyStateIconSize, height: emptyStateIconSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("Note content unavailable")

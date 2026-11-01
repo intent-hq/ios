@@ -76,7 +76,10 @@ extension RootView {
                 Label {
                     Text("Select a Workspace").interFont(Constants.Typography.bodyM.withFace(.semibold))
                 } icon: {
-                    Image(systemName: "sidebar.left")
+                    Image(.collapseLeft)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: emptyStateIconSize, height: emptyStateIconSize)
                 }
             } description: {
                 Text("Choose a workspace from the sidebar to see its agents and notes.")

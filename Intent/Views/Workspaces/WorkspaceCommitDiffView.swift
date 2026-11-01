@@ -21,6 +21,7 @@ enum WorkspaceCommitLayout {
 }
 
 struct WorkspaceCommitDiffView: View {
+    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     let loader: WorkspaceDiffLoader
     let commit: WorkspaceCommit
     @State private var files: [WorkspaceCommitFile] = []
@@ -123,7 +124,14 @@ struct WorkspaceCommitDiffView: View {
                 .frame(maxWidth: .infinity).padding(WorkspaceCommitLayout.sectionSpacing)
         } else if let errorMessage {
             ContentUnavailableView {
-                Label("Commit Unavailable", systemImage: "exclamationmark.triangle")
+                Label {
+                    Text("Commit Unavailable")
+                } icon: {
+                    Image(.attentionCircle)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: emptyStateIconSize, height: emptyStateIconSize)
+                }
             } description: {
                 Text(errorMessage)
             } actions: {
@@ -131,7 +139,16 @@ struct WorkspaceCommitDiffView: View {
                     .buttonStyle(IntentButtonStyle(variant: .secondary))
             }
         } else if files.isEmpty {
-            ContentUnavailableView("No Changed Files", systemImage: "doc.text")
+            ContentUnavailableView {
+                Label {
+                    Text("No Changed Files")
+                } icon: {
+                    Image(.fileList)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: emptyStateIconSize, height: emptyStateIconSize)
+                }
+            }
         } else {
             summary
             ForEach(files) { file in fileSection(file) }

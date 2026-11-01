@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 
 struct WorkspaceBrowserView: View {
+    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     let browser: WorkspaceBrowser
     let connection: any SessionConnectionManaging
     @Environment(\.dismiss) private var dismiss
@@ -159,7 +160,10 @@ struct WorkspaceBrowserView: View {
             Label {
                 Text("Page unavailable").interFont(Constants.Typography.bodyM.withFace(.semibold))
             } icon: {
-                Image(systemName: "globe")
+                Image(.globe)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: emptyStateIconSize, height: emptyStateIconSize)
             }
         } description: {
             Text(message).interFont(Constants.Typography.bodyS)

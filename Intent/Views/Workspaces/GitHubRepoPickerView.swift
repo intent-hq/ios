@@ -15,6 +15,7 @@ import SwiftUI
 /// Search state stays per-picker (the store is shared by every picker on
 /// the session, so one picker's search must not surface in another).
 struct GitHubRepoPickerView: View {
+    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
     let onCreateRepository: () -> Void
@@ -133,7 +134,10 @@ struct GitHubRepoPickerView: View {
                 Label {
                     Text("Repositories Unavailable").interFont(Constants.Typography.bodyM.withFace(.semibold))
                 } icon: {
-                    Image(systemName: "exclamationmark.triangle")
+                    Image(.attentionCircle)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: emptyStateIconSize, height: emptyStateIconSize)
                 }
             } description: {
                 Text(lastError).interFont(Constants.Typography.bodyS)

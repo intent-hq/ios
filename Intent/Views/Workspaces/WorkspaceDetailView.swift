@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkspaceDetailView: View {
+    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     let workspaceId: String
     private let persistence: PersistenceManager
     private let isSidebarVisible: Bool
@@ -461,7 +462,14 @@ private extension WorkspaceDetailView {
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
             } else if !viewModel.hasAgentSections, !hasWorkspaceResources {
                 ContentUnavailableView {
-                    Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: { Image(systemName: "person.2") }
+                    Label {
+                        Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold))
+                    } icon: {
+                        Image(.agents)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: emptyStateIconSize, height: emptyStateIconSize)
+                    }
                 } description: {
                     Text("Agents will appear here when active.").interFont(Constants.Typography.bodyS)
                 }

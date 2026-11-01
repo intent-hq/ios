@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct WorkspaceFileDiffView: View {
+    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
+    @ScaledMetric(relativeTo: .subheadline) private var statusIconSize: CGFloat = 15
     let loader: WorkspaceDiffLoader
     let path: String
     var staged = false
@@ -73,7 +75,9 @@ struct WorkspaceFileDiffView: View {
             }
         } else if let errorMessage {
             if embedded {
-                compactStatus("Diff Unavailable", systemImage: "doc.text.magnifyingglass", message: errorMessage)
+                compactStatus("Diff Unavailable", message: errorMessage) {
+                    Image(systemName: "doc.text.magnifyingglass")
+                }
             } else {
                 ContentUnavailableView {
                     Label("Diff Unavailable", systemImage: "doc.text.magnifyingglass")
@@ -85,10 +89,22 @@ struct WorkspaceFileDiffView: View {
             }
         } else if hunks.isEmpty {
             if embedded {
-                compactStatus("No Text Diff", systemImage: "doc.text", message: emptyMessage)
+                compactStatus("No Text Diff", message: emptyMessage) {
+                    Image(.fileList)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: statusIconSize, height: statusIconSize)
+                }
             } else {
                 ContentUnavailableView {
-                    Label("No Text Diff", systemImage: "doc.text")
+                    Label {
+                        Text("No Text Diff")
+                    } icon: {
+                        Image(.fileList)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: emptyStateIconSize, height: emptyStateIconSize)
+                    }
                 } description: {
                     Text(emptyMessage)
                 }
@@ -115,10 +131,14 @@ struct WorkspaceFileDiffView: View {
             .buttonStyle(IntentButtonStyle(variant: .secondary))
     }
 
-    private func compactStatus(_ title: String, systemImage: String, message: String) -> some View {
+    private func compactStatus<Icon: View>(_ title: String, message: String, @ViewBuilder icon: () -> Icon) -> some View {
         VStack(alignment: .leading, spacing: WorkspaceChangesLayout.sectionSpacing) {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
+            Label {
+                Text(title)
+            } icon: {
+                icon()
+            }
+            .font(.subheadline.weight(.semibold))
             Text(message)
                 .font(.caption)
                 .foregroundStyle(.secondary)
