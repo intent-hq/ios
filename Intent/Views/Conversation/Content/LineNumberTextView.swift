@@ -34,6 +34,7 @@ final class LineNumberTextView: UITextView {
     private var wrapsLines = true
     private var showsLineNumbers = true
     private var unwrappedWidth: CGFloat = 0
+    private var appliedLineHeight: CGFloat = 0
 
     init() {
         super.init(frame: .zero, textContainer: nil)
@@ -68,9 +69,7 @@ final class LineNumberTextView: UITextView {
         unwrappedWidth = 0
         lineIndex = index ?? FileLineIndex(source)
         text = source
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = Layout.lineSpacing
-        textStorage.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: textStorage.length))
+        appliedLineHeight = 0
         setNeedsLayout()
     }
 
@@ -121,7 +120,20 @@ final class LineNumberTextView: UITextView {
         layoutIfNeeded()
     }
 
+    /// A fixed line height keeps empty lines as tall as text lines; TextKit 2
+    /// spaces empty paragraphs unevenly with `lineSpacing`. Reapplied when Dynamic Type changes the font.
+    private func applyLineHeight() {
+        let height = ceil(numberFont.lineHeight) + Layout.lineSpacing
+        guard height != appliedLineHeight else { return }
+        appliedLineHeight = height
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.minimumLineHeight = height
+        paragraph.maximumLineHeight = height
+        textStorage.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: textStorage.length))
+    }
+
     override func layoutSubviews() {
+        applyLineHeight()
         let digits = max(Layout.minimumDigits, String(lineIndex.starts.count).count)
         let number = String(repeating: "8", count: digits)
         let width = ceil(number.size(withAttributes: [.font: numberFont]).width)
