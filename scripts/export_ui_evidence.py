@@ -295,6 +295,9 @@ CAPTURES = {
         ),
     },
     "WorkspaceTitleEditingUITests": {
+        "testSidebarFailedSaveKeepsErrorBelowDraftInBothThemes": (
+            "Sidebar title save error light", "Sidebar title save error dark",
+        ),
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",
         ),

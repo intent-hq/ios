@@ -38,7 +38,9 @@ struct WorkspaceDetailHeading: View {
 
     var body: some View {
         if showsOnlyTitle {
-            editableTitle
+            VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
+                editableTitle
+            }
         } else {
             headingContent
         }
