@@ -92,8 +92,9 @@ struct WorkspaceSearchButton: View {
         Button {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration)) {
                 isSearching = true
+            } completion: {
+                if isSearching { onOpen() }
             }
-            onOpen()
         } label: {
             Image(.search)
                 .resizable()
@@ -125,6 +126,7 @@ struct WorkspaceSearchInput: View {
     var identifierPrefix = "workspaces.search"
     var surfaceColor: Color?
     var horizontalPadding: CGFloat = Constants.WorkspaceSearch.contentSpacing
+    var focusesOnAppear = true
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
     var body: some View {
@@ -166,7 +168,7 @@ struct WorkspaceSearchInput: View {
                 .submitLabel(.search)
                 .focused(isFocused)
                 .accessibilityIdentifier("\(identifierPrefix).field")
-                .onAppear { isFocused.wrappedValue = true }
+                .onAppear { if focusesOnAppear { isFocused.wrappedValue = true } }
                 .onSubmit { isFocused.wrappedValue = false }
             if !text.isEmpty {
                 Button {

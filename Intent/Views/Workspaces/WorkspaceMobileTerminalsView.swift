@@ -74,12 +74,15 @@ private struct WorkspaceTerminalRow: View {
         .buttonStyle(TerminalRowButtonStyle())
         .visionListRowHitTarget()
         .contextMenu {
+            IPadToolPlacementAction(tool: .terminal(terminal))
             Button("Delete terminal", role: .destructive) { confirmDelete = true }
                 .disabled(!store.isConnected)
         }
         .accessibilityAction(named: "Delete terminal") {
             if store.isConnected { confirmDelete = true }
         }
+        .accessibilityIdentifier("terminal.row.\(terminal.id)")
+        .modifier(IPadToolDragSource(tool: .terminal(terminal)))
     }
 
     private var deleteButton: some View {

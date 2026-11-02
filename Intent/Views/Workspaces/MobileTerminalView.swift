@@ -4,6 +4,7 @@ struct MobileTerminalView: View {
     let terminal: MobileTerminal
     let workspaceName: String
     let store: MobileTerminalStore
+    var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var connection: MobileTerminalConnection
@@ -12,10 +13,11 @@ struct MobileTerminalView: View {
     @State private var isClosing = false
     @State private var hasPresented = false
 
-    init(terminal: MobileTerminal, workspaceName: String, store: MobileTerminalStore) {
+    init(terminal: MobileTerminal, workspaceName: String, store: MobileTerminalStore, onClose: (() -> Void)? = nil) {
         self.terminal = terminal
         self.workspaceName = workspaceName
         self.store = store
+        self.onClose = onClose
         _connection = State(initialValue: MobileTerminalConnection(store: store, terminal: terminal))
     }
 
@@ -34,7 +36,8 @@ struct MobileTerminalView: View {
         }
         .background(TerminalAppearance.background.ignoresSafeArea())
         .background(TerminalPresentationObserver { hasPresented = true })
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(onClose == nil ? .dark : nil)
+        .environment(\.colorScheme, .dark)
         .tint(.white)
         .interactiveDismissDisabled(isClosing)
         .alert("Close terminal?", isPresented: $confirmClose) { closeActions } message: {
@@ -72,7 +75,7 @@ struct MobileTerminalView: View {
 
     private var header: some View {
         HStack(spacing: TerminalAppearance.headerSpacing) {
-            Button { dismiss() } label: {
+            Button(action: leaveTerminal) {
                 Image(.arrowLeft)
                     .resizable()
                     .scaledToFit()
@@ -147,7 +150,7 @@ struct MobileTerminalView: View {
         Button("Close terminal", role: .destructive) {
             isClosing = true
             Task {
-                if await store.close(terminal) { dismiss() }
+                if await store.close(terminal) { leaveTerminal() }
                 isClosing = false
             }
         }
@@ -172,5 +175,9 @@ struct MobileTerminalView: View {
             .padding(.horizontal, TerminalAppearance.horizontalInset)
             .padding(.bottom, TerminalAppearance.headerSpacing)
             .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private func leaveTerminal() {
+        if let onClose { onClose() } else { dismiss() }
     }
 }

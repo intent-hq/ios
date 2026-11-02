@@ -38,6 +38,24 @@ struct IPadNavigationState: Equatable {
     private(set) var usesSidebarOverlay = false
     private(set) var usesCompactNavigation = false
     private(set) var hasMeasuredLayout = false
+    private(set) var mainTool: IPadWorkspaceTool?
+    let toolDragWindowId = UUID()
+
+    var canPlaceTool: Bool {
+        hasMeasuredLayout && !usesSidebarOverlay && !usesCompactNavigation && pairing == nil && section == .workspaces
+    }
+
+    @discardableResult
+    mutating func placeTool(_ tool: IPadWorkspaceTool) -> Bool {
+        guard canPlaceTool else { return false }
+        mainTool = tool
+        focusPresentation = .normal
+        detail = .workspace
+        revealSidebar()
+        return true
+    }
+
+    mutating func closeTool() { mainTool = nil }
 
     var isSidebarVisible: Bool {
         usesSidebarOverlay ? isDrawerPresented : isSidebarExpanded
@@ -68,6 +86,7 @@ struct IPadNavigationState: Equatable {
     }
 
     mutating func showAssistantDetail() {
+        closeTool()
         section = .assistant
         detail = .assistant
         hasOpenedAssistant = true
@@ -124,6 +143,7 @@ struct IPadNavigationState: Equatable {
         guard usesSidebarOverlay != usesOverlay || self.usesCompactNavigation != usesCompactNavigation else { return }
         usesSidebarOverlay = usesOverlay
         self.usesCompactNavigation = usesCompactNavigation
+        if usesOverlay || usesCompactNavigation { closeTool() }
         // Rotation preserves the wide-window preference, without unexpectedly
         // opening a drawer over the conversation in a narrow window.
         isDrawerPresented = false

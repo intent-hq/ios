@@ -5,6 +5,7 @@ struct WorkspaceBrowserView: View {
     @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     let browser: WorkspaceBrowser
     let connection: any SessionConnectionManaging
+    var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -150,7 +151,9 @@ struct WorkspaceBrowserView: View {
     @ToolbarContentBuilder
     private var browserToolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            IntentIconButton(icon: .close, label: "Done") { dismiss() }
+            IntentIconButton(icon: .close, label: onClose == nil ? "Done" : "Close main browser") {
+                if let onClose { onClose() } else { dismiss() }
+            }
         }
         .intentToolbarSurface()
     }
