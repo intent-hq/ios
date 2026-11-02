@@ -243,11 +243,18 @@ extension ConversationTranscriptView {
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("transcript.goToEnd")
         .padding(.bottom, Layout.goToEndBottomPadding)
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .transition(goToEndTransition)
         .animation(
             .easeInOut(duration: Constants.Conversation.Transcript.goToEndVisibilityAnimationDuration),
             value: userIsScrolledAway
         )
+    }
+
+    private var goToEndTransition: AnyTransition {
+        switch ConversationTranscriptScrollPolicy.goToEndVisibilityTransition(reduceMotion: reduceMotion) {
+        case .slideAndFade: .opacity.combined(with: .move(edge: .bottom))
+        case .fade: .opacity
+        }
     }
 
     @ViewBuilder
