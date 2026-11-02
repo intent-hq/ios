@@ -73,7 +73,28 @@ struct MobileTerminalView: View {
         .padding(.horizontal, TerminalAppearance.terminalInset)
     }
 
+    @ViewBuilder
     private var header: some View {
+        if onClose != nil {
+            WorkspaceNavigationHeader(
+                title: terminal.name,
+                subtitle: "\(workspaceName)",
+                backLabel: "Back to workspace",
+                backIdentifier: "terminal.main.close",
+                titleIdentifier: "mobile-terminal-title",
+                isLeadingActionEnabled: !isClosing,
+                showsBackground: false,
+                usesConversationLayout: true,
+                onBack: leaveTerminal
+            ) {
+                terminalMenu
+            }
+        } else {
+            standaloneHeader
+        }
+    }
+
+    private var standaloneHeader: some View {
         HStack(spacing: TerminalAppearance.headerSpacing) {
             Button(action: leaveTerminal) {
                 Image(.arrowLeft)
@@ -89,6 +110,8 @@ struct MobileTerminalView: View {
             .disabled(isClosing)
             title
             terminalMenu
+                .buttonStyle(TerminalControlStyle())
+                .modifier(TerminalControlSurface())
         }
         .padding(.horizontal, TerminalAppearance.horizontalInset)
         .padding(.top, TerminalAppearance.headerSpacing)
@@ -136,12 +159,14 @@ struct MobileTerminalView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
-                .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
+                .frame(width: headerControlSize, height: headerControlSize)
                 .accessibilityHidden(true)
         }
-        .buttonStyle(TerminalControlStyle())
-        .modifier(TerminalControlSurface())
         .accessibilityLabel("Terminal actions")
+    }
+
+    private var headerControlSize: CGFloat {
+        onClose == nil ? TerminalAppearance.controlSize : Constants.Conversation.Design.Header.controlSize
     }
 
     @ViewBuilder

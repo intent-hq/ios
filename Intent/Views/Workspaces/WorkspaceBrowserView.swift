@@ -22,6 +22,9 @@ struct WorkspaceBrowserView: View {
     var body: some View {
         NavigationStack {
             browserContent
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let onClose { mainContentHeader(onClose: onClose) }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 addressBar
                     .padding(.top, BrowserAppearance.rowSpacing)
@@ -31,6 +34,7 @@ struct WorkspaceBrowserView: View {
             .navigationTitle(page.title.isEmpty ? "Browser" : page.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { browserToolbar }
+            .toolbar(onClose == nil ? .automatic : .hidden, for: .navigationBar)
             .task(id: attachmentKey) { await attach() }
             .onAppear { addressInput = targetAddress ?? browser.url }
             .onChange(of: page.address) { _, address in
@@ -150,12 +154,29 @@ struct WorkspaceBrowserView: View {
 
     @ToolbarContentBuilder
     private var browserToolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            IntentIconButton(icon: .close, label: onClose == nil ? "Done" : "Close main browser") {
-                if let onClose { onClose() } else { dismiss() }
+        if onClose == nil {
+            ToolbarItem(placement: .cancellationAction) {
+                IntentIconButton(icon: .close, label: "Done") { dismiss() }
             }
+            .intentToolbarSurface()
         }
-        .intentToolbarSurface()
+    }
+
+    private func mainContentHeader(onClose: @escaping () -> Void) -> some View {
+        WorkspaceNavigationHeader(
+            title: page.title.isEmpty ? "Browser" : page.title,
+            subtitle: nil,
+            backLabel: "Close main browser",
+            backIdentifier: "browser.main.close",
+            titleIdentifier: "browser.main.title",
+            leadingIcon: .close,
+            usesConversationLayout: true,
+            onBack: onClose
+        ) {
+            Color.clear
+                .frame(width: Constants.Conversation.Design.Header.controlSize, height: Constants.Conversation.Design.Header.controlSize)
+                .accessibilityHidden(true)
+        }
     }
 
     private func unavailable(_ message: String) -> some View {
