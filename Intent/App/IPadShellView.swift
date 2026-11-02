@@ -268,6 +268,10 @@ extension IPadShellView {
             .environment(\.isIPadPaneVisible, accessible)
             .environment(\.iPadFocusPresentation, workspaceRouteInSidebar ? nil : focusPresentation)
             .environment(\.conversationBackgroundColor, workspaceRouteInSidebar ? IPadSidebarStyle.background(for: colorScheme) : nil)
+            .environment(
+                \.conversationComposerBackgroundColor,
+                workspaceRouteInSidebar ? Constants.Conversation.Design.Palette.raisedSurface(for: colorScheme) : nil
+            )
             .transformPreference(WorkspaceActionMenuInputTop.self) { inputTop in
                 if !accessible { inputTop = nil }
             }

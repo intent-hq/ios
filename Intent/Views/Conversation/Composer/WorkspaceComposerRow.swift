@@ -59,6 +59,7 @@ struct WorkspaceComposerSurface: View {
     let hasAttachments: Bool
     let isStreaming: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.conversationComposerBackgroundColor) private var backgroundColor
 
     private typealias Design = Constants.Conversation.Design
 
@@ -68,7 +69,7 @@ struct WorkspaceComposerSurface: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: isActive ? Design.Composer.activeCornerRadius : Design.cornerRadius)
-            .fill(Design.Palette.surface(for: colorScheme))
+            .fill(backgroundColor ?? Design.Palette.surface(for: colorScheme))
     }
 }
 
