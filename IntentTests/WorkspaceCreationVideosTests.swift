@@ -44,7 +44,7 @@ struct WorkspaceCreationVideosTests {
         // Fill the remaining slots with a mix; videos count against the same limit.
         let limit = Constants.Conversation.Composer.maximumImageSelectionCount
         let fill: [WorkspaceCreationImages.MediaLoader] = [{ .video(video) }, { .video(video) }]
-            + Array(repeating: { .image(imageData) }, count: limit - 4)
+            + (0..<(limit - 4)).map { _ in { .image(imageData) } as WorkspaceCreationImages.MediaLoader }
         await draft.images.addMedia(fill)?.value
         #expect(draft.images.videos.count + draft.images.images.count == limit)
         #expect(draft.images.remainingCount == 0)
