@@ -42,6 +42,7 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
             app.buttons["Workspace actions"].firstMatch.tap()
             let collapse = app.buttons["ipad.sidebar.collapse"]
             XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            capture("ipad-workspace-sidebar-menu-\(appearance)")
             collapse.tap()
             let expand = app.buttons["ipad.sidebar.expand"]
             XCTAssertTrue(expand.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))

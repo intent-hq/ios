@@ -14,7 +14,7 @@ CAPTURES = {
     "IPadWorkspaceSidebarUITests": {
         "testOpenAgentAndNoteMoveTheWorkspaceIntoTheSidebarInBothThemes": tuple(
             f"ipad-workspace-{state}-{appearance}"
-            for state in ("overview", "sidebar-agent", "sidebar-note", "sidebar-portrait", "sidebar-back")
+            for state in ("overview", "sidebar-agent", "sidebar-menu", "sidebar-note", "sidebar-portrait", "sidebar-back")
             for appearance in ("light", "dark")
         ),
     },

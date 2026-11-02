@@ -222,6 +222,7 @@ struct WorkspaceActionsMenu: View {
 
     var body: some View {
         Menu {
+            sidebarAction
             Button(action: onCreateAgent) {
                 Label { Text("Create New Agent").interFont(Constants.Typography.bodyS) } icon: { Image(.addCircle) }
             }
@@ -234,7 +235,6 @@ struct WorkspaceActionsMenu: View {
             }
             WorkspaceScriptsMenu(workspaceId: workspaceId, store: scriptStore)
             Divider()
-            sidebarAction
             if let onTransfer {
                 Button(action: onTransfer) {
                     Label { Text("Transfer workspace").interFont(Constants.Typography.bodyS) } icon: {
