@@ -9,6 +9,7 @@ struct WorkspaceChangesSection<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var iconSize = WorkspaceChangesLayout.treeIconSize
 
     var body: some View {
@@ -19,7 +20,11 @@ struct WorkspaceChangesSection<Content: View>: View {
     }
 
     private var header: some View {
-        Button { isExpanded.toggle() } label: {
+        Button {
+            withAnimation(WorkspaceFileTreeLayout.folderToggleAnimation(opening: !isExpanded, reduceMotion: reduceMotion)) {
+                isExpanded.toggle()
+            }
+        } label: {
             HStack {
                 Text(count.map { "\(title) (\($0))" } ?? title)
                     .interFont(Constants.Typography.eyebrow)
@@ -27,10 +32,11 @@ struct WorkspaceChangesSection<Content: View>: View {
                     .tracking(CreateWorkspaceRepoStyle.sectionTracking)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: CreateWorkspaceFormStyle.rowSpacing)
-                Image(isExpanded ? .chevronDown : .chevronRight)
+                Image(.chevronRight)
                     .resizable()
                     .scaledToFit()
                     .frame(width: iconSize, height: iconSize)
+                    .rotationEffect(.radians(isExpanded ? .pi / 2 : 0))
                     .accessibilityHidden(true)
             }
             .foregroundStyle(CreateWorkspaceRepoStyle.sectionForeground(for: colorScheme, contrast: contrast))

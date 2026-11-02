@@ -358,23 +358,24 @@ private extension PullRequestDetailView {
         } else if store.files.isEmpty {
             muted("No changed files")
         } else {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                let rows = ChangeTree(files: store.files).visibleRows(collapsedPaths: collapsedDirectories)
-                ForEach(rows) { row in
-                    Group {
-                        switch row.node {
-                        case .directory:
-                            directoryRow(row)
-                        case .file(let file):
-                            fileRow(file, row: row)
+            WorkspaceFileTreeScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    let rows = ChangeTree(files: store.files).visibleRows(collapsedPaths: collapsedDirectories)
+                    ForEach(rows) { row in
+                        Group {
+                            switch row.node {
+                            case .directory:
+                                directoryRow(row)
+                            case .file(let file):
+                                fileRow(file, row: row)
+                            }
                         }
                     }
-                    .fileTreeOutdent()
                 }
-                if store.filesTruncated {
-                    muted("Showing the first \(PullRequestDetailStore.filesLimit) files. Open on GitHub for the rest.")
-                        .padding(.top, Style.rowPadding)
-                }
+            }
+            if store.filesTruncated {
+                muted("Showing the first \(PullRequestDetailStore.filesLimit) files. Open on GitHub for the rest.")
+                    .padding(.top, Style.rowPadding)
             }
         }
     }
