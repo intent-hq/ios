@@ -258,7 +258,7 @@ extension IPadShellView {
         }
             .frame(width: isEditing ? layout.focusedPanelWidth : (workspaceRouteInSidebar ? layout.sidebarPaneWidth : mainWidth))
             .frame(maxHeight: .infinity)
-            .background(IPadShellStyle.panel(for: colorScheme))
+            .background(workspaceRouteInSidebar ? IPadSidebarStyle.background(for: colorScheme) : IPadShellStyle.panel(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
             .modifier(IPadToolDropTarget(session: session, isEnabled: !workspaceRouteInSidebar))
             .modifier(IPadPaneBounds(
@@ -267,6 +267,7 @@ extension IPadShellView {
             ))
             .environment(\.isIPadPaneVisible, accessible)
             .environment(\.iPadFocusPresentation, workspaceRouteInSidebar ? nil : focusPresentation)
+            .environment(\.conversationBackgroundColor, workspaceRouteInSidebar ? IPadSidebarStyle.background(for: colorScheme) : nil)
             .transformPreference(WorkspaceActionMenuInputTop.self) { inputTop in
                 if !accessible { inputTop = nil }
             }
