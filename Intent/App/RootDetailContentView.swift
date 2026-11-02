@@ -73,20 +73,30 @@ extension RootView {
     var emptyDetailPlaceholder: some View {
         ZStack {
             WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
-
-            ContentUnavailableView {
-                Label {
-                    Text("Select a Workspace").interFont(Constants.Typography.bodyM.withFace(.semibold))
-                } icon: {
-                    Image(.collapseLeft)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: emptyStateIconSize, height: emptyStateIconSize)
-                }
-            } description: {
-                Text("Choose a workspace from the sidebar to see its agents and notes.")
-                    .interFont(Constants.Typography.bodyS)
-            }
+            WorkspaceDetailPlaceholder()
         }
+    }
+}
+
+/// Detail-pane empty state for wide layouts with no workspace selected (#908).
+struct WorkspaceDetailPlaceholder: View {
+    @ScaledMetric(relativeTo: .title) private var iconSize: CGFloat = 48
+
+    var body: some View {
+        ContentUnavailableView {
+            Label {
+                Text("Select a Workspace").interFont(Constants.Typography.bodyM.withFace(.semibold))
+            } icon: {
+                Image(.collapseLeft)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+            }
+        } description: {
+            Text("Choose a workspace from the sidebar, or create one, to see its agents and notes.")
+                .interFont(Constants.Typography.bodyS)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("workspace.detail.placeholder")
     }
 }
