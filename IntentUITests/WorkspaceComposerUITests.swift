@@ -10,6 +10,8 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         static let workspace = "Workspace agent design"
         static let agent = "Continue Spec Writer"
         static let monitor = "monitoredPr.demo-design-pr-56"
+        /// Mirrors Constants.Conversation.Composer.maximumImageSelectionCount.
+        static let imageLimit = 10
     }
 
     @MainActor
@@ -138,6 +140,47 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         remove.tap()
         XCTAssertTrue(remove.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, "Keep this draft")
+    }
+
+    /// #861: pending images keep their slots, but library videos import as
+    /// files. At the image limit Photos stays available for videos only.
+    @MainActor
+    func testPhotosOffersOnlyVideosAtTheImageLimit() {
+        let app = launch(scenario: "composer")
+        let composer = app.textViews["composer.textView"]
+        composer.tap()
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 30))
+        let colors = (0..<Fixture.imageLimit).map { UIColor(hue: CGFloat($0) / CGFloat(Fixture.imageLimit), saturation: 0.8, brightness: 0.9, alpha: 1) }
+        UIPasteboard.general.images = colors.map { color in
+            renderer.image { context in
+                color.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 40, height: 30))
+            }
+        }
+        defer { UIPasteboard.general.items = [] }
+        pasteClipboard(into: composer, in: app)
+        XCTAssertTrue(app.buttons["Remove image \(colors.count)"].waitForExistence(timeout: Fixture.timeout))
+
+        let attachment = app.buttons["composer.attachment"]
+        assertReachable(attachment, in: app)
+        attachment.tap()
+        let photos = app.buttons["Photos"]
+        XCTAssertTrue(photos.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(photos.isEnabled, "Library videos do not use image slots")
+        XCTAssertTrue(app.buttons["Files"].isEnabled)
+        let menuShot = XCTAttachment(screenshot: app.screenshot())
+        menuShot.name = "Composer attachment menu at image limit"
+        menuShot.lifetime = .keepAlways
+        add(menuShot)
+        photos.tap()
+        let cancel = app.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: Fixture.timeout), "Photos must open at the image limit")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Composer Photos offers videos at image limit"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        cancel.tap()
+        XCTAssertTrue(app.buttons["Remove image \(colors.count)"].waitForExistence(timeout: Fixture.timeout))
     }
 
     @MainActor

@@ -170,7 +170,8 @@ extension ConversationViewModelTests {
         let image = UIImage(cgImage: try #require(source.cgImage), scale: 3, orientation: .right)
         let original = try #require(image.jpegData(compressionQuality: 0.8))
         try #require(original.count > 1024 * 1024, "fixture must exercise byte reduction")
-        viewModel.pendingImages = Array(repeating: image, count: 5)
+        let limit = Constants.Conversation.Composer.maximumImageSelectionCount
+        viewModel.pendingImages = Array(repeating: image, count: limit)
         if queue { await viewModel.queueMessage("big photos") } else { await viewModel.sendMessage("big photos") }
 
         let requests = fake.paramsForMethod(queue ? "agent.queueMessage" : "agent.sendMessage")
@@ -178,15 +179,16 @@ extension ConversationViewModelTests {
         let params = try #require(requests.first)
         #expect(params["content"] as? String == "big photos")
         let blocks = try #require(params["imageBlocks"] as? [[String: Any]])
-        #expect(blocks.count == 5, "never silently omit an image to meet the budget")
+        #expect(blocks.count == limit, "never silently omit an image to meet the budget")
         let placements = fake.paramsForMethod("file.placeAttachment")
-        #expect(placements.count == (assistant ? 0 : 5))
+        #expect(placements.count == (assistant ? 0 : limit))
         #expect(blocks.allSatisfy { ($0["attachmentId"] != nil) == !assistant })
         let payloads = try (assistant ? blocks : placements).map { block in
             let encoded = try #require(block["data"] as? String)
             return try #require(Data(base64Encoded: encoded))
         }
-        #expect(payloads.reduce(0) { $0 + $1.count } <= 5 * 1024 * 1024)
+        // Each allowed image keeps a 1 MiB share of the aggregate budget.
+        #expect(payloads.reduce(0) { $0 + $1.count } <= limit * 1024 * 1024)
         for data in payloads {
             #expect(data.count <= 1024 * 1024)
             let decoded = try #require(UIImage(data: data))

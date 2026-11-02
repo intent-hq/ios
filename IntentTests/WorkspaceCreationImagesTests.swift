@@ -95,15 +95,16 @@ struct WorkspaceCreationImagesTests {
     @Test func countLimitAndOversizedInputRejectWithoutDroppingExistingImages() async throws {
         let draft = WorkspaceCreationImages()
         let data = try png()
-        let loaders: [WorkspaceCreationImages.Loader] = (0..<5).map { _ in { data } }
+        let limit = Constants.Conversation.Composer.maximumImageSelectionCount
+        let loaders: [WorkspaceCreationImages.Loader] = (0..<limit).map { _ in { data } }
         await draft.add(loaders)?.value
-        #expect(draft.images.count == 5)
+        #expect(draft.images.count == limit)
         #expect(draft.add([{ data }]) == nil)
-        #expect(draft.errorMessage?.contains("Remove") == true)
+        #expect(draft.errorMessage?.contains("up to \(limit) images or videos") == true)
         let id = try #require(draft.images.first?.id)
         draft.remove(id)
         await draft.add([{ Data(count: WorkspaceCreationImages.maximumSourceBytes + 1) }])?.value
-        #expect(draft.images.count == 4)
+        #expect(draft.images.count == limit - 1)
         #expect(draft.errorMessage?.contains("smaller") == true)
     }
 

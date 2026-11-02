@@ -15,7 +15,7 @@ enum ConversationConstants {
     }
 
     enum Composer {
-        static let maximumImageSelectionCount = 5
+        nonisolated static let maximumImageSelectionCount = 10
         static let draftSaveDebounceMilliseconds = 500
         static let imageCompressionQuality: CGFloat = 0.8
     }

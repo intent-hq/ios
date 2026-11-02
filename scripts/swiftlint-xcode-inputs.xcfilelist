@@ -667,6 +667,7 @@ $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/ComposerDraftBindingTests.swift
 $(SRCROOT)/IntentTests/ComposerFocusBindingTests.swift
+$(SRCROOT)/IntentTests/ComposerPhotoLimitTests.swift
 $(SRCROOT)/IntentTests/ComposerSkillCompletionTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
 $(SRCROOT)/IntentTests/ConnectionAdmissionRaceTests.swift

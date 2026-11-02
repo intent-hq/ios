@@ -1,4 +1,5 @@
 import Foundation
+import PhotosUI
 import UIKit
 
 extension ConversationViewModel {
@@ -199,6 +200,27 @@ extension ConversationViewModel {
     func removeImage(at index: Int) { attachmentPipeline.removeImage(at: index) }
     func loadSelectedPhotos() { attachmentPipeline.startLoadingSelectedPhotos(workspaceId: workspaceId) }
     func cancelPhotoImport() { attachmentPipeline.cancelPhotoImport() }
+
+    /// Photos image picks left before the composer reaches its image limit (#861).
+    var remainingPhotoImageCount: Int {
+        attachmentPipeline.remainingPhotoImageCount ?? Constants.Conversation.Composer.maximumImageSelectionCount
+    }
+
+    /// Library videos import as files and never use image slots, so workspace
+    /// conversations keep Photos available for videos once the images are full.
+    var photosAllowsVideos: Bool { workspaceId != Workspace.chiefWorkspaceId }
+    var isPhotosPickerEnabled: Bool { photosAllowsVideos || remainingPhotoImageCount > 0 }
+    var photoPickerFilter: PHPickerFilter {
+        guard photosAllowsVideos else { return .images }
+        return remainingPhotoImageCount > 0 ? .any(of: [.images, .videos]) : .videos
+    }
+    /// Photos interprets zero as unlimited. Mixed picks keep the full allowance;
+    /// the import rejects images beyond the remaining slots.
+    var photoPickerMaxSelectionCount: Int {
+        photosAllowsVideos
+            ? Constants.Conversation.Composer.maximumImageSelectionCount
+            : max(1, remainingPhotoImageCount)
+    }
 
     var isLoadingPhotos: Bool { attachmentPipeline.isLoadingPhotos }
 
