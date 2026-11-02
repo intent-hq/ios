@@ -77,9 +77,7 @@ struct MessageInputView: View {
             allowedContentTypes: [.item],
             allowsMultipleSelection: true
         ) { result in
-            if case .success(let urls) = result {
-                viewModel.addFiles(urls)
-            }
+            do { try viewModel.addFiles(result.get()) } catch { viewModel.reportFileImportFailure(error) }
         }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled { isFocused = false }

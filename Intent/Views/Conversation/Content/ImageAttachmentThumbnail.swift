@@ -32,6 +32,7 @@ struct ImageAttachmentThumbnail: View {
             .contextMenu {
                 ImageActionMenuItems(image: uiImage, originalData: imageData)
             }
+            .imageSaveAlert()
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage, data: imageData)

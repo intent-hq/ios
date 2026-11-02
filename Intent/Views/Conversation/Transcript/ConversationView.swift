@@ -190,6 +190,7 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The message was not sent. " + detail)
             }
+            .attachmentImportAlert(viewModel.attachmentPipeline)
     }
 }
 

@@ -227,6 +227,7 @@ extension ConversationViewModel {
     var hasPendingAttachments: Bool { attachmentPipeline.hasPendingAttachments }
 
     func addFiles(_ urls: [URL]) { attachmentPipeline.addFiles(urls) }
+    func reportFileImportFailure(_ error: Error) { attachmentPipeline.reportFileImportFailure(error) }
     func removePendingFile(at index: Int) { attachmentPipeline.removePendingFile(at: index) }
     func clearPendingFiles() { attachmentPipeline.clearPendingFiles() }
 

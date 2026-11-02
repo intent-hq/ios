@@ -89,6 +89,8 @@ enum ComposerImageRecovery {
     var fileUploadProgress: [UUID: Double] = [:]
     var imagePlacementError: String?
     var filePlacementError: String?
+    /// Picked photos or files that could not be added to the composer (#463).
+    var attachmentImportError: String?
 
     var hasPendingAttachments: Bool { !pendingImages.isEmpty || !pendingFiles.isEmpty }
     var isUploadingFiles: Bool { !fileUploadProgress.isEmpty }
