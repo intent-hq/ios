@@ -218,6 +218,7 @@ struct IntentFileImageAttachment: Attachment {
             .contextMenu {
                 ImageActionMenuItems(image: image)
             }
+            .imageSaveAlert()
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {

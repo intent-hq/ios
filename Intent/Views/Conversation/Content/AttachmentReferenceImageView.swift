@@ -70,6 +70,7 @@ struct AttachmentReferenceImageView: View {
             .contextMenu {
                 ImageActionMenuItems(image: image)
             }
+            .imageSaveAlert()
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: image)

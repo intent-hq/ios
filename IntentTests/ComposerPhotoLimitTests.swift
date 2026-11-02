@@ -88,6 +88,75 @@ extension ConversationViewModelTests {
         #expect(viewModel.imagePlacementError?.contains("up to \(limit) images") == true)
     }
 
+    /// #463: photos that fail to transfer or decode are reported, while the
+    /// readable picks in the same selection stay attached.
+    @Test func composerPhotoImportReportsFailedItemsAndKeepsSuccessfulOnes() async throws {
+        let (viewModel, _) = makeFakeBackedVM()
+        let pipeline = viewModel.attachmentPipeline
+        let data = try #require(UIImage(systemName: "star")?.pngData())
+        pipeline.loadPhotoData = { item in
+            switch item.itemIdentifier {
+            case "transfer-fails": nil
+            case "decode-fails": Data("not an image".utf8)
+            default: data
+            }
+        }
+        viewModel.selectedPhotoItems = ["ok-1", "transfer-fails", "decode-fails", "ok-2"]
+            .map { PhotosPickerItem(itemIdentifier: $0) }
+        viewModel.loadSelectedPhotos()
+        await pipeline.photoImportTask?.value
+
+        #expect(viewModel.pendingImages.count == 2)
+        #expect(pipeline.attachmentImportError == "Couldn't add some of the selected photos. Try selecting them again.")
+        #expect(viewModel.imagePlacementError == nil)
+    }
+
+    @Test func composerPhotoImportStaysSilentWhenEveryItemLoads() async throws {
+        let (viewModel, _) = makeFakeBackedVM()
+        let pipeline = viewModel.attachmentPipeline
+        let data = try #require(UIImage(systemName: "star")?.pngData())
+        pipeline.loadPhotoData = { _ in data }
+        viewModel.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "a"), PhotosPickerItem(itemIdentifier: "b")]
+        viewModel.loadSelectedPhotos()
+        await pipeline.photoImportTask?.value
+
+        #expect(viewModel.pendingImages.count == 2)
+        #expect(pipeline.attachmentImportError == nil)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func cancelledPhotoImportStaysSilent() async throws {
+        let (viewModel, _) = makeFakeBackedVM()
+        let pipeline = viewModel.attachmentPipeline
+        let (started, didStart) = AsyncStream.makeStream(of: Void.self)
+        let (gate, release) = AsyncStream.makeStream(of: Void.self)
+        defer { didStart.finish(); release.finish() }
+        pipeline.loadPhotoData = { _ in
+            didStart.yield()
+            for await _ in gate { break }
+            return nil
+        }
+        viewModel.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "in-flight")]
+        viewModel.loadSelectedPhotos()
+        let importTask = try #require(pipeline.photoImportTask)
+        for await _ in started { break }
+        viewModel.cancelPhotoImport()
+        release.yield()
+        await importTask.value
+
+        #expect(viewModel.pendingImages.isEmpty)
+        #expect(pipeline.attachmentImportError == nil)
+    }
+
+    @Test func fileImporterFailureIsReportedButCancellationIsNot() {
+        let (viewModel, _) = makeFakeBackedVM()
+        let pipeline = viewModel.attachmentPipeline
+        viewModel.reportFileImportFailure(CocoaError(.userCancelled))
+        #expect(pipeline.attachmentImportError == nil)
+
+        viewModel.reportFileImportFailure(CocoaError(.fileReadNoPermission))
+        #expect(pipeline.attachmentImportError == "Couldn't add some of the selected files. Try selecting them again.")
+    }
+
     /// Library videos import as files and never use image slots, so a full
     /// image tray keeps Photos open for videos in workspace conversations.
     @Test func composerPhotosStayAvailableForVideosAtImageLimit() async throws {

@@ -45,6 +45,7 @@ struct ImageLightboxView: View {
             }
             .padding(Constants.Conversation.ImageLightbox.actionContainerPadding)
         }
+        .imageSaveAlert()
     }
 
     private var backdrop: some View {
