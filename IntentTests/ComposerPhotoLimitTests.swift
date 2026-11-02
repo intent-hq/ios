@@ -5,8 +5,26 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// #861: the ordinary composer's Photos picks share the five-image limit.
+/// #861: the ordinary composer's Photos picks share the image limit.
 extension ConversationViewModelTests {
+    /// The limit is 10 (closer to desktop, which has no count cap); every
+    /// attachment surface derives its capacity and copy from the one constant.
+    @Test func imageLimitIsTenOnEverySurface() throws {
+        let limit = Constants.Conversation.Composer.maximumImageSelectionCount
+        #expect(limit == 10)
+        let (viewModel, _) = makeFakeBackedVM()
+        #expect(viewModel.remainingPhotoImageCount == limit)
+        let question = viewModel.questionAttachments(for: "a1")
+        #expect(question.maximumPhotoImageCount == limit)
+        #expect(question.remainingPhotoImageCount == limit)
+        let image = try #require(UIImage(systemName: "star"))
+        for _ in 0..<limit { question.addImage(image) }
+        #expect(question.remainingPhotoImageCount == 0)
+        #expect(WorkspaceCreationImages().remainingCount == limit)
+        let creationCopy = WorkspaceCreationImages.ImportError.tooMany.localizedDescription
+        #expect(creationCopy.contains("up to \(limit) images or videos"))
+    }
+
     @Test func composerPhotoImportsCountPendingImagesAcrossBatches() async throws {
         let (viewModel, _) = makeFakeBackedVM()
         let pipeline = viewModel.attachmentPipeline

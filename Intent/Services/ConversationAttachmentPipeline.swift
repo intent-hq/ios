@@ -27,7 +27,8 @@ enum ComposerImageRecovery {
     // Conservative client budgets leave room for base64 and provider context;
     // they are not a guarantee against any provider's total request limit.
     private static let maxOutgoingImageBytes = 1024 * 1024
-    private static let maxOutgoingImagesBytes = 5 * 1024 * 1024
+    // Scale the aggregate with the selection limit so every allowed image keeps its 1 MiB share.
+    private static let maxOutgoingImagesBytes = Constants.Conversation.Composer.maximumImageSelectionCount * maxOutgoingImageBytes
     private static let maxOutgoingPixelSize: CGFloat = 2048
     private static let maximumResizePasses = 3
     private static let compressionQualities: [CGFloat] = [Constants.Conversation.Composer.imageCompressionQuality, 0.6, 0.4]
