@@ -140,7 +140,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         closeFocus.tap()
         XCTAssertTrue(rail.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)
-        app.buttons["ipad.sidebar.collapse"].tap()
+        app.hideWorkspaceSidebar()
         XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad collapsed conversation with draft")

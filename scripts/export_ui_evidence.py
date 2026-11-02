@@ -11,6 +11,13 @@ import tempfile
 
 
 CAPTURES = {
+    "IPadWorkspaceSidebarUITests": {
+        "testOpenAgentAndNoteMoveTheWorkspaceIntoTheSidebarInBothThemes": tuple(
+            f"ipad-workspace-{state}-{appearance}"
+            for state in ("overview", "sidebar-agent", "sidebar-menu", "sidebar-note", "sidebar-portrait", "sidebar-back")
+            for appearance in ("light", "dark")
+        ),
+    },
     "SkillAutocompleteUITests": {
         "testSkillSuggestionsFilterInsertAndSendInBothThemes": tuple(
             f"skill-{state}-{appearance}"
@@ -288,6 +295,9 @@ CAPTURES = {
         ),
     },
     "WorkspaceTitleEditingUITests": {
+        "testSidebarFailedSaveKeepsErrorBelowDraftInBothThemes": (
+            "Sidebar title save error light", "Sidebar title save error dark",
+        ),
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",
         ),
