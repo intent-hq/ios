@@ -122,6 +122,18 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
     }
 
+    /// ios#731: VoiceOver names each field by its visible label, never by its example placeholder.
+    @MainActor
+    func testFieldsUseVisibleLabelsAsAccessibilityNames() throws {
+        let app = try launchManual()
+        XCTAssertEqual(app.textFields["manual.host"].label, "Host / Tailcat Address")
+        XCTAssertEqual(app.textFields["manual.port"].label, "Port")
+        XCTAssertEqual(app.secureTextFields["manual.token"].label, "API Token")
+        try app.performAccessibilityAudit(for: .sufficientElementDescription)
+        app.buttons["connection-sheet.close"].tap()
+        XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
+    }
+
     @MainActor
     func testIncompleteFormAndInvalidPortRemainEditable() throws {
         let app = try launchManual()
@@ -136,7 +148,9 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         // Existing semantics only gate host/token; malformed port is a submit error.
         XCTAssertTrue(app.buttons["manual.connect"].isEnabled)
         app.buttons["manual.connect"].tap()
-        XCTAssertTrue(app.staticTexts["Invalid port number"].waitForExistence(timeout: Self.timeout))
+        let error = app.staticTexts["manual.error"]
+        XCTAssertTrue(error.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(error.label, "Invalid port number")
         XCTAssertTrue(app.textFields["manual.host"].isEnabled)
         XCTAssertTrue(app.secureTextFields["manual.token"].isEnabled)
         capture(app, named: "invalid-port")
