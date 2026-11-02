@@ -50,6 +50,9 @@ extension ConversationAttachmentPipeline {
             guard !Task.isCancelled else { return }
             let items = selectedPhotoItems
             selectedPhotoItems.removeAll()
+            // A new pick replaces any earlier import warning; the question
+            // tray shows it inline with no dismissal to clear it.
+            attachmentImportError = nil
             let imageCount = items.filter { !photoVideos.isVideo($0) }.count
             // Videos never use image slots. A batch with too many images keeps
             // its videos but rejects all of its images, with the limit alert.

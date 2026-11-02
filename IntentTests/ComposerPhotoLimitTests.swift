@@ -111,6 +111,27 @@ extension ConversationViewModelTests {
         #expect(viewModel.imagePlacementError == nil)
     }
 
+    /// The question tray shows the import error inline with no dismissal,
+    /// so a successful retry must clear it.
+    @Test func questionPhotoRetryClearsEarlierImportError() async throws {
+        let (viewModel, _) = makeFakeBackedVM()
+        let attachments = viewModel.questionAttachments(for: "a1")
+        let data = try #require(UIImage(systemName: "star")?.pngData())
+        var fails = true
+        attachments.loadPhotoData = { _ in fails ? nil : data }
+        attachments.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "first")]
+        attachments.startLoadingSelectedPhotos(workspaceId: viewModel.workspaceId)
+        await attachments.photoImportTask?.value
+        #expect(attachments.attachmentImportError != nil)
+
+        fails = false
+        attachments.selectedPhotoItems = [PhotosPickerItem(itemIdentifier: "retry")]
+        attachments.startLoadingSelectedPhotos(workspaceId: viewModel.workspaceId)
+        await attachments.photoImportTask?.value
+        #expect(attachments.pendingImages.count == 1)
+        #expect(attachments.attachmentImportError == nil)
+    }
+
     @Test func composerPhotoImportStaysSilentWhenEveryItemLoads() async throws {
         let (viewModel, _) = makeFakeBackedVM()
         let pipeline = viewModel.attachmentPipeline
