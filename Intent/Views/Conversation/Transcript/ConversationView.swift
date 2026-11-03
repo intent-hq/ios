@@ -260,6 +260,7 @@ private extension ConversationViewContent {
                     WorkspaceConversationHeader(
                         title: viewModel.agentName,
                         showsBackground: !viewModel.showsLoadingState && (!isNamedBySidebar || usesMiniHeader),
+                        bottomPadding: usesMiniHeader ? Constants.Conversation.Design.IPad.miniHeaderBottomInset : nil,
                         showsContextualActions: !usesVerticalNavigation,
                         showsTitle: !isNamedBySidebar,
                         assistantStore: assistantStore,
