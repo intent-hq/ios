@@ -7,6 +7,27 @@ nonisolated struct MobileTerminal: Codable, Equatable, Identifiable, Sendable {
     let name: String
 }
 
+/// The program running in a terminal, from the daemon's `foregroundProcess` and
+/// `lastProcess` fields. Nil when the terminal has only ever run its shell.
+nonisolated struct MobileTerminalProcess: Equatable, Sendable {
+    let foreground: String?
+    let last: String?
+
+    init?(_ data: [String: Any]) {
+        foreground = Self.name(data["foregroundProcess"])
+        last = Self.name(data["lastProcess"])
+        if foreground == nil, last == nil { return nil }
+    }
+
+    var title: String? { foreground ?? last }
+    var hasExited: Bool { foreground == nil && last != nil }
+
+    private static func name(_ value: Any?) -> String? {
+        guard let name = value as? String, !name.isEmpty else { return nil }
+        return name
+    }
+}
+
 enum MobileTerminalError: LocalizedError {
     case disconnected
     case invalidResponse

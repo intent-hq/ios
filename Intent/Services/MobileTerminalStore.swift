@@ -12,6 +12,8 @@ final class MobileTerminalStore {
     /// Errors are keyed by workspace so a background refresh of one workspace
     /// never surfaces on another workspace's screen.
     private(set) var errors: [String: String] = [:]
+    /// Running programs by terminal id; not persisted, refreshed from `terminal.list`.
+    private(set) var processes: [String: MobileTerminalProcess] = [:]
 
     @ObservationIgnored let connection: ConnectionManagerRouting
     @ObservationIgnored private let persistence: MobileTerminalPersistence
@@ -22,6 +24,7 @@ final class MobileTerminalStore {
     @ObservationIgnored private var verifiedIds: Set<String> = []
     @ObservationIgnored private var revisions: [String: Int] = [:]
     @ObservationIgnored private var observedWorkspaces: Set<String> = []
+    @ObservationIgnored private var processEvents = 0
 
     init(connection: ConnectionManagerRouting, persistence: MobileTerminalPersistence) {
         self.connection = connection
@@ -48,6 +51,15 @@ final class MobileTerminalStore {
 
     func isActive(_ terminal: MobileTerminal) -> Bool {
         terminals.contains(terminal) && verifiedIds.contains(terminal.id)
+    }
+
+    /// The running program, else the last program, else the terminal's own name.
+    func title(for terminal: MobileTerminal) -> String {
+        processes[terminal.id]?.title ?? terminal.name
+    }
+
+    func hasExitedProcess(_ terminal: MobileTerminal) -> Bool {
+        processes[terminal.id]?.hasExited == true
     }
 
     func errorMessage(workspaceId: String) -> String? { errors[workspaceId] }
@@ -147,6 +159,7 @@ final class MobileTerminalStore {
         let generation = connectionGeneration
         try checkConnection(generation)
         let revision = revisions[workspaceId, default: 0]
+        let processRevision = processEvents
         let response = try await connection.request("terminal.list", params: ["workspaceId": workspaceId])
         try checkConnection(generation)
         guard let result = response as? [String: Any],
@@ -155,10 +168,18 @@ final class MobileTerminalStore {
             throw MobileTerminalError.invalidResponse
         }
         let liveIds = Set(rows.compactMap { $0["id"] as? String })
+        // An event that arrived during the request is newer than this list.
+        if processEvents == processRevision {
+            for row in rows {
+                guard let id = row["id"] as? String, terminals.contains(where: { $0.id == id }) else { continue }
+                processes[id] = MobileTerminalProcess(row)
+            }
+        }
         if revisions[workspaceId, default: 0] == revision {
             terminals.removeAll { terminal in
                 terminal.workspaceId == workspaceId && (terminal.daemonBootId != bootId || !liveIds.contains(terminal.id))
             }
+            processes = processes.filter { id, _ in terminals.contains { $0.id == id } }
             verifiedIds.formUnion(terminals.filter { $0.workspaceId == workspaceId }.map(\.id))
             persistence.save(terminals)
         }
@@ -175,7 +196,7 @@ final class MobileTerminalStore {
         }
         let task = Task { @MainActor in
             let response = try await self.connection.request("events.subscribe", params: [
-                "eventTypes": ["terminal:exit"], "replaceGroup": "ios-mobile-terminals"
+                "eventTypes": ["terminal:exit", "terminal:process"], "replaceGroup": "ios-mobile-terminals"
             ])
             try self.checkConnection(generation)
             guard let result = response as? [String: Any],
@@ -206,18 +227,26 @@ final class MobileTerminalStore {
     private func handleEvent(_ method: String, params: Any) {
         guard method == "events.event", let envelope = params as? [String: Any],
               let event = envelope["event"] as? [String: Any],
-              event["type"] as? String == "terminal:exit",
               let data = event["data"] as? [String: Any],
               let id = data["terminalId"] as? String,
               let terminal = terminals.first(where: { terminal in
                   terminal.id == id && terminal.workspaceId == event["workspaceId"] as? String
               }) else { return }
-        remove(terminal)
+        switch event["type"] as? String {
+        case "terminal:exit":
+            remove(terminal)
+        case "terminal:process":
+            processEvents += 1
+            processes[id] = MobileTerminalProcess(data)
+        default:
+            break
+        }
     }
 
     private func remove(_ terminal: MobileTerminal) {
         terminals.removeAll { $0 == terminal }
         verifiedIds.remove(terminal.id)
+        processes[terminal.id] = nil
         changed(terminal.workspaceId)
     }
 

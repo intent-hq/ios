@@ -190,6 +190,52 @@ struct MobileTerminalStoreTests {
         #expect(fixture.store.activeTerminals(workspaceId: "workspace").contains(terminal))
     }
 
+    @Test func titleFollowsTheRunningThenLastProgramThenTheTerminalName() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        #expect(fixture.store.title(for: terminal) == "Terminal 1")
+
+        fixture.list(ids: [terminal.id], fields: ["foregroundProcess": "claude", "lastProcess": "npm"])
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.title(for: terminal) == "claude")
+        #expect(!fixture.store.hasExitedProcess(terminal))
+
+        fixture.list(ids: [terminal.id], fields: ["foregroundProcess": NSNull(), "lastProcess": "claude"])
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.title(for: terminal) == "claude")
+        #expect(fixture.store.hasExitedProcess(terminal))
+    }
+
+    @Test func processEventsRenameTheTerminalAndSubscribeAlongsideExit() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        let subscribe = try #require(fixture.fake.paramsForMethod("events.subscribe").first)
+        #expect(subscribe["eventTypes"] as? [String] == ["terminal:exit", "terminal:process"])
+
+        fixture.processEvent(id: terminal.id, foreground: "vim", last: nil)
+        #expect(fixture.store.title(for: terminal) == "vim")
+        fixture.processEvent(id: terminal.id, foreground: nil, last: "vim")
+        #expect(fixture.store.title(for: terminal) == "vim")
+        #expect(fixture.store.hasExitedProcess(terminal))
+        fixture.processEvent(id: terminal.id, foreground: "top", last: nil, workspaceId: "other")
+        #expect(fixture.store.title(for: terminal) == "vim")
+    }
+
+    @Test func aListStartedBeforeAProcessEventDoesNotOverwriteIt() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.fake.pendingMethods.insert("terminal.list")
+        let refresh = Task { await fixture.store.refresh(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("terminal.list")
+        fixture.processEvent(id: terminal.id, foreground: "make", last: nil)
+        fixture.fake.resolvePending("terminal.list", with: [
+            "daemonBootId": "boot",
+            "terminals": [["id": terminal.id, "name": "Terminal", "foregroundProcess": NSNull(), "lastProcess": NSNull()]]
+        ])
+        await refresh.value
+        #expect(fixture.store.title(for: terminal) == "make")
+    }
+
     @Test func persistenceIsScopedToTheBackend() async throws {
         let fixture = try MobileTerminalFixture()
         _ = try await fixture.create()
@@ -228,11 +274,27 @@ struct MobileTerminalFixture {
         return terminal
     }
 
-    func list(ids: [String], bootId: String = "boot") {
+    func list(ids: [String], bootId: String = "boot", fields: [String: Any] = [:]) {
         fake.responseMap["terminal.list"] = [
             "daemonBootId": bootId,
-            "terminals": ids.map { ["id": $0, "name": "Terminal", "isExecutingCommand": true] }
+            "terminals": ids.map { id in
+                (["id": id, "name": "Terminal", "isExecutingCommand": true] as [String: Any]).merging(fields) { _, new in new }
+            }
         ]
+    }
+
+    func processEvent(id: String, foreground: String?, last: String?, workspaceId: String = "workspace") {
+        fake.deliverEvent(method: "events.event", params: [
+            "subscriptionId": "mobile-sub",
+            "event": [
+                "type": "terminal:process", "workspaceId": workspaceId,
+                "data": [
+                    "terminalId": id,
+                    "foregroundProcess": foreground as Any? ?? NSNull(),
+                    "lastProcess": last as Any? ?? NSNull()
+                ]
+            ]
+        ])
     }
 
     func event(type: String, id: String = "mobile", data: Data = Data(), subscriptionId: String = "mobile-sub") {
