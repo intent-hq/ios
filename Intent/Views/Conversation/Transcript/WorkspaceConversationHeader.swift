@@ -73,6 +73,7 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 struct WorkspaceConversationHeader<Actions: View>: View {
     let title: String
     var showsBackground = true
+    var bottomPadding: CGFloat?
     var showsContextualActions = true
     /// The sidebar names the open agent while its workspace sits there, so the header drops its title.
     var showsTitle = true
@@ -86,6 +87,7 @@ struct WorkspaceConversationHeader<Actions: View>: View {
             AssistantConversationHeader(
                 title: title,
                 showsBackground: showsBackground,
+                bottomPadding: bottomPadding,
                 canCreateConversation: !assistantStore.isCreating && assistantStore.hasLoaded,
                 onNewConversation: {
                     Task {
@@ -103,6 +105,7 @@ struct WorkspaceConversationHeader<Actions: View>: View {
                 backLabel: "Back",
                 backIdentifier: "conversation.back",
                 showsBackground: showsBackground,
+                bottomPadding: bottomPadding,
                 showsTitle: showsTitle,
                 usesConversationLayout: true,
                 showsContextualActions: showsContextualActions,
@@ -117,6 +120,7 @@ struct WorkspaceConversationHeader<Actions: View>: View {
 struct AssistantConversationHeader<Actions: View>: View {
     let title: String
     var showsBackground = true
+    var bottomPadding: CGFloat?
     let canCreateConversation: Bool
     let onNewConversation: () -> Void
     @ViewBuilder let actions: () -> Actions
@@ -131,6 +135,7 @@ struct AssistantConversationHeader<Actions: View>: View {
             leadingIcon: .displayEdit,
             isLeadingActionEnabled: canCreateConversation,
             showsBackground: showsBackground,
+            bottomPadding: bottomPadding,
             showsTitle: presentation != .iPad || title != "Assistant",
             usesConversationLayout: true,
             onBack: presentation == .iPad ? nil : onNewConversation,
@@ -164,6 +169,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var leadingIcon: ImageResource = .arrowLeft
     var isLeadingActionEnabled = true
     var showsBackground = true
+    var bottomPadding: CGFloat?
     var showsTitle = true
     var showsWorkspacePlaceholder = false
     var workspaceCreatedAt: String?
@@ -259,7 +265,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         .foregroundStyle(Design.Palette.foreground(for: colorScheme))
         .padding(.horizontal, Design.horizontalInset)
         .padding(.top, usesIPadDesign ? Design.IPad.headerTopInset : Design.Header.verticalPadding)
-        .padding(.bottom, usesIPadDesign ? Design.IPad.headerBottomInset : Design.Header.verticalPadding)
+        .padding(.bottom, bottomPadding ?? (usesIPadDesign ? Design.IPad.headerBottomInset : Design.Header.verticalPadding))
     }
 
     @ViewBuilder private var headerCopy: some View {

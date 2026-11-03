@@ -24,6 +24,7 @@ extension Constants.Conversation.Design {
         static let horizontalInset: CGFloat = 24
         static let headerTopInset = IPadShellLayout.headerInset
         static let headerBottomInset: CGFloat = 24
+        static let miniHeaderBottomInset: CGFloat = 16
         static let composerBottomInset: CGFloat = 24
         static let transcriptRowSpacing: CGFloat = 36
     }
