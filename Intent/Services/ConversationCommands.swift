@@ -280,9 +280,10 @@ extension ConversationCommands {
     /// whole-queue). Malformed envelopes preserve existing rows; a valid empty
     /// array clears them. Later acknowledged changes and processing removals
     /// fold in without discarding unrelated seed rows. The page token is a
-    /// queue position, so a walk overtaken by a queue event, local mutation,
-    /// reset or newer read stops before its next page; any re-read starts
-    /// from the first page.
+    /// queue position, so a walk overtaken by a queue event, processing
+    /// removal, local mutation, reset or newer read stops before its next
+    /// page without publishing; the daemon's following `agent:queue:updated`
+    /// carries the whole queue, and any re-read starts from the first page.
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
         let readGeneration = queueReadGeneration
@@ -298,7 +299,8 @@ extension ConversationCommands {
                 if params["nextToken"] != nil {
                     guard !Task.isCancelled, generation == resetGeneration,
                           readGeneration == queueReadGeneration else { throw CancellationError() }
-                    guard read.revision == queueRevision else { throw QueueReadSuperseded() }
+                    // Drains and local edits shift positions too, even when they fold into this read.
+                    guard read.revision == queueRevision, read.mutations.isEmpty else { throw QueueReadSuperseded() }
                 }
                 return try await connectionManager.request("agent.getQueue", params: params)
             }

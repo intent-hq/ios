@@ -112,6 +112,29 @@ struct ConversationQueuePagingTests {
         #expect(fake.paramsForMethod("agent.getQueue").count == 1, "Positions shifted, so the walk must not read on")
     }
 
+    /// A drain or acknowledged local change between pages shifts positions,
+    /// so the next page could skip an entry: the walk stops without publishing.
+    @Test(arguments: ["processing", "local"])
+    func queueChangeBetweenPagesStopsTheWalk(change: String) async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        store.queuedMessages = Self.previous
+        fake.pendingMethods.insert("agent.getQueue")
+        let read = Task { await store.fetchQueue(agentId: "agent-1") }
+        try await fake.waitForPendingRequests("agent.getQueue")
+
+        if change == "processing" {
+            store.commands.removeProcessingMessage("q-1")
+        } else {
+            store.commands.confirmQueueMutation(.remove("q-1"), generation: store.commands.queueMutations.generation)
+        }
+        fake.resolvePending("agent.getQueue", with: Self.page(Self.entries(1...200), next: "t1"))
+        await read.value
+
+        #expect(fake.paramsForMethod("agent.getQueue").count == 1, "Positions shifted, so the walk must not read on")
+        #expect(store.queuedMessages.map(\.id) == ["q-old"], "A cut-short walk is never published")
+    }
+
     @Test func unreadableQueueEventRereadsFromTheFirstPage() async throws {
         let (store, fake) = await liveStore()
         fake.pendingMethods.insert("agent.getQueue")
