@@ -16,6 +16,7 @@ struct WorkspaceComposerRow: View {
     let onStop: () -> Void
     let onPhotos: () -> Void
     let onFiles: () -> Void
+    var photosEnabled = true
     var onPasteImages: (() -> Void)?
     var skillCompletion: ComposerSkillCompletion?
 
@@ -29,7 +30,7 @@ struct WorkspaceComposerRow: View {
     var body: some View {
         HStack(spacing: Layout.controlSpacing - controlInset) {
             WorkspaceComposerEditor(text: $text, isFocused: $isFocused, onSend: onSend, onPasteImages: onPasteImages, skillCompletion: skillCompletion)
-            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles)
+            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles, photosEnabled: photosEnabled)
             if hasDraft {
                 WorkspaceComposerAction(isStop: false, action: onSend)
                     .disabled(!canSend)

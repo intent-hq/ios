@@ -65,7 +65,8 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
         HStack(alignment: .firstTextBaseline, spacing: CreateWorkspaceFormStyle.rowSpacing) {
             Text(name)
                 .font(.system(size: nameSize, weight: .medium, design: .monospaced))
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             if let lineStats {
                 Spacer(minLength: 0)
                 WorkspaceChangeStats(additions: lineStats.additions, deletions: lineStats.deletions)
@@ -83,8 +84,6 @@ enum WorkspaceFileTreeLayout {
     static let rowVerticalPadding: CGFloat = 7
     static let fileIconSize: CGFloat = 13
     static let nameSize: CGFloat = 14
-    /// Trees sit closer to the screen edge than page text to fit deeper nesting.
-    static let leadingOutdent: CGFloat = 12
 
     static let folderOpenDuration = 0.25
     /// Closing runs a little faster than opening so collapsing feels immediate.
@@ -117,11 +116,25 @@ enum WorkspaceFileTreeLayout {
     }
 }
 
-extension View {
-    func fileTreeOutdent() -> some View {
-        padding(.leading, -WorkspaceFileTreeLayout.leadingOutdent)
-    }
+struct WorkspaceFileTreeScrollView<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+    @State private var viewportWidth: CGFloat = 0
 
+    var body: some View {
+        ScrollView(.horizontal) {
+            content()
+                .fixedSize(horizontal: true, vertical: false)
+                .frame(minWidth: viewportWidth, alignment: .leading)
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            geometry.size.width
+        } action: { width in
+            viewportWidth = width
+        }
+    }
+}
+
+extension View {
     /// Draws a vertical guide under each ancestor folder's icon. Rows stack
     /// without spacing, so the guides join into one line per open folder;
     /// the folder's own label starts the line just below its icon.

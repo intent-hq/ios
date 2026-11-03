@@ -91,6 +91,7 @@ struct WorkspaceStatusImageView: View {
             .contextMenu {
                 ImageActionMenuItems(image: image)
             }
+            .imageSaveAlert()
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: image)
             }

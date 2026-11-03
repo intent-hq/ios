@@ -27,7 +27,8 @@ enum ComposerImageRecovery {
     // Conservative client budgets leave room for base64 and provider context;
     // they are not a guarantee against any provider's total request limit.
     private static let maxOutgoingImageBytes = 1024 * 1024
-    private static let maxOutgoingImagesBytes = 5 * 1024 * 1024
+    // Scale the aggregate with the selection limit so every allowed image keeps its 1 MiB share.
+    private static let maxOutgoingImagesBytes = Constants.Conversation.Composer.maximumImageSelectionCount * maxOutgoingImageBytes
     private static let maxOutgoingPixelSize: CGFloat = 2048
     private static let maximumResizePasses = 3
     private static let compressionQualities: [CGFloat] = [Constants.Conversation.Composer.imageCompressionQuality, 0.6, 0.4]
@@ -81,13 +82,15 @@ enum ComposerImageRecovery {
     @ObservationIgnored var photoImportTask: Task<Void, Never>?
     /// Loads one picked photo's bytes. A seam so tests can hold an import in
     /// flight; production reads the item's transferable data.
-    @ObservationIgnored var loadPhotoData: (PhotosPickerItem) async -> Data? = { item in
-        try? await item.loadTransferable(type: Data.self)
-    }
+    @ObservationIgnored var loadPhotoData: (PhotosPickerItem) async -> Data? = { try? await $0.loadTransferable(type: Data.self) }
+    /// A seam so tests can pick library videos, which import as files.
+    @ObservationIgnored var photoVideos = PhotoLibraryVideos.live
     var pendingFiles: [PendingFile] = []
     var fileUploadProgress: [UUID: Double] = [:]
     var imagePlacementError: String?
     var filePlacementError: String?
+    /// Picked photos or files that could not be added to the composer (#463).
+    var attachmentImportError: String?
 
     var hasPendingAttachments: Bool { !pendingImages.isEmpty || !pendingFiles.isEmpty }
     var isUploadingFiles: Bool { !fileUploadProgress.isEmpty }

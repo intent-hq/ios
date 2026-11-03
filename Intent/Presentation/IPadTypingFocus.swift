@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Input focus controls the retained iPad pane independently of keyboard visibility.
 struct IPadTypingFocus: ViewModifier {
@@ -76,21 +77,66 @@ struct IPadTypingFocusRow<Content: View>: View {
 /// Hides only navigation chrome while the existing conversation fills its focus panel.
 struct ConversationFocusHeaderInset<Header: View>: ViewModifier {
     let isEnabled: Bool
-    /// Untitled controls float over the content instead of reserving a header band.
     var floats = false
-    @ViewBuilder let header: Header
+    @ViewBuilder let header: (Bool) -> Header
     @Environment(\.iPadFocusPresentation) private var iPadFocusPresentation
+    @State private var usesMiniHeader = false
 
     private var showsHeader: Bool { isEnabled && iPadFocusPresentation?.wrappedValue != .conversationEditing }
+    private var floatsOverContent: Bool { floats && !usesMiniHeader }
 
-    // Both placements stay attached so switching between them keeps the content's identity and scroll.
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .top, spacing: 0) {
-                if showsHeader, !floats { header }
+                if showsHeader, !floatsOverContent { header(usesMiniHeader) }
             }
             .overlay(alignment: .top) {
-                if showsHeader, floats { header }
+                if showsHeader, floatsOverContent { header(usesMiniHeader) }
+            }
+            .background {
+                #if os(iOS)
+                ConversationHeaderScreenReader { usesMiniHeader = $0 }
+                    .frame(width: 0, height: 0)
+                #endif
             }
     }
 }
+
+enum ConversationHeaderLayout {
+    static func usesMiniHeader(isPad: Bool, screenSize: CGSize) -> Bool {
+        let shortSide = min(screenSize.width, screenSize.height)
+        return isPad && shortSide > 0 && shortSide < IPadShellLayout.tightRailShortSide
+    }
+}
+
+#if os(iOS)
+private struct ConversationHeaderScreenReader: UIViewRepresentable {
+    let onResolve: (Bool) -> Void
+
+    func makeUIView(context _: Context) -> ReaderView {
+        let view = ReaderView()
+        view.isUserInteractionEnabled = false
+        view.onResolve = onResolve
+        return view
+    }
+
+    func updateUIView(_ view: ReaderView, context _: Context) {
+        view.onResolve = onResolve
+    }
+
+    final class ReaderView: UIView {
+        var onResolve: ((Bool) -> Void)?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard let scene = window?.windowScene, let onResolve else { return }
+            let screen = scene.screen
+            let usesMiniHeader = ConversationHeaderLayout.usesMiniHeader(
+                isPad: traitCollection.userInterfaceIdiom == .pad,
+                screenSize: CGSize(width: screen.nativeBounds.width / screen.scale, height: screen.nativeBounds.height / screen.scale)
+            )
+            DispatchQueue.main.async { onResolve(usesMiniHeader) }
+        }
+    }
+}
+#endif

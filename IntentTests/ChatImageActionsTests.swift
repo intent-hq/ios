@@ -1,4 +1,5 @@
 import Foundation
+import Photos
 import Testing
 import UIKit
 
@@ -66,5 +67,68 @@ struct ChatImageActionsTests {
         let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
 
         #expect(ContentBlockView.decodeImageData(block) == nil)
+    }
+
+    // MARK: - Save outcomes (#463)
+
+    private struct WriteFailure: Error {}
+
+    private static func saveOutcome(
+        status: PHAuthorizationStatus,
+        writeFails: Bool = false
+    ) async -> (outcome: ChatImageSaveOutcome, wrote: Bool) {
+        var wrote = false
+        let outcome = await ChatImageSaver.save(
+            UIImage(),
+            requestAuthorization: { status },
+            write: { _ in
+                wrote = true
+                if writeFails { throw WriteFailure() }
+            }
+        )
+        return (outcome, wrote)
+    }
+
+    @Test func saveSucceedsWithFullOrLimitedAccess() async {
+        for status in [PHAuthorizationStatus.authorized, .limited] {
+            let result = await Self.saveOutcome(status: status)
+            #expect(result.outcome == .saved)
+            #expect(result.wrote)
+            #expect(result.outcome.failureMessage == nil)
+        }
+    }
+
+    @Test func saveReportsDenialWithoutWriting() async {
+        for status in [PHAuthorizationStatus.denied, .restricted] {
+            let result = await Self.saveOutcome(status: status)
+            #expect(result.outcome == .denied)
+            #expect(!result.wrote)
+            #expect(result.outcome.failureMessage == "Allow Intent to add photos in Settings to save this image.")
+        }
+    }
+
+    @Test func saveReportsWriteFailure() async {
+        let result = await Self.saveOutcome(status: .authorized, writeFails: true)
+        #expect(result.outcome == .failed)
+        #expect(result.outcome.failureMessage == "Couldn't save this image. Try again.")
+    }
+
+    @Test func saveAlertShowsFailureAndClearsOnSuccessfulRetry() async {
+        let model = ImageSaveAlertModel()
+        var outcome = ChatImageSaveOutcome.failed
+        model.saveImage = { _ in outcome }
+        let image = UIImage()
+
+        await model.save(image)
+        #expect(model.failure?.outcome == .failed)
+        #expect(model.failure?.image === image, "retry needs the same image")
+
+        outcome = .saved
+        await model.save(image)
+        #expect(model.failure == nil)
+
+        outcome = .denied
+        await model.save(image)
+        #expect(model.failure?.outcome == .denied)
     }
 }

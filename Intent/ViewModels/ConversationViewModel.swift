@@ -156,7 +156,10 @@ import SwiftUI
         self.hookStore = BackgroundHookStore(connectionManager: connection, source: hooks)
         self.monitoredPrStore = MonitoredPrStore(connectionManager: connection, source: monitors)
         self.scriptMonitorsStore = scriptMonitors ?? WorkspaceScriptMonitorsStore(connection: connection)
-        self.attachmentPipeline = ConversationAttachmentPipeline(uploadService: uploadService)
+        self.attachmentPipeline = ConversationAttachmentPipeline(
+            uploadService: uploadService,
+            maximumPhotoImageCount: Constants.Conversation.Composer.maximumImageSelectionCount
+        )
         self.messageText = PersistenceManager.shared.loadDraft(
             workspaceId: workspaceId,
             agentId: agentId
