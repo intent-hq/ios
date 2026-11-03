@@ -5,6 +5,23 @@ import Testing
 
 @MainActor
 struct IPadCompactNavigationTests {
+    @Test func miniChatHeaderRequiresASmallIPadDisplay() {
+        for size in [CGSize(width: 744, height: 1133), CGSize(width: 768, height: 1024)] {
+            for screen in [size, CGSize(width: size.height, height: size.width)] {
+                #expect(ConversationHeaderLayout.usesMiniHeader(isPad: true, screenSize: screen))
+                #expect(!ConversationHeaderLayout.usesMiniHeader(isPad: false, screenSize: screen))
+            }
+        }
+        let largerDisplays = [
+            CGSize(width: 800, height: 1200), CGSize(width: 810, height: 1080), CGSize(width: 820, height: 1180),
+            CGSize(width: 834, height: 1194), CGSize(width: 1024, height: 1366)
+        ]
+        for size in [.zero] + largerDisplays {
+            #expect(!ConversationHeaderLayout.usesMiniHeader(isPad: true, screenSize: size))
+            #expect(!ConversationHeaderLayout.usesMiniHeader(isPad: true, screenSize: CGSize(width: size.height, height: size.width)))
+        }
+    }
+
     @Test func sharedShellRequiresAnIPadOrExpandedDuo() {
         for sizeClass: UserInterfaceSizeClass? in [nil, .compact, .regular] {
             #expect(IPadShellLayout.usesShell(isPad: true, hasVerticalBar: false, sizeClass: sizeClass))
