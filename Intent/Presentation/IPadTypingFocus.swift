@@ -94,8 +94,10 @@ struct ConversationFocusHeaderInset<Header: View>: ViewModifier {
                 if showsHeader, floatsOverContent { header(usesMiniHeader) }
             }
             .background {
+                #if os(iOS)
                 ConversationHeaderScreenReader { usesMiniHeader = $0 }
                     .frame(width: 0, height: 0)
+                #endif
             }
     }
 }
@@ -107,6 +109,7 @@ enum ConversationHeaderLayout {
     }
 }
 
+#if os(iOS)
 private struct ConversationHeaderScreenReader: UIViewRepresentable {
     let onResolve: (Bool) -> Void
 
@@ -136,3 +139,4 @@ private struct ConversationHeaderScreenReader: UIViewRepresentable {
         }
     }
 }
+#endif
