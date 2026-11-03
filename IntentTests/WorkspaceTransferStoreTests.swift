@@ -89,12 +89,18 @@ struct WorkspaceTransferStoreTests {
         #expect(fixture.store.progress == 1)
     }
 
-    @Test(arguments: ["version", "collision", "guest", "identity", "list", "certificate"])
+    @Test(arguments: ["version", "collision", "pagedCollision", "guest", "identity", "list", "certificate"])
     func failedPreflightNeverStopsSource(reason: String) async {
         let fixture = WorkspaceTransferFixture()
         switch reason {
         case "version": fixture.target.responseMap["system.status"] = ["version": "older"]
         case "collision": fixture.target.responseMap["workspace.list"] = ["workspaces": [["id": "workspace", "status": "archived"]]]
+        case "pagedCollision":
+            // Bounded reads: the duplicate sits on the second page.
+            fixture.target.responseQueueMap["workspace.list"] = [
+                ["workspaces": [["id": "other"]], "nextToken": "t1"],
+                ["workspaces": [["id": "workspace", "status": "archived"]], "nextToken": NSNull()]
+            ]
         case "guest": fixture.target.responseMap["principal.me"] = ["id": "test-owner", "isAdministrator": false]
         case "identity": fixture.destination.principal = .demoOwner
         case "list": fixture.target.responseMap["workspace.list"] = ["unexpected": true]

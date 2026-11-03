@@ -259,6 +259,7 @@ $(SRCROOT)/Intent/Services/NoteStore+Events.swift
 $(SRCROOT)/Intent/Services/NoteStore.swift
 $(SRCROOT)/Intent/Services/NoteStoreCollections.swift
 $(SRCROOT)/Intent/Services/OutgoingImagePayload.swift
+$(SRCROOT)/Intent/Services/PagedReads.swift
 $(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
 $(SRCROOT)/Intent/Services/PerMessageDeflate.swift
@@ -505,6 +506,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceTranscriptDesign.swift
 $(SRCROOT)/Intent/Views/Notes/NoteContentView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteDetailView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteListView.swift
+$(SRCROOT)/Intent/Views/Notes/NoteTruncationNotice.swift
 $(SRCROOT)/Intent/Views/Notes/TaskMetadataHeaderView.swift
 $(SRCROOT)/Intent/Views/Notes/WorkspaceNoteIcon.swift
 $(SRCROOT)/Intent/Views/Onboarding/DeepLinkPairingView.swift
@@ -665,6 +667,7 @@ $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
 $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
+$(SRCROOT)/IntentTests/CommentStorePagingTests.swift
 $(SRCROOT)/IntentTests/ComposerDraftBindingTests.swift
 $(SRCROOT)/IntentTests/ComposerFocusBindingTests.swift
 $(SRCROOT)/IntentTests/ComposerPhotoLimitTests.swift
@@ -785,6 +788,7 @@ $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
 $(SRCROOT)/IntentTests/CreationPickerRenderedGeometry.swift
 $(SRCROOT)/IntentTests/CurrentProtocolVersion.swift
+$(SRCROOT)/IntentTests/DeltaReconcilerPagingTests.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoConversationStartupTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesDesignTests.swift
@@ -876,12 +880,14 @@ $(SRCROOT)/IntentTests/NoteStoreCancellationAndEventTests.swift
 $(SRCROOT)/IntentTests/NoteStoreFetchIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreLiveStateTests.swift
+$(SRCROOT)/IntentTests/NoteStorePagingTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerPresentationAndRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerSoundDeliveryTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
 $(SRCROOT)/IntentTests/ObjCCallbackIsolationTests.swift
+$(SRCROOT)/IntentTests/PagedReadsTests.swift
 $(SRCROOT)/IntentTests/PairingAuthorityRaceTests.swift
 $(SRCROOT)/IntentTests/PairingDesignTests.swift
 $(SRCROOT)/IntentTests/PairingFlowTests.swift
@@ -1053,6 +1059,7 @@ $(SRCROOT)/IntentTests/WorkspaceStatusMessageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusTestSupport.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreAgentLifecycleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreEventAllowlistTests.swift
+$(SRCROOT)/IntentTests/WorkspaceStorePagingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStateTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStatusImageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreTests.swift
