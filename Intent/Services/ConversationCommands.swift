@@ -281,8 +281,8 @@ extension ConversationCommands {
     /// array clears them. Later acknowledged changes and processing removals
     /// fold in without discarding unrelated seed rows. The page token is a
     /// queue position, so a walk overtaken by a queue event, processing
-    /// removal, local mutation, reset or newer read stops before its next
-    /// page without publishing; the daemon's following `agent:queue:updated`
+    /// removal, local mutation, reset or newer read (up to its last reply)
+    /// stops without publishing; the daemon's following `agent:queue:updated`
     /// carries the whole queue, and any re-read starts from the first page.
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
@@ -292,11 +292,13 @@ extension ConversationCommands {
         queueReads[readID] = read
         defer { queueReads[readID] = nil }
         let result: Any
+        var paged = false
         do {
             result = try await PagedReads.requestWholeReply(
                 params: ["agentId": agentId, "limit": PagedReads.queuePageLimit], field: "queue"
             ) { [connectionManager] params in
                 if params["nextToken"] != nil {
+                    paged = true
                     guard !Task.isCancelled, generation == resetGeneration,
                           readGeneration == queueReadGeneration else { throw CancellationError() }
                     // Drains and local edits shift positions too, even when they fold into this read.
@@ -310,6 +312,9 @@ extension ConversationCommands {
         guard !Task.isCancelled, generation == resetGeneration,
               readGeneration == queueReadGeneration else { throw CancellationError() }
         guard read.revision == queueRevision else { return }
+        // A change while the last page was in flight can have shifted it too. One
+        // page is a single snapshot, so its folded-in changes still apply.
+        guard !paged || read.mutations.isEmpty else { return }
         guard let response = result as? [String: Any],
               let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
         else {

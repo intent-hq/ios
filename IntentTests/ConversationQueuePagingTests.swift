@@ -123,16 +123,56 @@ struct ConversationQueuePagingTests {
         let read = Task { await store.fetchQueue(agentId: "agent-1") }
         try await fake.waitForPendingRequests("agent.getQueue")
 
-        if change == "processing" {
-            store.commands.removeProcessingMessage("q-1")
-        } else {
-            store.commands.confirmQueueMutation(.remove("q-1"), generation: store.commands.queueMutations.generation)
-        }
+        Self.removeFirstEntry(store, change: change)
         fake.resolvePending("agent.getQueue", with: Self.page(Self.entries(1...200), next: "t1"))
         await read.value
 
         #expect(fake.paramsForMethod("agent.getQueue").count == 1, "Positions shifted, so the walk must not read on")
         #expect(store.queuedMessages.map(\.id) == ["q-old"], "A cut-short walk is never published")
+    }
+
+    /// The same change while the last page is in flight: that page may start
+    /// one entry late (q-202 instead of q-201), so the walk is not published.
+    @Test(arguments: ["processing", "local"])
+    func queueChangeDuringTheLastPageDropsTheWalk(change: String) async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        store.queuedMessages = Self.previous
+        fake.pendingMethods.insert("agent.getQueue")
+        let read = Task { await store.fetchQueue(agentId: "agent-1") }
+        try await fake.waitForPendingRequests("agent.getQueue")
+        fake.resolvePending("agent.getQueue", with: Self.page(Self.entries(1...200), next: "t1"))
+        try await fake.waitForPendingRequests("agent.getQueue")
+
+        Self.removeFirstEntry(store, change: change)
+        fake.resolvePending("agent.getQueue", with: Self.page(Self.entries(202...251), next: nil))
+        await read.value
+
+        #expect(fake.paramsForMethod("agent.getQueue").count == 2)
+        #expect(store.queuedMessages.map(\.id) == ["q-old"], "A walk that may have skipped q-201 is never published")
+    }
+
+    /// One page is a single snapshot, so a change during it still folds in.
+    @Test func queueChangeDuringASinglePageFoldsIn() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.pendingMethods.insert("agent.getQueue")
+        let read = Task { await store.fetchQueue(agentId: "agent-1") }
+        try await fake.waitForPendingRequests("agent.getQueue")
+
+        Self.removeFirstEntry(store, change: "processing")
+        fake.resolvePending("agent.getQueue", with: Self.page(Self.entries(1...3), next: nil))
+        await read.value
+
+        #expect(store.queuedMessages.map(\.id) == ["q-2", "q-3"])
+    }
+
+    private static func removeFirstEntry(_ store: ConversationStore, change: String) {
+        if change == "processing" {
+            store.commands.removeProcessingMessage("q-1")
+        } else {
+            store.commands.confirmQueueMutation(.remove("q-1"), generation: store.commands.queueMutations.generation)
+        }
     }
 
     @Test func unreadableQueueEventRereadsFromTheFirstPage() async throws {
