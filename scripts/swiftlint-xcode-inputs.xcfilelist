@@ -256,6 +256,7 @@ $(SRCROOT)/Intent/Services/NetworkAvailability.swift
 $(SRCROOT)/Intent/Services/NetworkCopyDiagnostics.swift
 $(SRCROOT)/Intent/Services/NetworkPathMonitoring.swift
 $(SRCROOT)/Intent/Services/NoteStore+Events.swift
+$(SRCROOT)/Intent/Services/NoteStore+TaskStatus.swift
 $(SRCROOT)/Intent/Services/NoteStore.swift
 $(SRCROOT)/Intent/Services/NoteStoreCollections.swift
 $(SRCROOT)/Intent/Services/OutgoingImagePayload.swift
@@ -307,6 +308,7 @@ $(SRCROOT)/Intent/Services/WorkspaceStatusStore+Pages.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
+$(SRCROOT)/Intent/Services/WorkspaceStore+LocalPatches.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceTextFile.swift
 $(SRCROOT)/Intent/Services/WorkspaceTransferExport.swift
