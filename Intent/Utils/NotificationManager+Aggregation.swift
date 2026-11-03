@@ -196,8 +196,8 @@ extension NotificationManager {
     }
 
     /// Fetches the workspace's agents for the suppression decision over the
-    /// event source's own connection. Returns nil when the source session is
-    /// gone, the read fails, or the response is malformed.
+    /// event source's own connection. Returns `.unavailable` when the source
+    /// session is gone, any page fails, or a response is malformed.
     private func fetchWorkspaceAgents(
         workspaceId: String,
         from sourceBackendID: BackendID?
@@ -210,10 +210,8 @@ extension NotificationManager {
             sourceConnection = connection
         }
         do {
-            let result = try await sourceConnection.request(
-                "agent.list",
-                params: ["workspaceId": workspaceId]
-            )
+            // Every page, so an active agent on a later page still suppresses the alert.
+            let result = try await PagedReads.requestAgentList(["workspaceId": workspaceId], connection: sourceConnection)
             if let dict = result as? [String: Any],
                let items = dict["agents"] as? [[String: Any]] {
                 return .sessions(items.compactMap { AgentSession.parseAgent($0) })

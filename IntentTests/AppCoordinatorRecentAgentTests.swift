@@ -152,6 +152,51 @@ extension AppCoordinatorTests {
         #expect(coordinator.conversationRequestId == 1)
     }
 
+    /// Rows ascend by creation, so the most recent agent can sit on a later
+    /// `agent.list` page ("Paged agent lists and queues").
+    @Test @MainActor func workspaceSwipe_readsEveryAgentPage() async {
+        let (coordinator, fake) = makeRecentAgentCoordinator()
+        fake.responseQueueMap["agent.list"] = [
+            ["agents": [["id": "old", "name": "Old", "lastActivity": "2026-09-30T05:00:00Z"]], "nextToken": "t1"],
+            ["agents": [["id": "newest", "name": "Newest", "lastActivity": "2026-10-01T05:00:00Z"]], "nextToken": NSNull()]
+        ]
+
+        await coordinator.onOpenRecentWorkspaceAgent("workspace-1").value
+
+        #expect(persistence.loadLastScreen(for: Self.windowBackend.connectionID)?.agentId == "newest")
+        let sent = fake.paramsForMethod("agent.list")
+        #expect(sent.map { $0["nextToken"] as? String } == [nil, "t1"])
+        #expect(sent.allSatisfy { $0["workspaceId"] as? String == "workspace-1" && $0["scope"] == nil })
+    }
+
+    @Test @MainActor func workspaceSwipe_pageErrorKeepsOverview() async {
+        let (coordinator, fake) = makeRecentAgentCoordinator()
+        // The second page has no configured reply, so the walk fails.
+        fake.responseQueueMap["agent.list"] = [
+            ["agents": [["id": "old", "name": "Old"]], "nextToken": "t1"]
+        ]
+
+        await coordinator.onOpenRecentWorkspaceAgent("workspace-1").value
+
+        #expect(Self.isWorkspaceDetail(coordinator.currentScreen, for: "workspace-1"))
+        #expect(coordinator.conversationRequestId == 0)
+        #expect(fake.paramsForMethod("agent.list").count == 2)
+    }
+
+    @Test @MainActor func workspaceSwipe_supersededLookupStopsBeforeItsNextPage() async throws {
+        let (coordinator, fake) = makeRecentAgentCoordinator()
+        fake.pendingMethods.insert("agent.list")
+        let opening = coordinator.onOpenRecentWorkspaceAgent("workspace-1")
+        try await fake.waitForPendingRequests("agent.list")
+
+        coordinator.onBackToWorkspaceList()
+        fake.resolvePending("agent.list", with: ["agents": [["id": "stale", "name": "Stale"]], "nextToken": "t1"])
+        await opening.value
+
+        #expect(fake.paramsForMethod("agent.list").count == 1, "A superseded lookup must not read its next page")
+        #expect(coordinator.conversationRequestId == 0)
+    }
+
     @MainActor
     private func makeRecentAgentCoordinator() -> (AppCoordinator, FakeConnectionManager) {
         let fake = FakeConnectionManager()

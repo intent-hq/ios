@@ -61,8 +61,9 @@ final class AssistantStore {
             refreshRequested = false
             do {
                 let summaryBoundary = summaries?.beginRead()
-                let result = try await connection.request(
-                    "agent.list", params: ["workspaceId": Workspace.chiefWorkspaceId]
+                // Every page: threads ascend by creation, so the newest are on the last page.
+                let result = try await PagedReads.requestAgentList(
+                    ["workspaceId": Workspace.chiefWorkspaceId], connection: connection
                 )
                 try Task.checkCancellation()
                 guard let response = result as? [String: Any],
