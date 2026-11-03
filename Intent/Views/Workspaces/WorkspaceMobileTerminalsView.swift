@@ -108,16 +108,22 @@ private struct WorkspaceTerminalRow: View {
         }
     }
 
+    private var status: String? {
+        if !store.isConnected { return "Disconnected" }
+        return store.hasExitedProcess(terminal) ? "Exited" : nil
+    }
+
     private var terminalRow: some View {
-        HStack(alignment: store.isConnected ? .center : .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
+        let status = status
+        return HStack(alignment: status == nil ? .center : .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
             terminalIcon
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
-                Text(terminal.name)
+                Text(store.title(for: terminal))
                     .interFont(Constants.Typography.bodyM)
                     .tracking(WorkspaceDetailStyle.rowTitleTracking)
                     .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                if !store.isConnected {
-                    Text("Disconnected")
+                if let status {
+                    Text(status)
                         .interFont(Constants.Typography.bodyS)
                         .tracking(WorkspaceDetailStyle.bodyTracking)
                         .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
@@ -126,7 +132,7 @@ private struct WorkspaceTerminalRow: View {
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: store.isConnected ? .center : .top)
+        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: status == nil ? .center : .top)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }

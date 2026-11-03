@@ -94,7 +94,7 @@ struct MobileTerminalView: View {
 
     private var title: some View {
         VStack(spacing: TerminalAppearance.groupInset) {
-            Text(terminal.name)
+            Text(store.title(for: terminal))
                 .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("mobile-terminal-title")
