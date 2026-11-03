@@ -253,13 +253,13 @@ private extension ConversationViewContent {
             // In the Duo shell the rail replaces the vertical toolbar, so no bar sits over the transcript top.
             .toolbar(usesWorkspaceDesign && (!usesVerticalNavigation || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
-            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign, floats: isNamedBySidebar && !usesVerticalNavigation) {
+            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign) {
                 if usesVerticalNavigation, presentation != .iPad {
                     WorkspaceVerticalConversationHeader(title: viewModel.agentName, workspaceId: viewModel.workspaceId)
                 } else {
                     WorkspaceConversationHeader(
                         title: viewModel.agentName,
-                        showsBackground: !viewModel.showsLoadingState && !isNamedBySidebar,
+                        showsBackground: !viewModel.showsLoadingState,
                         showsContextualActions: !usesVerticalNavigation,
                         showsTitle: !isNamedBySidebar,
                         assistantStore: assistantStore,
