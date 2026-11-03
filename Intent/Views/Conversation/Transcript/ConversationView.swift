@@ -478,11 +478,7 @@ private extension ConversationViewContent {
     }
 
     private func navigateToNote(noteId: String, workspaceId: String, title: String) {
-        presentedNote = NoteSheetInfo(
-            noteId: noteId,
-            workspaceId: workspaceId,
-            noteTitle: title
-        )
+        presentedNote = NoteSheetInfo(noteId: noteId, workspaceId: workspaceId, noteTitle: title)
     }
 
     private func navigateToAgent(agentId: String, workspaceId: String, name: String) {
