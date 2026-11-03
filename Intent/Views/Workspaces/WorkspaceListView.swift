@@ -468,11 +468,16 @@ private extension WorkspaceListView {
             workspaceRows(viewModel.filteredWorkspaces)
         case .repo:
             let groups = viewModel.groupedByRepo.map { repoName, workspaces in
-                (id: repoName, heading: groupHeading(repoName), rows: workspaceRows(workspaces, showRepo: false))
+                let isExpanded = viewModel.isRepoGroupExpanded(repoName)
+                let heading = WorkspaceListRepoGroupHeading(
+                    repoName: repoName, isExpanded: isExpanded, isToggleEnabled: !viewModel.hasSearchQuery
+                ) { viewModel.toggleRepoGroup(repoName) }
+                return (id: repoName, heading: heading.modifier(WorkspaceListDuoLeadingInset()),
+                        isExpanded: isExpanded, rows: workspaceRows(workspaces, showRepo: false))
             }
             ForEach(groups, id: \.id) { @Sendable group in
                 group.heading
-                group.rows
+                if group.isExpanded { group.rows }
             }
         case .status:
             let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in

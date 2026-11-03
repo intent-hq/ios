@@ -562,6 +562,7 @@ $(SRCROOT)/Intent/Views/Workspaces/PullRequestLinkRouting.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestListContent.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestSwipeRow.swift
+$(SRCROOT)/Intent/Views/Workspaces/RepoGroupDisclosureButton.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
@@ -1035,6 +1036,7 @@ $(SRCROOT)/IntentTests/WorkspaceFilesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFilesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListCacheTests.swift
+$(SRCROOT)/IntentTests/WorkspaceListRepoGroupTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListViewModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceParsingTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrMonitorsStoreTests.swift

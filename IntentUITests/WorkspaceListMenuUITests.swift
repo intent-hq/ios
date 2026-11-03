@@ -148,6 +148,42 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
 
     /// The Intent menu switches between the Workspaces and Pull requests lists.
     @MainActor
+    func testRepoGroupHeadingCollapsesAndExpandsRowsInBothThemes() {
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for appearance in ["light", "dark"] {
+            let app = launchWorkspaces(arguments: ["-appThemePreference", appearance])
+            app.buttons["workspaces.viewMode.Repo"].tap()
+            let heading = app.buttons["workspaces.repoGroup.nova-labs/console"]
+            let row = app.buttons["workspace.row.demo-ws-dashboard"]
+            let otherRow = app.buttons["workspace.row.demo-ws-reconnect"]
+            XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+            XCTAssertEqual(heading.value as? String, "Expanded")
+            capture(app, named: "repo-group-expanded-\(appearance)")
+
+            heading.tap()
+            XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertEqual(heading.value as? String, "Collapsed")
+            XCTAssertTrue(otherRow.exists, "Collapsing one repo leaves other groups expanded")
+            capture(app, named: "repo-group-collapsed-\(appearance)")
+
+            app.buttons["workspaces.search.open"].tap()
+            let search = app.textFields["workspaces.search.field"]
+            XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
+            search.typeText("usage")
+            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout), "Search never hides matching rows")
+            app.buttons["workspaces.search.cancel"].tap()
+            XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout), "Collapse is remembered after search")
+
+            heading.tap()
+            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+            XCTAssertEqual(heading.value as? String, "Expanded")
+            app.terminate()
+        }
+    }
+
+    @MainActor
     private func switchList(in app: XCUIApplication, to list: String) {
         app.openHomeAction(list)
     }
