@@ -186,7 +186,7 @@ struct InlineImageThumbnail: View {
             }
     }
 
-    static func size(for imageSize: CGSize, proposedWidth: CGFloat? = nil) -> CGSize {
+    nonisolated static func size(for imageSize: CGSize, proposedWidth: CGFloat? = nil) -> CGSize {
         let limit = Constants.Conversation.ImageThumbnail.transcriptSide
         let width = max(0, min(limit, proposedWidth ?? limit))
         guard imageSize.width > 0, imageSize.height > 0 else {
