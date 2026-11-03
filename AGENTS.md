@@ -44,7 +44,7 @@
 - Keep [smoke selectors](scripts/ui-smoke-tests.txt) small, update renamed tests, and maintain valid shard annotations; selection must reject duplicates and empty shards before native tests run.
 - Both workspace creation entry tests in [WorkspaceListMenuUITests](IntentUITests/WorkspaceListMenuUITests.swift) must exercise light and dark appearances on every run.
 - Transcript quarantine: [ConversationTranscriptFullGateUITests.swift](IntentUITests/ConversationTranscriptFullGateUITests.swift) extends `ConversationTranscriptScrollUITests`; select `ONLY_TESTING='IntentUITests/ConversationTranscriptScrollUITests'` with `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run.
-- Full runs still honor skips and quarantines; keep `AppStoreScreenshotTests` excluded from both schemes and follow the separate [Mermaid quarantine](README.md#mermaid-ui-quarantine).
+- Full runs still honor skips and quarantines; keep `AppStoreScreenshotTests` excluded from both schemes and follow the separate [Mermaid quarantine](README.md#mermaid-ui-quarantine) (ios#735 is closed; lifting the remaining guard is tracked in ios#940).
 - Preserve full-suite inventory partitioning and cross-lane coverage verification; only the first iPhone shard owns the [screenshot-retention contract](README.md#ui-evidence-artifacts).
 - Extend the explicit allowlist in [export_ui_evidence.py](scripts/export_ui_evidence.py); review the exported PNGs before claiming visual coverage and keep screenshots outside git.
 - Keep evidence exports separate per lane, record runner/toolchain details for timings, and retain failure/cancellation results and logs with `pipefail`.
@@ -62,6 +62,10 @@ Run the matching checks after changing tooling:
 | Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`) |
 | SwiftLint wrapper / input checker | `scripts/test-swiftlint.sh`; `scripts/test-check-swiftlint-inputs.sh`; Linux setup/runtime checks are in the [lint guide](README.md#strict-lint-on-linux) |
 | Xcode Cloud preparation | `scripts/test-ci-post-clone.sh` |
+| UI attachment lifecycle check | `python3 scripts/check_ui_attachment_lifecycle.py`; `python3 scripts/test_check_ui_attachment_lifecycle.py` |
+| Capture-lifecycle verifier | `python3 scripts/test_fixture_capture_lifecycle.py` |
+| Protocol fixture versions | `python3 scripts/test_protocol_fixture_version.py`; `python3 scripts/protocol_fixture_version.py lint` |
+| Deferred row-provider boundary | `scripts/test-row-provider-isolation.sh` (macOS) |
 
 ## Transport and bundled content
 
