@@ -146,24 +146,36 @@ final class WorkspaceTransferRelay {
               version == plan.manifest["creatingIntentdVersion"] as? String else {
             throw WorkspaceTransferError.message("Both machines must run the same host version. Update them before transferring.")
         }
-        // Every page (bounded reads): a duplicate can sit past the first page.
-        var listedShape = true
-        let rows = try await PagedReads.requestAllPages(
-            params: ["includeArchived": true, "limit": PagedReads.workspacePageLimit],
-            field: "workspaces"
-        ) { [target, timing] params in
-            let reply = try await target.request("workspace.list", params: params, timeout: timing.request)
-            if (reply as? [String: Any])?["workspaces"] as? [[String: Any]] == nil { listedShape = false }
-            return reply
-        }
-        guard listedShape else {
-            throw WorkspaceTransferError.message("The destination could not check for an existing workspace.")
-        }
+        let rows = try await destinationWorkspaceRows()
         guard !rows.contains(where: { $0["id"] as? String == workspaceId }) else {
             throw WorkspaceTransferError.message("This workspace already exists on that machine. Choose another destination.")
         }
         try check()
         return plan
+    }
+
+    /// Every destination workspace row (bounded reads): a duplicate can sit
+    /// past the first page, and a walk that cannot finish fails closed.
+    private func destinationWorkspaceRows() async throws -> [[String: Any]] {
+        var listedShape = true
+        let rows: [[String: Any]]
+        do {
+            rows = try await PagedReads.requestAllPages(
+                params: ["includeArchived": true, "limit": PagedReads.workspacePageLimit],
+                field: "workspaces"
+            ) { [target, timing] params in
+                let reply = try await target.request("workspace.list", params: params, timeout: timing.request)
+                if (reply as? [String: Any])?["workspaces"] as? [[String: Any]] == nil { listedShape = false }
+                return reply
+            }
+        } catch is PagedReads.IncompleteWalk {
+            listedShape = false
+            rows = []
+        }
+        guard listedShape else {
+            throw WorkspaceTransferError.message("The destination could not check for an existing workspace.")
+        }
+        return rows
     }
 
     private func stage(_ archive: WorkspaceTransferArchive) async throws {

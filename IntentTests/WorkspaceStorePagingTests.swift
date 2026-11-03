@@ -58,6 +58,19 @@ struct WorkspaceStorePagingTests {
         #expect(fake.paramsForMethod("workspace.list").count == 1)
     }
 
+    @Test func fetchAllThatCannotFinishKeepsThePreviousList() async {
+        let fake = FakeConnectionManager()
+        let store = WorkspaceStore(connectionManager: fake)
+        fake.responseMap["workspace.list"] = ["workspaces": Self.workspaces(1...3), "nextToken": NSNull()]
+        await store.fetchAll()
+        #expect(store.workspaces.count == 3)
+
+        // The daemon repeats its token, so the walk cannot reach the last page.
+        fake.responseMap["workspace.list"] = ["workspaces": Self.workspaces(1...2), "nextToken": "same"]
+        await store.fetchAll()
+        #expect(store.workspaces.count == 3)
+    }
+
     /// Connected store with a complete 150-workspace list and a registered
     /// `workspace.subscribe` handler (`sub-1`).
     private func liveStore() async throws -> (WorkspaceStore, FakeConnectionManager) {
@@ -138,6 +151,25 @@ struct WorkspaceStorePagingTests {
         }
         #expect(fake.paramsForMethod("workspace.unsubscribe").count == 1)
         #expect(store.workspaces.count == 150)
+    }
+
+    @Test func fillThatCannotFinishKeepsThePreviousList() async throws {
+        let (store, fake) = try await liveStore()
+        let revisionBefore = store.workspacesRevision
+        let backoff = TestGate()
+        store.snapshotFiller.sleep = { delay in
+            if delay >= .seconds(1) { await backoff.wait() }
+        }
+        fake.responseMap["workspace.list"] = ["workspaces": Self.workspaces(101...120), "nextToken": "t1"]
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1", seq: 0, snapshot: Self.workspaces(1...100), nextToken: "t1"
+        ))
+
+        try await waitUntil("walk gave up") { store.snapshotFiller.failures == 1 }
+        #expect(store.workspaces.count == 150)
+        #expect(store.workspacesRevision == revisionBefore)
+        backoff.open()
     }
 
     @Test func localPatchDuringFillKeepsTheFreshSnapshotRow() async throws {

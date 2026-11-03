@@ -51,10 +51,15 @@ enum PagedReads {
         .seconds(min(resubscribeBackoffCapSeconds, 1 << min(failures, resubscribeBackoffMaxExponent)))
     }
 
+    /// A walk stopped before the last page: the daemon repeated a token or
+    /// the `maxPages` guard ran out. The rows read so far are not the whole list.
+    struct IncompleteWalk: Error {}
+
     /// Reads every page of a list method and returns the concatenated `field`
     /// rows. `params` are repeated on every page with the previous page's
-    /// `nextToken`. Stops at the end, on a repeated token, or after `maxPages`.
-    /// Any page error is thrown, so callers never publish a partial list as whole.
+    /// `nextToken`. Any page error is thrown, and a walk that cannot reach the
+    /// last page (repeated token, `maxPages`) throws `IncompleteWalk`, so
+    /// callers never publish a partial list as whole.
     static func requestAllPages(
         params: [String: Any],
         field: String,
@@ -70,10 +75,11 @@ enum PagedReads {
             if let pageRows = (reply as? [String: Any])?[field] as? [[String: Any]] {
                 rows.append(contentsOf: pageRows)
             }
-            guard let next = nextToken(reply), seen.insert(next).inserted else { break }
+            guard let next = nextToken(reply) else { return rows }
+            guard seen.insert(next).inserted else { throw IncompleteWalk() }
             token = next
         }
-        return rows
+        throw IncompleteWalk()
     }
 
     /// How a snapshot continuation walk ended.
@@ -97,6 +103,7 @@ enum PagedReads {
     /// snapshots") from `firstToken`, handing each page's rows to `applyPage`.
     /// Each page gets `pageAttempts` tries with doubling backoff. `isCurrent`
     /// is checked after every suspension so a superseded walk never applies a page.
+    /// A walk that cannot reach the last page (repeated token, `maxPages`) fails.
     static func fillSnapshot(
         from firstToken: String,
         source: PageSource,
@@ -107,7 +114,8 @@ enum PagedReads {
         var token: String? = firstToken
         var seen = Set<String>()
         var pages = 0
-        while let current = token, pages < maxPages, seen.insert(current).inserted {
+        while let current = token {
+            guard pages < maxPages, seen.insert(current).inserted else { return .failed }
             var reply: Any?
             for attempt in 0..<pageAttempts {
                 if attempt > 0 {

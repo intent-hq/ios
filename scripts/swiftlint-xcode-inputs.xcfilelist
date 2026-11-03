@@ -874,6 +874,7 @@ $(SRCROOT)/IntentTests/NetworkAvailabilityTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerAnchorTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerTests.swift
 $(SRCROOT)/IntentTests/NewRepositoryDraftTests.swift
+$(SRCROOT)/IntentTests/NoteContentPagesTests.swift
 $(SRCROOT)/IntentTests/NoteContentSegmentsTests.swift
 $(SRCROOT)/IntentTests/NoteDetailViewLifecycleTests.swift
 $(SRCROOT)/IntentTests/NoteRowIconTests.swift
