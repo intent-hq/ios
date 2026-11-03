@@ -146,7 +146,6 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         }
     }
 
-    /// The Intent menu switches between the Workspaces and Pull requests lists.
     @MainActor
     func testRepoGroupHeadingCollapsesAndExpandsRowsInBothThemes() {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
@@ -183,6 +182,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         }
     }
 
+    /// The Intent menu switches between the Workspaces and Pull requests lists.
     @MainActor
     private func switchList(in app: XCUIApplication, to list: String) {
         app.openHomeAction(list)
