@@ -223,7 +223,17 @@ import Observation
     func applyConfirmedTitle(_ title: String, workspaceId: String) {
         guard var workspace = workspaces.first(where: { $0.id == workspaceId }) else { return }
         workspace.title = title
-        addOrUpdate(workspace)
+        if snapshotFiller.isFilling, let index = workspaces.firstIndex(where: { $0.id == workspaceId }) {
+            // The published row is from the previous list; patch the fresher reconciler row.
+            workspaces[index] = workspace
+            workspaceReconciler?.patch(id: workspaceId) { row in
+                var renamed = row
+                renamed.title = title
+                return renamed
+            }
+        } else {
+            addOrUpdate(workspace)
+        }
         invalidateFetchForEvent()
     }
 }

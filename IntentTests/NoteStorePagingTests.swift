@@ -134,6 +134,7 @@ struct NoteStorePagingTests {
         let (store, fake) = try await liveStore()
         let subscribes = fake.paramsForMethod("note.subscribe").count
         fake.clearRequestLog()
+        fake.failsCancelledRequests = true
         fake.errorMap["note.list"] = PageError()
 
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -145,6 +146,9 @@ struct NoteStorePagingTests {
             fake.paramsForMethod("note.subscribe").count == 1 && fake.paramsForMethod("note.list").count == 4
         }
         #expect(subscribes == 1)
+        // The resubscribe is not cancelled with the walk that triggered it.
+        try await waitUntil("live handler re-registered") { fake.hasSubscriptionHandler(id: "sub-1") }
+        #expect(fake.paramsForMethod("note.unsubscribe").count == 1)
         // The partial first page is shown rather than nothing.
         #expect(store.notes.count == 200)
         #expect(store.snapshotFiller.failures == 1)

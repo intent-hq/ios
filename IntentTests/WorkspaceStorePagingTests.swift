@@ -108,14 +108,76 @@ struct WorkspaceStorePagingTests {
 
     @Test func failedContinuationKeepsTheWholeListAndResubscribes() async throws {
         let (store, fake) = try await liveStore()
+        fake.failsCancelledRequests = true
+        let revisionBefore = store.workspacesRevision
+        // Hold the resubscribe so the backoff window can be observed.
+        let backoff = TestGate()
+        store.snapshotFiller.sleep = { delay in
+            if delay >= .seconds(1) { await backoff.wait() }
+        }
         fake.errorMap["workspace.list"] = PageError()
 
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1", seq: 0, snapshot: Self.workspaces(1...100), nextToken: "t1"
         ))
+        try await waitUntil("walk gave up") { store.snapshotFiller.failures == 1 }
 
-        try await waitUntil("resubscribed for a fresh snapshot") { fake.paramsForMethod("workspace.subscribe").count == 1 }
+        // A delta during the backoff must not publish the partial snapshot.
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            seq: 1,
+            delta: .init(added: [], updated: [["id": "ws-5", "title": "Renamed"]], removedIds: [])
+        ))
+        #expect(store.snapshotFiller.isFilling)
         #expect(store.workspaces.count == 150)
-        #expect(store.snapshotFiller.failures == 1)
+        #expect(store.workspacesRevision == revisionBefore)
+
+        backoff.open()
+        try await waitUntil("resubscribed for a fresh snapshot") {
+            fake.paramsForMethod("workspace.subscribe").count == 1 && fake.hasSubscriptionHandler(id: "sub-1")
+        }
+        #expect(fake.paramsForMethod("workspace.unsubscribe").count == 1)
+        #expect(store.workspaces.count == 150)
+    }
+
+    @Test func localPatchDuringFillKeepsTheFreshSnapshotRow() async throws {
+        let (store, fake) = try await liveStore()
+        fake.pendingMethods = ["workspace.list"]
+        // The previous list says "Workspace 5"; the fresh snapshot renamed it.
+        var fresh = Self.workspaces(1...100)
+        fresh[4]["title"] = "Fresh title"
+        fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", seq: 0, snapshot: fresh, nextToken: "t1"))
+        try await fake.waitForPendingRequests("workspace.list")
+
+        store.updateWaiting(workspaceId: "ws-5", waiting: true)
+        store.updateWaiting(workspaceId: "ws-120", waiting: true)
+
+        fake.resolvePending("workspace.list", with: [
+            "workspaces": Self.workspaces(101...150), "nextToken": NSNull()
+        ] as [String: Any])
+        try await waitUntil("whole snapshot published") { !store.snapshotFiller.isFilling }
+
+        let ws5 = store.workspaces.first { $0.id == "ws-5" }
+        #expect(ws5?.title == "Fresh title")
+        #expect(ws5?.waiting == true)
+        // Rows from unread pages come from their page, not from the old list.
+        #expect(store.workspaces.first { $0.id == "ws-120" }?.waiting == false)
+        #expect(store.workspaces.count == 150)
+    }
+
+    @Test func reconcilerPatchUpdatesOnlyPresentRows() {
+        let reconciler = DeltaReconciler<Workspace>(
+            getId: { $0["id"] as? String },
+            normalize: { WorkspaceStore.parseWorkspace($0) }
+        )
+        reconciler.applySnapshot(seq: 0, rawItems: [["id": "ws-1", "title": "One"]])
+        reconciler.patch(id: "ws-1") { row in
+            var renamed = row
+            renamed.title = "Patched"
+            return renamed
+        }
+        reconciler.patch(id: "ws-2") { $0 }
+        reconciler.fillFromPage([["id": "ws-1", "title": "Page"], ["id": "ws-2", "title": "Two"]])
+        #expect(reconciler.values().map(\.title) == ["Patched", "Two"])
     }
 }

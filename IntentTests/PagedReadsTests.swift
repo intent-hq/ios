@@ -76,9 +76,11 @@ struct PagedReadsTests {
 
     // MARK: - fillSnapshot
 
-    private static func source(_ requestPage: @escaping (String) async throws -> Any) -> PagedReads.PageSource {
+    private static func source(_ requestPage: @escaping @MainActor (String) async throws -> Any) -> PagedReads.PageSource {
         PagedReads.PageSource(field: "notes", requestPage: requestPage)
     }
+
+    private static func alwaysCurrent() -> Bool { true }
 
     private static func ids(_ rows: [[String: Any]]) -> [String] {
         rows.compactMap { $0["id"] as? String }
@@ -95,7 +97,7 @@ struct PagedReadsTests {
                     ? ["notes": [["id": "b"]], "nextToken": "t2"]
                     : ["notes": [[String: Any]](), "nextToken": NSNull()]
             },
-            isCurrent: { true },
+            isCurrent: Self.alwaysCurrent,
             sleep: Self.noSleep
         ) { rows in applied += Self.ids(rows) }
         #expect(outcome == .completed)
@@ -115,8 +117,9 @@ struct PagedReadsTests {
                 return ["notes": [["id": "b"]], "nextToken": NSNull()]
             },
             isCurrent: { true },
-            sleep: { delay in sleeps.append(delay) }
-        ) { rows in applied += Self.ids(rows) }
+            sleep: { delay in sleeps.append(delay) },
+            applyPage: { rows in applied += Self.ids(rows) }
+        )
         #expect(outcome == .completed)
         #expect(attempts == 3)
         #expect(sleeps == [.milliseconds(250), .milliseconds(500)])
@@ -132,7 +135,7 @@ struct PagedReadsTests {
                 attempts += 1
                 throw PageError()
             },
-            isCurrent: { true },
+            isCurrent: Self.alwaysCurrent,
             sleep: Self.noSleep
         ) { _ in applied += 1 }
         #expect(outcome == .failed)
@@ -143,13 +146,14 @@ struct PagedReadsTests {
     @Test func fillSnapshotStopsWhenSuperseded() async {
         var current = true
         var applied = 0
+        func isCurrent() -> Bool { current }
         let outcome = await PagedReads.fillSnapshot(
             from: "t1",
             source: Self.source { _ in
                 current = false
                 return ["notes": [["id": "b"]], "nextToken": "t2"]
             },
-            isCurrent: { current },
+            isCurrent: isCurrent,
             sleep: Self.noSleep
         ) { _ in applied += 1 }
         #expect(outcome == .superseded)
@@ -245,8 +249,8 @@ struct PagedReadsTests {
 
     @Test func wholeNoteFromOlderDaemonIsOneRead() async throws {
         let daemon = FakeNoteGet(content: "small note", cuts: [])
-        let result = try await NoteContentPages.readWholeNote(params: ["noteId": "note-1"], sleep: Self.noSleep) {
-            try daemon.reply($0)
+        let result = try await NoteContentPages.readWholeNote(params: ["noteId": "note-1"], sleep: Self.noSleep) { params in
+            try daemon.reply(params)
         }
         #expect(Self.content(of: result)?["content"] as? String == "small note")
         #expect(daemon.calls.count == 1)
@@ -256,8 +260,8 @@ struct PagedReadsTests {
         let full = String(repeating: "abc\n", count: 10)
         let daemon = FakeNoteGet(content: full, cuts: [12])
         daemon.bumpRevAfterFirstCall = true
-        let result = try await NoteContentPages.readWholeNote(params: ["noteId": "note-1"], sleep: Self.noSleep) {
-            try daemon.reply($0)
+        let result = try await NoteContentPages.readWholeNote(params: ["noteId": "note-1"], sleep: Self.noSleep) { params in
+            try daemon.reply(params)
         }
         #expect(Self.content(of: result)?["content"] as? String == full)
         #expect(daemon.calls.map { $0["contentOffset"] as? Int } == [nil, 12, nil, 12])
@@ -267,8 +271,8 @@ struct PagedReadsTests {
         let full = String(repeating: "abc\n", count: 10)
         let daemon = FakeNoteGet(content: full, cuts: [12])
         daemon.failOffsets = [12: 2]
-        let result = try await NoteContentPages.readWholeNote(params: ["noteId": "note-1"], sleep: Self.noSleep) {
-            try daemon.reply($0)
+        let result = try await NoteContentPages.readWholeNote(params: ["noteId": "note-1"], sleep: Self.noSleep) { params in
+            try daemon.reply(params)
         }
         #expect(Self.content(of: result)?["content"] as? String == full)
         #expect(daemon.calls.count == 4)
@@ -278,8 +282,8 @@ struct PagedReadsTests {
         let full = String(repeating: "abc\n", count: 10)
         let daemon = FakeNoteGet(content: full, cuts: [12])
         daemon.failOffsets = [12: 99]
-        let result = try await NoteContentPages.readWholeNote(params: ["noteId": "note-1"], sleep: Self.noSleep) {
-            try daemon.reply($0)
+        let result = try await NoteContentPages.readWholeNote(params: ["noteId": "note-1"], sleep: Self.noSleep) { params in
+            try daemon.reply(params)
         }
         let note = try #require(Self.content(of: result))
         #expect(note["content"] as? String == "abc\nabc\nabc\n")

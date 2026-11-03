@@ -27,8 +27,9 @@ enum PagedReads {
     private static let resubscribeBackoffCapSeconds = 30
     private static let resubscribeBackoffMaxExponent = 5
 
-    typealias Request = ([String: Any]) async throws -> Any
-    typealias Sleep = (Duration) async -> Void
+    /// Requests run on the main actor, where stores own their connection.
+    typealias Request = @MainActor ([String: Any]) async throws -> Any
+    typealias Sleep = @MainActor (Duration) async -> Void
 
     static let defaultSleep: Sleep = { duration in try? await Task.sleep(for: duration) }
 
@@ -89,7 +90,7 @@ enum PagedReads {
     /// reply and the request for one page by token.
     struct PageSource {
         let field: String
-        let requestPage: (String) async throws -> Any
+        let requestPage: @MainActor (String) async throws -> Any
     }
 
     /// Reads the rest of a paged subscription snapshot (protocol §6.9 "Paged
@@ -143,7 +144,7 @@ enum NoteContentPages {
     /// errors propagate unchanged (not-found classification), as do cancellations.
     static func readWholeNote(
         params: [String: Any],
-        sleep: PagedReads.Sleep = PagedReads.defaultSleep,
+        sleep: PagedReads.Sleep,
         request: PagedReads.Request
     ) async throws -> Any {
         var first: Any = [String: Any]()
@@ -170,8 +171,7 @@ enum NoteContentPages {
     }
 
     /// The note of a `{ note }` reply or a bare note row.
-    // swiftlint:disable:next discouraged_optional_collection
-    private static func unwrap(_ reply: Any) -> [String: Any]? {
+    private static func unwrap(_ reply: Any) -> [String: Any]? { // swiftlint:disable:this discouraged_optional_collection
         guard let dict = reply as? [String: Any] else { return nil }
         if dict["note"] == nil { return dict }
         return dict["note"] as? [String: Any]
@@ -226,12 +226,11 @@ enum NoteContentPages {
     }
 
     /// One continuation page with the shared retry policy; nil when it keeps failing.
-    // swiftlint:disable:next discouraged_optional_collection
     private static func readPage(
         _ params: [String: Any],
         sleep: PagedReads.Sleep,
         request: PagedReads.Request
-    ) async throws -> [String: Any]? {
+    ) async throws -> [String: Any]? { // swiftlint:disable:this discouraged_optional_collection
         for attempt in 0..<PagedReads.pageAttempts {
             if attempt > 0 {
                 await sleep(PagedReads.retryDelay(attempt: attempt))
@@ -275,7 +274,7 @@ final class PagedSnapshotFiller {
         /// Publish the reconciled collection; `complete` is false after a failed walk.
         let publish: (_ complete: Bool) -> Void
         /// Resubscribe for a fresh snapshot (called after the failure backoff).
-        let resubscribe: () async -> Void
+        let resubscribe: @MainActor () async -> Void
     }
 
     private(set) var isFilling = false
@@ -323,21 +322,37 @@ final class PagedSnapshotFiller {
                 sleep: sleep
             ) { rows in reconciler?.fillFromPage(rows) }
             guard let self, generation == walk else { return }
-            isFilling = false
             switch outcome {
             case .completed:
+                isFilling = false
                 failures = 0
                 owner.publish(true)
             case .failed:
+                // The reconciler stays partial until the fresh snapshot, so
+                // `isFilling` holds through the backoff: deltas must not
+                // publish it meanwhile.
                 owner.publish(false)
                 let delay = PagedReads.resubscribeDelay(failures: failures)
                 failures += 1
                 await sleep(delay)
-                guard live() else { return }
-                await owner.resubscribe()
+                guard generation == walk else { return }
+                guard live() else {
+                    isFilling = false
+                    return
+                }
+                resubscribeOutsideWalk(owner)
             case .superseded:
-                break
+                isFilling = false
             }
         }
+    }
+
+    /// Resubscribing cancels this filler (the store resets its snapshot), so
+    /// it must not run inside the walk's own task: a cancelled task would make
+    /// the unsubscribe/subscribe requests throw `CancellationError` at once.
+    private func resubscribeOutsideWalk(_ owner: Owner) {
+        task = nil
+        let resubscribe = owner.resubscribe
+        Task { await resubscribe() }
     }
 }

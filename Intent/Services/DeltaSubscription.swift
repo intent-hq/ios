@@ -392,6 +392,16 @@ class DeltaReconciler<T> {
         changedSinceSnapshot.insert(id)
     }
 
+    /// Applies a local change to the current row for `id`, if present, and
+    /// keeps later snapshot pages from overriding it. Unlike `seed`, this
+    /// never inserts a row: while a paged snapshot fills, a row not read yet
+    /// comes from its page.
+    func patch(id: String, _ transform: (T) -> T) {
+        guard let current = items[id] else { return }
+        items[id] = transform(current)
+        changedSinceSnapshot.insert(id)
+    }
+
     /// Adds the rows of a later page of a paged snapshot (protocol §6.9).
     /// A row a delta (or local seed) changed or removed since the snapshot is
     /// newer than the page, so it is skipped. Any other row is upserted; a
