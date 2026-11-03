@@ -307,6 +307,9 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// request resolves with — e.g. a stale list captured before a state change —
     /// while later requests for the same method stay suspended.
     var pendingMethods: Set<String> = []
+    /// Opt-in: throw `CancellationError` for requests made from a cancelled
+    /// task, as `ConnectionManager.awaitResponse` does.
+    var failsCancelledRequests = false
     private var pendingContinuations: [String: [(id: UUID, continuation: CheckedContinuation<Any, Error>)]] = [:]
 
     /// Resolve the oldest suspended request for `method` with `response`.
@@ -330,6 +333,8 @@ class FakeConnectionManager: SessionConnectionManaging {
         params: [String: Any] = [:],
         timeout _: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
+        // Like the real ConnectionManager, a request from an already-cancelled task fails at once.
+        if failsCancelledRequests, Task.isCancelled { throw CancellationError() }
         requestLog.append(RequestLogEntry(method: method, params: params, timestamp: Date()))
 
         if pendingMethods.contains(method) {
@@ -479,11 +484,6 @@ class FakeConnectionManager: SessionConnectionManaging {
         requestLog.removeAll()
     }
 
-    /// Check if a specific request method was called.
-    func didCallMethod(_ method: String) -> Bool {
-        requestLog.contains { $0.method == method }
-    }
-
     /// Get all parameters for calls to a specific method.
     func paramsForMethod(_ method: String) -> [[String: Any]] {
         requestLog.filter { $0.method == method }.map { $0.params }
@@ -542,5 +542,12 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// Count of registered subscription handlers.
     var subscriptionHandlerCount: Int {
         subscriptionHandlers.count
+    }
+}
+
+extension FakeConnectionManager {
+    /// Check if a specific request method was called.
+    func didCallMethod(_ method: String) -> Bool {
+        requestLog.contains { $0.method == method }
     }
 }

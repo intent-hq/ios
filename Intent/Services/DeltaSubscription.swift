@@ -14,6 +14,10 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
     let seq: Int
     // Nil means no snapshot payload; an empty snapshot authoritatively clears the collection.
     let snapshot: [[String: Any]]? // swiftlint:disable:this discouraged_optional_collection
+    /// Paged collection snapshot continuation (protocol §6.9 "Paged snapshots"):
+    /// the list-read token for the rows after this first page, or nil when the
+    /// snapshot holds the whole collection (and for every non-snapshot push).
+    let nextToken: String?
     let delta: DeltaPayload?
     // Snapshot-level metadata for object-shaped snapshots (chat channel):
     // agentId, truncated, totalMessages, nextToken, plus activity flags like
@@ -178,24 +182,27 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         // Nil preserves collection-shaped payloads; empty metadata still marks a conversation snapshot.
         snapshotMeta: [String: Any]? = nil, // swiftlint:disable:this discouraged_optional_collection
         // Nil leaves decoding to the consumer; an empty array records a completed decode.
-        snapshotMessages: [ConversationMessage]? = nil // swiftlint:disable:this discouraged_optional_collection
+        snapshotMessages: [ConversationMessage]? = nil, // swiftlint:disable:this discouraged_optional_collection
+        nextToken: String? = nil
     ) {
         self.subscriptionId = subscriptionId
         self.kind = kind
         self.seq = seq
         self.snapshot = snapshot
+        self.nextToken = nextToken
         self.delta = delta
         self.snapshotMeta = snapshotMeta
         self.snapshotMessages = snapshotMessages
     }
 
-    init(subscriptionId: String, seq: Int, snapshot: [[String: Any]]) {
+    init(subscriptionId: String, seq: Int, snapshot: [[String: Any]], nextToken: String? = nil) {
         self.init(
             subscriptionId: subscriptionId,
             kind: .snapshot,
             seq: seq,
             snapshot: snapshot,
-            delta: nil
+            delta: nil,
+            nextToken: nextToken
         )
     }
 
@@ -268,12 +275,14 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         seq: Int
     ) -> Self? {
         if let snapshot = dict["snapshot"] as? [[String: Any]] {
+            let token = dict["nextToken"] as? String
             return Self(
                 subscriptionId: subscriptionId,
                 kind: .snapshot,
                 seq: seq,
                 snapshot: snapshot,
-                delta: nil
+                delta: nil,
+                nextToken: token?.isEmpty == false ? token : nil
             )
         }
         guard let snapshotObject = dict["snapshot"] as? [String: Any],
@@ -300,6 +309,13 @@ class DeltaReconciler<T> {
     private var orderedIds = [String]()
     private var expectedSeq = 0
     private var seeded = false
+    /// Ids a delta or local seed added or updated since the last snapshot;
+    /// newer than any later snapshot page row (see `fillFromPage`).
+    private var changedSinceSnapshot = Set<String>()
+    /// Ids a delta removed since the last snapshot; a later page must not re-add them.
+    private var removedSinceSnapshot = Set<String>()
+    /// Bumped by every snapshot and reset, so a stale page walk can tell it was superseded.
+    private(set) var epoch = 0
 
     private let getId: ([String: Any]) -> String?
     private let normalize: ([String: Any]) -> T?
@@ -322,14 +338,20 @@ class DeltaReconciler<T> {
     func reset() {
         items.removeAll()
         orderedIds.removeAll()
+        changedSinceSnapshot.removeAll()
+        removedSinceSnapshot.removeAll()
         expectedSeq = 0
         seeded = false
+        epoch &+= 1
     }
 
     /// Replace the whole collection from a snapshot push.
     func applySnapshot(seq: Int, rawItems: [[String: Any]]) {
         items.removeAll()
         orderedIds.removeAll()
+        changedSinceSnapshot.removeAll()
+        removedSinceSnapshot.removeAll()
+        epoch &+= 1
         for raw in rawItems {
             upsert(raw)
         }
@@ -342,15 +364,13 @@ class DeltaReconciler<T> {
         guard seeded, seq == expectedSeq else {
             return false
         }
-        for raw in delta.added {
-            upsert(raw)
-        }
-        for raw in delta.updated {
-            upsert(raw)
+        for raw in delta.added + delta.updated {
+            if let id = upsert(raw) { changedSinceSnapshot.insert(id) }
         }
         for id in delta.removedIds {
             items.removeValue(forKey: id)
             orderedIds.removeAll { $0 == id }
+            removedSinceSnapshot.insert(id)
         }
         expectedSeq = seq + 1
         return true
@@ -369,15 +389,42 @@ class DeltaReconciler<T> {
             orderedIds.insert(id, at: 0)
         }
         items[id] = value
+        changedSinceSnapshot.insert(id)
     }
 
-    private func upsert(_ raw: [String: Any]) {
+    /// Applies a local change to the current row for `id`, if present, and
+    /// keeps later snapshot pages from overriding it. Unlike `seed`, this
+    /// never inserts a row: while a paged snapshot fills, a row not read yet
+    /// comes from its page.
+    func patch(id: String, _ transform: (T) -> T) {
+        guard let current = items[id] else { return }
+        items[id] = transform(current)
+        changedSinceSnapshot.insert(id)
+    }
+
+    /// Adds the rows of a later page of a paged snapshot (protocol §6.9).
+    /// A row a delta (or local seed) changed or removed since the snapshot is
+    /// newer than the page, so it is skipped. Any other row is upserted; a
+    /// list walk that serves the same row twice (`comment.list` rounds) keeps
+    /// the later, newer one.
+    func fillFromPage(_ rawItems: [[String: Any]]) {
+        for raw in rawItems {
+            guard let id = getId(raw),
+                  !changedSinceSnapshot.contains(id),
+                  !removedSinceSnapshot.contains(id) else { continue }
+            upsert(raw)
+        }
+    }
+
+    @discardableResult
+    private func upsert(_ raw: [String: Any]) -> String? {
         guard let id = getId(raw), let normalized = normalize(raw) else {
-            return
+            return nil
         }
         if items[id] == nil {
             orderedIds.append(id)
         }
         items[id] = normalized
+        return id
     }
 }

@@ -34,9 +34,12 @@ import Observation
 
     // Live-state subscription tracking
     @ObservationIgnored private var workspaceSubscriptionId: String?
-    @ObservationIgnored private var workspaceReconciler: DeltaReconciler<Workspace>?
+    /// Read-only outside this file so local patches can reseed it.
+    @ObservationIgnored private(set) var workspaceReconciler: DeltaReconciler<Workspace>?
     @ObservationIgnored private var workspaceLive = false
     @ObservationIgnored private var resnapshotInProgress = false
+    /// Reads the rest of a paged `workspace.subscribe` snapshot (protocol §6.9).
+    @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
 
     /// Each pinned backend session owns a store over its own connection.
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
@@ -78,6 +81,7 @@ import Observation
         }
         workspaceSubscriptionId = nil
         workspaceReconciler = nil
+        snapshotFiller.cancel()
         resnapshotInProgress = false
 
         await fetchAll()
@@ -156,10 +160,10 @@ import Observation
             let revision = fetchRevision
             do {
                 let summaryBoundary = agentSummaries?.beginRead()
-                let result = try await connectionManager.request("workspace.list", params: ["includeArchived": true])
+                let rows = try await requestAllWorkspaceRows()
                 if revision == fetchRevision {
                     fetchNeedsRefresh = false
-                    publishFetchedWorkspaces(Self.parseWorkspaces(from: result), summaryBoundary: summaryBoundary)
+                    publishFetchedWorkspaces(rows.compactMap { Self.parseWorkspace($0) }, summaryBoundary: summaryBoundary)
                     return
                 }
             } catch {
@@ -167,6 +171,22 @@ import Observation
             }
             guard revision != fetchRevision else { return }
             needsSuccessor = round == 1
+        }
+    }
+
+    /// Every `workspace.list` page (protocol "Paged workspace lists": `limit`
+    /// + `nextToken`, rows in `(createdAt, id)` order). A daemon without paging
+    /// answers the whole list in one reply, possibly as a bare array. A failed
+    /// page fails the whole read, so a partial list is never published as
+    /// whole (a missing row would read as a deleted workspace).
+    private func requestAllWorkspaceRows() async throws -> [[String: Any]] {
+        try await PagedReads.requestAllPages(
+            params: ["includeArchived": true, "limit": PagedReads.workspacePageLimit],
+            field: "workspaces"
+        ) { [connectionManager] params in
+            let reply = try await connectionManager.request("workspace.list", params: params)
+            if let rows = reply as? [[String: Any]] { return ["workspaces": rows] }
+            return reply
         }
     }
 
@@ -203,7 +223,17 @@ import Observation
     func applyConfirmedTitle(_ title: String, workspaceId: String) {
         guard var workspace = workspaces.first(where: { $0.id == workspaceId }) else { return }
         workspace.title = title
-        addOrUpdate(workspace)
+        if snapshotFiller.isFilling, let index = workspaces.firstIndex(where: { $0.id == workspaceId }) {
+            // The published row is from the previous list; patch the fresher reconciler row.
+            workspaces[index] = workspace
+            workspaceReconciler?.patch(id: workspaceId) { row in
+                var renamed = row
+                renamed.title = title
+                return renamed
+            }
+        } else {
+            addOrUpdate(workspace)
+        }
         invalidateFetchForEvent()
     }
 }
@@ -325,13 +355,19 @@ extension WorkspaceStore {
             guard let rawItems = push.snapshot else { return }
             workspaceLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
-            publishFetchedWorkspaces(reconciler.values())
             AppLog.workspace.debug("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
+            if let token = push.nextToken {
+                fillSnapshot(reconciler: reconciler, firstToken: token)
+            } else {
+                snapshotFiller.cancel()
+                publishFetchedWorkspaces(reconciler.values())
+            }
 
         case .delta:
             guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
-                publishFetchedWorkspaces(reconciler.values())
+                // A paged snapshot still filling publishes once complete.
+                if !snapshotFiller.isFilling { publishFetchedWorkspaces(reconciler.values()) }
                 AppLog.workspace.debug("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
@@ -344,12 +380,33 @@ extension WorkspaceStore {
         }
     }
 
+    /// Reads the rest of a paged snapshot (§6.9) with `workspace.list`, then
+    /// publishes the whole list. A partial list is never published: views
+    /// treat a workspace missing from a loaded list as deleted. A walk that
+    /// gives up keeps the previous list and resubscribes.
+    private func fillSnapshot(reconciler: DeltaReconciler<Workspace>, firstToken: String) {
+        let source = PagedReads.PageSource(field: "workspaces") { [connectionManager] token in
+            try await connectionManager.request("workspace.list", params: ["includeArchived": true, "nextToken": token])
+        }
+        snapshotFiller.start(reconciler, from: firstToken, source: source, owner: .init(
+            isCurrent: { [weak self] in self?.workspaceReconciler === reconciler },
+            publish: { [weak self] complete in
+                if complete { self?.publishFetchedWorkspaces(reconciler.values()) }
+            },
+            resubscribe: { [weak self] in
+                guard let self, !resnapshotInProgress else { return }
+                await resnapshot()
+            }
+        ))
+    }
+
     private func resnapshot() async {
         resnapshotInProgress = true
         defer { resnapshotInProgress = false }
 
         workspaceLive = false
         workspaceReconciler?.reset()
+        snapshotFiller.cancel()
 
         if let subId = workspaceSubscriptionId {
             // Unregister handler before unsubscribing
@@ -368,129 +425,5 @@ extension WorkspaceStore {
         // Re-subscribe and refetch to bridge
         await subscribeLiveState()
         await fetchAll()
-    }
-
-    /// Applies an intentd-sent `lastActivity` (from `workspace:updated`
-    /// `changes.lastActivity`) in place, exactly as received. The reconciler is
-    /// reseeded so the next live delta doesn't revert the value.
-    func updateLastActivity(workspaceId: String, lastActivity: String) {
-        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
-              workspaces[index].lastActivity != lastActivity else { return }
-        let workspace = workspaces[index]
-        let updated = Workspace(
-            id: workspace.id,
-            title: workspace.title,
-            branch: workspace.branch,
-            baseRef: workspace.baseRef,
-            status: workspace.status,
-            activity: workspace.activity,
-            displayStatus: workspace.displayStatus,
-            attention: workspace.attention,
-            waiting: workspace.waiting,
-            lastActivity: lastActivity,
-            createdAt: workspace.createdAt,
-            updatedAt: workspace.updatedAt,
-            repositoryOwner: workspace.repositoryOwner,
-            repositoryName: workspace.repositoryName,
-            prStatus: workspace.prStatus,
-            prNumber: workspace.prNumber,
-            diffSummaryTotalFiles: workspace.diffSummaryTotalFiles,
-            taskStatsTotal: workspace.taskStatsTotal,
-            taskStatsCompleted: workspace.taskStatsCompleted,
-            taskStatsInProgress: workspace.taskStatsInProgress,
-            agentSummaryCount: workspace.agentSummaryCount,
-            agentSummaryAgents: workspace.agentSummaryAgents,
-            pullRequests: workspace.pullRequests,
-            agentSummaryWasReported: workspace.agentSummaryWasReported,
-            pullRequestsWereReported: workspace.pullRequestsWereReported,
-            activePullRequest: workspace.activePullRequest,
-            statusImageAssetId: workspace.statusImageAssetId,
-            statusMessage: workspace.statusMessage
-        )
-        workspaces[index] = updated
-        workspaceReconciler?.seed(id: updated.id, value: updated)
-    }
-
-    /// Applies a workspace:waiting-changed transition in place (protocol 6.17).
-    /// The event is self-sufficient, so no refetch is needed; the reconciler is
-    /// reseeded so the next live delta doesn't revert the flag.
-    func updateWaiting(workspaceId: String, waiting: Bool) {
-        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
-              workspaces[index].waiting != waiting else { return }
-        let workspace = workspaces[index]
-        let updated = Workspace(
-            id: workspace.id,
-            title: workspace.title,
-            branch: workspace.branch,
-            baseRef: workspace.baseRef,
-            status: workspace.status,
-            activity: workspace.activity,
-            displayStatus: workspace.displayStatus,
-            attention: workspace.attention,
-            waiting: waiting,
-            lastActivity: workspace.lastActivity,
-            createdAt: workspace.createdAt,
-            updatedAt: workspace.updatedAt,
-            repositoryOwner: workspace.repositoryOwner,
-            repositoryName: workspace.repositoryName,
-            prStatus: workspace.prStatus,
-            prNumber: workspace.prNumber,
-            diffSummaryTotalFiles: workspace.diffSummaryTotalFiles,
-            taskStatsTotal: workspace.taskStatsTotal,
-            taskStatsCompleted: workspace.taskStatsCompleted,
-            taskStatsInProgress: workspace.taskStatsInProgress,
-            agentSummaryCount: workspace.agentSummaryCount,
-            agentSummaryAgents: workspace.agentSummaryAgents,
-            pullRequests: workspace.pullRequests,
-            agentSummaryWasReported: workspace.agentSummaryWasReported,
-            pullRequestsWereReported: workspace.pullRequestsWereReported,
-            activePullRequest: workspace.activePullRequest,
-            statusImageAssetId: workspace.statusImageAssetId,
-            statusMessage: workspace.statusMessage
-        )
-        workspaces[index] = updated
-        workspaceReconciler?.seed(id: updated.id, value: updated)
-    }
-
-    /// Optimistically clears the unread attention flag locally (guarded on
-    /// "unread", mirroring the server-side workspace.markSeen guard) so the
-    /// dot disappears immediately; the authoritative state converges via
-    /// workspace:attention-changed / the live subscription delta.
-    func clearUnreadAttentionLocally(workspaceId: String) {
-        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
-              workspaces[index].attention == "unread" else { return }
-        let workspace = workspaces[index]
-        let updated = Workspace(
-            id: workspace.id,
-            title: workspace.title,
-            branch: workspace.branch,
-            baseRef: workspace.baseRef,
-            status: workspace.status,
-            activity: workspace.activity,
-            displayStatus: workspace.displayStatus,
-            attention: "none",
-            waiting: workspace.waiting,
-            lastActivity: workspace.lastActivity,
-            createdAt: workspace.createdAt,
-            updatedAt: workspace.updatedAt,
-            repositoryOwner: workspace.repositoryOwner,
-            repositoryName: workspace.repositoryName,
-            prStatus: workspace.prStatus,
-            prNumber: workspace.prNumber,
-            diffSummaryTotalFiles: workspace.diffSummaryTotalFiles,
-            taskStatsTotal: workspace.taskStatsTotal,
-            taskStatsCompleted: workspace.taskStatsCompleted,
-            taskStatsInProgress: workspace.taskStatsInProgress,
-            agentSummaryCount: workspace.agentSummaryCount,
-            agentSummaryAgents: workspace.agentSummaryAgents,
-            pullRequests: workspace.pullRequests,
-            agentSummaryWasReported: workspace.agentSummaryWasReported,
-            pullRequestsWereReported: workspace.pullRequestsWereReported,
-            activePullRequest: workspace.activePullRequest,
-            statusImageAssetId: workspace.statusImageAssetId,
-            statusMessage: workspace.statusMessage
-        )
-        workspaces[index] = updated
-        workspaceReconciler?.seed(id: updated.id, value: updated)
     }
 }
