@@ -82,7 +82,9 @@ struct AgentListPagingTests {
         await #expect(throws: PagedReads.MalformedPage.self) {
             _ = try await PagedReads.requestWholeReply(params: [:], field: "agents") { _ in
                 calls += 1
-                return calls == 1 ? Self.page(Self.rows(1...1), next: "t1") : ["unexpected": true]
+                let malformed: [String: Any] = ["unexpected": true]
+                if calls == 1 { return Self.page(Self.rows(1...1), next: "t1") }
+                return malformed
             }
         }
         #expect(calls == 2)
