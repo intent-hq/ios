@@ -236,6 +236,33 @@ struct MobileTerminalStoreTests {
         #expect(fixture.store.title(for: terminal) == "make")
     }
 
+    @Test func aProcessEventSkipsOnlyItsOwnRowInAPendingList() async throws {
+        let fixture = try MobileTerminalFixture()
+        let first = try await fixture.create()
+        fixture.fake.responseMap["terminal.create"] = ["terminalId": "second"]
+        let second = try await fixture.create()
+        fixture.fake.responseMap["terminal.create"] = ["terminalId": "elsewhere"]
+        let elsewhere = try #require(await fixture.store.create(workspaceId: "other"))
+        fixture.list(ids: [first.id, second.id])
+
+        fixture.fake.pendingMethods.insert("terminal.list")
+        let refresh = Task { await fixture.store.refresh(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("terminal.list")
+        fixture.processEvent(id: first.id, foreground: "make", last: nil)
+        fixture.processEvent(id: elsewhere.id, foreground: "top", last: nil, workspaceId: "other")
+        fixture.fake.resolvePending("terminal.list", with: [
+            "daemonBootId": "boot",
+            "terminals": [
+                ["id": first.id, "name": "Terminal", "foregroundProcess": NSNull(), "lastProcess": NSNull()],
+                ["id": second.id, "name": "Terminal", "foregroundProcess": "sleep", "lastProcess": "vim"]
+            ]
+        ])
+        await refresh.value
+        #expect(fixture.store.title(for: first) == "make")
+        #expect(fixture.store.title(for: second) == "sleep")
+        #expect(fixture.store.title(for: elsewhere) == "top")
+    }
+
     @Test func persistenceIsScopedToTheBackend() async throws {
         let fixture = try MobileTerminalFixture()
         _ = try await fixture.create()

@@ -25,6 +25,7 @@ final class MobileTerminalStore {
     @ObservationIgnored private var revisions: [String: Int] = [:]
     @ObservationIgnored private var observedWorkspaces: Set<String> = []
     @ObservationIgnored private var processEvents = 0
+    @ObservationIgnored private var processEventAt: [String: Int] = [:]
 
     init(connection: ConnectionManagerRouting, persistence: MobileTerminalPersistence) {
         self.connection = connection
@@ -168,12 +169,11 @@ final class MobileTerminalStore {
             throw MobileTerminalError.invalidResponse
         }
         let liveIds = Set(rows.compactMap { $0["id"] as? String })
-        // An event that arrived during the request is newer than this list.
-        if processEvents == processRevision {
-            for row in rows {
-                guard let id = row["id"] as? String, terminals.contains(where: { $0.id == id }) else { continue }
-                processes[id] = MobileTerminalProcess(row)
-            }
+        for row in rows {
+            guard let id = row["id"] as? String, terminals.contains(where: { $0.id == id }) else { continue }
+            // A terminal whose own event arrived during the request is newer than this row.
+            if processEventAt[id, default: 0] > processRevision { continue }
+            processes[id] = MobileTerminalProcess(row)
         }
         if revisions[workspaceId, default: 0] == revision {
             terminals.removeAll { terminal in
@@ -237,6 +237,7 @@ final class MobileTerminalStore {
             remove(terminal)
         case "terminal:process":
             processEvents += 1
+            processEventAt[id] = processEvents
             processes[id] = MobileTerminalProcess(data)
         default:
             break
@@ -247,6 +248,7 @@ final class MobileTerminalStore {
         terminals.removeAll { $0 == terminal }
         verifiedIds.remove(terminal.id)
         processes[terminal.id] = nil
+        processEventAt[terminal.id] = nil
         changed(terminal.workspaceId)
     }
 
