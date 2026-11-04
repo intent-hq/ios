@@ -873,6 +873,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilePreview.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileTreeLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilesView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListMenu.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceListRepoGroupHeading.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceMobileTerminalsView.swift
