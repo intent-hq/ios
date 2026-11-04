@@ -276,9 +276,14 @@ extension ConversationCommands {
 
     func queueSeedSupersedes(_ receivedAt: Int) -> Bool { receivedAt < queueSeedSequence }
 
-    /// Replaces the queue from agent.getQueue. Malformed envelopes preserve
-    /// existing rows; a valid empty array clears them. Later acknowledged changes
-    /// and processing removals fold in without discarding unrelated seed rows.
+    /// Replaces the queue from every agent.getQueue page (positions are
+    /// whole-queue). Malformed envelopes preserve existing rows; a valid empty
+    /// array clears them. Later acknowledged changes and processing removals
+    /// fold in without discarding unrelated seed rows. The page token is a
+    /// queue position, so a walk overtaken by a queue event, processing
+    /// removal, local mutation, reset or newer read (up to its last reply)
+    /// stops without publishing; the daemon's following `agent:queue:updated`
+    /// carries the whole queue, and any re-read starts from the first page.
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
         let readGeneration = queueReadGeneration
@@ -286,13 +291,30 @@ extension ConversationCommands {
         let readID = UUID()
         queueReads[readID] = read
         defer { queueReads[readID] = nil }
-        let result = try await connectionManager.request(
-            "agent.getQueue",
-            params: ["agentId": agentId]
-        )
+        let result: Any
+        var paged = false
+        do {
+            result = try await PagedReads.requestWholeReply(
+                params: ["agentId": agentId, "limit": PagedReads.queuePageLimit], field: "queue"
+            ) { [connectionManager] params in
+                if params["nextToken"] != nil {
+                    paged = true
+                    guard !Task.isCancelled, generation == resetGeneration,
+                          readGeneration == queueReadGeneration else { throw CancellationError() }
+                    // Drains and local edits shift positions too, even when they fold into this read.
+                    guard read.revision == queueRevision, read.mutations.isEmpty else { throw QueueReadSuperseded() }
+                }
+                return try await connectionManager.request("agent.getQueue", params: params)
+            }
+        } catch is QueueReadSuperseded {
+            return
+        }
         guard !Task.isCancelled, generation == resetGeneration,
               readGeneration == queueReadGeneration else { throw CancellationError() }
         guard read.revision == queueRevision else { return }
+        // A change while the last page was in flight can have shifted it too. One
+        // page is a single snapshot, so its folded-in changes still apply.
+        guard !paged || read.mutations.isEmpty else { return }
         guard let response = result as? [String: Any],
               let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
         else {
@@ -307,62 +329,6 @@ extension ConversationCommands {
         if isComplete { queueSeedSequence = read.sequence }
         queuedMessages = read.applying(to: decoded)
         onQueueSnapshot?(queuedMessages)
-    }
-
-    // Shared getQueue/queue:updated decoder (PROTOCOL §5.5). Non-arrays return
-    // nil; invalid elements are dropped, retaining valid rows' order and ids.
-    // Logs only array positions/error shapes, never content or metadata.
-    // Nil preserves the current queue for malformed input; an empty array clears it.
-    // swiftlint:disable:next discouraged_optional_collection
-    static func decodeQueueSnapshot(_ queue: Any?, source: String) -> [QueuedMessage]? {
-        guard let items = queue as? [Any] else { return nil }
-        let decoder = JSONDecoder()
-        var messages: [QueuedMessage] = []
-        messages.reserveCapacity(items.count)
-        for (index, item) in items.enumerated() {
-            do {
-                guard let dictionary = item as? [String: Any] else {
-                    throw DecodingError.typeMismatch(
-                        [String: Any].self,
-                        DecodingError.Context(
-                            codingPath: [],
-                            debugDescription: "element is not an object"
-                        )
-                    )
-                }
-                let data = try JSONSerialization.data(withJSONObject: dictionary)
-                messages.append(try decoder.decode(QueuedMessage.self, from: data))
-            } catch {
-                AppLog.conversation.error(
-                    "[ConversationStore] Dropping undecodable queue element \(index + 1)/"
-                        + "\(items.count) from \(source): \(Self.describeDecodingFailure(error))"
-                )
-            }
-        }
-        return messages
-    }
-
-    /// Content-free failure description: decoding case/path or other error type.
-    private static func describeDecodingFailure(_ error: Error) -> String {
-        guard let decodingError = error as? DecodingError else {
-            return String(describing: type(of: error))
-        }
-        let path: (DecodingError.Context) -> String = { context in
-            context.codingPath.map(\.stringValue).joined(separator: ".")
-        }
-        if case let .keyNotFound(key, context) = decodingError {
-            return "keyNotFound(\(key.stringValue)) at [\(path(context))]"
-        }
-        if case let .typeMismatch(_, context) = decodingError {
-            return "typeMismatch at [\(path(context))]"
-        }
-        if case let .valueNotFound(_, context) = decodingError {
-            return "valueNotFound at [\(path(context))]"
-        }
-        if case .dataCorrupted(let context) = decodingError {
-            return "dataCorrupted at [\(path(context))]"
-        }
-        return "DecodingError"
     }
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {

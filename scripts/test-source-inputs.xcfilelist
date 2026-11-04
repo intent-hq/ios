@@ -900,6 +900,7 @@ $(SRCROOT)/IntentTests/AgentAvatarPulseTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
 $(SRCROOT)/IntentTests/AgentGroupingTests.swift
 $(SRCROOT)/IntentTests/AgentHistoryTests.swift
+$(SRCROOT)/IntentTests/AgentListPagingTests.swift
 $(SRCROOT)/IntentTests/AgentListScaleTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
@@ -1000,6 +1001,7 @@ $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
 $(SRCROOT)/IntentTests/ConversationModelSelectionTests.swift
 $(SRCROOT)/IntentTests/ConversationQuestionAttachmentTests.swift
+$(SRCROOT)/IntentTests/ConversationQueuePagingTests.swift
 $(SRCROOT)/IntentTests/ConversationRetryNowTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupAuthorityTests.swift
@@ -1171,6 +1173,7 @@ $(SRCROOT)/IntentTests/NoteStoreFetchIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/NoteStorePagingTests.swift
+$(SRCROOT)/IntentTests/NotificationAgentListPagingTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerPresentationAndRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerSoundDeliveryTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerTests.swift
