@@ -26,9 +26,7 @@ extension ConnectionManager {
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        #if DEBUG
-        if DemoMode.isEnabled || servesDemoFixtures { return try await demoResponse(for: method, params: params) }
-        #endif
+        if let requestTransport { return try await requestTransport.response(for: method, params: params, on: self) }
         guard let currentSocket = socket else {
             let error = Self.localRequestError(
                 code: Self.notConnectedErrorCode,

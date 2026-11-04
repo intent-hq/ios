@@ -27,6 +27,7 @@ $(SRCROOT)/Intent/Demo/DemoBrowserFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoChangesFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoChangesRootFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoConnectionLoss.swift
+$(SRCROOT)/Intent/Demo/DemoConnectionTransport.swift
 $(SRCROOT)/Intent/Demo/DemoDesignAttachments.swift
 $(SRCROOT)/Intent/Demo/DemoFilesFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoFixtures.swift
@@ -208,7 +209,6 @@ $(SRCROOT)/Intent/Services/ConnectionAdmission.swift
 $(SRCROOT)/Intent/Services/ConnectionCapabilities.swift
 $(SRCROOT)/Intent/Services/ConnectionDiagnostics.swift
 $(SRCROOT)/Intent/Services/ConnectionHostRacing.swift
-$(SRCROOT)/Intent/Services/ConnectionManager+Demo.swift
 $(SRCROOT)/Intent/Services/ConnectionManager.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerBrowser.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerHeartbeat.swift
@@ -217,6 +217,7 @@ $(SRCROOT)/Intent/Services/ConnectionManagerIdentity.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerRecovery.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerRequests.swift
 $(SRCROOT)/Intent/Services/ConnectionPrincipal.swift
+$(SRCROOT)/Intent/Services/ConnectionRequestTransport.swift
 $(SRCROOT)/Intent/Services/ConnectionSubscriptionRouter.swift
 $(SRCROOT)/Intent/Services/ConnectionTypes.swift
 $(SRCROOT)/Intent/Services/ConversationAttachmentPipeline+Photos.swift

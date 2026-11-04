@@ -81,10 +81,9 @@ struct DemoScriptMonitorFixturesTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let manager = ConnectionManager()
-        manager.connectDemo(serveFixtures: true)
-        manager.configureDemoScriptMonitors(serveFixtures: true, arguments: [
+        manager.connectInProcess(using: ConnectionManager.makeInProcessTransport(serveFixtures: true, arguments: [
             "--demo-data", "--demo-script-monitors=active", "--demo-script-monitor-directory=" + directory.path
-        ])
+        ]))
         defer { manager.disconnect() }
         let store = WorkspaceScriptMonitorsStore(connection: manager)
         let workspace = DemoDesignFixtures.workspaceId

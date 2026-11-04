@@ -37,18 +37,17 @@ import os
 
     var connectionState: ConnectionState = .disconnected {
         didSet {
-            if isDemoConnection {
+            if isInProcessConnection {
                 globalSubscriptionState = connectionState == .connected ? .subscribed : .idle
             }
             connectionStateSubject.send(connectionState)
         }
     }
-    @ObservationIgnored private var isDemoConnection = false
-    @ObservationIgnored var servesDemoFixtures = false
-
-    #if DEBUG
-    @ObservationIgnored var demoScriptMonitorFixtures: DemoScriptMonitorFixtures?
-    #endif
+    /// Set while connected without a daemon socket (pretend-paired launches);
+    /// readiness then follows the connection state directly.
+    @ObservationIgnored private var isInProcessConnection = false
+    /// Answers requests in process instead of over the socket when set.
+    @ObservationIgnored private(set) var requestTransport: (any ConnectionRequestTransport)?
 
     @ObservationIgnored var scriptMonitorsDisabledForConnection = false
     var capabilities: ConnectionCapabilities = .unknown {
@@ -60,7 +59,7 @@ import os
     @ObservationIgnored var admission: ConnectionAdmission?
     @ObservationIgnored private(set) var pairingAttemptID: UUID?
     var currentPrincipal: ConnectionPrincipal? {
-        get { DemoMode.isEnabled ? .demoOwner : admittedPrincipal }
+        get { requestTransport?.principal ?? admittedPrincipal }
         set { admittedPrincipal = newValue }
     }
     @ObservationIgnored var authorityRefreshTask: Task<Void, Never>?
@@ -164,12 +163,11 @@ import os
         self.diagnostics = diagnostics
         self.persistence = persistence
         subscriptionRouter = ConnectionSubscriptionRouter(diagnostics: diagnostics)
+        requestTransport = Self.makeInProcessTransport(serveFixtures: false)
     }
 
     isolated deinit {
-        #if DEBUG
-        demoScriptMonitorFixtures?.stop()
-        #endif
+        requestTransport?.stop()
         authorityRefreshTask?.cancel()
         stopPathMonitor()
     }
@@ -179,13 +177,22 @@ extension ConnectionManager {
     /// Demo sessions use fixture pushes instead of a socket's remote feed.
     /// Keep readiness tied to the same connection transitions as their stores.
     func connectDemo(serveFixtures: Bool) {
-        if !isDemoConnection { disconnect() }
-        isDemoConnection = true
-        servesDemoFixtures = serveFixtures
-        #if DEBUG
-        configureDemoScriptMonitors(serveFixtures: serveFixtures)
-        #endif
+        connectInProcess(using: Self.makeInProcessTransport(serveFixtures: serveFixtures))
+    }
+
+    /// Marks the connection live without a socket; requests go to `transport`.
+    func connectInProcess(using transport: (any ConnectionRequestTransport)?) {
+        if !isInProcessConnection { disconnect() }
+        isInProcessConnection = true
+        replaceRequestTransport(with: transport)
         connectionState = .connected
+    }
+
+    /// Installs `transport` and adopts the capabilities it advertises.
+    func replaceRequestTransport(with transport: (any ConnectionRequestTransport)?) {
+        requestTransport?.stop()
+        requestTransport = transport
+        capabilities = transport?.capabilities ?? .unknown
     }
 
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
@@ -430,12 +437,9 @@ extension ConnectionManager {
     /// `connect()` to the same target must keep the accumulated mismatches,
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
-        #if DEBUG
-        demoScriptMonitorFixtures?.stop()
-        demoScriptMonitorFixtures = nil
-        #endif
-        isDemoConnection = false
-        servesDemoFixtures = false
+        requestTransport?.stop()
+        requestTransport = Self.makeInProcessTransport(serveFixtures: false)
+        isInProcessConnection = false
         connectionGeneration += 1
         pairingAttemptID = nil
         clearPrincipal()
