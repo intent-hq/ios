@@ -25,6 +25,11 @@ struct Note: Identifiable, Equatable {
     /// char count instead. nil on full rows.
     let contentPreview: String?
     let contentLength: Int?
+    /// True when `content` is only a prefix of the note: the daemon cut a row
+    /// too large for one read (PROTOCOL §5.2 "Bounded note and comment reads")
+    /// and the rest could not be read. `contentBytes` is the full UTF-8 size.
+    let contentTruncated: Bool
+    let contentBytes: Int?
 
     init(
         id: String,
@@ -43,7 +48,9 @@ struct Note: Identifiable, Equatable {
         unmetDependsOn: [String] = [],
         estimatedEffort: String? = nil,
         contentPreview: String? = nil,
-        contentLength: Int? = nil
+        contentLength: Int? = nil,
+        contentTruncated: Bool = false,
+        contentBytes: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -62,6 +69,8 @@ struct Note: Identifiable, Equatable {
         self.estimatedEffort = estimatedEffort
         self.contentPreview = contentPreview
         self.contentLength = contentLength
+        self.contentTruncated = contentTruncated
+        self.contentBytes = contentBytes
     }
 
     /// True when this is a slim-projection row whose full body has not been
@@ -79,6 +88,38 @@ struct Note: Identifiable, Equatable {
     /// `discussion_needed` exist only in task-note metadata status.
     var taskDisplayStatus: TaskDisplayStatus? {
         taskStatus.map { TaskDisplayStatus(wire: $0) }
+    }
+
+    /// True when the cached row lacks the note's whole body: a slim row
+    /// without content, or a row the daemon cut to fit one read.
+    var needsFullContent: Bool {
+        isContentStale || contentTruncated
+    }
+
+    /// Copy carrying `source`'s body and cut markers (grafting a fetched body
+    /// onto a cached list row whose metadata should win).
+    func withBody(of source: Self) -> Self {
+        Self(
+            id: id,
+            title: title,
+            content: source.content,
+            tags: tags,
+            isDefault: isDefault,
+            isArchived: isArchived,
+            taskStatus: taskStatus,
+            parentId: parentId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            assignedAgentIds: assignedAgentIds,
+            dependsOn: dependsOn,
+            conflictsWith: conflictsWith,
+            unmetDependsOn: unmetDependsOn,
+            estimatedEffort: estimatedEffort,
+            contentPreview: contentPreview,
+            contentLength: contentLength,
+            contentTruncated: source.contentTruncated,
+            contentBytes: source.contentBytes
+        )
     }
 
     /// Copy with different content (optimistic local updates).
@@ -100,7 +141,9 @@ struct Note: Identifiable, Equatable {
             unmetDependsOn: unmetDependsOn,
             estimatedEffort: estimatedEffort,
             contentPreview: contentPreview,
-            contentLength: contentLength
+            contentLength: contentLength,
+            contentTruncated: contentTruncated,
+            contentBytes: contentBytes
         )
     }
 
@@ -123,7 +166,9 @@ struct Note: Identifiable, Equatable {
             unmetDependsOn: unmetDependsOn,
             estimatedEffort: estimatedEffort,
             contentPreview: contentPreview,
-            contentLength: contentLength
+            contentLength: contentLength,
+            contentTruncated: contentTruncated,
+            contentBytes: contentBytes
         )
     }
 
@@ -171,7 +216,9 @@ struct Note: Identifiable, Equatable {
             unmetDependsOn: task?["unmetDependsOn"] as? [String] ?? [],
             estimatedEffort: task?["estimatedEffort"] as? String,
             contentPreview: dict["contentPreview"] as? String,
-            contentLength: dict["contentLength"] as? Int
+            contentLength: dict["contentLength"] as? Int,
+            contentTruncated: dict["contentTruncated"] as? Bool ?? false,
+            contentBytes: dict["contentBytes"] as? Int
         )
     }
 }

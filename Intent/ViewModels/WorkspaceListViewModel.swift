@@ -168,6 +168,12 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         didSet { persistence.saveWorkspaceListViewMode(viewMode) }
     }
     var searchText = ""
+    /// Repo group keys (as used by `groupedByRepo`) the user has collapsed in
+    /// the Repo view. Persisted so the iPhone list and iPad sidebar share it
+    /// across launches.
+    private(set) var collapsedRepoGroups: Set<String> {
+        didSet { persistence.saveCollapsedRepoGroups(collapsedRepoGroups) }
+    }
 
     var showArchived: Bool {
         get { workspaceStore.showArchived }
@@ -190,6 +196,7 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         self.workspaceStore = workspaceStore
         self.persistence = persistence
         self.viewMode = persistence.loadWorkspaceListViewMode()
+        self.collapsedRepoGroups = persistence.loadCollapsedRepoGroups()
         self.activityTime = activityTime
     }
 
@@ -214,6 +221,21 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     /// — the same rule as the FE sidebar's `groupedByRepo`.
     var groupedByRepo: [(String, [Workspace])] {
         derivedWorkspaces.byRepo
+    }
+
+    /// Searching always shows every group expanded so matches are never hidden.
+    func isRepoGroupExpanded(_ repoKey: String) -> Bool {
+        hasSearchQuery || !collapsedRepoGroups.contains(repoKey)
+    }
+
+    /// Toggles a repo group; a no-op while searching, where groups are forced open.
+    func toggleRepoGroup(_ repoKey: String) {
+        guard !hasSearchQuery else { return }
+        if collapsedRepoGroups.contains(repoKey) {
+            collapsedRepoGroups.remove(repoKey)
+        } else {
+            collapsedRepoGroups.insert(repoKey)
+        }
     }
 
     var groupedByStatus: [(String, [Workspace])] {

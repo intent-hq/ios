@@ -24,6 +24,10 @@ import Observation
     private var noteReconciler: DeltaReconciler<Note>?
     private var resnapshotInProgress = false
     private var connectionObserver: AnyCancellable?
+    /// Reads the rest of a paged `note.subscribe` snapshot (protocol §6.9).
+    @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
+    /// Test seam for the whole-note read's page retry backoff.
+    @ObservationIgnored var pageRetrySleep: PagedReads.Sleep = PagedReads.defaultSleep
 
     /// Optional callback invoked when a note event is received (for detail view refresh)
     var onNoteChanged: (() -> Void)?
@@ -69,6 +73,7 @@ import Observation
         }
         noteSubscriptionId = nil
         noteReconciler = nil
+        snapshotFiller.cancel()
         resnapshotInProgress = false
 
         // If we have a workspace context, refetch and subscribe
@@ -100,6 +105,7 @@ import Observation
             noteLive = false
             noteSubscriptionId = nil
             noteReconciler = nil
+            snapshotFiller.cancel()
             resnapshotInProgress = false
         }
         self.workspaceId = workspaceId
@@ -138,38 +144,41 @@ import Observation
     /// `note.list` with the slim projection (PROTOCOL §5.2 `projection:
     /// "slim"`): bounded rows carrying `contentPreview`/`contentLength`
     /// instead of full `content`, so note-heavy workspaces don't pull multi-MB
-    /// frames. If the daemon rejects the param (-32602 Invalid params —
+    /// frames. Every page is read (§5.2 "Bounded note and comment reads":
+    /// `limit` + `nextToken`; daemons without paging answer the whole list).
+    /// If the daemon rejects the param (-32602 Invalid params —
     /// defense-in-depth: pre-8.1 daemons ignore unknown params and serve full
     /// rows instead), fall back once to the plain full list; other failures
     /// propagate unchanged.
     private func requestNoteList(workspaceId: String) async throws -> [[String: Any]] {
-        let result: Any
+        let page: PagedReads.Request = { [connectionManager] params in
+            try await connectionManager.request("note.list", params: params)
+        }
         do {
-            result = try await connectionManager.request(
-                "note.list",
-                params: ["workspaceId": workspaceId, "projection": "slim"]
+            return try await PagedReads.requestAllPages(
+                params: ["workspaceId": workspaceId, "projection": "slim", "limit": PagedReads.notePageLimit],
+                field: "notes",
+                request: page
             )
         } catch let error as NSError
             where error.domain == "WebSocket" && error.code == Self.invalidParametersErrorCode {
             AppLog.notes.warning(
                 "[NoteStore] note.list rejected projection param, retrying full: \(error)"
             )
-            result = try await connectionManager.request(
-                "note.list",
-                params: ["workspaceId": workspaceId]
+            return try await PagedReads.requestAllPages(
+                params: ["workspaceId": workspaceId, "limit": PagedReads.notePageLimit],
+                field: "notes",
+                request: page
             )
         }
-        guard let dict = result as? [String: Any],
-              let items = dict["notes"] as? [[String: Any]] else { return [] }
-        return items
     }
 
     /// Slim-projection merge (§5.2): a slim row carries no content, so when
     /// the cache already holds the full body at the same `updatedAt`, keep
-    /// it — a re-list must never clobber loaded content. A slim row with a
-    /// different `updatedAt` wins as-is: the stale marker makes content
-    /// surfaces refetch via `note.get`, which is safer than keeping a
-    /// possibly-outdated body.
+    /// it (and its cut markers) — a re-list must never clobber loaded
+    /// content. A slim row with a different `updatedAt` wins as-is: the stale
+    /// marker makes content surfaces refetch via `note.get`, which is safer
+    /// than keeping a possibly-outdated body.
     private func mergeSlimRows(_ incoming: [Note]) -> [Note] {
         guard !notes.isEmpty else { return incoming }
         let existingById = Dictionary(notes.map { ($0.id, $0) }) { existing, _ in existing }
@@ -178,7 +187,7 @@ import Observation
                   let existing = existingById[row.id],
                   !existing.content.isEmpty,
                   existing.updatedAt == row.updatedAt else { return row }
-            return row.withContent(existing.content)
+            return row.withBody(of: existing)
         }
     }
 
@@ -192,9 +201,10 @@ import Observation
         guard self.workspaceId == workspaceId,
               !note.content.isEmpty,
               let idx = notes.firstIndex(where: { $0.id == note.id }),
-              notes[idx].isContentStale,
+              notes[idx].needsFullContent,
+              note.content.utf8.count >= notes[idx].content.utf8.count,
               notes[idx].updatedAt == note.updatedAt else { return }
-        notes[idx] = notes[idx].withContent(note.content)
+        notes[idx] = notes[idx].withBody(of: note)
     }
 
     /// True when the cached row carries a strictly newer `updatedAt` than
@@ -220,12 +230,16 @@ import Observation
     /// `data.code == "not-found"` for a nonexistent note (docs/PROTOCOL.md
     /// §3.3/§9) and archived notes are treated as gone; any other error is
     /// transient so callers don't mistake network blips for deletion.
+    /// A note too large for one read is joined from `contentOffset` pages
+    /// (§5.2); if that fails the cut note comes back with `contentTruncated`.
     func fetchNote(noteId: String, workspaceId: String) async -> NoteFetchResult {
         do {
-            let result = try await connectionManager.request(
-                "note.get",
-                params: ["noteId": noteId, "workspaceId": workspaceId]
-            )
+            let result = try await NoteContentPages.readWholeNote(
+                params: ["noteId": noteId, "workspaceId": workspaceId],
+                sleep: pageRetrySleep
+            ) { [connectionManager] params in
+                try await connectionManager.request("note.get", params: params)
+            }
             // A cancelled fetch must not publish a late note body.
             try Task.checkCancellation()
             if let dict = result as? [String: Any],
@@ -234,9 +248,12 @@ import Observation
                 if note.isArchived { return .notFound }
                 // Replace a matching cached slim row, but never a newer row or
                 // one from another workspace.
+                // A cut fetch never replaces a cached whole body of the same revision.
                 if self.workspaceId == workspaceId,
                    let idx = notes.firstIndex(where: { $0.id == note.id }),
-                   !Self.isCachedRowNewer(notes[idx], thanFetched: note) {
+                   !Self.isCachedRowNewer(notes[idx], thanFetched: note),
+                   !(note.contentTruncated && !notes[idx].needsFullContent
+                       && notes[idx].updatedAt == note.updatedAt) {
                     notes[idx] = note
                 }
                 return .found(note)
@@ -266,74 +283,6 @@ import Observation
 }
 
 extension NoteStore {
-    // MARK: - Task status writes
-
-    /// Restore one note's pre-request snapshot after a failed optimistic
-    /// write. Scoped to that note by id so concurrent deltas / optimistic
-    /// writes to other notes that landed mid-flight are not clobbered; the
-    /// note's own `note:updated` event reconciles any remaining drift.
-    private func rollback(_ original: Note) {
-        if let idx = notes.firstIndex(where: { $0.id == original.id }) {
-            notes[idx] = original
-        }
-    }
-
-    /// Update a plain checkbox line's status via the daemon's `task.update`
-    /// (PROTOCOL §5.4 atomic single-line edit). `line` is 1-based; `status` is
-    /// the checkbox vocabulary ("todo" | "in-progress" | "done"). The marker
-    /// rewrite is applied optimistically to the local cache and reverted on
-    /// error; the confirming `note:updated` event reconciles the real state.
-    @discardableResult
-    func updateTaskLineStatus(noteId: String, workspaceId: String, line: Int, status: String) async -> Bool {
-        var original: Note?
-        if let idx = notes.firstIndex(where: { $0.id == noteId }),
-           let rewritten = NoteContentSegmenter.replacingCheckboxMarker(
-               in: notes[idx].content,
-               line: line,
-               status: status
-           ) {
-            original = notes[idx]
-            notes[idx] = notes[idx].withContent(rewritten)
-        }
-        do {
-            _ = try await connectionManager.request("task.update", params: [
-                "workspaceId": workspaceId,
-                "noteId": noteId,
-                "line": line,
-                "status": status
-            ])
-            return true
-        } catch {
-            if let original { rollback(original) }
-            AppLog.notes.error("[NoteStore] task.update failed: \(error)")
-            return false
-        }
-    }
-
-    /// Update a task note's metadata status via `task.updateNoteStatus`
-    /// (PROTOCOL §5.4 task-note status vocabulary). Optimistic local update,
-    /// reverted on error; `note:updated` confirms the change.
-    @discardableResult
-    func updateTaskNoteStatus(noteId: String, workspaceId: String, status: String) async -> Bool {
-        var original: Note?
-        if let idx = notes.firstIndex(where: { $0.id == noteId }) {
-            original = notes[idx]
-            notes[idx] = notes[idx].withTaskStatus(status)
-        }
-        do {
-            _ = try await connectionManager.request("task.updateNoteStatus", params: [
-                "workspaceId": workspaceId,
-                "noteId": noteId,
-                "status": status
-            ])
-            return true
-        } catch {
-            if let original { rollback(original) }
-            AppLog.notes.error("[NoteStore] task.updateNoteStatus failed: \(error)")
-            return false
-        }
-    }
-
     // MARK: - Live-state subscription
 
     private func subscribeLiveState(workspaceId: String) async {
@@ -348,6 +297,7 @@ extension NoteStore {
         do {
             let result = try await connectionManager.request("note.subscribe", params: [
                 "workspaceId": workspaceId,
+                "limit": PagedReads.notePageLimit,
                 "replaceGroup": "ios-notes-\(workspaceId)"
             ])
             if let dict = result as? [String: Any],
@@ -446,13 +396,19 @@ extension NoteStore {
             guard let rawItems = push.snapshot else { return }
             noteLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
-            notes = reconciler.values()
             AppLog.notes.debug("[NoteStore] Applied snapshot with \(rawItems.count) notes, seq=\(push.seq)")
+            if let token = push.nextToken {
+                fillSnapshot(reconciler: reconciler, firstToken: token)
+            } else {
+                snapshotFiller.cancel()
+                notes = reconciler.values()
+            }
 
         case .delta:
             guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
-                notes = reconciler.values()
+                // A paged snapshot still filling publishes once complete.
+                if !snapshotFiller.isFilling { notes = reconciler.values() }
                 AppLog.notes.debug("[NoteStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
@@ -465,12 +421,37 @@ extension NoteStore {
         }
     }
 
+    /// Reads the rest of a paged snapshot (§6.9) with `note.list` in the
+    /// subscription's projection (full), then publishes the whole list; the
+    /// previous list stays visible meanwhile. A walk that gives up shows what
+    /// it has unless that would shrink the list, then resubscribes.
+    private func fillSnapshot(reconciler: DeltaReconciler<Note>, firstToken: String) {
+        guard let workspaceId else { return }
+        let source = PagedReads.PageSource(field: "notes") { [connectionManager] token in
+            try await connectionManager.request("note.list", params: [
+                "workspaceId": workspaceId, "limit": PagedReads.notePageLimit, "nextToken": token
+            ])
+        }
+        snapshotFiller.start(reconciler, from: firstToken, source: source, owner: .init(
+            isCurrent: { [weak self] in self?.noteReconciler === reconciler && self?.workspaceId == workspaceId },
+            publish: { [weak self] complete in
+                guard let self, complete || reconciler.values().count >= notes.count else { return }
+                notes = reconciler.values()
+            },
+            resubscribe: { [weak self] in
+                guard let self, !resnapshotInProgress else { return }
+                await resnapshot()
+            }
+        ))
+    }
+
     private func resnapshot() async {
         resnapshotInProgress = true
         defer { resnapshotInProgress = false }
 
         noteLive = false
         noteReconciler?.reset()
+        snapshotFiller.cancel()
 
         if let subId = noteSubscriptionId {
             // Unregister handler before unsubscribing

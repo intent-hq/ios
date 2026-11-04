@@ -403,6 +403,9 @@ extension Constants.Notes.Detail {
     static let tagVerticalPadding: CGFloat = 3
     static let tagCornerRadius: CGFloat = 6
     static let contentPadding: CGFloat = 16
+    static let truncationNoticeSpacing: CGFloat = 4
+    static let truncationNoticePadding: CGFloat = 12
+    static let truncationNoticeCornerRadius: CGFloat = 8
 }
 
 extension Constants.Notes.List {

@@ -96,7 +96,7 @@ struct NoteDetailView: View {
             // refetch so the rendered content catches up (fetchNote's upsert
             // then clears the stale marker, ending the cycle).
             if let cached = newNotes.first(where: { $0.id == noteId }),
-               cached.isContentStale, let full = note,
+               cached.needsFullContent, let full = note,
                cached.updatedAt != full.updatedAt {
                 Task { await refreshNote() }
             }
@@ -131,6 +131,11 @@ struct NoteDetailView: View {
         VStack(alignment: .leading, spacing: Constants.Notes.Detail.contentSpacing) {
             noteTags(note)
             taskHeader(note)
+            if note.contentTruncated {
+                NoteTruncationNotice(shownBytes: note.content.utf8.count, totalBytes: note.contentBytes) {
+                    Task { await refreshNote() }
+                }
+            }
             renderedContent(note)
         }
         .padding(Constants.Notes.Detail.contentPadding)
@@ -219,15 +224,17 @@ struct NoteDetailView: View {
 
     /// The note to render: the store's cached copy when available (so
     /// optimistic task-status updates show immediately), else the fetched one.
-    /// A cached slim list row (§5.2) carries no content, so graft the fetched
-    /// full body onto it — the cached copy's metadata still wins. When the
-    /// slim row is newer than the fetched body, this is last-known content:
+    /// A cached slim list row (§5.2) carries no content, and a cut list row
+    /// only a prefix, so graft the fetched body onto it when it holds at
+    /// least as much — the cached copy's metadata still wins. When the
+    /// cached row is newer than the fetched body, this is last-known content:
     /// the onChange handler has already kicked off a refetch (same policy as
     /// refreshNote's transient-error path — never blank a rendered note).
     private var displayNote: Note? {
         guard let cached = noteStore.note(byId: noteId) else { return note }
-        if cached.isContentStale, let full = note, !full.content.isEmpty {
-            return cached.withContent(full.content)
+        if cached.needsFullContent, let full = note, !full.content.isEmpty,
+           full.content.utf8.count >= cached.content.utf8.count {
+            return cached.withBody(of: full)
         }
         return cached
     }

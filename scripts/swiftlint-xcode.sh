@@ -137,7 +137,7 @@ check_input_parity() {
   fi
 
   if [ "$failed" -ne 0 ]; then
-    warning "Regenerate scripts/swiftlint-xcode-inputs.xcfilelist; build continues without incomplete lint diagnostics"
+    warning "Run scripts/update-source-lists.sh to regenerate scripts/swiftlint-xcode-inputs.xcfilelist; build continues without incomplete lint diagnostics"
     return 1
   fi
 
