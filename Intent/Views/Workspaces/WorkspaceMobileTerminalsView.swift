@@ -38,6 +38,7 @@ private struct WorkspaceTerminalRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmDelete = false
     @State private var isDeleting = false
+    @State private var isRenaming = false
 
     var body: some View {
         WorkspaceSwipeContainer(
@@ -52,6 +53,7 @@ private struct WorkspaceTerminalRow: View {
             deleteButton
         }
         .disabled(isDeleting)
+        .modifier(TerminalRenameAlert(isPresented: $isRenaming, terminal: terminal, store: store))
         .alert("Delete terminal?", isPresented: $confirmDelete) {
             Button("Cancel", role: .cancel) {}
             Button("Delete terminal", role: .destructive, action: deleteTerminal)
@@ -74,9 +76,11 @@ private struct WorkspaceTerminalRow: View {
         .buttonStyle(TerminalRowButtonStyle())
         .visionListRowHitTarget()
         .contextMenu {
+            Button("Rename terminal") { isRenaming = true }
             Button("Delete terminal", role: .destructive) { confirmDelete = true }
                 .disabled(!store.isConnected)
         }
+        .accessibilityAction(named: "Rename terminal") { isRenaming = true }
         .accessibilityAction(named: "Delete terminal") {
             if store.isConnected { confirmDelete = true }
         }
@@ -151,5 +155,30 @@ private struct WorkspaceTerminalRow: View {
                 cornerRadius: WorkspaceDetailStyle.avatarSize * WorkspaceDetailStyle.avatarCornerRatio
             ))
             .accessibilityHidden(true)
+    }
+}
+
+/// Names a terminal; an empty name returns it to automatic naming.
+struct TerminalRenameAlert: ViewModifier {
+    @Binding var isPresented: Bool
+    let terminal: MobileTerminal
+    let store: MobileTerminalStore
+    @State private var name = ""
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Rename Terminal", isPresented: $isPresented) {
+                TextField("Terminal name", text: $name)
+                Button("Rename") { store.rename(terminal, to: name) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Leave empty to use the program name.")
+            }
+            .onChange(of: isPresented) { _, presented in
+                if presented { name = store.title(for: terminal) }
+            }
+            .onChange(of: store.isActive(terminal)) { _, active in
+                if !active { isPresented = false }
+            }
     }
 }
