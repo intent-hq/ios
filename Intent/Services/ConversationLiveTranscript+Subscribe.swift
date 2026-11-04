@@ -41,8 +41,6 @@ extension ConversationLiveTranscript {
         let generation = openRegistration()
         subscriptionAttempt += 1
         subscriptionLoadingStage = .requesting
-        chatChannelActive = true
-        chatSeeded = false
         snapshotPending = true
         if messages.isEmpty {
             isLoading = true
@@ -140,7 +138,7 @@ extension ConversationLiveTranscript {
     private func openRegistration() -> Int {
         cancelSnapshotRecovery()
         releaseActiveRegistration()
-        chatLive = false
+        chatChannel = .registering
         incrementalDeltas = false
         registrationGeneration &+= 1
         return registrationGeneration
@@ -210,8 +208,7 @@ extension ConversationLiveTranscript {
         // This recovery owns the channel: a timeout or retry armed for the
         // registration it replaces must not open a registration of its own.
         cancelSnapshotRecovery()
-        chatLive = false
-        chatSeeded = false
+        if chatChannel == .live { chatChannel = .registering }
         incrementalDeltas = false
 
         await releaseCurrentSubscription()
@@ -225,15 +222,13 @@ extension ConversationLiveTranscript {
     func prepareForReconnect() {
         traceEvent("ChatReconnecting", "messages=\(messages.count) pending=\(snapshotPending)")
         subscriptionLoadingStage = .requesting
-        chatLive = false
         incrementalDeltas = false
         useFullDeltaEncoding = false
         if let subscriptionId = chatSubscriptionId {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }
         chatSubscriptionId = nil
-        chatChannelActive = false
-        chatSeeded = false
+        chatChannel = .inactive
         recoveryGeneration = nil
         emptySnapshotRecoveryAttempts = 0
         // The reconnect registration is the recovery: drop the outage's
@@ -394,8 +389,7 @@ extension ConversationLiveTranscript {
     /// A rejected registration leaves no channel; its snapshot stays owed to
     /// the retry, so waiters are not released here.
     private func clearChannel() {
-        chatChannelActive = false
-        chatLive = false
+        chatChannel = .inactive
         chatSubscriptionId = nil
     }
 }
