@@ -17,6 +17,7 @@ protocol LocalNotificationCenter: AnyObject {
         withCompletionHandler completionHandler: (@Sendable ((any Error)?) -> Void)?
     )
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
+    func soundIsEnabled() async -> Bool
 }
 
 @MainActor
@@ -56,6 +57,11 @@ private final class SystemLocalNotificationCenter: LocalNotificationCenter {
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
+
+    func soundIsEnabled() async -> Bool {
+        let settings = await center.notificationSettings()
+        return settings.soundSetting == .enabled
+    }
 }
 
 @MainActor
@@ -75,9 +81,17 @@ final class LocalNotificationService: NSObject {
     var onNotificationResponse: ((Response) -> Void)?
 
     private let center: any LocalNotificationCenter
+    private let outputVolume: () -> Float
+    private let playForegroundSound: () async -> Void
 
-    init(center: any LocalNotificationCenter = SystemLocalNotificationCenter()) {
+    init(
+        center: any LocalNotificationCenter = SystemLocalNotificationCenter(),
+        playForegroundSound: @escaping () async -> Void = { await NotificationChime.playForegroundSound() },
+        outputVolume: @escaping () -> Float = { NotificationChime.outputVolume }
+    ) {
         self.center = center
+        self.outputVolume = outputVolume
+        self.playForegroundSound = playForegroundSound
         super.init()
         center.delegate = self
     }
@@ -100,7 +114,7 @@ final class LocalNotificationService: NSObject {
         let content = UNMutableNotificationContent()
         content.title = agentName
         content.body = "Finished in \(workspaceName)"
-        content.sound = .default
+        content.sound = outputVolume() > 0 ? .default : nil
         content.interruptionLevel = .active
         content.userInfo = [
             "agentId": agentId,
@@ -158,7 +172,14 @@ final class LocalNotificationService: NSObject {
         completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
     ) {
         Task { @MainActor [weak self] in
-            let options = self?.onWillPresentNotification?(response) ?? []
+            var options = self?.onWillPresentNotification?(response) ?? []
+            let requestsSound = options.contains(.sound)
+            // System alert volume is independent of output volume, whose read
+            // can also be stale while our audio session is inactive.
+            options.remove(.sound)
+            if requestsSound, let self, await center.soundIsEnabled() {
+                await playForegroundSound()
+            }
             completionHandler(options)
         }
     }

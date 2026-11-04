@@ -5,6 +5,40 @@ import UIKit
 import UserNotifications
 
 extension NotificationManagerTests {
+    @Test(arguments: [Float(0), 1], [false, true])
+    func deliveryUsesAudioPlaybackAndHonorsSoundPermission(reportedVolume: Float, soundEnabled: Bool) async throws {
+        var feedbackCount = 0
+        var sounds = 0
+        let center = NotificationManagerFakeCenter()
+        center.soundEnabled = soundEnabled
+        let service = LocalNotificationService(
+            center: center,
+            playForegroundSound: { sounds += 1 },
+            outputVolume: { reportedVolume }
+        )
+        let manager = NotificationManager(
+            localNotificationService: service,
+            applicationState: { .active },
+            activeConnectionId: { Self.connectionId },
+            presentFeedback: { feedbackCount += 1 },
+            registerEvents: false
+        )
+        manager.presentIdleAlert(
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
+        let request = try #require(center.requests.first)
+        #expect((request.content.sound != nil) == (reportedVolume > 0))
+
+        let options = await deliver(request, through: service)
+
+        #expect(options.isEmpty)
+        #expect(sounds == (soundEnabled ? 1 : 0))
+        #expect(manager.currentToast?.agentId == "agent-1")
+        #expect(feedbackCount == 1)
+    }
+
     @Test(arguments: [false, true])
     func foregroundSoundDeliveryDoesNotRepeatPresentation(dismissToast: Bool) async throws {
         var feedbackCount = 0
@@ -22,7 +56,7 @@ extension NotificationManagerTests {
 
         let options = await deliver(request, through: manager.localNotificationService)
 
-        #expect(options == [.sound])
+        #expect(options.isEmpty)
         #expect(feedbackCount == 1)
         #expect(manager.currentToast == (dismissToast ? nil : toast))
         #expect(center.requests.count == 1)
@@ -35,7 +69,7 @@ extension NotificationManagerTests {
         var state: UIApplication.State = .background
         var feedbackCount = 0
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center)
+        let service = LocalNotificationService(center: center, playForegroundSound: {}, outputVolume: { 1 })
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { state },
@@ -56,7 +90,7 @@ extension NotificationManagerTests {
 
         let options = await deliver(request, through: service)
 
-        #expect(options == (windowEmitsFeedbackSound ? [] : [.sound]))
+        #expect(options.isEmpty)
         #expect(feedbackCount == (windowEmitsFeedbackSound ? 0 : 1))
         #expect((manager.windowFeedbackEvent != nil) == windowEmitsFeedbackSound)
         #expect(manager.currentToast?.agentId == "agent-1")

@@ -14,6 +14,8 @@ private final class FakeLocalNotificationCenter: LocalNotificationCenter {
     var authorizationGranted = true
     var completesAuthorizationRequest = true
 
+    func soundIsEnabled() -> Bool { false }
+
     func getAuthorizationStatus(
         completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
     ) {
@@ -77,10 +79,10 @@ struct LocalNotificationServiceTests {
         #expect(center.authorizationOptions == [[.alert, .sound]])
     }
 
-    @Test(arguments: [false, true])
-    func postsExpectedAgentCompletionRequest(foregroundPresentationHandled: Bool) throws {
+    @Test(arguments: [false, true], [Float(0), 0.01, 1])
+    func postsExpectedAgentCompletionRequest(foregroundPresentationHandled: Bool, volume: Float) throws {
         let center = FakeLocalNotificationCenter()
-        let service = LocalNotificationService(center: center)
+        let service = LocalNotificationService(center: center, playForegroundSound: {}, outputVolume: { volume })
         let connectionId = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
 
         service.postAgentIdleNotification(
@@ -100,7 +102,7 @@ struct LocalNotificationServiceTests {
         #expect(request.trigger == nil)
         #expect(request.content.title == "Build Agent")
         #expect(request.content.body == "Finished in iOS App")
-        #expect(request.content.sound != nil)
+        #expect((request.content.sound != nil) == (volume > 0))
         #expect(request.content.interruptionLevel == .active)
         #expect(request.content.userInfo["agentId"] as? String == "agent-1")
         #expect(request.content.userInfo["workspaceId"] as? String == "workspace-1")
