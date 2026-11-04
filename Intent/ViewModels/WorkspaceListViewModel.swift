@@ -195,7 +195,7 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         self.viewMode = persistence.loadWorkspaceListViewMode()
         self.collapsedGroups = [
             .repo: persistence.loadCollapsedGroups(for: .repo),
-            .status: persistence.loadCollapsedGroups(for: .status),
+            .status: persistence.loadCollapsedGroups(for: .status)
         ]
         self.activityTime = activityTime
     }

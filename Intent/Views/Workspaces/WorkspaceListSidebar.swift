@@ -293,12 +293,13 @@ extension WorkspaceListSidebar {
         if isEmbedded {
             // Ordinary header rows avoid the List's implicit section padding.
             // The scroll-content top margin is the entire filter-to-label gap.
-            groupHeader(key, mode: mode, isExpanded: isExpanded, insets: EdgeInsets(
+            let insets = EdgeInsets(
                 top: isFirst ? 0 : IPadSidebarStyle.sectionSpacing,
                 leading: IPadSidebarStyle.rowInset,
                 bottom: IPadSidebarStyle.groupLabelSpacing,
                 trailing: IPadSidebarStyle.rowInset
-            ), label: header())
+            )
+            groupHeader(key, mode: mode, isExpanded: isExpanded, insets: insets, label: header())
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
