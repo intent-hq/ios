@@ -17,10 +17,10 @@ struct CoalescedReadTests {
     @Test func invalidationDuringPassEarnsOneTrailingPass() async {
         let read = CoalescedRead()
         var passes = 0
-        await read.run(isCurrent: { true }) { _ in
+        await read.run(isCurrent: { true }, pass: { _ in
             passes += 1
             _ = read.invalidate()
-        }
+        })
         #expect(passes == 2)
         #expect(read.phase == .idle)
     }
@@ -29,9 +29,9 @@ struct CoalescedReadTests {
         let read = CoalescedRead()
         let gate = AsyncGate()
         var passes = 0
-        let first = Task { await read.run(isCurrent: { true }) { _ in passes += 1; await gate.wait() } }
+        let first = Task { await read.run(isCurrent: { true }, pass: { _ in passes += 1; await gate.wait() }) }
         while passes == 0 { await Task.yield() }
-        let second = Task { await read.run(isCurrent: { true }) { _ in passes += 1 } }
+        let second = Task { await read.run(isCurrent: { true }, pass: { _ in passes += 1 }) }
         await Task.yield()
         gate.open()
         await first.value
@@ -43,7 +43,7 @@ struct CoalescedReadTests {
     @Test func staleOwnerSkipsPass() async {
         let read = CoalescedRead()
         var passes = 0
-        await read.run(isCurrent: { false }) { _ in passes += 1 }
+        await read.run(isCurrent: { false }, pass: { _ in passes += 1 })
         #expect(passes == 0)
         #expect(read.phase == .idle)
     }
@@ -52,7 +52,7 @@ struct CoalescedReadTests {
         let read = CoalescedRead()
         let gate = AsyncGate()
         var observed: [Int] = []
-        let running = Task { await read.run(isCurrent: { true }) { revision in observed.append(revision); await gate.wait() } }
+        let running = Task { await read.run(isCurrent: { true }, pass: { revision in observed.append(revision); await gate.wait() }) }
         while observed.isEmpty { await Task.yield() }
         let before = read.revision
         read.cancel()

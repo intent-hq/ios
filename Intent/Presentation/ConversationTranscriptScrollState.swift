@@ -184,6 +184,7 @@ final class ConversationTranscriptScrollState {
     /// content-raised forced follows are refused (see
     /// `ConversationTranscriptScrollPolicy.forcedFollowTakeoverLatch`).
     @ObservationIgnored var forcedFollowTakenOverByGesture = false
+
     /// Where the once-per-transcript entry scroll stands.
     enum EntryScroll: Equatable {
         case idle
@@ -201,6 +202,7 @@ final class ConversationTranscriptScrollState {
         var isPerformed: Bool { self == .settling || self == .positioned || self == .preserved }
         var isSettled: Bool { self == .positioned || self == .preserved }
     }
+
     var entryScroll = EntryScroll.idle
     var hasInitiallyScrolled: Bool { entryScroll.isSettled }
     var entryViewportPreserved: Bool { entryScroll == .preserved }

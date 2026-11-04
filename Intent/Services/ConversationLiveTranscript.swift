@@ -107,6 +107,7 @@ final class ConversationLiveTranscript {
     /// the same binding), cleared when a snapshot applies or the binding is
     /// torn down.
     @ObservationIgnored var snapshotPending = false
+
     enum ChatChannel: Equatable {
         /// No registration: before the first subscribe, after a rejection,
         /// reconnect or reset.
@@ -117,6 +118,7 @@ final class ConversationLiveTranscript {
         /// A snapshot applied: the channel owns the transcript and streaming flag.
         case live
     }
+
     var chatChannel = ChatChannel.inactive {
         didSet {
             guard oldValue != chatChannel else { return }

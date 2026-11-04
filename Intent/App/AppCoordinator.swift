@@ -53,29 +53,6 @@ struct AppCoordinatorDependencies {
     let claimScreenRestoration: @MainActor () -> Bool
 }
 
-final class AppCoordinatorLifecycleState {
-    /// How far the initial flow has come toward usable remote UI.
-    enum Entry: Equatable {
-        /// Routing the initial flow. `dataStamp` is the workspace data that
-        /// predates it, which cannot prove this flow fetched anything.
-        case routing(dataStamp: Date?)
-        /// Routed; waiting for workspace data fetched in this flow.
-        case routed(dataStamp: Date?)
-        /// Remote UI is usable, so a connection loss may present the overlay.
-        case entered
-    }
-
-    var entry = Entry.routing(dataStamp: nil)
-    var hasEnteredRemoteUI: Bool { entry == .entered }
-    /// Orthogonal to `entry`: set while the window has returned to saved
-    /// machines, so late callbacks from the old session are ignored.
-    var hasReturnedToSavedMachines = false
-
-    func completeInitialRouting() {
-        if case .routing(let dataStamp) = entry { entry = .routed(dataStamp: dataStamp) }
-    }
-}
-
 @MainActor
 @Observable
 class AppCoordinator {

@@ -49,9 +49,9 @@ final class CoalescedRead {
         let task = Task { [weak self] in
             for _ in 0..<2 {
                 guard let self, !Task.isCancelled, isCurrent() else { return }
-                let revision = self.revision
-                await pass(revision)
-                if revision == self.revision { return }
+                let passRevision = revision
+                await pass(passRevision)
+                if passRevision == revision { return }
             }
         }
         phase = .running(task)
