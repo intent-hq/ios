@@ -30,7 +30,7 @@ struct CoalescedReadTests {
         let gate = AsyncGate()
         var passes = 0
         let first = Task { await read.run(isCurrent: { true }) { _ in passes += 1; await gate.wait() } }
-        while !read.isRunning { await Task.yield() }
+        while passes == 0 { await Task.yield() }
         let second = Task { await read.run(isCurrent: { true }) { _ in passes += 1 } }
         await Task.yield()
         gate.open()
@@ -53,7 +53,7 @@ struct CoalescedReadTests {
         let gate = AsyncGate()
         var observed: [Int] = []
         let running = Task { await read.run(isCurrent: { true }) { revision in observed.append(revision); await gate.wait() } }
-        while !read.isRunning { await Task.yield() }
+        while observed.isEmpty { await Task.yield() }
         let before = read.revision
         read.cancel()
         #expect(read.phase == .idle)
