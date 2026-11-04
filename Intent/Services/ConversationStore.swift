@@ -108,9 +108,7 @@ import SwiftUI
 
     @ObservationIgnored var pendingWorkspaceEvents: [PendingWorkspaceEvent] = []
     @ObservationIgnored var isFoldingWorkspaceEvents = false
-    @ObservationIgnored var workspaceAuthorityWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
-    @ObservationIgnored var workspaceAuthorityFailed = false
-    @ObservationIgnored var subscriptionsNeedAuthorityRecovery = false
+    @ObservationIgnored let workspaceAuthority = WorkspaceAuthorityGate()
     var connectionObserver: AnyCancellable?
     @ObservationIgnored var feedObserver: AnyCancellable?
     @ObservationIgnored var observedConnectionState: ConnectionState

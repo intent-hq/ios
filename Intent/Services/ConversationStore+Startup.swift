@@ -51,9 +51,8 @@ extension ConversationStore {
         let requestedWorkspace = workspaceId ?? bootstrapWorkspaceHint
         workspaceId = workspace
         liveTranscript.workspaceId = workspace
-        if streamingEventsActive, requestedWorkspace != workspace || subscriptionsNeedAuthorityRecovery { invalidateSubscriptions() }
-        subscriptionsNeedAuthorityRecovery = false
-        workspaceAuthorityFailed = false
+        let recoveringFailure = workspaceAuthority.clearFailure()
+        if streamingEventsActive, requestedWorkspace != workspace || recoveringFailure { invalidateSubscriptions() }
         let events = pendingWorkspaceEvents
         pendingWorkspaceEvents.removeAll()
         isFoldingWorkspaceEvents = true
@@ -67,35 +66,19 @@ extension ConversationStore {
         }
         commands.queueMutations.finish()
         isFoldingWorkspaceEvents = false
-        finishWorkspaceAuthorityWaiters(ready: true)
+        workspaceAuthority.release(ready: true)
     }
 
     func awaitWorkspaceAuthority() async -> Bool {
         guard !Task.isCancelled else { return false }
         guard workspaceId == nil, bootstrapWorkspaceHint != nil else { return true }
         guard streamingEventsActive, connectionManager.connectionState == .connected else { return false }
-        guard !workspaceAuthorityFailed else { return false }
-        let id = UUID()
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { workspaceAuthorityWaiters[id] = $0 }
-        } onCancel: {
-            Task { @MainActor [weak self] in
-                self?.workspaceAuthorityWaiters.removeValue(forKey: id)?.resume(returning: false)
-            }
-        }
+        return await workspaceAuthority.wait()
     }
 
     func failWorkspaceAuthority() {
         guard workspaceId == nil, bootstrapWorkspaceHint != nil else { return }
-        workspaceAuthorityFailed = true
-        subscriptionsNeedAuthorityRecovery = true
-        finishWorkspaceAuthorityWaiters(ready: false)
-    }
-
-    private func finishWorkspaceAuthorityWaiters(ready: Bool) {
-        let waiters = workspaceAuthorityWaiters.values
-        workspaceAuthorityWaiters.removeAll()
-        for waiter in waiters { waiter.resume(returning: ready) }
+        workspaceAuthority.fail()
     }
 
     func releaseConversation(_ consumer: UUID) {
@@ -128,9 +111,7 @@ extension ConversationStore {
     func cancelBootstrap() {
         bootstrapGeneration &+= 1
         commands.queueMutations.cancel()
-        finishWorkspaceAuthorityWaiters(ready: false)
-        workspaceAuthorityFailed = false
-        subscriptionsNeedAuthorityRecovery = false
+        workspaceAuthority.reset()
         pendingWorkspaceEvents.removeAll()
         metadataReadyForEntry = false
         bootstrapTask?.cancel()
