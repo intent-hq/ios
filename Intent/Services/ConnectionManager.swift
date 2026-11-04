@@ -180,7 +180,7 @@ extension ConnectionManager {
         connectionState = .connected
     }
 
-    func configureDemoScriptMonitors(serveFixtures: Bool, arguments: [String] = ProcessInfo.processInfo.arguments) {
+    func configureDemoScriptMonitors(serveFixtures: Bool, arguments: [String] = LaunchOptions.current.arguments) {
         demoScriptMonitorFixtures?.stop()
         demoScriptMonitorFixtures = serveFixtures ? DemoScriptMonitorFixtures.configured(arguments: arguments) : nil
         capabilities = .unknown

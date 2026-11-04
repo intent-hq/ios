@@ -23,6 +23,8 @@ Intent/
 ├── Models/                    Domain and wire models
 ├── Services/                  JSON-RPC transport, live subscriptions,
 │                              feature stores, and attachment handling
+├── Demo/                      `--demo-data` fixtures, demo mode, and
+│                              parsed launch options
 ├── ViewModels/                UI state and feature orchestration
 ├── Presentation/              View-agnostic presentation logic
 │                              (scroll policy, partitioning, classifiers)
