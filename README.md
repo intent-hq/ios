@@ -420,6 +420,17 @@ A selector whose tests were all skipped at runtime exits 0 with a notice. Inspec
 the per-selector summary and confirm a nonzero executed count before claiming that
 a green focused run executed the intended tests.
 
+Besides xcodebuild's own status (65 for a build or test failure), the wrapper exits
+80 when the test process crashed and its one re-run did not recover, 81 when the
+simulator lock timed out, 82 when a selector matched or ran no test, 83 when the
+selection could not be verified, and 84 when the app could not launch on the
+simulator. For 84, a watchdog spots dyld aborting the app before `main` (for example,
+a library the simulator runtime lacks) within seconds. It stops the run instead of
+letting XCUITest wait until the job times out, prints the missing library and the
+simulator runtime, and does not re-run. Try a simulator on another runtime with
+`SIM_UDID`. The [wrapper header](scripts/xcodebuild.sh) has the details and the
+`LAUNCH_CRASH_WATCH=0` opt-out.
+
 For repeated focused runs, build once and reuse that build:
 
 ```bash

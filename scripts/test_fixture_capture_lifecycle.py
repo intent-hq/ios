@@ -37,7 +37,7 @@ class ResultTests(unittest.TestCase):
     def test_requires_original_failure_and_passing_companion(self):
         tests, details = native_results()
         contract.verify_result(65, tests, details)
-        for status in (0, 1, 80, 81, 82, 83):
+        for status in (0, 1, 80, 81, 82, 83, 84):
             with self.subTest(status=status), self.assertRaisesRegex(ValueError, "exit 65"):
                 contract.verify_result(status, tests, details)
 

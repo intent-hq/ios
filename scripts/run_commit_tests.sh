@@ -60,7 +60,7 @@
 # too: Xcode starts its compilers outside the wrapper's process group. A
 # cleanup problem is noted in the summary and never changes the exit status.
 #
-# Exit status: the wrapper's (0 passed, 65 build or test failure, 80-83 see
+# Exit status: the wrapper's (0 passed, 65 build or test failure, 80-84 see
 # scripts/xcodebuild.sh), 2 for bad arguments, 1 when the commit cannot be
 # resolved or checked out, 130 or 143 when interrupted.
 #
@@ -197,6 +197,7 @@ exit_meaning() {
     81) echo "timed out waiting for the simulator lock" ;;
     82) echo "a selector matched or ran no test" ;;
     83) echo "the test selection could not be verified" ;;
+    84) echo "the app could not launch on the simulator" ;;
     130|143) echo "interrupted" ;;
     *) echo "see scripts/xcodebuild.sh" ;;
   esac
