@@ -14,7 +14,7 @@
 #
 # Both lists hold the files git sees (tracked, or new and not ignored, and
 # present on disk), sorted with LC_ALL=C; see scripts/source-lists.sh. Paths
-# that exist only locally (empty or ignored directories, ignored Swift files)
+# that exist only locally (empty or git-ignored directories, ignored Swift files)
 # stay out and are reported as warnings, because the Xcode phases still see
 # them on disk.
 set -euo pipefail
@@ -49,7 +49,7 @@ warn_local_only() {
   local generated=$1 on_disk=$2 consequence=$3 path
   LC_ALL=C comm -13 "$generated" <($on_disk "$repo_root") |
     while IFS= read -r path; do
-      echo "warning: ${path#'$(SRCROOT)/'} exists only locally (empty, ignored or untracked); $consequence" >&2
+      echo "warning: ${path#'$(SRCROOT)/'} exists only locally (empty or git-ignored); $consequence" >&2
     done
 }
 
