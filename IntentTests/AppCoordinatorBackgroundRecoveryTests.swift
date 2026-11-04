@@ -271,7 +271,7 @@ extension AppCoordinatorTests {
             connectionLossPresentation: presentation
         )
         weak var weakCoordinator = coordinator
-        coordinator?.lifecycleState.hasEnteredRemoteUI = true
+        coordinator?.lifecycleState.entry = .entered
         coordinator?.onScenePhaseBackground()
         coordinator?.onScenePhaseActive()
         await Self.drainBackgroundEvents()

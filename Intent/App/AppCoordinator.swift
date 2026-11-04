@@ -54,10 +54,26 @@ struct AppCoordinatorDependencies {
 }
 
 final class AppCoordinatorLifecycleState {
-    var hasEnteredRemoteUI = false
-    var hasCompletedInitialRouting = false
-    var workspaceDataAtInitialFlowStart: Date?
+    /// How far the initial flow has come toward usable remote UI.
+    enum Entry: Equatable {
+        /// Routing the initial flow. `dataStamp` is the workspace data that
+        /// predates it, which cannot prove this flow fetched anything.
+        case routing(dataStamp: Date?)
+        /// Routed; waiting for workspace data fetched in this flow.
+        case routed(dataStamp: Date?)
+        /// Remote UI is usable, so a connection loss may present the overlay.
+        case entered
+    }
+
+    var entry = Entry.routing(dataStamp: nil)
+    var hasEnteredRemoteUI: Bool { entry == .entered }
+    /// Orthogonal to `entry`: set while the window has returned to saved
+    /// machines, so late callbacks from the old session are ignored.
     var hasReturnedToSavedMachines = false
+
+    func completeInitialRouting() {
+        if case .routing(let dataStamp) = entry { entry = .routed(dataStamp: dataStamp) }
+    }
 }
 
 @MainActor
@@ -229,7 +245,7 @@ class AppCoordinator {
         self.backendID = backendID
         connectingStartedByLaunch = !sessionRegistry.consumeConnectionSelection(for: backendID)
         self.connectionLossPresentation = connectionLossPresentation
-        lifecycleState.workspaceDataAtInitialFlowStart = workspaceStore.lastUpdated
+        lifecycleState.entry = .routing(dataStamp: workspaceStore.lastUpdated)
         savedConnectionsObserver = persistence.connectionsDidChange.sink { [weak self] _ in
             self?.refreshSavedConnectionsPresentation()
         }
@@ -267,13 +283,12 @@ extension AppCoordinator {
     /// A timed-out initial data wait still uses the normal navigation fallback,
     /// but cannot arm the blocking overlay. Require data fetched in this flow.
     func establishConnectionLossEligibility() {
-        guard !lifecycleState.hasEnteredRemoteUI,
-              lifecycleState.hasCompletedInitialRouting,
+        guard case .routed(let dataStamp) = lifecycleState.entry,
               currentScreen.supportsConnectionLossOverlay,
               dependencies.connection.connectionState == .connected,
               let lastUpdated = dependencies.workspaceStore.lastUpdated,
-              lastUpdated != lifecycleState.workspaceDataAtInitialFlowStart else { return }
-        lifecycleState.hasEnteredRemoteUI = true
+              lastUpdated != dataStamp else { return }
+        lifecycleState.entry = .entered
         // Retire only deliveries queued before entry became usable.
         startObservingConnection()
     }
@@ -281,9 +296,7 @@ extension AppCoordinator {
     /// A new initial flow must not inherit a previous session's loss or delayed recovery work.
     func resetConnectionLossEligibility() {
         connectionLossPresentation.reset()
-        lifecycleState.hasEnteredRemoteUI = false
-        lifecycleState.hasCompletedInitialRouting = false
-        lifecycleState.workspaceDataAtInitialFlowStart = dependencies.workspaceStore.lastUpdated
+        lifecycleState.entry = .routing(dataStamp: dependencies.workspaceStore.lastUpdated)
         isDisconnected = false
         cancelReconnectLoadingObservation()
         reconnectOverlayTimeoutTask?.cancel()
