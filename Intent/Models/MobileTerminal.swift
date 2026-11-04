@@ -46,10 +46,12 @@ enum MobileTerminalError: LocalizedError {
 final class MobileTerminalPersistence {
     private let defaults: UserDefaults
     private let key: String?
+    private let namesKey: String?
 
     init(backendID: BackendID?, defaults: UserDefaults = .standard) {
         self.defaults = defaults
         key = backendID.map { "mobileTerminals.\($0.connectionID.uuidString)" }
+        namesKey = backendID.map { "mobileTerminalNames.\($0.connectionID.uuidString)" }
     }
 
     func load() -> [MobileTerminal] {
@@ -60,5 +62,16 @@ final class MobileTerminalPersistence {
     func save(_ terminals: [MobileTerminal]) {
         guard let key, let data = try? JSONEncoder().encode(terminals) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    /// Names the user gave terminals, by terminal id.
+    func loadNames() -> [String: String] {
+        guard let namesKey else { return [:] }
+        return defaults.dictionary(forKey: namesKey) as? [String: String] ?? [:]
+    }
+
+    func saveNames(_ names: [String: String]) {
+        guard let namesKey else { return }
+        defaults.set(names, forKey: namesKey)
     }
 }

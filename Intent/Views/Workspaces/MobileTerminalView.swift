@@ -9,6 +9,7 @@ struct MobileTerminalView: View {
     @State private var connection: MobileTerminalConnection
     @State private var controls = MobileTerminalControls()
     @State private var confirmClose = false
+    @State private var isRenaming = false
     @State private var isClosing = false
     @State private var hasPresented = false
 
@@ -37,6 +38,7 @@ struct MobileTerminalView: View {
         .preferredColorScheme(.dark)
         .tint(.white)
         .interactiveDismissDisabled(isClosing)
+        .modifier(TerminalRenameAlert(isPresented: $isRenaming, terminal: terminal, store: store))
         .alert("Close terminal?", isPresented: $confirmClose) { closeActions } message: {
             Text("This stops the shell and any commands running in it. Go back to leave it running.")
         }
@@ -108,6 +110,16 @@ struct MobileTerminalView: View {
 
     private var terminalMenu: some View {
         Menu {
+            Button {
+                isRenaming = true
+            } label: {
+                Label {
+                    Text("Rename").interFont(Constants.Typography.bodyS)
+                } icon: {
+                    Image(.edit)
+                }
+            }
+            .accessibilityIdentifier("mobile-terminal-rename")
             Button {
                 Task { await connection.attach() }
             } label: {

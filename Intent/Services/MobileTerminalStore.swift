@@ -14,6 +14,8 @@ final class MobileTerminalStore {
     private(set) var errors: [String: String] = [:]
     /// Running programs by terminal id; not persisted, refreshed from `terminal.list`.
     private(set) var processes: [String: MobileTerminalProcess] = [:]
+    /// Names the user chose, by terminal id; they win over program names.
+    private(set) var customNames: [String: String]
 
     @ObservationIgnored let connection: ConnectionManagerRouting
     @ObservationIgnored private let persistence: MobileTerminalPersistence
@@ -31,6 +33,7 @@ final class MobileTerminalStore {
         self.connection = connection
         self.persistence = persistence
         terminals = persistence.load()
+        customNames = persistence.loadNames()
         isConnected = connection.connectionState == .connected
         eventHandlerId = connection.onEvent { [weak self] method, params in
             self?.handleEvent(method, params: params)
@@ -54,13 +57,20 @@ final class MobileTerminalStore {
         terminals.contains(terminal) && verifiedIds.contains(terminal.id)
     }
 
-    /// The running program, else the last program, else the terminal's own name.
+    /// The user's name, else the running program, else the last program, else the terminal's own name.
     func title(for terminal: MobileTerminal) -> String {
-        processes[terminal.id]?.title ?? terminal.name
+        customNames[terminal.id] ?? processes[terminal.id]?.title ?? terminal.name
     }
 
     func hasExitedProcess(_ terminal: MobileTerminal) -> Bool {
-        processes[terminal.id]?.hasExited == true
+        customNames[terminal.id] == nil && processes[terminal.id]?.hasExited == true
+    }
+
+    /// Sets the terminal's name; an empty name returns it to automatic naming.
+    func rename(_ terminal: MobileTerminal, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        customNames[terminal.id] = name.isEmpty ? nil : name
+        persistence.saveNames(customNames)
     }
 
     func errorMessage(workspaceId: String) -> String? { errors[workspaceId] }
@@ -181,7 +191,7 @@ final class MobileTerminalStore {
             }
             processes = processes.filter { id, _ in terminals.contains { $0.id == id } }
             verifiedIds.formUnion(terminals.filter { $0.workspaceId == workspaceId }.map(\.id))
-            persistence.save(terminals)
+            persist()
         }
         return bootId
     }
@@ -254,7 +264,16 @@ final class MobileTerminalStore {
 
     private func changed(_ workspaceId: String) {
         revisions[workspaceId, default: 0] += 1
+        persist()
+    }
+
+    private func persist() {
         persistence.save(terminals)
+        let names = customNames.filter { id, _ in terminals.contains { $0.id == id } }
+        if names != customNames {
+            customNames = names
+            persistence.saveNames(names)
+        }
     }
 
     private func nextName(workspaceId: String) -> String {
