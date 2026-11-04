@@ -76,6 +76,9 @@ final class LocalNotificationService: NSObject {
 
     private let center: any LocalNotificationCenter
     private let outputVolume: () -> Float
+    #if DEBUG
+    private var soundProbe: [String: Double] = [:]
+    #endif
 
     init(
         center: any LocalNotificationCenter = SystemLocalNotificationCenter(),
@@ -105,7 +108,11 @@ final class LocalNotificationService: NSObject {
         let content = UNMutableNotificationContent()
         content.title = agentName
         content.body = "Finished in \(workspaceName)"
-        content.sound = outputVolume() > 0 ? .default : nil
+        let volume = outputVolume()
+        content.sound = volume > 0 ? .default : nil
+        #if DEBUG
+        recordSoundProbe(stage: "post", volume: volume, sound: content.sound != nil)
+        #endif
         content.interruptionLevel = .active
         content.userInfo = [
             "agentId": agentId,
@@ -123,7 +130,15 @@ final class LocalNotificationService: NSObject {
             content: content,
             trigger: nil
         )
-        center.add(request, withCompletionHandler: nil)
+        center.add(request) { [weak self] error in
+            let errorCode = (error as NSError?)?.code ?? 0
+            Task { @MainActor in
+                #if DEBUG
+                self?.soundProbe["scheduleError"] = Double(errorCode)
+                self?.recordSoundProbe(stage: "scheduled", volume: nil, sound: false)
+                #endif
+            }
+        }
     }
 
     func removeDeliveredNotifications(forAgentId agentId: String, connectionId: UUID) {
@@ -164,12 +179,33 @@ final class LocalNotificationService: NSObject {
     ) {
         Task { @MainActor [weak self] in
             var options = self?.onWillPresentNotification?(response) ?? []
-            if let self, !(outputVolume() > 0) {
-                options.remove(.sound)
+            if let self {
+                let volume = outputVolume()
+                if !(volume > 0) { options.remove(.sound) }
+                #if DEBUG
+                recordSoundProbe(stage: "delivery", volume: volume, sound: options.contains(.sound))
+                #endif
             }
             completionHandler(options)
         }
     }
+
+    #if DEBUG
+    private func recordSoundProbe(stage: String, volume: Float?, sound: Bool) {
+        if let volume { soundProbe[stage + "Volume"] = Double(volume) }
+        soundProbe[stage + "Sound"] = sound ? 1 : 0
+        soundProbe[stage + "Time"] = Date().timeIntervalSince1970
+        Task {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            soundProbe["authorization"] = Double(settings.authorizationStatus.rawValue)
+            soundProbe["soundSetting"] = Double(settings.soundSetting.rawValue)
+            if let data = try? JSONEncoder().encode(soundProbe) {
+                try? data.write(to: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("notification-sound-probe.json"), options: .atomic)
+            }
+        }
+    }
+    #endif
 
     nonisolated func deliverNotificationResponse(
         _ response: Response,
