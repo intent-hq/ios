@@ -165,7 +165,7 @@ extension NotificationManagerTests {
 
     @Test func foregroundDeliveryPresentsFeedbackAndToastWithSystemSoundOnly() async {
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center) { 1 }
+        let service = LocalNotificationService(center: center, playForegroundSound: {}) { 1 }
         var feedbackCount = 0
         let manager = NotificationManager(
             localNotificationService: service,
@@ -190,7 +190,7 @@ extension NotificationManagerTests {
             }
         }
 
-        #expect(options == [.sound])
+        #expect(options.isEmpty)
         #expect(feedbackCount == 1)
         #expect(manager.currentToast?.agentId == "agent-1")
         #expect(center.requests.isEmpty)

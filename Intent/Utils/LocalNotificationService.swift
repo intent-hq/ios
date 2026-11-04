@@ -17,6 +17,7 @@ protocol LocalNotificationCenter: AnyObject {
         withCompletionHandler completionHandler: (@Sendable ((any Error)?) -> Void)?
     )
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
+    func soundIsEnabled() async -> Bool
 }
 
 @MainActor
@@ -56,6 +57,11 @@ private final class SystemLocalNotificationCenter: LocalNotificationCenter {
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
+
+    func soundIsEnabled() async -> Bool {
+        let settings = await center.notificationSettings()
+        return settings.soundSetting == .enabled
+    }
 }
 
 @MainActor
@@ -76,13 +82,16 @@ final class LocalNotificationService: NSObject {
 
     private let center: any LocalNotificationCenter
     private let outputVolume: () -> Float
+    private let playForegroundSound: () async -> Void
 
     init(
         center: any LocalNotificationCenter = SystemLocalNotificationCenter(),
+        playForegroundSound: @escaping () async -> Void = { await NotificationChime.playForegroundSound() },
         outputVolume: @escaping () -> Float = { NotificationChime.outputVolume }
     ) {
         self.center = center
         self.outputVolume = outputVolume
+        self.playForegroundSound = playForegroundSound
         super.init()
         center.delegate = self
     }
@@ -164,8 +173,10 @@ final class LocalNotificationService: NSObject {
     ) {
         Task { @MainActor [weak self] in
             var options = self?.onWillPresentNotification?(response) ?? []
-            if let self, !(outputVolume() > 0) {
-                options.remove(.sound)
+            let requestsSound = options.contains(.sound)
+            options.remove(.sound)
+            if requestsSound, let self, await center.soundIsEnabled() {
+                await playForegroundSound()
             }
             completionHandler(options)
         }

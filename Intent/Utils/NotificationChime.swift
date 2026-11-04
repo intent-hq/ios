@@ -10,6 +10,16 @@ import Foundation
 enum NotificationChime {
     static var outputVolume: Float { AVAudioSession.sharedInstance().outputVolume }
 
+    @MainActor
+    static func playForegroundSound() async {
+        guard let lease = try? await MediaAudioSession.shared.acquire(.notification) else { return }
+        defer { Task { try? await MediaAudioSession.shared.release(lease) } }
+        guard !Task.isCancelled, let url = fileURL(),
+              let player = try? AVAudioPlayer(contentsOf: url), player.play() else { return }
+        try? await Task.sleep(for: .seconds(player.duration))
+        player.stop()
+    }
+
     /// 16-bit mono PCM.
     private static let sampleRate = 44_100
     private static let duration = 0.6
