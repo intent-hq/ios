@@ -64,7 +64,7 @@ find "$REPO_ROOT/Intent" "$REPO_ROOT/IntentTests" \
     printf '$(SRCROOT)/%s\n' "${path#"$REPO_ROOT/"}"
   done > "$expected_input_file_list"
 cmp -s "$expected_input_file_list" "$INPUT_FILE_LIST" ||
-  fail "test source input file list is stale; regenerate directories and Swift sources"
+  fail "scripts/test-source-inputs.xcfilelist is stale; run scripts/update-source-lists.sh to regenerate it"
 
 "$GENERATOR" "$SOURCE" "$DESTINATION" "$SCRATCH"
 cat > "$FIXTURE_ROOT/expected-manifest" <<'EOF'
