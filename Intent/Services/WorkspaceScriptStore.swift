@@ -275,7 +275,9 @@ private extension WorkspaceScriptStore {
             do {
                 try await ensureSubscribed(generation: currentGeneration)
                 guard isCurrent(currentGeneration) else { return }
-                let response = try await connection.request("script.list", params: ["workspaceId": workspaceId])
+                let response = try await PagedReads.requestAllScripts(workspaceId: workspaceId) { [connection] params in
+                    try await connection.request("script.list", params: params)
+                }
                 guard isCurrent(currentGeneration), revisions[workspaceId, default: 0] == revision else { continue }
                 let scripts = try decodeScripts(response, workspaceId: workspaceId)
                 definitions[workspaceId] = scripts
