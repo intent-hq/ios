@@ -94,7 +94,7 @@ extension CreationOptionsStore {
     private func refreshCreationOptionsIfInterested() {
         guard !creationConsumers.isEmpty else { return }
         let generation = loadGeneration
-        Task { [weak self] in
+        latestCreationRefreshTask = Task { [weak self] in
             guard let self, generation == loadGeneration, !creationConsumers.isEmpty else { return }
             async let workspace: () = workspaceProviderOptions.reloadIfNeeded()
             await loadIfNeeded(consumer: creationConsumers.first)

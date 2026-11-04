@@ -29,6 +29,8 @@ func waitUntil(
     let deadline = ContinuousClock.now + timeout
     while ContinuousClock.now < deadline {
         if condition() { return }
+        // Required: the poll interval of this bounded condition wait, not a
+        // fixed delay — it returns as soon as `condition` holds.
         try await Task.sleep(for: kConditionPollInterval)
     }
     if condition() { return }
@@ -56,6 +58,8 @@ func expectNever(
                 description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
             )
         }
+        // Required: this helper's contract is a timed observation window;
+        // the sleep is its poll interval.
         try await Task.sleep(for: kConditionPollInterval)
     } while ContinuousClock.now < deadline
     if forbidden() {
@@ -297,15 +301,11 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// Recorded request log: [(method, params, timestamp)]
     var requestLog: [RequestLogEntry] = []
 
-    /// Optional per-method artificial delay (nanoseconds) applied before responding,
-    /// for tests that need to interleave work while a request is in flight.
-    var delayMap: [String: UInt64] = [:]
-
     /// Methods whose requests suspend until `resolvePending(_:with:)` supplies the
-    /// payload. Unlike `delayMap` + `responseMap` (which reads the response only
-    /// after the delay), this lets a test pin the exact payload an in-flight
-    /// request resolves with — e.g. a stale list captured before a state change —
-    /// while later requests for the same method stay suspended.
+    /// payload (or `failPending(_:with:)` its error), so a test pins the exact
+    /// outcome an in-flight request resolves with — e.g. a stale list captured
+    /// before a state change — while later requests for the same method stay
+    /// suspended.
     var pendingMethods: Set<String> = []
     /// Opt-in: throw `CancellationError` for requests made from a cancelled
     /// task, as `ConnectionManager.awaitResponse` does.
@@ -352,10 +352,6 @@ class FakeConnectionManager: SessionConnectionManaging {
                     pending.continuation.resume(throwing: CancellationError())
                 }
             }
-        }
-
-        if let delay = delayMap[method] {
-            try await Task.sleep(nanoseconds: delay)
         }
 
         if var errorQueue = errorQueueMap[method], !errorQueue.isEmpty {

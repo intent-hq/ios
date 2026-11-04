@@ -46,15 +46,15 @@ struct GitHubRepoStoreTests {
         return (store, fake)
     }
 
-    /// Poll (bounded) until the condition holds — avoids fixed-sleep
-    /// flakiness for assertions on Task-spawned background refreshes.
-    /// Records a failure on timeout so a missed update cannot pass silently.
-    func waitFor(_ description: String = "condition", _ condition: () -> Bool) async throws {
-        for _ in 0..<200 {
-            if condition() { return }
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
-        Issue.record("Timed out waiting for \(description)")
+    /// Bounded wait until the condition holds, for assertions on
+    /// Task-spawned background refreshes. Throws on timeout so a missed
+    /// update cannot pass silently.
+    func waitFor(
+        _ description: String = "condition",
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ condition: () -> Bool
+    ) async throws {
+        try await waitUntil(description, sourceLocation: sourceLocation, condition)
     }
 
     // MARK: - Model parsing

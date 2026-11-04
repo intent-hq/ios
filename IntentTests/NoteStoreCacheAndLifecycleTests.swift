@@ -199,9 +199,8 @@ extension NoteStoreIntegrationTests {
         fake.deliverEvent(method: "events.event", params: [
             "event": ["type": "note:deleted", "workspaceId": "ws-1", "noteId": "note-1"]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(called, "note:deleted must invoke onNoteChanged so the detail view can re-validate")
+        // note:deleted must invoke onNoteChanged so the detail view can re-validate.
+        try await waitUntil("onNoteChanged") { called }
     }
 
     // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
@@ -215,15 +214,15 @@ extension NoteStoreIntegrationTests {
         store?.startObservingEvents(workspaceId: "ws-1")
         fake.simulateConnect()
         await store?.fetchNotes(workspaceId: "ws-1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // The reconnect's note.subscribe registers the subscription handler.
+        try await waitUntil("subscription handler") { fake.subscriptionHandlerCount == 1 }
         #expect(fake.eventHandlerCount == 1)
         #expect(fake.subscriptionHandlerCount == 1)
 
         store = nil
         // deinit hops to the main actor to remove the handlers; wait for that task
-        for _ in 0..<40 {
-            if fake.eventHandlerCount == 0, fake.subscriptionHandlerCount == 0 { break }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("handlers removed") {
+            fake.eventHandlerCount == 0 && fake.subscriptionHandlerCount == 0
         }
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
@@ -238,7 +237,7 @@ extension NoteStoreIntegrationTests {
 
         fake.pendingMethods.insert("note.list")
         let fetch = Task { await store.fetchNotes(workspaceId: "ws-1") }
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await fake.waitForPendingRequests("note.list")
         // Fetch in flight: still not loaded
         #expect(store.hasLoaded == false)
         #expect(store.isLoading == true)
@@ -304,9 +303,9 @@ extension NoteStoreIntegrationTests {
         fake.pendingMethods.insert("note.list")
 
         let staleFetch = Task { await store.fetchNotes(workspaceId: "ws-1") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("note.list")
         let currentFetch = Task { await store.fetchNotes(workspaceId: "ws-2") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("note.list", count: 2)
 
         // The stale ws-1 fetch completing must not mark ws-2 as loaded
         // nor replace ws-2's notes with ws-1's.
