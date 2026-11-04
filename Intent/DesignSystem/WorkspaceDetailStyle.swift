@@ -48,9 +48,8 @@ enum WorkspaceDetailStyle {
     static let accent = Constants.Pairing.accent
     static let onAccent = Constants.Pairing.onAccent
 
-    // Literal 8-bit channels preserve Figma Grey400 for repository text and neutral avatar tiles.
-    // swiftlint:disable:next no_magic_numbers
-    static let neutral = Color(.sRGB, red: 82 / 255, green: 82 / 255, blue: 80 / 255)
+    // Exact 8-bit palette channels preserve Figma Grey400 for repository text and neutral avatar tiles.
+    static let neutral = Color(sRGBHex: Constants.DesignPalette.darkGrey)
 
     static func avatarSurface(for scheme: ColorScheme) -> Color {
         scheme == .dark ? neutral : Constants.Pairing.background(for: .light)

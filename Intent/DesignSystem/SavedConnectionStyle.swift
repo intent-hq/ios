@@ -15,20 +15,18 @@ extension Constants.Connections {
     static let dividerWidth: CGFloat = 1
     static let dividerHeight: CGFloat = 12
     // Keep Figma's exported 0x26 alpha as an exact 8-bit fraction, not a rounded percentage.
-    // swiftlint:disable:next no_magic_numbers
-    static let dividerOpacity: Double = 38 / 255
+    private static let dividerAlpha: UInt32 = 0x26
+    static let dividerOpacity = Constants.EightBitChannel.fraction(dividerAlpha)
     static let headingTracking: CGFloat = -0.56
     static let nameTracking: CGFloat = -0.32
     static let infoTracking: CGFloat = -0.12
 
-    // Literal 8-bit channels keep the approved Saved palette directly comparable with the design export.
-    // swiftlint:disable no_magic_numbers
-    private static let lightBackground = Color(.sRGB, red: 240 / 255, green: 240 / 255, blue: 235 / 255)
-    private static let lightForeground = Color(.sRGB, red: 8 / 255, green: 8 / 255, blue: 8 / 255)
-    private static let lightMutedForeground = Color(.sRGB, red: 140 / 255, green: 140 / 255, blue: 137 / 255)
+    // Exact 8-bit palette channels keep the approved Saved palette directly comparable with the design export.
+    private static let lightBackground = Color(sRGBHex: Constants.DesignPalette.paper)
+    private static let lightForeground = Color(sRGBHex: Constants.DesignPalette.ink)
+    private static let lightMutedForeground = Color(sRGBHex: Constants.DesignPalette.mutedGrey)
     private static let lightDivider = Color.black.opacity(dividerOpacity)
-    private static let connectedGreen = Color(.sRGB, red: 111 / 255, green: 163 / 255, blue: 86 / 255)
-    // swiftlint:enable no_magic_numbers
+    private static let connectedGreen = Color(sRGBHex: Constants.DesignPalette.connectedGreen)
 
     static func background(for scheme: ColorScheme) -> Color {
         scheme == .dark ? Constants.Pairing.background(for: scheme) : lightBackground
