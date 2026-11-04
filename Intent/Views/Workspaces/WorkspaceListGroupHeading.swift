@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// The iPhone Workspaces list's collapsible repo heading. It matches the list's
-/// other group headings, with the group spacing inside the tap target.
-struct WorkspaceListRepoGroupHeading: View {
-    let repoName: String
+/// The iPhone Workspaces list's collapsible Repo or Status heading, with the
+/// list's group spacing inside the tap target.
+struct WorkspaceListGroupHeading: View {
+    let title: String
+    let mode: ViewMode
     let isExpanded: Bool
     /// False while searching: groups are forced open.
     let isToggleEnabled: Bool
@@ -22,11 +23,16 @@ struct WorkspaceListRepoGroupHeading: View {
             ),
             onToggle: onToggle
         ) {
-            Text(repoName.uppercased())
+            Text(title.uppercased())
                 .interFont(Constants.Typography.eyebrow)
         }
         .foregroundStyle(Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: colorSchemeContrast))
         .disabled(!isToggleEnabled)
-        .accessibilityIdentifier("workspaces.repoGroup.\(repoName)")
+        .accessibilityIdentifier(Self.accessibilityIdentifier(for: title, in: mode))
+    }
+
+    /// Shared with the iPad sidebar so UI tests address both the same way.
+    static func accessibilityIdentifier(for key: String, in mode: ViewMode) -> String {
+        "workspaces.\(mode == .status ? "statusGroup" : "repoGroup").\(key)"
     }
 }

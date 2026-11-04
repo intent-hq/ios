@@ -168,12 +168,9 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         didSet { persistence.saveWorkspaceListViewMode(viewMode) }
     }
     var searchText = ""
-    /// Repo group keys (as used by `groupedByRepo`) the user has collapsed in
-    /// the Repo view. Persisted so the iPhone list and iPad sidebar share it
-    /// across launches.
-    private(set) var collapsedRepoGroups: Set<String> {
-        didSet { persistence.saveCollapsedRepoGroups(collapsedRepoGroups) }
-    }
+    /// Group keys the user has collapsed, per grouped view mode. Persisted so
+    /// the iPhone list and iPad sidebar share them across launches.
+    private(set) var collapsedGroups: [ViewMode: Set<String>]
 
     var showArchived: Bool {
         get { workspaceStore.showArchived }
@@ -196,7 +193,10 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         self.workspaceStore = workspaceStore
         self.persistence = persistence
         self.viewMode = persistence.loadWorkspaceListViewMode()
-        self.collapsedRepoGroups = persistence.loadCollapsedRepoGroups()
+        self.collapsedGroups = [
+            .repo: persistence.loadCollapsedGroups(for: .repo),
+            .status: persistence.loadCollapsedGroups(for: .status),
+        ]
         self.activityTime = activityTime
     }
 
@@ -224,18 +224,17 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     }
 
     /// Searching always shows every group expanded so matches are never hidden.
-    func isRepoGroupExpanded(_ repoKey: String) -> Bool {
-        hasSearchQuery || !collapsedRepoGroups.contains(repoKey)
+    func isGroupExpanded(_ key: String, in mode: ViewMode) -> Bool {
+        hasSearchQuery || collapsedGroups[mode]?.contains(key) != true
     }
 
-    /// Toggles a repo group; a no-op while searching, where groups are forced open.
-    func toggleRepoGroup(_ repoKey: String) {
+    /// Toggles a Repo or Status group; a no-op while searching, where groups are forced open.
+    func toggleGroup(_ key: String, in mode: ViewMode) {
         guard !hasSearchQuery else { return }
-        if collapsedRepoGroups.contains(repoKey) {
-            collapsedRepoGroups.remove(repoKey)
-        } else {
-            collapsedRepoGroups.insert(repoKey)
-        }
+        var keys = collapsedGroups[mode, default: []]
+        if keys.remove(key) == nil { keys.insert(key) }
+        collapsedGroups[mode] = keys
+        persistence.saveCollapsedGroups(keys, for: mode)
     }
 
     var groupedByStatus: [(String, [Workspace])] {
