@@ -294,7 +294,7 @@ for runtime, entries in devices.items():
     if iphones:
         candidates.append((version, iphones))
 if not candidates:
-    sys.exit(1)
+    sys.exit(3)
 version, iphones = max(candidates, key=lambda candidate: candidate[0])
 
 def rank(item):
@@ -319,13 +319,17 @@ pick_simulator() {
   fi
   command -v python3 >/dev/null 2>&1 \
     || die "python3 is required to pick a simulator (on macOS it ships with Xcode's Command Line Tools); or set SIM_UDID"
-  local sdk_version picked udid
+  local sdk_version devices picked udid status=0
   sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version 2>/dev/null || true)
-  picked=$(xcrun simctl list devices available -j | python3 -c "$PICK_SIMULATOR_PY" "${sdk_version%%.*}" || true)
+  devices=$(xcrun simctl list devices available -j) \
+    || die "xcrun simctl list devices available -j failed; check the simulator service or set SIM_UDID"
+  picked=$(printf '%s\n' "$devices" | python3 -c "$PICK_SIMULATOR_PY" "${sdk_version%%.*}") || status=$?
+  case "$status" in
+    0) ;;
+    3) die "no available iPhone simulator on this machine${sdk_version:+ for the iOS $sdk_version simulator SDK}" ;;
+    *) die "could not read the simulator list from xcrun simctl list devices available -j (see above); set SIM_UDID to bypass" ;;
+  esac
   udid=$(echo "$picked" | sed -n 1p)
-  if [ -z "$udid" ]; then
-    die "no available iPhone simulator on this machine${sdk_version:+ for the iOS $sdk_version simulator SDK}"
-  fi
   echo "Selected simulator: $(echo "$picked" | sed -n 2p) ($udid)" >&2
   echo "$udid"
 }

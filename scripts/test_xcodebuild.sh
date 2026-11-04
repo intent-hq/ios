@@ -26,7 +26,7 @@ mkdir -p "$stubs"
 # xcresulttool test-results query prints $STUB_RESULTS (fixture JSON; a
 # "-retry" bundle path prints $STUB_RESULTS_RETRY when set) or fails under
 # STUB_RESULTS_FAIL=1; `simctl list devices available -j` prints
-# $STUB_SIMCTL_DEVICES; `--show-sdk-version` prints $STUB_SDK_VERSION, or fails
+# $STUB_SIMCTL_DEVICES or fails under STUB_SIMCTL_FAIL=1; `--show-sdk-version` prints $STUB_SDK_VERSION, or fails
 # when it is unset; every other invocation (simctl) exits 0.
 cat > "$stubs/xcrun" <<'EOF'
 #!/usr/bin/env bash
@@ -35,6 +35,7 @@ if [ -n "${STUB_ARGS:-}" ]; then
 fi
 case " $* " in
   *" simctl list devices available -j "*)
+    [ -z "${STUB_SIMCTL_FAIL:-}" ] || exit 1
     [ -z "${STUB_SIMCTL_DEVICES:-}" ] || cat "$STUB_SIMCTL_DEVICES" ;;
   *" --sdk iphonesimulator --show-sdk-version "*)
     [ -n "${STUB_SDK_VERSION:-}" ] || exit 1
@@ -1326,6 +1327,17 @@ assert_eq "pick fails without an available iPhone" "$(cat "$work/none.status")" 
 assert_contains "pick explains the missing iPhone" "$(cat "$work/none.err")" "no available iPhone simulator"
 pick capnone "$work/sims.json" STUB_SDK_VERSION=17.0 > /dev/null
 assert_eq "pick fails when every iPhone runtime is newer than the SDK" "$(cat "$work/capnone.status")" 1
+printf '{"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-27-0": [' > "$work/sims-truncated.json"
+pick badjson "$work/sims-truncated.json" STUB_SDK_VERSION=27.2 > /dev/null
+assert_eq "pick fails on an unreadable simulator list" "$(cat "$work/badjson.status")" 1
+assert_contains "pick reports an unreadable list, not a missing iPhone" "$(cat "$work/badjson.err")" \
+  "could not read the simulator list"
+assert_lacks "pick does not blame a missing iPhone for an unreadable list" "$(cat "$work/badjson.err")" \
+  "no available iPhone simulator"
+pick simctlfail "$work/sims.json" STUB_SDK_VERSION=27.2 STUB_SIMCTL_FAIL=1 > /dev/null
+assert_eq "pick fails when simctl fails" "$(cat "$work/simctlfail.status")" 1
+assert_contains "pick names the failed simctl call" "$(cat "$work/simctlfail.err")" \
+  "xcrun simctl list devices available -j failed"
 
 echo
 if [ "$failures" -eq 0 ]; then
