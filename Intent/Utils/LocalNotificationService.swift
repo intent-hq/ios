@@ -174,6 +174,8 @@ final class LocalNotificationService: NSObject {
         Task { @MainActor [weak self] in
             var options = self?.onWillPresentNotification?(response) ?? []
             let requestsSound = options.contains(.sound)
+            // System alert volume is independent of output volume, whose read
+            // can also be stale while our audio session is inactive.
             options.remove(.sound)
             if requestsSound, let self, await center.soundIsEnabled() {
                 await playForegroundSound()

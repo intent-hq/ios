@@ -11,7 +11,11 @@ extension NotificationManagerTests {
         var sounds = 0
         let center = NotificationManagerFakeCenter()
         center.soundEnabled = soundEnabled
-        let service = LocalNotificationService(center: center, playForegroundSound: { sounds += 1 }) { reportedVolume }
+        let service = LocalNotificationService(
+            center: center,
+            playForegroundSound: { sounds += 1 },
+            outputVolume: { reportedVolume }
+        )
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { .active },
@@ -65,7 +69,7 @@ extension NotificationManagerTests {
         var state: UIApplication.State = .background
         var feedbackCount = 0
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center, playForegroundSound: {}) { 1 }
+        let service = LocalNotificationService(center: center, playForegroundSound: {}, outputVolume: { 1 })
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { state },

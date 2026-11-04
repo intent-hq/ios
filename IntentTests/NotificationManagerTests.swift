@@ -13,7 +13,7 @@ final class NotificationManagerFakeCenter: LocalNotificationCenter {
     var addError: (any Error)?
     var soundEnabled = true
 
-    func soundIsEnabled() async -> Bool { soundEnabled && authorizationStatus == .authorized }
+    func soundIsEnabled() -> Bool { soundEnabled && authorizationStatus == .authorized }
 
     func getAuthorizationStatus(
         completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
@@ -59,7 +59,7 @@ struct NotificationManagerTests {
         feedback: @escaping () -> Void = {}
     ) -> (NotificationManager, NotificationManagerFakeCenter) {
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center, playForegroundSound: {}) { 1 }
+        let service = LocalNotificationService(center: center, playForegroundSound: {}, outputVolume: { 1 })
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { state },

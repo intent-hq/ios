@@ -14,7 +14,7 @@ private final class FakeLocalNotificationCenter: LocalNotificationCenter {
     var authorizationGranted = true
     var completesAuthorizationRequest = true
 
-    func soundIsEnabled() async -> Bool { false }
+    func soundIsEnabled() -> Bool { false }
 
     func getAuthorizationStatus(
         completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
