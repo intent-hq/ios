@@ -259,6 +259,16 @@ status=0
 assert_eq "rerun under bash exits 0" "$status" 0
 assert_eq "rerun under bash runs the same commit" "$(record head)" "$sha_a"
 assert_eq "rerun under bash runs the same selectors" "$(record only)" "IntentTests/FooTests IntentTests/BarTests/testBaz() IntentTests/BarTests/needsDevice()"
+anywhere=$(summary_field "Rerun from any iOS clone")
+assert_contains "the portable rerun is relative to an iOS clone" "$anywhere" " scripts/run_commit_tests.sh '$sha_a' 'IntentTests/FooTests' 'IntentTests/BarTests/testBaz()' 'IntentTests/BarTests/needsDevice()'"
+# Replayed from inside another clone that has the script (untracked here).
+cp "$SCRIPT" "$src/scripts/run_commit_tests.sh"
+rm -f "$STUB_RECORD"
+status=0
+(cd "$src" && bash -c "$anywhere") > "$work/rerun-anywhere.out" 2>&1 || status=$?
+rm -f "$src/scripts/run_commit_tests.sh"
+assert_eq "the portable rerun works from an iOS clone" "$status" 0
+assert_eq "the portable rerun runs the same commit" "$(record head)" "$sha_a"
 if command -v zsh >/dev/null 2>&1; then
   rm -f "$STUB_RECORD"
   status=0

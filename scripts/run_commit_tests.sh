@@ -143,21 +143,23 @@ mkdir -p "$root/runs" "$root/tailcatkit"
 root=$(cd "$root" && pwd)
 summary=$root/summary.md
 
-# set_rerun <commit>: the rerun command - recorded environment, this script,
-# --repo, the commit and every selector, each single-quoted. It is set again
-# with the resolved SHA, so replaying it never follows a moved branch.
+# set_rerun <commit>: the rerun commands - recorded environment, then this
+# script with --repo (rerun) or the relative path for any iOS clone
+# (rerun_anywhere), the commit and every selector, each single-quoted. It is
+# set again with the resolved SHA, so replaying never follows a moved branch.
 set_rerun() {
-  local name value selector
-  rerun=
+  local name value selector args env_prefix=''
   for name in $RECORDED_ENV $(env | sed -n 's/^\(TEST_RUNNER_[A-Za-z0-9_]*\)=.*/\1/p' | sort -u); do
     if value=$(printenv "$name"); then
-      rerun="$rerun$name=$(shell_quote "$value") "
+      env_prefix="$env_prefix$name=$(shell_quote "$value") "
     fi
   done
-  rerun="$rerun$(shell_quote "$script_path") --repo $(shell_quote "$repo") $(shell_quote "$1")"
+  args=$(shell_quote "$1")
   for selector in "${selectors[@]}"; do
-    rerun="$rerun $(shell_quote "$selector")"
+    args="$args $(shell_quote "$selector")"
   done
+  rerun="$env_prefix$(shell_quote "$script_path") --repo $(shell_quote "$repo") $args"
+  rerun_anywhere="${env_prefix}scripts/run_commit_tests.sh $args"
 }
 set_rerun "$rev"
 
@@ -227,6 +229,7 @@ write_summary() {
       echo "- Result bundle: $bundle"
     fi
     echo "- Rerun: $rerun"
+    echo "- Rerun from any iOS clone: $rerun_anywhere"
     if [ "$state" = RUNNING ]; then
       echo "- PID: $$ (if this process no longer exists, the run was killed; rerun it)"
     fi
