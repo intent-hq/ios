@@ -2,6 +2,8 @@ import Foundation
 
 extension AgentStore {
     /// Refresh the visible list and only the groups the user has requested.
+    /// Every read walks all `agent.list` pages of its variant; a failed page
+    /// fails the read, so a partial list never replaces a whole one.
     /// Per-scope request tickets prevent older reads from winning a race;
     /// the epoch also protects a workspace A → B → A navigation sequence.
     func _fetchAgents(workspaceId: String) async {
@@ -17,7 +19,9 @@ extension AgentStore {
             var params: [String: Any] = ["workspaceId": workspaceId]
             if scopedLoading { params["scope"] = "topLevel" }
             let boundary = summaries?.beginRead()
-            let result = try await connectionManager.request("agent.list", params: params)
+            let result = try await PagedReads.requestAgentList(params, connection: connectionManager) {
+                list.epoch == epoch && list.topLevelRequest == sequence
+            }
             guard list.epoch == epoch, list.topLevelRequest == sequence else { return }
             try Task.checkCancellation()
             let (response, rows) = try decodeList(result)
@@ -90,9 +94,9 @@ extension AgentStore {
         }
         do {
             let boundary = summaries?.beginRead()
-            let result = try await connectionManager.request(
-                "agent.list", params: groupParams(group, workspaceId: workspaceId, orphanOnly: orphanOnly)
-            )
+            let result = try await PagedReads.requestAgentList(
+                groupParams(group, workspaceId: workspaceId, orphanOnly: orphanOnly), connection: connectionManager
+            ) { list.epoch == epoch && list.groupRequests[group] == sequence }
             guard list.epoch == epoch, list.groupRequests[group] == sequence else { return }
             try Task.checkCancellation()
             let (response, rows) = try decodeList(result)

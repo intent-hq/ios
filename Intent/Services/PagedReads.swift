@@ -17,6 +17,10 @@ enum PagedReads {
     static let commentPageLimit = 500
     /// `workspace.list` page size for one-shot reads: the daemon maximum.
     static let workspacePageLimit = 200
+    /// `agent.list` page size: the daemon maximum.
+    static let agentPageLimit = 200
+    /// `agent.getQueue` page size: the daemon maximum.
+    static let queuePageLimit = 200
     /// Attempts per continuation page before the walk gives up.
     static let pageAttempts = 3
     private static let pageRetryBaseMilliseconds = 250
@@ -80,6 +84,63 @@ enum PagedReads {
             token = next
         }
         throw IncompleteWalk()
+    }
+
+    /// A continuation page whose reply has no `field` array.
+    struct MalformedPage: Error {}
+
+    /// Reads every page of a list method into one reply: the first page's
+    /// envelope (whole-collection counts such as `retiredCount` or
+    /// `queueLength`) with `field` holding every page's elements in order and
+    /// no `nextToken`. `params` are repeated on every page with the previous
+    /// page's `nextToken`. A first reply without a token, or without a `field`
+    /// array, is returned unchanged so callers keep their own envelope checks.
+    /// Page errors propagate, a continuation page without a `field` array
+    /// throws `MalformedPage`, and a walk that cannot reach the last page
+    /// throws `IncompleteWalk`, so a partial list is never returned as whole.
+    static func requestWholeReply(
+        params: [String: Any],
+        field: String,
+        request: Request
+    ) async throws -> Any {
+        let first = try await request(params)
+        guard var whole = first as? [String: Any], var elements = whole[field] as? [Any],
+              var token = nextToken(first) else { return first }
+        var seen: Set<String> = [token]
+        for _ in 1..<maxPages {
+            var pageParams = params
+            pageParams["nextToken"] = token
+            let reply = try await request(pageParams)
+            guard let page = (reply as? [String: Any])?[field] as? [Any] else { throw MalformedPage() }
+            elements.append(contentsOf: page)
+            guard let next = nextToken(reply) else {
+                whole[field] = elements
+                whole.removeValue(forKey: "nextToken")
+                return whole
+            }
+            guard seen.insert(next).inserted else { throw IncompleteWalk() }
+            token = next
+        }
+        throw IncompleteWalk()
+    }
+
+    /// Every `agent.list` page of one variant (protocol "Paged agent lists
+    /// and queues"): rows ascend by `(createdAt, id)` and the variant params
+    /// (`scope`, `parentAgentId`, `retiredOnly`, ...) repeat on every page.
+    /// `isCurrent` is checked before each continuation page; a read that
+    /// turned stale stops with `CancellationError` instead of reading on.
+    @MainActor
+    static func requestAgentList(
+        _ params: [String: Any],
+        connection: ConnectionManagerRouting,
+        isCurrent: @MainActor () -> Bool = { true }
+    ) async throws -> Any {
+        var params = params
+        params["limit"] = agentPageLimit
+        return try await requestWholeReply(params: params, field: "agents") { page in
+            if page["nextToken"] != nil, !isCurrent() { throw CancellationError() }
+            return try await connection.request("agent.list", params: page)
+        }
     }
 
     /// How a snapshot continuation walk ended.
