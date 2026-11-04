@@ -67,6 +67,7 @@ $(SRCROOT)/Intent/DesignSystem/ConversationDesignColors.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationMediaLayout.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationReadableColumn.swift
 $(SRCROOT)/Intent/DesignSystem/ConversationTranscriptLayout.swift
+$(SRCROOT)/Intent/DesignSystem/DesignPalette.swift
 $(SRCROOT)/Intent/DesignSystem/IPadShellLayout.swift
 $(SRCROOT)/Intent/DesignSystem/IntentButtonStyle.swift
 $(SRCROOT)/Intent/DesignSystem/InterFontModifier.swift

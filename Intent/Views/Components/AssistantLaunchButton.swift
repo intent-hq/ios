@@ -81,24 +81,40 @@ struct AssistantLauncherLayout {
     let tileExtraInset: CGFloat
 
     // Named layout presets keep platform geometry in one place.
-    // swiftlint:disable no_magic_numbers
+    private enum Handheld {
+        static let diameter: CGFloat = 80
+        static let closeSize: CGFloat = 48
+        static let horizontalInset: CGFloat = 24
+        static let launcherBottomInset: CGFloat = 12
+        static let menuBottomInset: CGFloat = 24
+        static let tileExtraInset: CGFloat = 0
+    }
+
+    private enum Spatial {
+        static let diameter: CGFloat = 88
+        static let closeSize: CGFloat = 60
+        static let horizontalInset: CGFloat = 48
+        static let launcherBottomInset: CGFloat = 36
+        static let menuBottomInset: CGFloat = 48
+        static let tileExtraInset: CGFloat = 24
+    }
+
     static let handheld = Self(
-        diameter: 80,
-        closeSize: 48,
-        horizontalInset: 24,
-        launcherBottomInset: 12,
-        menuBottomInset: 24,
-        tileExtraInset: 0
+        diameter: Handheld.diameter,
+        closeSize: Handheld.closeSize,
+        horizontalInset: Handheld.horizontalInset,
+        launcherBottomInset: Handheld.launcherBottomInset,
+        menuBottomInset: Handheld.menuBottomInset,
+        tileExtraInset: Handheld.tileExtraInset
     )
     static let spatial = Self(
-        diameter: 88,
-        closeSize: 60,
-        horizontalInset: 48,
-        launcherBottomInset: 36,
-        menuBottomInset: 48,
-        tileExtraInset: 24
+        diameter: Spatial.diameter,
+        closeSize: Spatial.closeSize,
+        horizontalInset: Spatial.horizontalInset,
+        launcherBottomInset: Spatial.launcherBottomInset,
+        menuBottomInset: Spatial.menuBottomInset,
+        tileExtraInset: Spatial.tileExtraInset
     )
-    // swiftlint:enable no_magic_numbers
 
     static var current: Self {
         #if os(visionOS)
