@@ -35,7 +35,7 @@
 - Use separate derived-data directories and simulators for concurrent runs; the wrapper serializes tests on a shared simulator.
 - `ONLY_TESTING` accepts whitespace-separated runnable `Target[/Suite[/test]]` identifiers; filenames are not selectors. Inspect executed/skipped counts before claiming coverage; all-skipped selections can pass.
 - For Release split runs, set `BUILD_CONFIGURATION=Release` on both commands; Debug results and Debug-only fixtures are not Release coverage.
-- When adding, removing, or moving Swift files, update [SwiftLint inputs](scripts/swiftlint-xcode-inputs.xcfilelist), sorted with `LC_ALL=C`, and run `scripts/check-swiftlint-inputs.sh`.
+- After adding, removing, splitting, or moving Swift files, run `scripts/update-source-lists.sh`; it regenerates both Xcode input lists (test sources and SwiftLint) from the working tree.
 - Linux agents cannot compile Swift, so a Mac helper agent runs iOS tests. Give it one command: `scripts/run_commit_tests.sh <full-sha> 'IntentTests/<Suite>' ...` (single-quote each selector). It tests that commit in a clean temporary checkout through the wrapper and writes `~/Library/Caches/intent-ios-test-run/summary.md`: verdict, per-suite counts, failing tests, and the rerun command. Run it in the foreground; a restarted agent reads the summary instead of asking for the steps again.
 - Read the [wrapper header](scripts/xcodebuild.sh) for locks, crash retries, and exit codes; use [prerequisites](README.md#clean-checkout-prerequisites), [wrapper commands](README.md#xcode-wrapper-commands), and [SwiftLint setup](README.md#strict-lint-on-linux) for toolchain details.
 
@@ -59,6 +59,7 @@ Run the matching checks after changing tooling:
 | Xcode wrapper | `scripts/test_xcodebuild.sh` |
 | Mac commit test runner | `scripts/test_run_commit_tests.sh` |
 | Source-input generator | `scripts/test-generate-test-inputs.sh` |
+| Source-list updater / shared enumeration (`scripts/source-lists.sh`) | `scripts/test-update-source-lists.sh`; `scripts/test-check-swiftlint-inputs.sh`; `scripts/test-generate-test-inputs.sh` |
 | CI / test selection | `python3 scripts/test_ci_simulator.py`; `python3 scripts/test_ui_smoke_tests.py`; `python3 scripts/test_ui_full_tests.py` |
 | Runner / capture selection | `python3 scripts/test_select_macos_runner.py`; `python3 scripts/test_select_fixture_capture_repetitions.py` |
 | Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`) |

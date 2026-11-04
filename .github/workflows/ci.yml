@@ -197,6 +197,11 @@ jobs:
       - name: check-swiftlint-inputs.sh self-tests
         run: scripts/test-check-swiftlint-inputs.sh
 
+      # Exercises scripts/update-source-lists.sh against a fixture git repo and
+      # proves its output satisfies both input-list drift checks.
+      - name: update-source-lists.sh self-tests
+        run: scripts/test-update-source-lists.sh
+
       # Exercises source-input generation and validation on Linux; the script's
       # sandbox-exec cases remain conditional and run only on macOS.
       - name: generate-test-inputs.sh self-tests
@@ -235,7 +240,7 @@ jobs:
         uses: actions/checkout@v7
 
       # The Xcode lint phase only warns and skips diagnostics when
-      # scripts/swiftlint-xcode-inputs.xcfilelist drifts from the tracked Swift
+      # scripts/swiftlint-xcode-inputs.xcfilelist drifts from the Swift
       # sources; this strict check keeps that drift merge-blocking (ios#384).
       - name: Check SwiftLint Xcode input list
         run: scripts/check-swiftlint-inputs.sh

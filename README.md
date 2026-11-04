@@ -634,9 +634,10 @@ static Inter faces from the pinned Inter release (see its header for the command
 The Linux job also runs the offline tooling self-tests `scripts/test_xcodebuild.sh`,
 `scripts/test_run_commit_tests.sh`,
 `scripts/test-ci-post-clone.sh`, `scripts/test-check-swiftlint-inputs.sh`,
-`scripts/test-generate-test-inputs.sh`, and `python3 scripts/test_select_macos_runner.py`;
+`scripts/test-update-source-lists.sh`, `scripts/test-generate-test-inputs.sh`, and `python3 scripts/test_select_macos_runner.py`;
 `scripts/check-swiftlint-inputs.sh` keeps `scripts/swiftlint-xcode-inputs.xcfilelist`
-in sync with the tracked Swift sources.
+in sync with the Swift sources; `scripts/update-source-lists.sh` regenerates it and
+`scripts/test-source-inputs.xcfilelist` after Swift files are added, split, moved, or removed.
 
 Two auxiliary workflows run on pushes to `main`: `warm-cache.yml` (also weekly on
 Mondays at 06:17 UTC and on manual dispatch) seeds the Go, TailcatKit, and SPM caches
