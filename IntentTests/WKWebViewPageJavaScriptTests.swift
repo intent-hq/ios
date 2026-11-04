@@ -20,6 +20,22 @@ struct WKWebViewPageJavaScriptTests {
         #expect(try await webView.callPageJavaScript("await Promise.resolve();", arguments: [:]) == nil)
     }
 
+    @Test func callJavaScriptReturnsNonStringValues() async throws {
+        let webView = WKWebView(frame: .zero)
+        #expect(try await webView.callJavaScript("return 40 + 2;", arguments: [:]) as? Int == 42)
+        #expect(try await webView.callJavaScript("return flag;", arguments: ["flag": true]) as? Bool == true)
+        #expect(try await webView.callJavaScript("await Promise.resolve();", arguments: [:]) == nil)
+    }
+
+    @Test func callJavaScriptRunsInTheRequestedContentWorld() async throws {
+        let webView = WKWebView(frame: .zero)
+        _ = try await webView.callJavaScript("window.intentWorldProbe = 'client';", arguments: [:], in: .defaultClient)
+        let fromClient = try await webView.callJavaScript("return window.intentWorldProbe;", arguments: [:], in: .defaultClient)
+        let fromPage = try await webView.callJavaScript("return window.intentWorldProbe ?? 'unset';", arguments: [:])
+        #expect(fromClient as? String == "client")
+        #expect(fromPage as? String == "unset")
+    }
+
     @Test func javaScriptExceptionsThrow() async {
         let webView = WKWebView(frame: .zero)
         await #expect(throws: (any Error).self) {

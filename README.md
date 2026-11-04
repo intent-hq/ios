@@ -639,8 +639,8 @@ The Linux job also runs the offline tooling self-tests `scripts/test_xcodebuild.
 in sync with the Swift sources; `scripts/update-source-lists.sh` regenerates it and
 `scripts/test-source-inputs.xcfilelist` after Swift files are added, split, moved, or removed.
 After building, the macOS job runs `scripts/check-webkit-overlay-linkage.sh`, which
-fails if `Intent.app` links `/usr/lib/swift/libswiftWebKit.dylib` (the app then cannot
-launch on iOS 18.4–18.5 simulators); `scripts/test-check-webkit-overlay-linkage.sh` is
+fails if `Intent.app` or a test bundle built next to it links
+`/usr/lib/swift/libswiftWebKit.dylib` (which cannot load on iOS 18.4–18.5 simulators); `scripts/test-check-webkit-overlay-linkage.sh` is
 its macOS self-test.
 
 Two auxiliary workflows run on pushes to `main`: `warm-cache.yml` (also weekly on

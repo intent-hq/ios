@@ -51,6 +51,7 @@ make_app "$TEMP_ROOT/Debug/Intent.app" uses.c Intent.debug.dylib -dynamiclib "$T
 run_check "$CHECK" "$TEMP_ROOT/Clean/Intent.app"
 [ "$status" -eq 0 ] || fail "clean app exited $status: $output"
 assert_contains "$output" "ok: $TEMP_ROOT/Clean/Intent.app/Intent.debug.dylib does not load"
+assert_contains "$output" "note: no test bundles next to $TEMP_ROOT/Clean/Intent.app"
 
 run_check "$CHECK" "$TEMP_ROOT/Release/Intent.app"
 [ "$status" -eq 1 ] || fail "Release app linking the overlay exited $status"
@@ -81,5 +82,61 @@ mkdir -p "$TEMP_ROOT/Empty/Intent.app"
 run_check "$CHECK" "$TEMP_ROOT/Empty/Intent.app"
 [ "$status" -eq 1 ] || fail "app without a binary exited $status"
 assert_contains "$output" "no Intent binary in"
+
+# Test bundles: Intent.app/PlugIns/*.xctest and a sibling *-Runner.app.
+copy_app() {
+  mkdir -p "$TEMP_ROOT/$1"
+  cp -R "$TEMP_ROOT/Clean/Intent.app" "$TEMP_ROOT/$1/"
+  printf '%s\n' "$TEMP_ROOT/$1/Intent.app"
+}
+app=$(copy_app CleanTests)
+make_app "$app/PlugIns/IntentTests.xctest" clean.c IntentTests -bundle
+make_app "$TEMP_ROOT/CleanTests/IntentUITests-Runner.app" clean.c IntentUITests-Runner
+make_app "$TEMP_ROOT/CleanTests/IntentUITests-Runner.app/PlugIns/IntentUITests.xctest" clean.c IntentUITests -bundle
+run_check "$CHECK" "$app"
+[ "$status" -eq 0 ] || fail "clean app with clean test bundles exited $status: $output"
+assert_contains "$output" "ok: $app/PlugIns/IntentTests.xctest/IntentTests does not load"
+assert_contains "$output" "ok: $TEMP_ROOT/CleanTests/IntentUITests-Runner.app/IntentUITests-Runner does not load"
+assert_contains "$output" "ok: $TEMP_ROOT/CleanTests/IntentUITests-Runner.app/PlugIns/IntentUITests.xctest/IntentUITests does not load"
+
+app=$(copy_app UnitBundle)
+make_app "$app/PlugIns/IntentTests.xctest" uses.c IntentTests -bundle "$TEMP_ROOT/libswiftWebKit.dylib"
+run_check "$CHECK" "$app"
+[ "$status" -eq 1 ] || fail "unit test bundle linking the overlay exited $status"
+assert_contains "$output" "error: $app/PlugIns/IntentTests.xctest/IntentTests loads /usr/lib/swift/libswiftWebKit.dylib"
+assert_contains "$output" "ok: $app/Intent.debug.dylib does not load"
+
+app=$(copy_app UIBundle)
+make_app "$TEMP_ROOT/UIBundle/IntentUITests-Runner.app" clean.c IntentUITests-Runner
+make_app "$TEMP_ROOT/UIBundle/IntentUITests-Runner.app/PlugIns/IntentUITests.xctest" uses.c IntentUITests -bundle "$TEMP_ROOT/libswiftWebKit.dylib"
+run_check "$CHECK" "$app"
+[ "$status" -eq 1 ] || fail "UI test bundle linking the overlay exited $status"
+assert_contains "$output" "error: $TEMP_ROOT/UIBundle/IntentUITests-Runner.app/PlugIns/IntentUITests.xctest/IntentUITests loads"
+
+app=$(copy_app NoExecutable)
+mkdir -p "$app/PlugIns/IntentTests.xctest"
+run_check "$CHECK" "$app"
+[ "$status" -eq 1 ] || fail "test bundle without an executable exited $status"
+assert_contains "$output" "no executable in $app/PlugIns/IntentTests.xctest"
+
+# otool must not turn an unreadable or non-Mach-O binary into "ok".
+app=$(copy_app NotMachO)
+echo 'not a Mach-O file' > "$app/Intent.debug.dylib"
+run_check "$CHECK" "$app"
+[ "$status" -eq 1 ] || fail "non-Mach-O binary exited $status: $output"
+assert_contains "$output" "otool -L listed no libraries for $app/Intent.debug.dylib"
+
+app=$(copy_app Truncated)
+head -c 64 "$TEMP_ROOT/Clean/Intent.app/Intent" > "$app/Intent"
+run_check "$CHECK" "$app"
+[ "$status" -eq 1 ] || fail "truncated Mach-O exited $status: $output"
+assert_contains "$output" "$app/Intent"
+
+app=$(copy_app Unreadable)
+chmod 000 "$app/Intent"
+run_check "$CHECK" "$app"
+chmod 644 "$app/Intent"
+[ "$status" -eq 1 ] || fail "unreadable binary exited $status: $output"
+assert_contains "$output" "otool -L failed on $app/Intent"
 
 echo "check-webkit-overlay-linkage tests passed"
