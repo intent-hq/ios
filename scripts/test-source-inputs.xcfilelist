@@ -430,6 +430,7 @@ $(SRCROOT)/Intent/Services/BrowserTunnelRelay.swift
 $(SRCROOT)/Intent/Services/BrowserTunnelStream.swift
 $(SRCROOT)/Intent/Services/BrowserTunnelURL.swift
 $(SRCROOT)/Intent/Services/CertFingerprintProbe.swift
+$(SRCROOT)/Intent/Services/CoalescedRead.swift
 $(SRCROOT)/Intent/Services/CommentStore.swift
 $(SRCROOT)/Intent/Services/ConnectionAdmission.swift
 $(SRCROOT)/Intent/Services/ConnectionCapabilities.swift
@@ -548,6 +549,7 @@ $(SRCROOT)/Intent/Services/WebSocketHandshake.swift
 $(SRCROOT)/Intent/Services/WebSocketMessageAssembler.swift
 $(SRCROOT)/Intent/Services/WebSocketPingSupport.swift
 $(SRCROOT)/Intent/Services/WebSocketTransportError.swift
+$(SRCROOT)/Intent/Services/WorkspaceAuthorityGate.swift
 $(SRCROOT)/Intent/Services/WorkspaceBrowserStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceChangesStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceCreationImages.swift
@@ -948,6 +950,7 @@ $(SRCROOT)/IntentTests/BrowserTunnelRelayTests.swift
 $(SRCROOT)/IntentTests/BrowserTunnelURLTests.swift
 $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
 $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
+$(SRCROOT)/IntentTests/CoalescedReadTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/CommentStorePagingTests.swift
@@ -1293,6 +1296,7 @@ $(SRCROOT)/IntentTests/WorkspaceAgentLoadingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAgentSelectionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAssetMarkdownTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
+$(SRCROOT)/IntentTests/WorkspaceAuthorityGateTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserFixture.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserPageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserRaceTests.swift
