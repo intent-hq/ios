@@ -57,7 +57,7 @@ Run the matching checks after changing tooling:
 | --- | --- |
 | Xcode wrapper | `scripts/test_xcodebuild.sh` |
 | Source-input generator | `scripts/test-generate-test-inputs.sh` |
-| Source-list updater | `scripts/test-update-source-lists.sh` |
+| Source-list updater / shared enumeration (`scripts/source-lists.sh`) | `scripts/test-update-source-lists.sh`; `scripts/test-check-swiftlint-inputs.sh`; `scripts/test-generate-test-inputs.sh` |
 | CI / test selection | `python3 scripts/test_ci_simulator.py`; `python3 scripts/test_ui_smoke_tests.py`; `python3 scripts/test_ui_full_tests.py` |
 | Runner / capture selection | `python3 scripts/test_select_macos_runner.py`; `python3 scripts/test_select_fixture_capture_repetitions.py` |
 | Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`) |

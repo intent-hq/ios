@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Self-test for scripts/update-source-lists.sh against a fixture git repo.
-# Also proves the regenerated SwiftLint list satisfies
-# scripts/check-swiftlint-inputs.sh; the test-source list format is pinned to
-# the stale-list check in scripts/test-generate-test-inputs.sh.
+# Also proves the regenerated lists satisfy scripts/check-swiftlint-inputs.sh
+# and the shared enumeration the stale-list check in
+# scripts/test-generate-test-inputs.sh uses (scripts/source-lists.sh).
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,13 +31,14 @@ assert_list() {
   diff -u "$TEMP_ROOT/expected" "$list" >&2 || fail "$description"
 }
 
-# Recomputes the test-source list exactly as test-generate-test-inputs.sh does.
+# The stale-list check in test-generate-test-inputs.sh compares against this.
 assert_test_list_matches_generator_check() {
-  find "$FIXTURE/Intent" "$FIXTURE/IntentTests" \
-    \( -type d -o -type f -name '*.swift' \) -print | LC_ALL=C sort |
-    while IFS= read -r path; do
-      printf '$(SRCROOT)/%s\n' "${path#"$FIXTURE/"}"
-    done > "$TEMP_ROOT/generator-expected"
+  (
+    set -euo pipefail
+    # shellcheck source=scripts/source-lists.sh
+    source "$FIXTURE/scripts/source-lists.sh"
+    list_test_sources "$FIXTURE"
+  ) > "$TEMP_ROOT/generator-expected"
   cmp -s "$TEMP_ROOT/generator-expected" "$TEST_LIST" ||
     fail "test-source list does not match the test-generate-test-inputs.sh check"
 }
@@ -59,6 +60,7 @@ mkdir -p "$FIXTURE/scripts" "$FIXTURE/Intent/Nested Dir" "$FIXTURE/Intent/Resour
   "$FIXTURE/IntentUITests" "$FIXTURE/TailcatKit"
 cp "$SCRIPT_DIR/update-source-lists.sh" "$UPDATE"
 cp "$SCRIPT_DIR/check-swiftlint-inputs.sh" "$CHECK"
+cp "$SCRIPT_DIR/source-lists.sh" "$FIXTURE/scripts/source-lists.sh"
 printf 'Intent/Generated/\n' > "$FIXTURE/.gitignore"
 printf 'let app = 1\n' > "$FIXTURE/Intent/App.swift"
 printf 'let nested = 2\n' > "$FIXTURE/Intent/Nested Dir/Nested.swift"
@@ -70,6 +72,20 @@ printf 'let fixture = 7\n' > "$FIXTURE/IntentTests/Fixtures/Fixture.swift"
 printf 'let generated = 8\n' > "$FIXTURE/Intent/Generated/Generated.swift"
 printf 'let outside = 9\n' > "$FIXTURE/TailcatKit/Outside.swift"
 printf 'not swift\n' > "$FIXTURE/Intent/Notes.md"
+
+set +e
+output=$("$UPDATE" 2>&1)
+status=$?
+set -e
+[ "$status" -ne 0 ] || fail "update outside a git checkout succeeded"
+assert_contains "$output" "is not a git checkout"
+if [ -e "$TEST_LIST" ] || [ -e "$SWIFTLINT_LIST" ]; then
+  fail "update outside a git checkout wrote a list"
+fi
+if find "$FIXTURE/scripts" -name '.*.??????' -print | grep -q .; then
+  fail "update outside a git checkout left temp files"
+fi
+
 git_fixture init -q
 git_fixture add -A
 git_fixture commit -q -m 'fixture'
@@ -87,15 +103,17 @@ fi
 run_update
 assert_contains "$output" "updated scripts/test-source-inputs.xcfilelist"
 assert_contains "$output" "updated scripts/swiftlint-xcode-inputs.xcfilelist"
-# The test-source list keeps every directory (it declares sandbox reads) and
-# every Swift file under Intent/ and IntentTests/, ignored or pruned or not.
+# The test-source list declares sandbox reads: every directory holding a file
+# git sees plus every such Swift file under Intent/ and IntentTests/, pruned
+# by SwiftLint or not. The ignored Intent/Generated/ stays out (with a warning).
+assert_contains "$output" "warning: Intent/Generated exists only locally"
+assert_contains "$output" "warning: Intent/Generated/Generated.swift exists only locally"
+assert_contains "$output" "Xcode lint phase will skip diagnostics"
 assert_list "initial test-source list" "$TEST_LIST" \
   'Intent' \
   'Intent/App.swift' \
   'Intent/Assets.xcassets' \
   'Intent/Assets.xcassets/Asset.swift' \
-  'Intent/Generated' \
-  'Intent/Generated/Generated.swift' \
   'Intent/Nested Dir' \
   'Intent/Nested Dir/Nested.swift' \
   'Intent/Resources' \
@@ -153,5 +171,39 @@ if grep -Fq 'AppSplitTests.swift' "$TEST_LIST" "$SWIFTLINT_LIST"; then
 fi
 assert_test_list_matches_generator_check
 assert_check_passes "deleted tracked source"
+
+# Local-only leftovers (an emptied directory, an ignored build directory) are
+# what a fresh clone lacks, so they must never reach the committed lists.
+cp "$TEST_LIST" "$TEMP_ROOT/test-list-before"
+cp "$SWIFTLINT_LIST" "$TEMP_ROOT/swiftlint-list-before"
+mkdir -p "$FIXTURE/Intent/Emptied" "$FIXTURE/IntentTests/build"
+printf 'build/\n' >> "$FIXTURE/.gitignore"
+git_fixture add .gitignore
+printf 'let built = 13\n' > "$FIXTURE/IntentTests/build/Built.swift"
+run_update
+assert_contains "$output" "warning: Intent/Emptied exists only locally"
+assert_contains "$output" "warning: IntentTests/build/Built.swift exists only locally"
+assert_contains "$output" "local test builds may hit a sandbox deny"
+cmp -s "$TEMP_ROOT/test-list-before" "$TEST_LIST" ||
+  fail "local-only paths changed the test-source list"
+cmp -s "$TEMP_ROOT/swiftlint-list-before" "$SWIFTLINT_LIST" ||
+  fail "local-only paths changed the SwiftLint list"
+assert_test_list_matches_generator_check
+assert_check_passes "local-only leftovers"
+
+# A fresh clone of the result passes both checks.
+git_fixture add -A
+git_fixture commit -q -m 'regenerated'
+git clone -q "$FIXTURE" "$TEMP_ROOT/clone"
+[ ! -e "$TEMP_ROOT/clone/Intent/Emptied" ] || fail "clone unexpectedly has the emptied directory"
+(
+  set -euo pipefail
+  # shellcheck source=scripts/source-lists.sh
+  source "$TEMP_ROOT/clone/scripts/source-lists.sh"
+  list_test_sources "$TEMP_ROOT/clone"
+) | cmp -s - "$TEMP_ROOT/clone/scripts/test-source-inputs.xcfilelist" ||
+  fail "fresh clone fails the test-source stale check"
+"$TEMP_ROOT/clone/scripts/check-swiftlint-inputs.sh" >/dev/null 2>&1 ||
+  fail "fresh clone fails check-swiftlint-inputs.sh"
 
 echo "update-source-lists.sh tests passed"

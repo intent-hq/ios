@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Fails when scripts/swiftlint-xcode-inputs.xcfilelist drifts from the Swift
 # sources under Intent/, IntentTests/ and IntentUITests/ (excluding the same
-# directories scripts/swiftlint-xcode.sh prunes). Sources are the working-tree
-# files git tracks or would track (new files count before `git add`; ignored
-# and deleted files do not), matching scripts/update-source-lists.sh, which
-# fixes any drift. The Xcode lint phase only warns and skips diagnostics on
-# drift, so this strict check runs in CI to keep the list complete.
+# directories scripts/swiftlint-xcode.sh prunes). Sources are the files git
+# sees (new files count before `git add`; ignored and deleted files do not),
+# enumerated by scripts/source-lists.sh exactly as
+# scripts/update-source-lists.sh writes them, so that script fixes any drift.
+# The Xcode lint phase only warns and skips diagnostics on drift, so this
+# strict check runs in CI to keep the list complete.
 set -euo pipefail
 
 fail() {
@@ -18,19 +19,15 @@ fail() {
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/.." && pwd -P)"
 input_file_list="$script_dir/swiftlint-xcode-inputs.xcfilelist"
+# shellcheck source=scripts/source-lists.sh
+source "$script_dir/source-lists.sh"
 
 [ -f "$input_file_list" ] || fail "missing $input_file_list"
 
 expected="$(mktemp "${TMPDIR:-/tmp}/swiftlint-inputs-expected.XXXXXX")"
 trap 'rm -f -- "$expected"' EXIT
 
-git -C "$repo_root" ls-files -z --cached --others --exclude-standard -- 'Intent/*.swift' 'IntentTests/*.swift' 'IntentUITests/*.swift' \
-  ':(exclude)Intent/Resources' ':(exclude)Intent/Assets.xcassets' ':(exclude)IntentTests/Fixtures' |
-  LC_ALL=C sort -zu |
-  while IFS= read -r -d '' relative; do
-    [ -f "$repo_root/$relative" ] || continue
-    printf '$(SRCROOT)/%s\n' "$relative"
-  done > "$expected"
+list_swiftlint_sources "$repo_root" > "$expected"
 
 [ -s "$expected" ] || fail "no Swift sources found under $repo_root"
 

@@ -49,6 +49,7 @@ mkdir -p "$FIXTURE/scripts" "$FIXTURE/Intent/Nested Dir" "$FIXTURE/Intent/Resour
   "$FIXTURE/Intent/Assets.xcassets" "$FIXTURE/IntentTests/Fixtures" "$FIXTURE/IntentUITests" \
   "$FIXTURE/TailcatKit"
 cp "$CHECK" "$FIXTURE_CHECK"
+cp "$SCRIPT_DIR/source-lists.sh" "$FIXTURE/scripts/source-lists.sh"
 printf 'let app = 1\n' > "$FIXTURE/Intent/App.swift"
 printf 'let nested = 2\n' > "$FIXTURE/Intent/Nested Dir/Nested.swift"
 printf 'let tests = 3\n' > "$FIXTURE/IntentTests/AppTests.swift"
@@ -103,7 +104,8 @@ write_list \
   'Intent/Nested Dir/Nested.swift' \
   'IntentUITests/AddedUITests.swift' \
   'IntentUITests/AppUITests.swift'
-assert_check_fails "unsorted list" "@@"
+assert_check_fails "unsorted list" '-$(SRCROOT)/IntentTests/AppTests.swift'
+assert_contains "$output" '+$(SRCROOT)/IntentTests/AppTests.swift'
 
 write_list \
   'Intent/App.swift' \

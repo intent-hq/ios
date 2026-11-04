@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Regenerates both hand-maintained Xcode input lists from the Swift sources in
-# the working tree. Run it after adding, removing, splitting or moving a Swift
-# file under Intent/, IntentTests/ or IntentUITests/:
+# Regenerates both hand-maintained Xcode input lists. Run it after adding,
+# removing, splitting or moving a Swift file under Intent/, IntentTests/ or
+# IntentUITests/:
 #
 #   scripts/test-source-inputs.xcfilelist
 #     Directories plus Swift files under Intent/ and IntentTests/; the
@@ -12,8 +12,11 @@
 #     directories scripts/swiftlint-xcode.sh prunes. Checked by
 #     scripts/check-swiftlint-inputs.sh.
 #
-# Both lists are sorted with LC_ALL=C. New files count before `git add`;
-# git-ignored files and deleted-but-still-tracked files do not.
+# Both lists hold the files git sees (tracked, or new and not ignored, and
+# present on disk), sorted with LC_ALL=C; see scripts/source-lists.sh. Paths
+# that exist only locally (empty or ignored directories, ignored Swift files)
+# stay out and are reported as warnings, because the Xcode phases still see
+# them on disk.
 set -euo pipefail
 
 fail() {
@@ -27,6 +30,8 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/.." && pwd -P)"
 test_list="$script_dir/test-source-inputs.xcfilelist"
 swiftlint_list="$script_dir/swiftlint-xcode-inputs.xcfilelist"
+# shellcheck source=scripts/source-lists.sh
+source "$script_dir/source-lists.sh"
 
 for directory in Intent IntentTests IntentUITests; do
   [ -d "$repo_root/$directory" ] || fail "missing $directory/ under $repo_root"
@@ -36,27 +41,22 @@ test_tmp="$(mktemp "$script_dir/.test-source-inputs.XXXXXX")"
 swiftlint_tmp="$(mktemp "$script_dir/.swiftlint-xcode-inputs.XXXXXX")"
 trap 'rm -f -- "$test_tmp" "$swiftlint_tmp"' EXIT
 
-# Mirrors the stale-list check in scripts/test-generate-test-inputs.sh.
-(
-  cd -- "$repo_root"
-  find Intent IntentTests \( -type d -o -type f -name '*.swift' \) -print |
-    LC_ALL=C sort |
-    while IFS= read -r relative; do
-      printf '$(SRCROOT)/%s\n' "$relative"
-    done
-) > "$test_tmp"
-
-# Mirrors scripts/check-swiftlint-inputs.sh.
-git -C "$repo_root" ls-files -z --cached --others --exclude-standard -- \
-  'Intent/*.swift' 'IntentTests/*.swift' 'IntentUITests/*.swift' \
-  ':(exclude)Intent/Resources' ':(exclude)Intent/Assets.xcassets' ':(exclude)IntentTests/Fixtures' |
-  LC_ALL=C sort -zu |
-  while IFS= read -r -d '' relative; do
-    [ -f "$repo_root/$relative" ] || continue
-    printf '$(SRCROOT)/%s\n' "$relative"
-  done > "$swiftlint_tmp"
-
+list_test_sources "$repo_root" > "$test_tmp"
+list_swiftlint_sources "$repo_root" > "$swiftlint_tmp"
 [ -s "$swiftlint_tmp" ] || fail "no Swift sources found under $repo_root"
+
+warn_local_only() {
+  local generated=$1 on_disk=$2 consequence=$3 path
+  LC_ALL=C comm -13 "$generated" <($on_disk "$repo_root") |
+    while IFS= read -r path; do
+      echo "warning: ${path#'$(SRCROOT)/'} exists only locally (empty, ignored or untracked); $consequence" >&2
+    done
+}
+
+warn_local_only "$test_tmp" list_test_sources_on_disk \
+  "left out of test-source-inputs.xcfilelist, so local test builds may hit a sandbox deny; delete it or add files git tracks"
+warn_local_only "$swiftlint_tmp" list_swiftlint_sources_on_disk \
+  "left out of swiftlint-xcode-inputs.xcfilelist, so the Xcode lint phase will skip diagnostics; delete it or stop ignoring it"
 
 publish() {
   local generated=$1 destination=$2 name=${2#"$repo_root/"}

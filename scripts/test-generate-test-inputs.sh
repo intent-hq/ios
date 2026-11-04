@@ -58,11 +58,9 @@ printf 'must-not-copy\n' > "$SOURCE/Intent/credentials.txt"
 
 [ -f "$INPUT_FILE_LIST" ] || fail "missing test source input file list"
 expected_input_file_list="$FIXTURE_ROOT/expected-input-file-list"
-find "$REPO_ROOT/Intent" "$REPO_ROOT/IntentTests" \
-  \( -type d -o -type f -name '*.swift' \) -print | LC_ALL=C sort |
-  while IFS= read -r path; do
-    printf '$(SRCROOT)/%s\n' "${path#"$REPO_ROOT/"}"
-  done > "$expected_input_file_list"
+# shellcheck source=scripts/source-lists.sh
+source "$SCRIPT_DIR/source-lists.sh"
+list_test_sources "$REPO_ROOT" > "$expected_input_file_list"
 cmp -s "$expected_input_file_list" "$INPUT_FILE_LIST" ||
   fail "scripts/test-source-inputs.xcfilelist is stale; run scripts/update-source-lists.sh to regenerate it"
 
