@@ -263,7 +263,23 @@ on_exit() {
 }
 trap on_exit EXIT
 
+# cache_tailcatkit: keeps a TailcatKit build the wrapper made (even in an
+# interrupted run, where the build may have finished) for later checkouts.
+cache_tailcatkit() {
+  local staging
+  if [ -n "${tailcat_cache:-}" ] && [ -d "$tailcat_dest" ] && [ ! -d "$tailcat_cache" ]; then
+    staging=$(mktemp -d "$root/tailcatkit/.staging.XXXXXX")
+    if cp -R "$tailcat_dest" "$staging/TailcatKit.xcframework" \
+        && mv "$staging" "$root/tailcatkit/$tailcat_tree" 2>/dev/null; then
+      tailcat_note="$tailcat_note; cached for later runs"
+    else
+      rm -rf -- "$staging"
+    fi
+  fi
+}
+
 finish_interrupted() {
+  cache_tailcatkit
   state=INTERRUPTED
   status=$1
   error_message="the run was stopped by a signal before it finished; rerun it"
@@ -378,16 +394,7 @@ if [ -n "$interrupted" ]; then
 fi
 child=
 
-# Cache a TailcatKit build the wrapper made.
-if [ -n "$tailcat_cache" ] && [ -d "$tailcat_dest" ] && [ ! -d "$tailcat_cache" ]; then
-  staging=$(mktemp -d "$root/tailcatkit/.staging.XXXXXX")
-  if cp -R "$tailcat_dest" "$staging/TailcatKit.xcframework" \
-      && mv "$staging" "$root/tailcatkit/$tailcat_tree" 2>/dev/null; then
-    tailcat_note="$tailcat_note; cached for later runs"
-  else
-    rm -rf -- "$staging"
-  fi
-fi
+cache_tailcatkit
 
 # 4. Summarize the results.
 results=

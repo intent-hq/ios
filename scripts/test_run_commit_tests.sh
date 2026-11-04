@@ -332,8 +332,9 @@ assert_contains "the copy is reported" "$(summary_field TailcatKit)" "copied fro
 rm -rf "$src/TailcatKit/build"
 
 # Interrupted: RUNNING with the PID while in progress, INTERRUPTED after a
-# TERM, the wrapper is stopped and the checkout removed.
-export INTENT_IOS_TEST_RUN_DIR=$work/runs-main
+# TERM, the wrapper is stopped, the checkout removed, and the TailcatKit build
+# the wrapper had already made is cached.
+export INTENT_IOS_TEST_RUN_DIR=$work/runs-interrupt
 rm -f "$STUB_RECORD" "$work/started"
 STUB_OUTCOME=sleep STUB_STARTED=$work/started "$SCRIPT" --repo "$src" "$sha_a" 'IntentTests' > "$work/interrupt.out" 2>&1 &
 pid=$!
@@ -349,8 +350,16 @@ assert_contains "an interrupted run says INTERRUPTED" "$(summary)" "# iOS test r
 assert_contains "the wrapper was told to stop" "$(cat "$STUB_RECORD")" "terminated"
 checkout=$(record pwd)
 if [ -e "$checkout" ]; then fail "an interrupted run removes its checkout"; else pass "an interrupted run removes its checkout"; fi
+tree=$(git -C "$src" rev-parse "$sha_a:TailcatKit")
+if [ -d "$INTENT_IOS_TEST_RUN_DIR/tailcatkit/$tree/TailcatKit.xcframework" ]; then
+  pass "an interrupted run caches the TailcatKit build"
+else
+  fail "an interrupted run caches the TailcatKit build"
+fi
+assert_contains "the interrupted summary reports the cached build" "$(summary_field TailcatKit)" "cached for later runs"
 
 # Only the newest 10 run directories are kept.
+export INTENT_IOS_TEST_RUN_DIR=$work/runs-main
 for i in 1 2 3 4 5 6 7 8 9 10 11; do
   run "prune$i" -- "$sha_a" 'IntentTests' > /dev/null
 done
