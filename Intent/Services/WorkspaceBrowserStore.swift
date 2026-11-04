@@ -141,7 +141,14 @@ final class WorkspaceBrowserStore {
 
     private func discovery(workspaceId: String, method: String, key: String) async -> (browsers: [WorkspaceBrowser], error: String?) {
         do {
-            let response = try await connection.request(method, params: ["workspaceId": workspaceId])
+            let response: Any
+            if method == "script.list" {
+                response = try await PagedReads.requestAllScripts(workspaceId: workspaceId) { [connection] params in
+                    try await connection.request(method, params: params)
+                }
+            } else {
+                response = try await connection.request(method, params: ["workspaceId": workspaceId])
+            }
             guard let result = response as? [String: Any], let rows = result[key] as? [[String: Any]] else {
                 throw WorkspaceBrowserError.invalidResponse
             }

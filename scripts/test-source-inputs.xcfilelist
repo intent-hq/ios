@@ -1221,6 +1221,7 @@ $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
+$(SRCROOT)/IntentTests/ScriptListPagingTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorPresentationTests+Conversation.swift
 $(SRCROOT)/IntentTests/ScriptMonitorPresentationTests.swift
@@ -1265,6 +1266,7 @@ $(SRCROOT)/IntentTests/TaskMetadataHeaderTests.swift
 $(SRCROOT)/IntentTests/TaskStatsTests.swift
 $(SRCROOT)/IntentTests/TaskStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/TaskStoreLiveStateTests.swift
+$(SRCROOT)/IntentTests/TaskStorePagingTests.swift
 $(SRCROOT)/IntentTests/TestBundleInputs.swift
 $(SRCROOT)/IntentTests/TestBundleInputsTests.swift
 $(SRCROOT)/IntentTests/TestSourceInputs.swift

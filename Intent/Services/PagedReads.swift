@@ -8,6 +8,7 @@ import Foundation
 /// large note in `note.get` with `contentTruncated` / `nextContentOffset`.
 /// Older daemons ignore `limit` / `nextToken` / `contentOffset` and answer in
 /// one reply without a token, so every walk here ends after one request.
+/// `script.list` names its cursor `cursor` / `nextCursor` (`Cursor.script`).
 enum PagedReads {
     /// Hard stop for any walk, so a misbehaving daemon cannot loop forever.
     static let maxPages = 1000
@@ -21,6 +22,8 @@ enum PagedReads {
     static let agentPageLimit = 200
     /// `agent.getQueue` page size: the daemon maximum.
     static let queuePageLimit = 200
+    /// `task.list` page size for snapshot continuations: the daemon maximum.
+    static let taskPageLimit = 1000
     /// Attempts per continuation page before the walk gives up.
     static let pageAttempts = 3
     private static let pageRetryBaseMilliseconds = 250
@@ -37,9 +40,21 @@ enum PagedReads {
 
     static let defaultSleep: Sleep = { duration in try? await Task.sleep(for: duration) }
 
+    /// How a list method names its continuation: the request param that
+    /// carries the token and the reply field that returns the next one.
+    struct Cursor: Sendable {
+        let param: String
+        let field: String
+
+        /// `nextToken` in both directions (most bounded list reads).
+        static let token = Self(param: "nextToken", field: "nextToken")
+        /// `script.list`: `cursor` in, `nextCursor` out, absent on the last page.
+        static let script = Self(param: "cursor", field: "nextCursor")
+    }
+
     /// The continuation token of a paged reply or snapshot push, or nil at the end.
-    static func nextToken(_ reply: Any?) -> String? {
-        guard let token = (reply as? [String: Any])?["nextToken"] as? String, !token.isEmpty else {
+    static func nextToken(_ reply: Any?, cursor: Cursor = .token) -> String? {
+        guard let token = (reply as? [String: Any])?[cursor.field] as? String, !token.isEmpty else {
             return nil
         }
         return token
@@ -69,17 +84,27 @@ enum PagedReads {
         field: String,
         request: Request
     ) async throws -> [[String: Any]] {
+        try await requestAllPages(params: params, field: field, cursor: .token, request: request)
+    }
+
+    /// `requestAllPages` for a list method whose continuation is named by `cursor`.
+    static func requestAllPages(
+        params: [String: Any],
+        field: String,
+        cursor: Cursor,
+        request: Request
+    ) async throws -> [[String: Any]] {
         var rows: [[String: Any]] = []
         var seen = Set<String>()
         var token: String?
         for _ in 0..<maxPages {
             var pageParams = params
-            if let token { pageParams["nextToken"] = token }
+            if let token { pageParams[cursor.param] = token }
             let reply = try await request(pageParams)
             if let pageRows = (reply as? [String: Any])?[field] as? [[String: Any]] {
                 rows.append(contentsOf: pageRows)
             }
-            guard let next = nextToken(reply) else { return rows }
+            guard let next = nextToken(reply, cursor: cursor) else { return rows }
             guard seen.insert(next).inserted else { throw IncompleteWalk() }
             token = next
         }
@@ -103,19 +128,29 @@ enum PagedReads {
         field: String,
         request: Request
     ) async throws -> Any {
+        try await requestWholeReply(params: params, field: field, cursor: .token, request: request)
+    }
+
+    /// `requestWholeReply` for a list method whose continuation is named by `cursor`.
+    static func requestWholeReply(
+        params: [String: Any],
+        field: String,
+        cursor: Cursor,
+        request: Request
+    ) async throws -> Any {
         let first = try await request(params)
         guard var whole = first as? [String: Any], var elements = whole[field] as? [Any],
-              var token = nextToken(first) else { return first }
+              var token = nextToken(first, cursor: cursor) else { return first }
         var seen: Set<String> = [token]
         for _ in 1..<maxPages {
             var pageParams = params
-            pageParams["nextToken"] = token
+            pageParams[cursor.param] = token
             let reply = try await request(pageParams)
             guard let page = (reply as? [String: Any])?[field] as? [Any] else { throw MalformedPage() }
             elements.append(contentsOf: page)
-            guard let next = nextToken(reply) else {
+            guard let next = nextToken(reply, cursor: cursor) else {
                 whole[field] = elements
-                whole.removeValue(forKey: "nextToken")
+                whole.removeValue(forKey: cursor.field)
                 return whole
             }
             guard seen.insert(next).inserted else { throw IncompleteWalk() }
@@ -141,6 +176,16 @@ enum PagedReads {
             if page["nextToken"] != nil, !isCurrent() { throw CancellationError() }
             return try await connection.request("agent.list", params: page)
         }
+    }
+
+    /// Every `script.list` full-view page as one `{ scripts }` reply
+    /// (protocol "Full-view pages", `boundedReads: 1`). The first request
+    /// carries no `limit` / `cursor`, because hosts without the capability
+    /// reject them on the full view; a bounded host then pages by default, and
+    /// `nextCursor` is followed until it is absent. A failed page fails the
+    /// whole read, so callers never treat a partial list as every script.
+    static func requestAllScripts(workspaceId: String, request: Request) async throws -> Any {
+        try await requestWholeReply(params: ["workspaceId": workspaceId], field: "scripts", cursor: .script, request: request)
     }
 
     /// How a snapshot continuation walk ended.
