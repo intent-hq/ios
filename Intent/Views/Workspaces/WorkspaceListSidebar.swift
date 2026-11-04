@@ -242,7 +242,12 @@ extension WorkspaceListSidebar {
                 repoGroups
             case .status:
                 let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
-                    let content = sidebarGroup(workspaces, isFirst: statusLabel == viewModel.groupedByStatus.first?.0) {
+                    let content = sidebarGroup(
+                        workspaces,
+                        key: statusLabel,
+                        mode: .status,
+                        isFirst: statusLabel == viewModel.groupedByStatus.first?.0
+                    ) {
                         Text(statusLabel).interFont(Constants.Typography.eyebrow)
                     }
                     return (id: statusLabel, content: content)
@@ -255,13 +260,12 @@ extension WorkspaceListSidebar {
     @ViewBuilder
     private var repoGroups: some View {
         let groups = viewModel.groupedByRepo.map { repoName, workspaces in
-            let isExpanded = viewModel.isRepoGroupExpanded(repoName)
             let content = sidebarGroup(
                 workspaces,
+                key: repoName,
+                mode: .repo,
                 isFirst: repoName == viewModel.groupedByRepo.first?.0,
-                showRepo: false,
-                isExpanded: isExpanded,
-                disclosure: (repoName, { viewModel.toggleRepoGroup(repoName) })
+                showRepo: false
             ) {
                 HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
                     RepoOwnerAvatarView(
@@ -279,12 +283,13 @@ extension WorkspaceListSidebar {
     @ViewBuilder
     private func sidebarGroup<Header: View>(
         _ workspaces: [Workspace],
+        key: String,
+        mode: ViewMode,
         isFirst: Bool,
         showRepo: Bool = true,
-        isExpanded: Bool = true,
-        disclosure: (repoKey: String, toggle: () -> Void)? = nil,
         @ViewBuilder header: () -> Header
     ) -> some View {
+        let isExpanded = viewModel.isGroupExpanded(key, in: mode)
         if isEmbedded {
             // Ordinary header rows avoid the List's implicit section padding.
             // The scroll-content top margin is the entire filter-to-label gap.
@@ -294,44 +299,39 @@ extension WorkspaceListSidebar {
                 bottom: IPadSidebarStyle.groupLabelSpacing,
                 trailing: IPadSidebarStyle.rowInset
             )
-            Group {
-                if let disclosure {
-                    disclosureHeader(disclosure, isExpanded: isExpanded, insets: insets, label: header())
-                } else {
-                    header()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(insets)
-                        .accessibilityAddTraits(.isHeader)
-                }
-            }
+            groupHeader(key, mode: mode, isExpanded: isExpanded, insets: insets, label: header())
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
             if isExpanded { sidebarRows(workspaces, showRepo: showRepo) }
-        } else if let disclosure {
-            Section(header: disclosureHeader(disclosure, isExpanded: isExpanded, insets: EdgeInsets(), label: header())) {
+        } else {
+            Section(header: groupHeader(key, mode: mode, isExpanded: isExpanded, insets: EdgeInsets(), label: header())) {
                 if isExpanded { sidebarRows(workspaces, showRepo: showRepo) }
             }
-        } else {
-            Section(header: header()) { sidebarRows(workspaces, showRepo: showRepo) }
         }
     }
 
-    private func disclosureHeader<Label: View>(
-        _ disclosure: (repoKey: String, toggle: () -> Void),
+    private func groupHeader<Label: View>(
+        _ key: String,
+        mode: ViewMode,
         isExpanded: Bool,
         insets: EdgeInsets,
         label: Label
     ) -> some View {
-        RepoGroupDisclosureButton(
-            repoKey: disclosure.repoKey,
+        // Bottom alignment keeps the label-to-rows gap when the tap target is taller.
+        CollapsibleSectionHeader(
             isExpanded: isExpanded,
-            isToggleEnabled: !viewModel.hasSearchQuery,
             insets: insets,
-            action: disclosure.toggle
-        ) { label }
+            alignment: .bottomLeading
+        ) {
+            viewModel.toggleGroup(key, in: mode)
+        } label: {
+            label
+        }
+        .disabled(viewModel.hasSearchQuery)
+        .accessibilityLabel(Text(key))
+        .accessibilityIdentifier(WorkspaceListGroupHeading.accessibilityIdentifier(for: key, in: mode))
     }
 
     private func sidebarRows(_ workspaces: [Workspace], showRepo: Bool = true) -> some View {

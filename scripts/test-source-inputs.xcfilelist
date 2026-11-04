@@ -815,6 +815,7 @@ $(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces
 $(SRCROOT)/Intent/Views/Workspaces/AgentModelFields.swift
+$(SRCROOT)/Intent/Views/Workspaces/CollapsibleSectionHeader.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
@@ -842,7 +843,6 @@ $(SRCROOT)/Intent/Views/Workspaces/PullRequestLinkRouting.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestListContent.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestSwipeRow.swift
-$(SRCROOT)/Intent/Views/Workspaces/RepoGroupDisclosureButton.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
@@ -872,6 +872,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilePreview.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileTreeLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilesView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceListGroupHeading.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListMenu.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
@@ -1325,7 +1326,7 @@ $(SRCROOT)/IntentTests/WorkspaceFilesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFilesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListCacheTests.swift
-$(SRCROOT)/IntentTests/WorkspaceListRepoGroupTests.swift
+$(SRCROOT)/IntentTests/WorkspaceListGroupCollapseTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListViewModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceParsingTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrMonitorsStoreTests.swift
