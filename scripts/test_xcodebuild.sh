@@ -25,13 +25,20 @@ mkdir -p "$stubs"
 # xcrun records its argv as "xcrun: [arg] ..." lines in STUB_ARGS; an
 # xcresulttool test-results query prints $STUB_RESULTS (fixture JSON; a
 # "-retry" bundle path prints $STUB_RESULTS_RETRY when set) or fails under
-# STUB_RESULTS_FAIL=1; every other invocation (simctl) exits 0.
+# STUB_RESULTS_FAIL=1; `simctl list devices available -j` prints
+# $STUB_SIMCTL_DEVICES; `--show-sdk-version` prints $STUB_SDK_VERSION, or fails
+# when it is unset; every other invocation (simctl) exits 0.
 cat > "$stubs/xcrun" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
   { printf 'xcrun:'; printf ' [%s]' "$@"; echo; } >> "$STUB_ARGS"
 fi
 case " $* " in
+  *" simctl list devices available -j "*)
+    [ -z "${STUB_SIMCTL_DEVICES:-}" ] || cat "$STUB_SIMCTL_DEVICES" ;;
+  *" --sdk iphonesimulator --show-sdk-version "*)
+    [ -n "${STUB_SDK_VERSION:-}" ] || exit 1
+    echo "$STUB_SDK_VERSION" ;;
   *" xcresulttool get test-results tests --path "*)
     if [ -n "${STUB_RESULTS_FAIL:-}" ]; then
       echo "Error: the result bundle could not be opened (stub)" >&2
@@ -1251,6 +1258,74 @@ assert_eq "incomplete full inventory never runs tests" "$(argv_count fullinvento
 status=$(run_filtered fullnativefailure "" test-without-building-ui UI_TEST_SHARD=1 \
   STUB_CATALOG="$work/full-catalog.json" STUB_RESULTS="$work/full-results.json" STUB_MODE=fail)
 assert_eq "full shard preserves native failure exit 65" "$status" 65
+
+# pick-simulator without SIM_UDID: the newest iOS runtime the selected Xcode's
+# SDK can run wins over an "iPhone 16" on an older runtime (ios#905).
+cat > "$work/sims.json" <<'EOF'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.watchOS-12-0": [
+    {"name": "Apple Watch Series 11 (46mm)", "udid": "99999999-0000-0000-0000-000000000001", "isAvailable": true}],
+  "com.apple.CoreSimulator.SimRuntime.iOS-18-2": [
+    {"name": "iPhone 16", "udid": "18181818-0000-0000-0000-000000000016", "isAvailable": true},
+    {"name": "iPhone 16 Pro", "udid": "18181818-0000-0000-0000-000000000017", "isAvailable": true}],
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+    {"name": "iPad Pro 13-inch (M5)", "udid": "26262626-0000-0000-0000-00000000000a", "isAvailable": true},
+    {"name": "iPhone 17 Pro", "udid": "26262626-0000-0000-0000-000000000171", "isAvailable": true},
+    {"name": "iPhone 17", "udid": "26262626-0000-0000-0000-000000000170", "isAvailable": true}],
+  "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [
+    {"name": "iPhone 18 Pro", "udid": "27272727-0000-0000-0000-000000000181", "isAvailable": true},
+    {"name": "iPhone 18", "udid": "27272727-0000-0000-0000-000000000180", "isAvailable": true},
+    {"name": "iPhone 18 Pro Max", "udid": "27272727-0000-0000-0000-000000000182", "isAvailable": true}]
+}}
+EOF
+cat > "$work/sims-iphone16.json" <<'EOF'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+    {"name": "iPhone 17", "udid": "26262626-0000-0000-0000-000000000170", "isAvailable": true},
+    {"name": "iPhone 16", "udid": "26262626-0000-0000-0000-000000000160", "isAvailable": true}]
+}}
+EOF
+cat > "$work/sims-numeric.json" <<'EOF'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+    {"name": "iPhone 17", "udid": "26262626-0000-0000-0000-000000000170", "isAvailable": true}],
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-10": [
+    {"name": "iPhone 17 Pro", "udid": "2626260a-0000-0000-0000-000000000171", "isAvailable": true},
+    {"name": "iPhone 17 Pro Max", "udid": "2626260a-0000-0000-0000-000000000172", "isAvailable": true}]
+}}
+EOF
+cat > "$work/sims-none.json" <<'EOF'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [
+    {"name": "iPad Air 11-inch (M4)", "udid": "27272727-0000-0000-0000-0000000000a1", "isAvailable": true}]
+}}
+EOF
+# pick <name> <fixture> [env...]: the picked UDID on stdout, stderr in $work/<name>.err,
+# exit status in $work/<name>.status.
+pick() {
+  local name=$1 fixture=$2 status=0
+  shift 2
+  env -u SIM_UDID STUB_SIMCTL_DEVICES="$fixture" "$@" "$SCRIPT" pick-simulator \
+    2> "$work/$name.err" || status=$?
+  echo "$status" > "$work/$name.status"
+}
+assert_eq "pick prefers the newest runtime over an older iPhone 16" \
+  "$(pick newest "$work/sims.json" STUB_SDK_VERSION=27.2)" 27272727-0000-0000-0000-000000000180
+assert_contains "pick names the device and its runtime" "$(cat "$work/newest.err")" \
+  "Selected simulator: iPhone 18 (iOS 27.0) (27272727-0000-0000-0000-000000000180)"
+assert_eq "pick skips runtimes newer than the selected Xcode's SDK" \
+  "$(pick sdkcap "$work/sims.json" STUB_SDK_VERSION=26.2)" 26262626-0000-0000-0000-000000000170
+assert_eq "pick falls back to the newest runtime when the SDK version is unknown" \
+  "$(pick nosdk "$work/sims.json")" 27272727-0000-0000-0000-000000000180
+assert_eq "pick compares runtime versions numerically and takes the first iPhone when no base model exists" \
+  "$(pick numeric "$work/sims-numeric.json" STUB_SDK_VERSION=26.4)" 2626260a-0000-0000-0000-000000000171
+assert_eq "pick keeps preferring iPhone 16 within the newest runtime" \
+  "$(pick prefer16 "$work/sims-iphone16.json" STUB_SDK_VERSION=26.4)" 26262626-0000-0000-0000-000000000160
+pick none "$work/sims-none.json" STUB_SDK_VERSION=27.2 > /dev/null
+assert_eq "pick fails without an available iPhone" "$(cat "$work/none.status")" 1
+assert_contains "pick explains the missing iPhone" "$(cat "$work/none.err")" "no available iPhone simulator"
+pick capnone "$work/sims.json" STUB_SDK_VERSION=17.0 > /dev/null
+assert_eq "pick fails when every iPhone runtime is newer than the SDK" "$(cat "$work/capnone.status")" 1
 
 echo
 if [ "$failures" -eq 0 ]; then

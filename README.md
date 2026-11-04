@@ -405,7 +405,7 @@ The Xcode wrapper supports these subcommands:
 | `test-without-building-unit` | Run previously built tests without `IntentUITests`. |
 | `test-ios` | Build and run the complete unit and UI test gate. |
 | `test-ios-unit` | Build and run tests without `IntentUITests`. |
-| `pick-simulator` | Print the automatically selected iPhone simulator UDID. |
+| `pick-simulator` | Print the automatically selected iPhone simulator UDID: an iPhone on the newest iOS runtime the selected Xcode can run (an iPhone 16 there when available). The device name and runtime go to stderr. Set `SIM_UDID` to choose another device or runtime. |
 
 For a focused run, set `ONLY_TESTING` to one or more whitespace-separated
 `Target[/Suite[/test]]` selectors. Selectors are test identifiers, not Swift file

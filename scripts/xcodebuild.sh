@@ -46,8 +46,9 @@
 #                         build-ios/build-visionos keep production testability.
 #   DEVICE_UDID           Required physical iOS device for build-ios-device;
 #                         preserves project signing and never installs or uploads.
-#   SIM_UDID              Simulator UDID for test destinations; when unset the
-#                         newest available iPhone simulator is picked automatically.
+#   SIM_UDID              Simulator UDID for test destinations; when unset,
+#                         an iPhone on the newest iOS runtime the selected Xcode
+#                         can run is picked automatically (see pick_simulator).
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
 #   DERIVED_DATA_DIR      Passed as -derivedDataPath to every build/test call.
 #                         CI uses a fresh directory per job and run attempt.
@@ -264,30 +265,68 @@ EOF
   exit 2
 }
 
-# Prefer the iPhone 16 simulator, else any available iPhone; fail early with a
-# clear message if there is none. Select by UDID: it keeps parenthesized names
-# (e.g. "iPhone SE (3rd generation)") intact, disambiguates duplicate names
-# across runtimes, and pins the destination to one concrete device. tail -n 1
-# prefers the newest installed runtime (simctl groups devices by runtime,
-# oldest first). SIM_UDID overrides the pick (CI selects once, pre-boots, and
-# reuses the same device here).
+# Pick a simulator on the newest installed iOS runtime the selected Xcode can
+# run (its major version at most the iphonesimulator SDK's; any runtime when the
+# SDK version is unknown) that has an iPhone. Within that runtime prefer the
+# iPhone 16, else the newest base "iPhone <N>", else the first iPhone listed.
+# Preferring an iPhone 16 across runtimes picked an old runtime on hosts whose
+# newer runtimes no longer offer that model, so local runs silently tested
+# iOS 18 while CI tested iOS 26 (ios#905). The runtime is printed with the
+# device. Fail early with a clear message if there is none. Select by UDID: it
+# keeps parenthesized names (e.g. "iPhone SE (3rd generation)") intact,
+# disambiguates duplicate names across runtimes, and pins the destination to
+# one concrete device. SIM_UDID overrides the pick (CI selects once, pre-boots,
+# and reuses the same device here).
+PICK_SIMULATOR_PY='
+import json, re, sys
+
+sdk_major = int(sys.argv[1]) if sys.argv[1].isdigit() else None
+devices = json.load(sys.stdin).get("devices", {})
+candidates = []
+for runtime, entries in devices.items():
+    match = re.search(r"\.iOS-(\d+)-(\d+)(?:-(\d+))?$", runtime)
+    if not match:
+        continue
+    version = tuple(int(part or 0) for part in match.groups())
+    if sdk_major is not None and version[0] > sdk_major:
+        continue
+    iphones = [d for d in entries if d.get("isAvailable", True) and d.get("name", "").startswith("iPhone")]
+    if iphones:
+        candidates.append((version, iphones))
+if not candidates:
+    sys.exit(1)
+version, iphones = max(candidates, key=lambda candidate: candidate[0])
+
+def rank(item):
+    index, device = item
+    name = device["name"]
+    if name == "iPhone 16":
+        return (0, 0, index)
+    base = re.fullmatch(r"iPhone (\d+)", name)
+    if base:
+        return (1, -int(base.group(1)), index)
+    return (2, 0, index)
+
+device = min(enumerate(iphones), key=rank)[1]
+label = ".".join(str(part) for part in (version if version[2] else version[:2]))
+print(device["udid"])
+print("%s (iOS %s)" % (device["name"], label))
+'
 pick_simulator() {
   if [ -n "${SIM_UDID:-}" ]; then
     echo "$SIM_UDID"
     return
   fi
-  local devices line udid name
-  devices=$(xcrun simctl list devices available)
-  line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone 16 \(' | tail -n 1 || true)
-  if [ -z "$line" ]; then
-    line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone' | tail -n 1 || true)
-  fi
-  udid=$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -n 1 || true)
+  command -v python3 >/dev/null 2>&1 \
+    || die "python3 is required to pick a simulator (on macOS it ships with Xcode's Command Line Tools); or set SIM_UDID"
+  local sdk_version picked udid
+  sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version 2>/dev/null || true)
+  picked=$(xcrun simctl list devices available -j | python3 -c "$PICK_SIMULATOR_PY" "${sdk_version%%.*}" || true)
+  udid=$(echo "$picked" | sed -n 1p)
   if [ -z "$udid" ]; then
-    die "no available iPhone simulator on this machine"
+    die "no available iPhone simulator on this machine${sdk_version:+ for the iOS $sdk_version simulator SDK}"
   fi
-  name=$(echo "$line" | sed -E "s/^[[:space:]]*(.*) \($udid\).*/\1/")
-  echo "Selected simulator: $name ($udid)" >&2
+  echo "Selected simulator: $(echo "$picked" | sed -n 2p) ($udid)" >&2
   echo "$udid"
 }
 
