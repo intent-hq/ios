@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import UIKit
 
@@ -68,3 +69,4 @@ extension DemoFixtures {
         }
     }()
 }
+#endif

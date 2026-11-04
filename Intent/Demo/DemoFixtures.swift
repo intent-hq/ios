@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import UIKit
 
@@ -24,9 +25,9 @@ enum DemoFixtures {
     nonisolated private static let statusImageToggleHeight: CGFloat = 24
     nonisolated private static let statusImageToggleCornerRadius: CGFloat = 12
     private static let bytesPerKilobyte = 1024.0
-    private static let secondsPerMinute: TimeInterval = 60
+    static let secondsPerMinute: TimeInterval = 60
     @TaskLocal static var transcriptTimestampAnchor = Date()
-    @TaskLocal private static var snapshotTimestampAnchor: Date?
+    @TaskLocal static var snapshotTimestampAnchor: Date?
     private static let defaultHookListDelaySeconds = 4
     private static let defaultBlockHydrationDelaySeconds = 4
     private static let triggerFilePollMilliseconds = 100
@@ -479,22 +480,4 @@ extension DemoFixtures {
         return agentId == longConversationAgentId ? longConversationSubscriptions : [String: Any]()
     }
 }
-
-extension DemoFixtures {
-    /// Non-transcript labels and future events share each response's snapshot time.
-    static func iso(minutesAgo: Double) -> String {
-        iso(minutesAgo: minutesAgo, relativeTo: snapshotTimestampAnchor ?? Date())
-    }
-
-    /// Transcript timestamp relative to the process-stable message anchor, so
-    /// independently rebuilt snapshots preserve immutable message identity.
-    static func transcriptIso(minutesAgo: Double) -> String {
-        iso(minutesAgo: minutesAgo, relativeTo: transcriptTimestampAnchor)
-    }
-
-    static func iso(minutesAgo: Double, relativeTo anchor: Date) -> String {
-        ISO8601DateFormatter().string(
-            from: anchor.addingTimeInterval(-minutesAgo * secondsPerMinute)
-        )
-    }
-}
+#endif

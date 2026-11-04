@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import SwiftUI
 
@@ -131,3 +132,4 @@ enum DemoConnectionLoss {
         record("did-recover")
     }
 }
+#endif

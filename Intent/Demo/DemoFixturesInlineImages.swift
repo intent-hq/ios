@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -75,3 +76,4 @@ extension DemoFixtures {
         ].joined(separator: "\n\n")
     }
 }
+#endif

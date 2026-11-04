@@ -208,6 +208,7 @@ $(SRCROOT)/Intent/Services/ConnectionAdmission.swift
 $(SRCROOT)/Intent/Services/ConnectionCapabilities.swift
 $(SRCROOT)/Intent/Services/ConnectionDiagnostics.swift
 $(SRCROOT)/Intent/Services/ConnectionHostRacing.swift
+$(SRCROOT)/Intent/Services/ConnectionManager+Demo.swift
 $(SRCROOT)/Intent/Services/ConnectionManager.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerBrowser.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerHeartbeat.swift

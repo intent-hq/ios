@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -66,3 +67,23 @@ extension DemoFixtures {
         return ["id": "history-message-\(index)", "role": "assistant", "contentBlocks": [textBlock(text)]]
     }
 }
+
+extension DemoFixtures {
+    /// Non-transcript labels and future events share each response's snapshot time.
+    static func iso(minutesAgo: Double) -> String {
+        iso(minutesAgo: minutesAgo, relativeTo: snapshotTimestampAnchor ?? Date())
+    }
+
+    /// Transcript timestamp relative to the process-stable message anchor, so
+    /// independently rebuilt snapshots preserve immutable message identity.
+    static func transcriptIso(minutesAgo: Double) -> String {
+        iso(minutesAgo: minutesAgo, relativeTo: transcriptTimestampAnchor)
+    }
+
+    static func iso(minutesAgo: Double, relativeTo anchor: Date) -> String {
+        ISO8601DateFormatter().string(
+            from: anchor.addingTimeInterval(-minutesAgo * secondsPerMinute)
+        )
+    }
+}
+#endif

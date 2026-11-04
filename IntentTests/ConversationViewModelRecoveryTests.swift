@@ -318,6 +318,7 @@ extension ConversationViewModelTests {
 
     // MARK: - Suggested-prompt send (draft retention)
 
+    #if DEBUG
     @Test func imageResponsePromptsSendExactDisplayedText() async throws {
         for expected in DemoFixtures.inlineImageSuggestedPrompts {
             let (viewModel, fake) = makeFakeBackedVM()
@@ -329,6 +330,7 @@ extension ConversationViewModelTests {
             #expect(sent.params["imageBlocks"] == nil)
         }
     }
+    #endif
 
     @Test func sendSuggestedPromptDoesNotAttachPendingImages() async throws {
         // Regression: draft attachments must not silently ride a suggested

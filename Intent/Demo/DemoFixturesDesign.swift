@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -249,3 +250,4 @@ final class DemoDesignFixtures {
         return ["type": method == "prMonitor.cancel" ? "prMonitor:cancelled" : "prMonitor:emitted", "data": monitor]
     }
 }
+#endif

@@ -208,6 +208,7 @@ struct WorkspaceScriptStoreTests {
         #expect(fixture.store.scripts(workspaceId: "workspace").first?.detectedURL == nil)
     }
 
+    #if DEBUG
     @Test func demoScriptsStartIdleAndProduceDeterministicRuntime() throws {
         let workspaceId = UUID().uuidString
         let params = ["workspaceId": workspaceId]
@@ -227,4 +228,5 @@ struct WorkspaceScriptStoreTests {
         let other = DemoBrowserFixtures.scriptResponse(for: "script.status", params: ["workspaceId": UUID().uuidString, "scriptId": "demo-server"]) as? [String: Any]
         #expect(other?["status"] as? String == "idle")
     }
+    #endif
 }

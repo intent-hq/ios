@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import SwiftUI
 
@@ -38,4 +39,5 @@ struct DemoToastOverlay: ViewModifier {
         }
     }
 }
+#endif
 #endif

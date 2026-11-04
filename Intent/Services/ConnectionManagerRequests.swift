@@ -26,9 +26,9 @@ extension ConnectionManager {
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        if DemoMode.isEnabled || servesDemoFixtures {
-            return try await demoResponse(for: method, params: params)
-        }
+        #if DEBUG
+        if DemoMode.isEnabled || servesDemoFixtures { return try await demoResponse(for: method, params: params) }
+        #endif
         guard let currentSocket = socket else {
             let error = Self.localRequestError(
                 code: Self.notConnectedErrorCode,
@@ -78,27 +78,6 @@ extension ConnectionManager {
                 }
             }
         }
-    }
-
-    private func demoResponse(for method: String, params: [String: Any]) async throws -> Any {
-        demoScriptMonitorFixtures?.startEvents(for: method, params: params) { [weak self] event in
-            guard let self else { return }
-            for handler in Array(eventHandlers.values) { handler("event", event) }
-        }
-        if let response = try await demoScriptMonitorFixtures?.response(for: method, params: params) { return response }
-        if let gate = DemoFixtures.responseGate(for: method, params: params) {
-            try await DemoFixtures.wait(for: gate)
-        }
-        let response = DemoFixtures.response(for: method, params: params)
-        // Routed ahead of the ack: the router buffers it until the caller
-        // registers its handler, the same order a live daemon can produce.
-        if let push = DemoFixtures.subscriptionPush(for: method, params: params) {
-            subscriptionRouter.route(push)
-        }
-        if let event = DemoFixtures.designScenario?.event(for: method, params: params) {
-            for handler in Array(eventHandlers.values) { handler("event", event) }
-        }
-        return response
     }
 
     private static func localRequestError(

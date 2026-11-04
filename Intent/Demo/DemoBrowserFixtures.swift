@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum DemoBrowserFixtures {
@@ -115,3 +116,4 @@ enum DemoBrowserFixtures {
         return ["status": "idle", "restartCount": 0]
     }
 }
+#endif

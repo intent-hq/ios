@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoDesignFixtures {
@@ -268,3 +269,4 @@ extension DemoDesignFixtures {
     ]
     // swiftlint:enable no_magic_numbers
 }
+#endif

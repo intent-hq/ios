@@ -84,6 +84,7 @@ struct AgentGroupingTests {
         #expect(model.visibleTree(model.foregroundAgents).map(\.agent.id) == ["parent", "child", "grandchild"])
         #expect(model.orphanedAgents.map(\.id) == ["background-child"])
     }
+    #if DEBUG
     @Test func scopeAwareFixtureCountsDoNotDependOnRequestedRows() throws {
         let rows = DemoAgentListFixtures.groupRows
         let top = DemoAgentListFixtures.response(rows: rows, params: ["scope": "topLevel"])
@@ -97,6 +98,7 @@ struct AgentGroupingTests {
         #expect(AgentScopeCounts(wire: try #require(top["scopeCounts"] as? [String: Any]))
             == AgentScopeCounts(wire: try #require(child["scopeCounts"] as? [String: Any])))
     }
+    #endif
 
     @Test func retiredRowsCannotBecomeActiveRootsAndResetCollapsesEverything() throws {
         let model = AgentListViewModel()
@@ -138,6 +140,7 @@ struct AgentGroupingTests {
         #expect(model.orphanedAgents.map(\.id) == ["served"])
         #expect(model.foregroundAgents.isEmpty)
     }
+    #if DEBUG
     @Test func loadingFixtureGateIsExplicitAndOnlyHoldsRequestedBackgroundRows() {
         let arguments = ["--demo-data", "--demo-design-scenario=agent-groups-retry", "--demo-agent-group-trigger-file=/tmp/groups.trigger"]
         #expect(DemoFixtures.agentGroupResponseGate(for: "agent.list", params: ["scope": "background"], arguments: arguments)
@@ -149,4 +152,5 @@ struct AgentGroupingTests {
         #expect(DemoFixtures.agentGroupResponseGate(for: "agent.list", params: ["scope": "background"], arguments: []) == nil)
         #expect(DemoFixtures.agentGroupResponseGate(for: "agent.list", params: ["scope": "background"], arguments: Array(arguments.dropLast())) == nil)
     }
+    #endif
 }

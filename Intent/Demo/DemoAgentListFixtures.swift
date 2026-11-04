@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// A scope-aware in-memory agent.list endpoint shared by ordinary demos and
@@ -88,3 +89,4 @@ enum DemoAgentListFixtures {
         return row
     }
 }
+#endif

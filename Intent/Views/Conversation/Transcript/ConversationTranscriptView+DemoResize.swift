@@ -20,6 +20,7 @@ extension ConversationTranscriptView {
         DemoMode.isEnabled && LaunchOptions.current.contains("--demo-hooks-row-during-recovery")
     }
 
+    #if DEBUG
     func releaseHooksRowDuringDemoRecovery(geometry: ConversationTranscriptScrollPolicy.ViewportGeometry) {
         guard demoRecoveryResizeEnabled, scrollState.demoRecoveryResize == nil,
               !isUserInteracting, case .recovery(let token) = lifecycle.owner,
@@ -33,6 +34,7 @@ extension ConversationTranscriptView {
             AppLog.userInterface.debug("[SCROLL] Demo: could not release hooks during recovery")
         }
     }
+    #endif
 
     /// The geometry callback is evidence that the footer actually resized
     /// the container while the same recovery still owned the page-up.

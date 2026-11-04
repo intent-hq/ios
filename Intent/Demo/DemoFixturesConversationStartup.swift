@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -50,3 +51,4 @@ extension DemoFixtures {
             .map { .triggerFile(URL(fileURLWithPath: $0)) }
     }
 }
+#endif

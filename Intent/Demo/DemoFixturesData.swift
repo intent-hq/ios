@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -477,23 +478,5 @@ extension DemoFixtures {
         ]
     }
 }
-
-extension DemoFixtures {
-    // MARK: - Specialists
-
-    static var specialists: [[String: Any]] {
-        [
-            [
-                "id": "implementor",
-                "name": "Implementor",
-                "description": "Implements a scoped task end to end."
-            ],
-            [
-                "id": "verifier",
-                "name": "Verifier",
-                "description": "Reviews and verifies completed work."
-            ]
-        ]
-    }
-}
 // swiftlint:enable no_magic_numbers
+#endif

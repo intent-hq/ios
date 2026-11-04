@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum DemoChangesRootFixtures {
@@ -73,3 +74,4 @@ enum DemoChangesRootFixtures {
         ]
     }
 }
+#endif

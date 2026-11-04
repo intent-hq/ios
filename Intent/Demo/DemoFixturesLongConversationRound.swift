@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -402,3 +403,4 @@ extension DemoFixtures {
         return [answer, thirdReport]
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum DemoChangesFixtures {
@@ -108,3 +109,4 @@ enum DemoChangesFixtures {
         ]
     }
 }
+#endif

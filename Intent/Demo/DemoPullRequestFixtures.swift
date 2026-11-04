@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// Demo `github.pulls.search` results over the demo workspaces' repositories.
@@ -129,3 +130,4 @@ enum DemoPullRequestFixtures {
     ]
     // swiftlint:enable no_magic_numbers
 }
+#endif

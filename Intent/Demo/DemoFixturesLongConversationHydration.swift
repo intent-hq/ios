@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -105,3 +106,4 @@ extension DemoFixtures {
     // swiftlint:enable large_tuple
     // swiftlint:enable no_magic_numbers
 }
+#endif

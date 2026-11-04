@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// In-memory upload/read RPCs for attachments sent to the design demo workspace.
@@ -36,3 +37,4 @@ final class DemoDesignAttachments {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// Saved-machine fixtures for Settings screenshots and interaction tests.
@@ -42,3 +43,4 @@ enum DemoSettings {
         )
     }
 }
+#endif

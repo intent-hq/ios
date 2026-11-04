@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 @MainActor
@@ -39,3 +40,4 @@ enum DemoWorkspaceActionFixtures {
         return ["workspace": workspace]
     }
 }
+#endif

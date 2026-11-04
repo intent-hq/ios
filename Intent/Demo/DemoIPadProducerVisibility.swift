@@ -1,3 +1,4 @@
+#if DEBUG
 import SwiftUI
 import UIKit
 
@@ -363,4 +364,5 @@ private final class DemoProducerInspector: UIView {
         return controller.children.lazy.compactMap { self.marker(in: $0) }.first
     }
 }
+#endif
 #endif

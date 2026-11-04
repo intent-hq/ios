@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// Explicit demo-only wire fixture. Its single event pump feeds ConnectionManager's
@@ -220,3 +221,4 @@ final class DemoScriptMonitorFixtures {
         NSError(domain: "WebSocket", code: code, userInfo: [NSLocalizedDescriptionKey: message])
     }
 }
+#endif

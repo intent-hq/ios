@@ -367,6 +367,7 @@ extension WorkspaceProviderOptionsTests {
         printCatalogLedger("workspace-policy-inactive-events-and-reconnect", connection.traffic(since: inactive))
     }
 
+    #if DEBUG
     @Test func demoCreationFixturesLoadSelectableProvidersAndNamedModels() async {
         let fake = FakeConnectionManager()
         for method in ["providers.catalog", "host.providerAuthStatus", "specialist.list"] {
@@ -394,4 +395,5 @@ extension WorkspaceProviderOptionsTests {
         let create = try #require(DemoFixtures.response(for: "workspace.create", params: [:]) as? [String: Any])
         #expect(create.isEmpty)
     }
+    #endif
 }

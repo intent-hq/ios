@@ -66,7 +66,7 @@ extension ConversationTranscriptView {
         // reads (#338): the lazy stack appears and disappears the marker as
         // it realizes and drops it. Realizing while scrolled away replays
         // the live edge; derealizing arms the recovery.
-        if demoWithdrawnEnd == nil {
+        if !isDemoEndWithdrawn {
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding + bottomClearance)
                 .id("scroll-bottom")

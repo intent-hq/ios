@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -81,3 +82,4 @@ extension DemoFixtures {
     N1wBXFzG/cq276+lidw5+XI6ggwb4HdCVBORzEV3h7lB2dIrIbuFUGndLmVgw5WRHUsAAAAMQZohbEFf/talUAPy
     """
 }
+#endif

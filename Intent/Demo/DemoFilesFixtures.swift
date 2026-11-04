@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum DemoFilesFixtures {
@@ -61,3 +62,4 @@ enum DemoFilesFixtures {
             """
     ]
 }
+#endif

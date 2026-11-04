@@ -27,5 +27,13 @@ struct ReleaseConfigurationTests {
             _ = try WebSocketConnection.makeURL(host: "127.0.0.1", port: 4242, certFingerprint: nil)
         }
     }
+
+    @Test func demoLaunchFlagsAreIgnored() {
+        let arguments = ["--demo-data", "--pretend-paired"]
+        #expect(!DemoMode.demoDataRequested(by: arguments))
+        #expect(!DemoMode.pretendPairedRequested(by: arguments))
+        #expect(!DemoMode.isEnabled)
+        #expect(!DemoMode.pretendPaired)
+    }
 }
 #endif

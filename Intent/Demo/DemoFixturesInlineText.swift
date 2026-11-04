@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -53,3 +54,4 @@ extension DemoFixtures {
     3. Return to the conversation.
     """.utf8)
 }
+#endif

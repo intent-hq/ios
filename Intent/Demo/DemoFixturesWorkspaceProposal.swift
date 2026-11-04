@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 extension DemoFixtures {
@@ -43,3 +44,4 @@ extension DemoFixtures {
         return ["workspace": proposedWorkspace]
     }
 }
+#endif

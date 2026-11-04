@@ -143,7 +143,9 @@ struct ConnectionLossPresenter: UIViewRepresentable {
                     self.host = host
                     overlayWindow = window
                     window.makeKeyAndVisible()
+                    #if DEBUG
                     DemoConnectionLoss.record("overlay-presented")
+                    #endif
                     window.layoutIfNeeded()
                     UIAccessibility.post(notification: .screenChanged, argument: host.view)
                 }
@@ -183,8 +185,10 @@ struct ConnectionLossPresenter: UIViewRepresentable {
             UIView.performWithoutAnimation {
                 let wasKey = overlayWindow.isKeyWindow
                 overlayWindow.isHidden = true
+                #if DEBUG
                 DemoConnectionLoss.record("overlay-dismissed")
                 DemoConnectionLoss.record("overlay-dismissed-\(reason.rawValue)")
+                #endif
                 host?.rootView = AnyView(EmptyView())
                 overlayWindow.rootViewController = nil
                 sourceWindow?.accessibilityElementsHidden = sourceAccessibilityHidden

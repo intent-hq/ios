@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import Network
 
@@ -38,3 +39,4 @@ final class DemoNetworkPathMonitor: NetworkPathMonitoring {
         task = nil
     }
 }
+#endif

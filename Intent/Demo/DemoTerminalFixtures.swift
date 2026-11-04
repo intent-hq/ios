@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum DemoTerminalFixtures {
@@ -37,3 +38,4 @@ enum DemoTerminalFixtures {
         }
     }
 }
+#endif

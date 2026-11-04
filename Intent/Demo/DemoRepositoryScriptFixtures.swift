@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 enum DemoRepositoryScriptFixtures {
@@ -81,3 +82,4 @@ enum DemoRepositoryScriptFixtures {
         return saved.filter { !removedScripts[workspaceId, default: []].contains($0["id"] as? String ?? "") }
     }
 }
+#endif
