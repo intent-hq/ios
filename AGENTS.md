@@ -69,6 +69,7 @@ Run the matching checks after changing tooling:
 | Capture-lifecycle verifier | `python3 scripts/test_fixture_capture_lifecycle.py` |
 | Protocol fixture versions | `python3 scripts/test_protocol_fixture_version.py`; `python3 scripts/protocol_fixture_version.py lint` |
 | Deferred row-provider boundary | `scripts/test-row-provider-isolation.sh` (macOS) |
+| WebKit overlay linkage check | `scripts/test-check-webkit-overlay-linkage.sh` (macOS) |
 
 ## Transport and bundled content
 

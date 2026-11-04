@@ -638,6 +638,10 @@ The Linux job also runs the offline tooling self-tests `scripts/test_xcodebuild.
 `scripts/check-swiftlint-inputs.sh` keeps `scripts/swiftlint-xcode-inputs.xcfilelist`
 in sync with the Swift sources; `scripts/update-source-lists.sh` regenerates it and
 `scripts/test-source-inputs.xcfilelist` after Swift files are added, split, moved, or removed.
+After building, the macOS job runs `scripts/check-webkit-overlay-linkage.sh`, which
+fails if `Intent.app` links `/usr/lib/swift/libswiftWebKit.dylib` (the app then cannot
+launch on iOS 18.4–18.5 simulators); `scripts/test-check-webkit-overlay-linkage.sh` is
+its macOS self-test.
 
 Two auxiliary workflows run on pushes to `main`: `warm-cache.yml` (also weekly on
 Mondays at 06:17 UTC and on manual dispatch) seeds the Go, TailcatKit, and SPM caches
