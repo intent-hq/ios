@@ -7,6 +7,7 @@ struct MobileTerminalView: View {
     var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
     @State private var connection: MobileTerminalConnection
     @State private var controls = MobileTerminalControls()
     @State private var confirmClose = false
@@ -22,8 +23,11 @@ struct MobileTerminalView: View {
     }
 
     private var attachmentKey: String {
-        "\(store.connectionGeneration)-\(scenePhase == .active)"
+        "\(store.connectionGeneration)-\(canAttach)"
     }
+
+    private var canAttach: Bool { isPaneVisible && scenePhase == .active && store.isActive(terminal) }
+    private var canInteract: Bool { canAttach && connection.isReady }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,7 +36,7 @@ struct MobileTerminalView: View {
             terminalContent
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            TerminalKeyBar(controls: controls, isEnabled: connection.isReady && store.isActive(terminal))
+            TerminalKeyBar(controls: controls, isEnabled: canInteract)
         }
         .background(TerminalAppearance.background.ignoresSafeArea())
         .background(TerminalPresentationObserver { hasPresented = true })
@@ -43,8 +47,11 @@ struct MobileTerminalView: View {
         .alert("Close terminal?", isPresented: $confirmClose) { closeActions } message: {
             Text("This stops the shell and any commands running in it. Go back to leave it running.")
         }
-        .onChange(of: store.isActive(terminal)) { _, active in
-            if !active { connection.detach() }
+        .onChange(of: canAttach) { _, active in
+            if !active {
+                controls.terminalView?.resignFirstResponder()
+                connection.detach()
+            }
         }
     }
 
@@ -52,9 +59,9 @@ struct MobileTerminalView: View {
         ZStack(alignment: .top) {
             if hasPresented {
                 TerminalEmulatorView(connection: connection, controls: controls)
-                    .disabled(!connection.isReady || !store.isActive(terminal))
+                    .disabled(!canInteract)
                     .task(id: attachmentKey) {
-                        if scenePhase == .active { await connection.attach() } else { connection.detach() }
+                        if canAttach { await connection.attach() } else { connection.detach() }
                     }
                     .onDisappear { connection.detach() }
             } else {
@@ -135,7 +142,7 @@ struct MobileTerminalView: View {
     private var terminalMenu: some View {
         Menu {
             Button {
-                Task { await connection.attach() }
+                Task { if canAttach { await connection.attach() } }
             } label: {
                 Label {
                     Text("Reconnect").interFont(Constants.Typography.bodyS)
@@ -143,7 +150,7 @@ struct MobileTerminalView: View {
                     Image(.clockwiseArrow)
                 }
             }
-            .disabled(!hasPresented || !store.isConnected || !store.isActive(terminal))
+            .disabled(!hasPresented || !store.isConnected || !canAttach)
             Button(role: .destructive) {
                 confirmClose = true
             } label: {
