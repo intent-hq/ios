@@ -94,8 +94,10 @@ struct ScriptListPagingTests {
 
     @Test func registrationReusesAScriptSavedOnALaterPage() async throws {
         let fixture = WorkspaceScriptFixture()
-        fixture.fake.responseMap["file.list"] = [["name": "package.json", "type": "file"]]
-        fixture.fake.responseMap["file.read"] = #"{"scripts":{"dev":"astro dev"}}"#
+        fixture.fake.responseMap["file.list"] = [
+            ["name": "package.json", "type": "file"], ["name": "pnpm-lock.yaml", "type": "file"]
+        ]
+        fixture.fake.responseMap["file.read"] = #"{"packageManager":"pnpm@10.30.3","scripts":{"dev":"astro dev"}}"#
         await fixture.load([fixture.definition(id: "verification")])
         let candidate = try #require(fixture.store.scripts(workspaceId: "workspace").first { $0.name == "dev" && !$0.isRegistered })
         let saved: [String: Any] = [
