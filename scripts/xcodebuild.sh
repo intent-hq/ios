@@ -449,28 +449,27 @@ run_xcodebuild_logged() {
 #
 # The shell writes "run <pid>" on fd 9 when xcodebuild starts and "done" when
 # it has returned. EOF between the two means the shell died mid-run while
-# xcodebuild kept going: the keeper then SIGTERMs that process tree (parents
-# before children, so a parent cannot outlive a child's exit and carry on), waits
-# up to SIM_LOCK_KILL_GRACE seconds for every process in it to exit (tracking
-# the PIDs it saw, so a descendant that outlives and reparents away from its
-# parent is still waited for, plus any new descendants that appear meanwhile),
-# SIGKILLs the survivors, and releases only once none is left, so the next run
+# xcodebuild kept going: the keeper then terminates that process tree with
+# terminate_tree (PROCESS_TREE_PY: SIGTERM, up to SIM_LOCK_KILL_GRACE seconds,
+# SIGKILL for the survivors) and releases only once none is left, so the next run
 # never shares the device with an orphaned test process (helpers that merely
 # outlive a completed xcodebuild are never touched).
 #
 # Keeper protocol on stdout, one line each: "waiting <holder>" once if the
 # lock was busy, then "acquired <keeper pid> <seconds waited>" or
 # "timeout <holder>"; <holder> is the PID recorded in the file or "unknown".
-SIM_LOCK_KEEPER_PY='
-import errno, fcntl, os, signal, subprocess, sys, time
-path, owner, timeout, grace = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
-def holder():
-    os.lseek(fd, 0, os.SEEK_SET)
-    return os.read(fd, 64).decode("ascii", "replace").strip() or "unknown"
-def say(line):
-    sys.stdout.write(line + "\n")
-    sys.stdout.flush()
+# Process-tree termination shared by the simulator lock keeper and the launch
+# watchdog (each python program below that needs it is run as this prelude
+# plus its own body). terminate_tree SIGTERMs a process and every descendant,
+# parents before children (so a parent cannot outlive a child's exit and
+# carry on), then waits up to <grace> seconds for every process in the tree
+# to exit, tracking the PIDs it saw (a descendant that outlives and reparents
+# away from its parent is still waited for) plus any new descendants that
+# appear meanwhile, and SIGKILLs the survivors; it returns once none is left.
+# give_up(), polled while waiting, ends the wait early (the survivors are
+# SIGKILLed at once); on_kill(count) is called before the SIGKILLs.
+PROCESS_TREE_PY='
+import os, signal, subprocess, time
 def alive(pid):
     try:
         os.kill(pid, 0)
@@ -511,9 +510,7 @@ def signal_all(pids, sig):
             os.kill(pid, sig)
         except (ProcessLookupError, PermissionError):
             pass
-def terminate_orphaned_run(root):
-    sys.stderr.write("xcodebuild.sh: PID %s died while xcodebuild PID %d was still running; terminating it before releasing the simulator lock\n" % (owner, root))
-    sys.stderr.flush()
+def terminate_tree(root, grace, on_kill=None, give_up=None):
     tracked = with_descendants([root], process_table())
     signal_all(tracked, signal.SIGTERM)
     deadline = time.time() + grace
@@ -521,18 +518,36 @@ def terminate_orphaned_run(root):
         table = process_table()
         tracked = with_descendants(tracked, table)
         remaining = still_running(tracked, table)
-        if not remaining or time.time() >= deadline:
+        if not remaining or time.time() >= deadline or (give_up and give_up()):
             break
         time.sleep(0.2)
-    if remaining:
-        sys.stderr.write("xcodebuild.sh: %d process(es) of xcodebuild PID %d ignored SIGTERM for %ds; sending SIGKILL\n" % (len(remaining), root, grace))
+    if remaining and on_kill:
+        on_kill(len(remaining))
+    while remaining:
+        signal_all(remaining, signal.SIGKILL)
+        time.sleep(0.1)
+        table = process_table()
+        tracked = with_descendants(tracked, table)
+        remaining = still_running(tracked, table)
+'
+
+SIM_LOCK_KEEPER_PY='
+import errno, fcntl, os, signal, subprocess, sys, time
+path, owner, timeout, grace = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+def holder():
+    os.lseek(fd, 0, os.SEEK_SET)
+    return os.read(fd, 64).decode("ascii", "replace").strip() or "unknown"
+def say(line):
+    sys.stdout.write(line + "\n")
+    sys.stdout.flush()
+def terminate_orphaned_run(root):
+    sys.stderr.write("xcodebuild.sh: PID %s died while xcodebuild PID %d was still running; terminating it before releasing the simulator lock\n" % (owner, root))
+    sys.stderr.flush()
+    def killing(count):
+        sys.stderr.write("xcodebuild.sh: %d process(es) of xcodebuild PID %d ignored SIGTERM for %ds; sending SIGKILL\n" % (count, root, grace))
         sys.stderr.flush()
-        while remaining:
-            signal_all(remaining, signal.SIGKILL)
-            time.sleep(0.1)
-            table = process_table()
-            tracked = with_descendants(tracked, table)
-            remaining = still_running(tracked, table)
+    terminate_tree(root, grace, killing)
 start = time.time()
 announced = False
 while True:
@@ -582,7 +597,7 @@ acquire_simulator_lock() {
   SIM_LOCK_PATH="${dir%/}/xcodebuild-sim-$udid.lock"
   fifo=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-lock.XXXXXX")/status
   mkfifo "$fifo"
-  exec 9> >(python3 -c "$SIM_LOCK_KEEPER_PY" "$SIM_LOCK_PATH" "$$" "$timeout" "$grace" > "$fifo")
+  exec 9> >(python3 -c "$PROCESS_TREE_PY$SIM_LOCK_KEEPER_PY" "$SIM_LOCK_PATH" "$$" "$timeout" "$grace" > "$fifo")
   exec 8< "$fifo"
   rm -rf -- "${fifo%/status}"
   while :; do
@@ -668,10 +683,13 @@ append_step_summary() {
 # found" lines into the xcodebuild log. So every xcodebuild run under the
 # simulator lock (enumeration, test run, crash re-run) gets a watcher that
 # polls both once a second and, on the first hit, writes the reason to a
-# marker file and stops xcodebuild (SIGTERM, which ends the test session
-# cleanly; SIGKILL to its whole process tree if it is still running after
-# SIM_LOCK_KILL_GRACE seconds; helper daemons that merely outlive a stopped
-# xcodebuild are left alone, as after any run). The wrapper then exits
+# marker file and stops xcodebuild's whole process tree with terminate_tree
+# (PROCESS_TREE_PY: SIGTERM, SIGKILL for the survivors after
+# SIM_LOCK_KILL_GRACE seconds). A survivor holding the log pipe keeps the
+# wrapper waiting for that grace period; one that does not (xcodebuild's
+# DTServiceHub ignores SIGTERM) is SIGKILLed as soon as the wrapper reports
+# that the run's pipeline has ended, so the tree never outlives the lock and
+# the grace period is only spent when something actually blocks. The wrapper then exits
 # EXIT_APP_LAUNCH_FAILED naming the process, the dyld reason, the crash
 # report and the simulator runtime, and never re-runs: a launch failure is
 # deterministic. Only reports modified since the run started and belonging to
@@ -685,9 +703,10 @@ append_step_summary() {
 # watch runs until xcodebuild exits (one last scan then) or a hit; scan looks
 # for up to the given seconds after xcodebuild has already returned. A hit
 # writes <marker> at once and <marker>.stopped once xcodebuild is gone; a log hit waits up to 3 s for the matching crash report,
-# whose details are richer.
+# whose details are richer. <marker>.done, written by the wrapper once the
+# pipeline has ended, cuts the grace period short.
 LAUNCH_CRASH_WATCH_PY='
-import json, os, re, signal, subprocess, sys, time
+import json, os, re, sys, time
 mode, udid, reports, log, marker, since, arg, grace = sys.argv[1:9]
 since, grace = int(since), int(grace)
 device = "/devices/%s/" % udid.lower()
@@ -760,57 +779,13 @@ def record(found, elapsed):
         for key, value in found + [("elapsed", elapsed)]:
             f.write("%s\t%s\n" % (key, " ".join(value.split())))
     os.replace(tmp, marker)
-def tree(root):
-    try:
-        out = subprocess.run(["ps", "-axo", "pid=,ppid="], capture_output=True, text=True).stdout
-    except Exception:
-        return [root]
-    children = {}
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-            children.setdefault(int(parts[1]), []).append(int(parts[0]))
-    ordered = [root]
-    for pid in ordered:
-        ordered.extend(c for c in children.get(pid, []) if c not in ordered)
-    return ordered
-def alive(pid):
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    try:
-        stat = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
-    except Exception:
-        return True
-    return bool(stat) and not stat.startswith("Z")
-def wait_gone(pids, seconds):
-    deadline = time.time() + seconds
-    while pids and time.time() < deadline:
-        time.sleep(0.2)
-        pids = [pid for pid in pids if alive(pid)]
-    return pids
-def stop(root):
-    try:
-        os.kill(root, signal.SIGTERM)
-    except (ProcessLookupError, PermissionError):
-        return
-    if not wait_gone([root], grace):
-        return
-    pids = tree(root)
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
-    wait_gone(pids, 5)
+def running(pid):
+    return bool(still_running([pid], process_table()))
 def hit(found, from_log, root):
     elapsed = str(max(0, int(time.time()) - since))
     record(found, elapsed)
-    if root is not None and alive(root):
-        stop(root)
+    if root is not None and running(root):
+        terminate_tree(root, grace, give_up=lambda: os.path.exists(marker + ".done"))
     for _ in range(3 if from_log else 0):
         report = scan_reports()
         if report:
@@ -821,19 +796,20 @@ def hit(found, from_log, root):
 root = int(arg) if mode == "watch" else None
 deadline = time.time() + (0 if root is not None else int(arg))
 while True:
-    running = root is not None and alive(root)
+    active = root is not None and running(root)
     found = scan_reports()
     from_log = not found
     found = found or scan_log()
     if found:
         hit(found, from_log, root)
         break
-    if not running and time.time() >= deadline:
+    if not active and time.time() >= deadline:
         break
     time.sleep(1)
 '
 LAUNCH_STAGE_PATTERN='before establishing connection|never finished bootstrapping|Test runner never began executing'
 LAUNCH_WATCH_UDID=
+LAUNCH_TEMP_BUNDLE=
 LAUNCH_WATCH_SINCE=0
 LAUNCH_WATCH_MARKER=
 launch_watch_enabled() {
@@ -858,7 +834,7 @@ start_launch_watch() {
   local reports
   [ -n "$LAUNCH_WATCH_MARKER" ] || return 0
   reports=$(launch_reports_dir)
-  ( python3 -c "$LAUNCH_CRASH_WATCH_PY" watch "$LAUNCH_WATCH_UDID" "$reports" "$2" "$LAUNCH_WATCH_MARKER" \
+  ( python3 -c "$PROCESS_TREE_PY$LAUNCH_CRASH_WATCH_PY" watch "$LAUNCH_WATCH_UDID" "$reports" "$2" "$LAUNCH_WATCH_MARKER" \
       "$LAUNCH_WATCH_SINCE" "$1" "${SIM_LOCK_KILL_GRACE:-30}" \
       < /dev/null > /dev/null 2>> "${LAUNCH_WATCH_MARKER%/*}/watch.err" 9>&- & )
 }
@@ -891,14 +867,17 @@ print("simulator")
 # and the log get one more look (the watcher polls once a second, so a short
 # run can end first), for up to 5 s when the log says the test process died
 # before it connected (LAUNCH_STAGE_PATTERN): the report lands a few seconds
-# after the abort, and a hosted launch failure can make xcodebuild exit first. On a hit, reports it and exits EXIT_APP_LAUNCH_FAILED, keeping the log
-# and skipping the crash re-run and selector checks.
+# after the abort, and a hosted launch failure can make xcodebuild exit first.
+# On a hit, reports it and exits EXIT_APP_LAUNCH_FAILED, skipping the crash
+# re-run and selector checks; the log and a filtered run's temporary result
+# bundle(s) (LAUNCH_TEMP_BUNDLE and any RETRY_BUNDLE) are kept and named, as
+# after any failing filtered run.
 check_launch_failure() {
   local status=$1 log=$2 label=$3 scratch=${4:-} kept wait=0 key value process='' indicator='' source='' elapsed='' reasons='' device
   [ -n "$LAUNCH_WATCH_MARKER" ] || return 0
   if [ ! -e "$LAUNCH_WATCH_MARKER" ]; then
     [ "$status" -eq 0 ] || ! grep -qiE "$LAUNCH_STAGE_PATTERN" "$log" 2>/dev/null || wait=5
-    python3 -c "$LAUNCH_CRASH_WATCH_PY" scan "$LAUNCH_WATCH_UDID" "$(launch_reports_dir)" "$log" \
+    python3 -c "$PROCESS_TREE_PY$LAUNCH_CRASH_WATCH_PY" scan "$LAUNCH_WATCH_UDID" "$(launch_reports_dir)" "$log" \
       "$LAUNCH_WATCH_MARKER" "$LAUNCH_WATCH_SINCE" "$wait" 0 9>&- || true
     wait=0
   fi
@@ -907,8 +886,9 @@ check_launch_failure() {
     LAUNCH_WATCH_MARKER=
     return 0
   fi
-  # The lock is not released while the watcher is still stopping xcodebuild
-  # (SIGTERM, then SIGKILL after the grace period).
+  # The lock is not released while the watcher is still stopping xcodebuild's
+  # tree; the pipeline has ended, so survivors no longer get the grace period.
+  : > "$LAUNCH_WATCH_MARKER.done"
   while [ ! -e "$LAUNCH_WATCH_MARKER.stopped" ] && [ "$wait" -lt $(( (${SIM_LOCK_KILL_GRACE:-30} + 10) * 10 )) ]; do
     sleep 0.1 2>/dev/null || sleep 1
     wait=$((wait + 1))
@@ -939,8 +919,12 @@ ${reasons}Seen in the $source, ${elapsed}s into $label; xcodebuild was stopped r
 A launch failure is deterministic, so nothing is re-run. Check that every library the app links exists on this
 runtime (deployment target vs. SDK), or pick a simulator on another runtime with SIM_UDID.
 Full xcodebuild output kept at: $log
-Exiting $EXIT_APP_LAUNCH_FAILED (app launch failure).
 EOF
+  if [ -n "$LAUNCH_TEMP_BUNDLE" ]; then
+    echo "Result bundle kept at: $LAUNCH_TEMP_BUNDLE" >&2
+    [ -z "$RETRY_BUNDLE" ] || echo "Re-run result bundle kept at: $RETRY_BUNDLE" >&2
+  fi
+  echo "Exiting $EXIT_APP_LAUNCH_FAILED (app launch failure)." >&2
   append_step_summary "### App launch failure ($label)" "" \
     "dyld terminated \`$process\` before main ($indicator) on $device; xcodebuild was stopped after ${elapsed}s and nothing was re-run (exit $EXIT_APP_LAUNCH_FAILED)." "" \
     '```' "${reasons%
@@ -1654,6 +1638,7 @@ cmd_test_without_building() {
   elif [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ]; then
     bundle_dir=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-result.XXXXXX")
     bundle=$bundle_dir/Intent.xcresult
+    LAUNCH_TEMP_BUNDLE=$bundle
   fi
   [ -z "$bundle" ] || extra+=(-resultBundlePath "$bundle")
   log=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-test.XXXXXX")

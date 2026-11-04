@@ -77,7 +77,11 @@ EOF
 # $LAUNCH_CRASH_REPORTS_DIR STUB_REPORT_DELAY seconds (default 1) after a test
 # invocation starts, without delaying it; STUB_LOG_DYLD=1 prints dyld's
 # abort lines; mode "hang" waits on "Launch dev.intentapp.ios" for
-# STUB_HANG seconds (default 60), as XCUITest does.
+# STUB_HANG seconds (default 60), as XCUITest does, and mode "dyldhang" prints
+# dyld's abort lines first (so with STUB_THEN only the later invocation does);
+# STUB_RESIST_DETACHED=1 points the STUB_RESIST child's stdout/stderr at
+# /dev/null, like xcodebuild's SIGTERM-immune DTServiceHub, which does not
+# hold the log pipe.
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
@@ -120,7 +124,11 @@ if [ -n "${STUB_WATCH:-}" ]; then
   if kill -0 "$STUB_WATCH" 2>/dev/null; then echo "peer alive" >> "$STUB_LOG"; else echo "peer dead" >> "$STUB_LOG"; fi
 fi
 if [ -n "${STUB_RESIST:-}" ]; then
-  (trap '' TERM; exec sleep "$STUB_RESIST") &
+  if [ -n "${STUB_RESIST_DETACHED:-}" ]; then
+    (trap '' TERM; exec sleep "$STUB_RESIST") > /dev/null 2>&1 &
+  else
+    (trap '' TERM; exec sleep "$STUB_RESIST") &
+  fi
   [ -z "${STUB_LOG:-}" ] || echo "child $!" >> "$STUB_LOG"
 fi
 [ -z "${STUB_RESIST_ROOT:-}" ] || trap '' TERM
@@ -132,8 +140,12 @@ if [ -n "${STUB_THEN:-}" ]; then
   if [ -e "$STUB_STATE" ]; then mode=$STUB_THEN; else : > "$STUB_STATE"; fi
 fi
 case "$mode" in
-  hang)
+  hang|dyldhang)
     echo "    t =     0.03s     Launch dev.intentapp.ios"
+    if [ "$mode" = dyldhang ]; then
+      echo "dyld[4242]: Library not loaded: /usr/lib/swift/libswiftWebKit.dylib"
+      echo "  Referenced from: <UUID> /stub/Intent.app/Intent.debug.dylib"
+    fi
     exec sleep "${STUB_HANG:-60}" ;;
   marker)
     echo "Test Suite 'FooTests' started"
@@ -786,6 +798,51 @@ assert_lacks "an enumeration launch failure is not an unmatched selector" "$out"
 assert_lock_free "lock released after an enumeration launch failure"
 assert_eq "an enumeration launch failure leaves no enumeration scratch files" "$(scratch_count xcodebuild-enumerate.)" 0
 assert_contains "an enumeration launch failure keeps its log" "$out" "Full xcodebuild output kept at: $work/xcodebuild-test."
+
+echo "# a launch failure stops xcodebuild's whole tree: a SIGTERM-immune child holding the log pipe is SIGKILLed after the grace"
+reset_reports
+: > "$work/launchchild.log"
+launch_started=$(date +%s)
+status=$(run_filtered launchchild "" test-without-building STUB_MODE=hang STUB_LOG_DYLD=1 STUB_RESIST=40 \
+  SIM_LOCK_KILL_GRACE=1 STUB_LOG="$work/launchchild.log")
+launch_elapsed=$(( $(date +%s) - launch_started ))
+assert_eq "a launch failure with a SIGTERM-immune child exits 84" "$status" 84
+if [ "$launch_elapsed" -lt 12 ]; then pass "the SIGTERM-immune child is stopped within the grace (${launch_elapsed}s)"; else fail "the SIGTERM-immune child kept the run alive for ${launch_elapsed}s"; fi
+child=$(sed -n 's/^child //p' "$work/launchchild.log")
+if [ -n "$child" ] && ! kill -0 "$child" 2>/dev/null; then pass "the SIGTERM-immune child is gone"; else fail "the SIGTERM-immune child ($child) is still running"; kill -9 "$child" 2>/dev/null || true; fi
+assert_lock_free "lock released after stopping the SIGTERM-immune child"
+
+echo "# a SIGTERM-immune child that does not hold the log pipe is SIGKILLed once the pipeline ends, without the grace"
+: > "$work/launchdetached.log"
+launch_started=$(date +%s)
+status=$(run_filtered launchdetached "" test-without-building STUB_MODE=hang STUB_LOG_DYLD=1 STUB_RESIST=40 STUB_RESIST_DETACHED=1 \
+  SIM_LOCK_KILL_GRACE=30 STUB_LOG="$work/launchdetached.log")
+launch_elapsed=$(( $(date +%s) - launch_started ))
+assert_eq "a launch failure with a detached SIGTERM-immune child exits 84" "$status" 84
+if [ "$launch_elapsed" -lt 12 ]; then pass "a detached SIGTERM-immune child does not cost the grace (${launch_elapsed}s)"; else fail "a detached SIGTERM-immune child cost ${launch_elapsed}s"; fi
+child=$(sed -n 's/^child //p' "$work/launchdetached.log")
+if [ -n "$child" ] && ! kill -0 "$child" 2>/dev/null; then pass "the detached SIGTERM-immune child is gone"; else fail "the detached SIGTERM-immune child ($child) is still running"; kill -9 "$child" 2>/dev/null || true; fi
+
+echo "# a filtered run that exits 84 keeps and names its temporary result bundle"
+bundles_before=$(temp_bundles)
+status=$(run_filtered launchbundle "IntentTests/DemoFixturesTests" test-without-building STUB_MODE=dyldhang)
+assert_eq "a filtered launch failure exits 84" "$status" 84
+assert_eq "a filtered launch failure keeps its temporary bundle" "$(temp_bundles)" $((bundles_before + 1))
+kept=$(kept_bundle "$work/launchbundle.out")
+if [ -n "$kept" ] && [ -e "$kept" ]; then pass "the kept bundle is named and exists"; else fail "the kept bundle is not named or missing ('$kept')"; fi
+assert_lacks "a filtered launch failure reads no result bundle" "$(cat "$work/launchbundle.out")" "ONLY_TESTING summary"
+
+echo "# a launch failure in the crash re-run names both kept bundles"
+status=$(run_filtered launchretry "IntentTests" test-without-building STUB_MODE=crash STUB_THEN=dyldhang \
+  STUB_STATE="$work/launchretry.state")
+out=$(cat "$work/launchretry.out")
+assert_eq "a launch failure in the re-run exits 84" "$status" 84
+assert_contains "the re-run launch failure names its phase" "$out" "into the re-run"
+assert_contains "the re-run launch failure keeps the primary bundle" "$out" "Result bundle kept at: $work/xcodebuild-result."
+assert_contains "the re-run launch failure keeps the re-run bundle" "$out" "Re-run result bundle kept at: $work/xcodebuild-result."
+assert_lacks "the re-run launch failure is not re-run again" "$out" "crashed as well"
+rm -rf -- "$work"/xcodebuild-result.*
+reset_reports
 
 echo "# no false positives: old, other-device, and non-dyld crash reports"
 reset_reports
