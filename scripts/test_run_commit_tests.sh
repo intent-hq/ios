@@ -53,7 +53,10 @@ export PATH="$stubs:$PATH"
 # to the re-run bundle and exits 0, and sleep waits on a foreground pipeline
 # like the real wrapper's xcodebuild call: it writes the sleeping process's PID
 # to $STUB_SLEEP_PID, touches $STUB_STARTED, and with STUB_IGNORE_TERM=1
-# ignores TERM (as does the sleep).
+# ignores TERM (as does the sleep). STUB_STRAY=<pidfile> first starts a
+# "compiler" in its own session (outside the wrapper's process group, like
+# Xcode's swift-frontend) that keeps writing into the checkout for 30s.
+# STUB_LOCKED=1 leaves a read-only directory that cannot be deleted.
 origin=$work/origin
 mkdir -p "$origin/scripts" "$origin/TailcatKit"
 cat > "$origin/scripts/xcodebuild.sh" <<'EOF'
@@ -77,6 +80,30 @@ if [ ! -d TailcatKit/build/TailcatKit.xcframework ]; then
   [ -n "${STUB_TAILCAT_PARTIAL:-}" ] || echo license > TailcatKit/build/TailcatKit.xcframework/LICENSE.tailcat
 fi
 echo "Building..."
+if [ -n "${STUB_STRAY:-}" ]; then
+  python3 -c '
+import os, sys, time
+if os.fork():
+    sys.exit(0)
+os.setsid()
+out = sys.argv[1]
+open(sys.argv[2], "w").write(str(os.getpid()))
+end, i = time.time() + 30, 0
+while time.time() < end:
+    try:
+        os.makedirs(out, exist_ok=True)
+        open(os.path.join(out, "obj%d.o" % i), "w").close()
+    except OSError:
+        pass
+    i += 1
+    time.sleep(0.01)
+' "$PWD/DerivedStray/Objects" "$STUB_STRAY" < /dev/null > /dev/null 2>&1
+  tries=0
+  while [ ! -s "$STUB_STRAY" ] && [ "$tries" -lt 100 ]; do sleep 0.05; tries=$((tries + 1)); done
+fi
+if [ -n "${STUB_LOCKED:-}" ]; then
+  mkdir -p locked && : > locked/file && chmod 555 locked
+fi
 case "${STUB_OUTCOME:-pass}" in
   pass)
     mkdir -p "$RESULT_BUNDLE"; cp "$STUB_RESULTS" "$RESULT_BUNDLE/tests.json"
@@ -431,6 +458,50 @@ kill -TERM "$pid"
 finish_sleeping "kill grace"
 assert_eq "a run killed after the grace period exits 143" "$status" 143
 if [ "$elapsed" -lt 10 ]; then pass "RUN_KILL_GRACE bounds the wait"; else fail "RUN_KILL_GRACE bounds the wait (took ${elapsed}s)"; fi
+
+# A compiler outside the process group, still writing into the checkout, is
+# stopped so the checkout can be deleted, and the exit status stays 143.
+start_sleeping STUB_STRAY="$work/stray.pid"
+kill -TERM "$pid"
+finish_sleeping "stray compiler"
+assert_eq "an interrupted run with a stray compiler exits 143" "$status" 143
+if kill -0 "$(cat "$work/stray.pid")" 2>/dev/null; then
+  fail "the stray compiler is stopped"
+  kill -KILL "$(cat "$work/stray.pid")" 2>/dev/null || true
+else
+  pass "the stray compiler is stopped"
+fi
+assert_lacks "no cleanup problem is reported" "$(cat "$work/interrupt.out")" "could not be deleted"
+# The same after a normal exit: a passing run's leftover compiler is stopped.
+rm -f "$work/stray.pid"
+status=$(run straypass STUB_STRAY="$work/stray.pid" -- "$sha_a" 'IntentTests')
+assert_eq "a passing run with a stray compiler exits 0" "$status" 0
+if kill -0 "$(cat "$work/stray.pid")" 2>/dev/null; then
+  fail "a passing run stops a stray compiler"
+  kill -KILL "$(cat "$work/stray.pid")" 2>/dev/null || true
+else
+  pass "a passing run stops a stray compiler"
+fi
+if [ -e "$(record pwd)" ]; then fail "a passing run with a stray compiler removes its checkout"; else pass "a passing run with a stray compiler removes its checkout"; fi
+
+# A checkout that cannot be deleted keeps the run's exit status, is noted in
+# the summary, and is deleted by the next run once it can be.
+if [ "$(id -u)" = 0 ]; then
+  echo "skip - running as root, which can delete read-only directories"
+else
+  status=$(run locked STUB_OUTCOME=fail STUB_RESULTS="$work/fail.json" STUB_LOCKED=1 -- "$sha_a" 'IntentTests')
+  assert_eq "an undeletable checkout keeps exit 65" "$status" 65
+  assert_contains "an undeletable checkout is noted in the summary" "$(summary)" "could not be deleted"
+  assert_contains "the summary keeps the verdict" "$(summary)" "# iOS test run: FAILED (exit 65"
+  locked=$(record pwd)
+  assert_contains "the checkout is listed for the next run" "$(cat "$INTENT_IOS_TEST_RUN_DIR/stale-checkouts")" "$(dirname "$locked")"
+  chmod 755 "$locked/locked"
+  status=$(run afterlocked -- "$sha_a" 'IntentTests')
+  assert_eq "the next run exits 0" "$status" 0
+  if [ -e "$(dirname "$locked")" ]; then fail "the next run deletes the stale checkout"; else pass "the next run deletes the stale checkout"; fi
+  assert_eq "the stale list is emptied" "$(cat "$INTENT_IOS_TEST_RUN_DIR/stale-checkouts" 2>/dev/null)" ""
+  assert_lacks "the next summary has no cleanup note" "$(summary)" "could not be deleted"
+fi
 
 # Only the newest 10 run directories are kept.
 export INTENT_IOS_TEST_RUN_DIR=$work/runs-main

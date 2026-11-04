@@ -44,6 +44,8 @@
 #                        of TailcatKit/, so a new checkout skips the slow Go
 #                        build. Only complete builds the wrapper made in a
 #                        clean checkout are cached. The newest 3 are kept.
+#   stale-checkouts      Temporary checkouts a run could not delete; the next
+#                        run deletes them.
 #
 # These environment variables are passed to the wrapper and recorded in the
 # rerun command: BUILD_CONFIGURATION, SIM_UDID, SPM_CLONE_DIR,
@@ -53,8 +55,10 @@
 #
 # Interrupts: a TERM, INT or HUP stops the whole test run (xcodebuild
 # included) with TERM; a second signal, or RUN_KILL_GRACE seconds (default
-# 60) without exiting, escalates to KILL. The checkout is deleted only after
-# every process of the run has exited.
+# 60) without exiting, escalates to KILL. Before the checkout is deleted (on
+# every exit), processes still naming it on their command line are stopped
+# too: Xcode starts its compilers outside the wrapper's process group. A
+# cleanup problem is noted in the summary and never changes the exit status.
 #
 # Exit status: the wrapper's (0 passed, 65 build or test failure, 80-83 see
 # scripts/xcodebuild.sh), 2 for bad arguments, 1 when the commit cannot be
@@ -175,6 +179,8 @@ child=
 interrupted=
 error_message=
 tailcat_note="not checked yet"
+report=
+cleanup_note=
 started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 started_epoch=$(date +%s)
 finished_at=
@@ -197,7 +203,7 @@ exit_meaning() {
 }
 
 # write_summary: writes $summary (atomically) and a copy in the run directory.
-# $work/report.md, when present, holds the per-suite table and failure lists.
+# $report, when present, holds the per-suite table and failure lists.
 write_summary() {
   local tmp heading
   tmp=$(mktemp "$root/.summary.XXXXXX")
@@ -237,9 +243,13 @@ write_summary() {
       echo
       echo "Error: $error_message"
     fi
-    if [ -n "$work" ] && [ -s "$work/report.md" ]; then
+    if [ -n "$cleanup_note" ]; then
       echo
-      cat "$work/report.md"
+      echo "Note: $cleanup_note"
+    fi
+    if [ -n "$report" ] && [ -s "$report" ]; then
+      echo
+      cat "$report"
     fi
   } > "$tmp"
   mv -f "$tmp" "$summary"
@@ -253,28 +263,86 @@ finish_time() {
   duration="$((elapsed / 60))m $((elapsed % 60))s"
 }
 
-cleanup() {
-  if [ -n "$work" ] && [ -d "$work" ]; then
-    if [ "${KEEP_CHECKOUT:-0}" = 1 ]; then
-      echo "notice: KEEP_CHECKOUT=1 keeps the checkout at $work/ios" >&2
+# stop_strays: stops processes whose command line names this run's private
+# directory. Xcode's build service starts swift-frontend outside the wrapper's
+# process group, so after an interrupt compilers can keep writing into the
+# checkout (seen on Xcode 27.2). Nothing else uses this directory. TERM first,
+# KILL after about 5 seconds.
+stop_strays() {
+  local pattern pids tries=0
+  pattern=$(printf '%s/' "$work" | sed 's/[][\.*^$+?(){}|]/\\&/g')
+  while pids=$(pgrep -f -- "$pattern" 2>/dev/null | grep -vx "$$" || true); [ -n "$pids" ]; do
+    if [ "$tries" -ge 20 ]; then
+      echo "warning: processes still using $work after KILL: $(echo $pids)" >&2
+      return 0
+    elif [ "$tries" -ge 10 ]; then
+      # shellcheck disable=SC2086
+      kill -KILL $pids 2>/dev/null || true
     else
-      rm -rf -- "$work"
+      # shellcheck disable=SC2086
+      kill -TERM $pids 2>/dev/null || true
     fi
+    sleep 0.5
+    tries=$((tries + 1))
+  done
+}
+
+# remove_work: deletes this run's checkout and derived data after stopping
+# stray processes. If it still cannot be deleted, its path is listed in
+# $root/stale-checkouts for the next run to delete, and $cleanup_note says so.
+remove_work() {
+  local tries=0
+  [ -n "$work" ] && [ -d "$work" ] || return 0
+  stop_strays
+  if [ "${KEEP_CHECKOUT:-0}" = 1 ]; then
+    echo "notice: KEEP_CHECKOUT=1 keeps the checkout at $work/ios" >&2
+    work=
+    return 0
   fi
+  until rm -rf -- "$work" 2>/dev/null; do
+    tries=$((tries + 1))
+    if [ "$tries" -ge 3 ]; then
+      echo "$work" >> "$root/stale-checkouts"
+      cleanup_note="the temporary checkout $work could not be deleted (a process was still using it); the next run deletes it"
+      echo "warning: $cleanup_note" >&2
+      break
+    fi
+    sleep 1
+    stop_strays
+  done
+  work=
+}
+
+# purge_stale_checkouts: deletes checkouts earlier runs could not delete.
+purge_stale_checkouts() {
+  local list=$root/stale-checkouts old
+  [ -f "$list" ] || return 0
+  mv -f "$list" "$list.$$"
+  while IFS= read -r old; do
+    case "$old" in
+      */intent-ios-run.*) rm -rf -- "$old" 2>/dev/null || echo "$old" >> "$list" ;;
+    esac
+  done < "$list.$$"
+  rm -f "$list.$$"
 }
 
 on_exit() {
   local code=$?
+  set +e
   if [ "$state" = RUNNING ]; then
     # An unexpected failure (set -e) after the RUNNING summary was written.
     state=ERROR
     status=$code
     [ "$status" -ne 0 ] || status=1
     [ -n "$error_message" ] || error_message="run_commit_tests.sh stopped unexpectedly (exit $code); see the messages above"
+    remove_work
     finish_time
-    write_summary || true
+    write_summary
   fi
-  cleanup
+  # Cleanup problems are reported in the summary; they never change the
+  # exit status.
+  remove_work
+  exit "$code"
 }
 trap on_exit EXIT
 
@@ -296,6 +364,7 @@ cache_tailcatkit() {
 
 finish_interrupted() {
   cache_tailcatkit
+  remove_work
   state=INTERRUPTED
   status=$1
   error_message="the run was stopped by a signal before it finished; rerun it"
@@ -339,6 +408,7 @@ trap 'on_signal 143' TERM
 trap 'on_signal 129' HUP
 
 fail_early() {
+  remove_work
   state=ERROR
   status=$1
   error_message=$2
@@ -349,6 +419,7 @@ fail_early() {
   exit "$status"
 }
 
+purge_stale_checkouts
 write_summary
 
 # 1. Resolve the commit.
@@ -446,7 +517,8 @@ if [ -d "$retry_bundle" ]; then
   retry_results=$work/retry-results.json
   xcrun xcresulttool get test-results tests --path "$retry_bundle" > "$retry_results" 2>>"$log" || retry_results=
 fi
-python3 - "$status" "$log" "$work/report.md" "$results" "$retry_results" <<'PY' || echo "warning: could not summarize the results; read the log" >&2
+report=$run_dir/report.md
+python3 - "$status" "$log" "$report" "$results" "$retry_results" <<'PY' || echo "warning: could not summarize the results; read the log" >&2
 import json
 import sys
 
@@ -584,6 +656,7 @@ if [ "$status" -eq 0 ]; then
 else
   state=FAILED
 fi
+remove_work
 finish_time
 write_summary
 
