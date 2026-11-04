@@ -266,11 +266,12 @@ finish_time() {
 # stop_strays: stops processes whose command line names this run's private
 # directory. Xcode's build service starts swift-frontend outside the wrapper's
 # process group, so after an interrupt compilers can keep writing into the
-# checkout (seen on Xcode 27.2). Nothing else uses this directory. TERM first,
-# KILL after about 5 seconds.
+# checkout (seen on Xcode 27.2). Nothing else uses this directory. It matches
+# the directory's unique name, not its full path: compilers print a normalized
+# path (one slash, /var not /private/var). TERM first, KILL after about 5s.
 stop_strays() {
   local pattern pids tries=0
-  pattern=$(printf '%s/' "$work" | sed 's/[][\.*^$+?(){}|]/\\&/g')
+  pattern="intent-ios-run\\.$(printf '%s' "${work##*/intent-ios-run.}" | sed 's/[][\.*^$+?(){}|]/\\&/g')/"
   while pids=$(pgrep -f -- "$pattern" 2>/dev/null | grep -vx "$$" || true); [ -n "$pids" ]; do
     if [ "$tries" -ge 20 ]; then
       echo "warning: processes still using $work after KILL: $(echo $pids)" >&2
@@ -299,7 +300,9 @@ remove_work() {
     work=
     return 0
   fi
-  until rm -rf -- "$work" 2>/dev/null; do
+  # A compiler that starts during the delete can recreate folders afterwards,
+  # so the delete only counts once a final sweep leaves nothing behind.
+  until rm -rf -- "$work" 2>/dev/null && stop_strays && [ ! -e "$work" ]; do
     tries=$((tries + 1))
     if [ "$tries" -ge 3 ]; then
       echo "$work" >> "$root/stale-checkouts"
@@ -450,7 +453,9 @@ bundle=$run_dir/Results.xcresult
 retry_bundle=$run_dir/Results-retry.xcresult
 
 # 2. Check out a clean copy.
-work=$(mktemp -d "${TMPDIR:-/tmp}/intent-ios-run.XXXXXX")
+# No double slash when TMPDIR ends in "/" (it does on macOS).
+tmp_base=${TMPDIR:-/tmp}
+work=$(mktemp -d "${tmp_base%/}/intent-ios-run.XXXXXX")
 checkout=$work/ios
 git clone --quiet --shared --no-checkout "$repo" "$checkout" \
   || fail_early 1 "could not clone $repo into $checkout"

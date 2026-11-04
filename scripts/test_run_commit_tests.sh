@@ -472,6 +472,20 @@ else
   pass "the stray compiler is stopped"
 fi
 assert_lacks "no cleanup problem is reported" "$(cat "$work/interrupt.out")" "could not be deleted"
+# The same with a TMPDIR ending in "/", as on macOS: the compiler's command
+# line names the normalized path (one slash), which must still match.
+start_sleeping STUB_STRAY="$work/stray.pid" TMPDIR="$work/"
+kill -TERM "$pid"
+finish_sleeping "stray compiler, TMPDIR ending in /"
+assert_eq "an interrupted run with TMPDIR ending in / exits 143" "$status" 143
+if kill -0 "$(cat "$work/stray.pid")" 2>/dev/null; then
+  fail "the stray compiler is stopped when TMPDIR ends in /"
+  kill -KILL "$(cat "$work/stray.pid")" 2>/dev/null || true
+else
+  pass "the stray compiler is stopped when TMPDIR ends in /"
+fi
+leftover=$(ls -d "$work"/intent-ios-run.* 2>/dev/null || true)
+assert_eq "no temporary checkout is left behind" "$leftover" ""
 # The same after a normal exit: a passing run's leftover compiler is stopped.
 rm -f "$work/stray.pid"
 status=$(run straypass STUB_STRAY="$work/stray.pid" -- "$sha_a" 'IntentTests')
