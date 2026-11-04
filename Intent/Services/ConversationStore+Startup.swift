@@ -135,15 +135,9 @@ extension ConversationStore {
         metadataReadyForEntry = false
         bootstrapTask?.cancel()
         bootstrapTask = nil
-        queueReadTask?.cancel()
-        queueReadTask = nil
-        queueReadPending = false
-        queueRefreshQueued = false
+        queueReads.cancel()
         commands.invalidateQueueReads()
-        subscriptionReadTask?.cancel()
-        subscriptionReadTask = nil
-        subscriptionRefreshQueued = false
-        subscriptionRevision &+= 1
+        subscriptionReads.cancel()
         watchedAgentCoordinator.invalidateReads()
     }
 

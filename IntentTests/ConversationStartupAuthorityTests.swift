@@ -14,7 +14,7 @@ struct ConversationStartupAuthorityTests {
         defer { load.cancel(); fixture.stop() }
         try await connection.waitForPendingRequests("agent.get")
         try await waitUntil("snapshot and queue before metadata") {
-            model.store.liveTranscript.chatSeeded && model.store.queueReadTask == nil
+            model.store.liveTranscript.chatSeeded && !model.store.queueReads.isRunning
         }
         for (scoped, value) in [(scopedFirst, "older"), (!scopedFirst, "newer")] {
             event("agent:updated", fixture: fixture, scoped: scoped, fields: ["lastSeenMessageId": value])

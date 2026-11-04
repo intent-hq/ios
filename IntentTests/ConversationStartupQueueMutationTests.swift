@@ -248,7 +248,7 @@ extension ConversationStartupQueueMutationTests {
     private func waitForSeed(_ fixture: ConversationStartupFixture, _ model: ConversationViewModel) async throws {
         try await fixture.connection.waitForPendingRequests("agent.get")
         try await waitUntil("queue seed applied while metadata is held") {
-            model.store.queueReadTask == nil && model.store.queuedMessages.map(\.id) == ["existing"]
+            !model.store.queueReads.isRunning && model.store.queuedMessages.map(\.id) == ["existing"]
                 && fixture.connection.traffic().calls("agent.getQueue").first?.completed != nil
                 && fixture.connection.traffic().calls("hook.list").first?.completed != nil
                 && fixture.connection.traffic().calls("prMonitor.list").first?.completed != nil

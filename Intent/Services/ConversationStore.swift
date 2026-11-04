@@ -121,12 +121,8 @@ import SwiftUI
     @ObservationIgnored var consumers: Set<UUID> = []
     @ObservationIgnored var streamingObservers: [UUID: (Bool) -> Void] = [:]
     @ObservationIgnored var entryObservers: [UUID: () -> Void] = [:]
-    @ObservationIgnored var queueReadTask: Task<Void, Never>?
-    @ObservationIgnored var queueReadPending = false
-    @ObservationIgnored var queueRefreshQueued = false
-    @ObservationIgnored var subscriptionReadTask: Task<Void, Never>?
-    @ObservationIgnored var subscriptionRefreshQueued = false
-    @ObservationIgnored var subscriptionRevision = 0
+    @ObservationIgnored let queueReads = CoalescedRead()
+    @ObservationIgnored let subscriptionReads = CoalescedRead()
 
     @ObservationIgnored var eventHandlerId: UUID?
     var sessionMetadataGeneration = 0
@@ -188,8 +184,8 @@ import SwiftUI
             connectionManager.removeEventHandler(id: handlerId)
         }
         bootstrapTask?.cancel()
-        queueReadTask?.cancel()
-        subscriptionReadTask?.cancel()
+        queueReads.cancel()
+        subscriptionReads.cancel()
     }
 }
 

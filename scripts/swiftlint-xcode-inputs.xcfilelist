@@ -168,6 +168,7 @@ $(SRCROOT)/Intent/Services/BrowserTunnelRelay.swift
 $(SRCROOT)/Intent/Services/BrowserTunnelStream.swift
 $(SRCROOT)/Intent/Services/BrowserTunnelURL.swift
 $(SRCROOT)/Intent/Services/CertFingerprintProbe.swift
+$(SRCROOT)/Intent/Services/CoalescedRead.swift
 $(SRCROOT)/Intent/Services/CommentStore.swift
 $(SRCROOT)/Intent/Services/ConnectionAdmission.swift
 $(SRCROOT)/Intent/Services/ConnectionCapabilities.swift
@@ -667,6 +668,7 @@ $(SRCROOT)/IntentTests/BrowserTunnelRelayTests.swift
 $(SRCROOT)/IntentTests/BrowserTunnelURLTests.swift
 $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
 $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
+$(SRCROOT)/IntentTests/CoalescedReadTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/CommentStorePagingTests.swift
