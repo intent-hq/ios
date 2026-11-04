@@ -53,17 +53,15 @@ struct CreationOptionsStoreTests {
         return (store, fake)
     }
 
-    /// Poll (bounded) until the condition holds — avoids fixed-sleep
-    /// flakiness for assertions on Task-spawned background refreshes.
-    /// Records a failure on timeout so a missed update cannot pass silently.
-    func waitFor(_ description: String = "condition", _ condition: () -> Bool) async throws {
-        for _ in 0 ..< 200 {
-            if condition() {
-                return
-            }
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
-        Issue.record("Timed out waiting for \(description)")
+    /// Bounded wait until the condition holds, for assertions on
+    /// Task-spawned background refreshes. Throws on timeout so a missed
+    /// update cannot pass silently.
+    func waitFor(
+        _ description: String = "condition",
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ condition: () -> Bool
+    ) async throws {
+        try await waitUntil(description, sourceLocation: sourceLocation, condition)
     }
 
     // MARK: - Cold load
@@ -212,7 +210,7 @@ struct CreationOptionsStoreTests {
 
         await store.loadIfNeeded()
         try await waitFor("refresh reads") { fake.paramsForMethod("specialist.list").count == 2 }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
 
         #expect(store.specialists.map(\.id) == cachedSpecialists)
         #expect(store.providers == cachedProviders)
@@ -302,7 +300,7 @@ extension CreationOptionsStoreTests {
         // The superseded refresh completes with data from before the
         // invalidation: it must not repopulate the cache or mark it loaded.
         fake.resolvePending("specialist.list", with: ["specialists": [specialistDict(id: "stale")]])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await drainMainQueue()
         #expect(store.specialists.isEmpty)
         #expect(store.providers.isEmpty)
         #expect(store.hasLoaded == false)
@@ -319,7 +317,7 @@ extension CreationOptionsStoreTests {
         #expect(fake.paramsForMethod("specialist.list").count == 3)
     }
 
-    @Test func loadTaskStartingAfterInvalidateTouchesNothing() async throws {
+    @Test func loadTaskStartingAfterInvalidateTouchesNothing() async {
         let (store, fake) = await makeLoadedStore()
         fake.clearRequestLog()
         // The cached path spawns a silent refresh task and returns without
@@ -328,7 +326,7 @@ extension CreationOptionsStoreTests {
         await store.loadIfNeeded()
         store.invalidate()
 
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await drainMainQueue()
         #expect(fake.requestLog.isEmpty)
         #expect(store.isLoading == false)
         #expect(store.hasLoaded == false)
@@ -426,7 +424,7 @@ extension CreationOptionsStoreTests {
         // The pre-reconnect read resolves first (oldest pending) with stale
         // data: dropped.
         fake.resolvePending("specialist.list", with: ["specialists": [specialistDict(id: "stale")]])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await drainMainQueue()
         #expect(store.specialists.map(\.id) == ["implementor", "coordinator"])
         #expect(store.hasLoaded == false)
         #expect(store.isLoading)
@@ -451,7 +449,7 @@ extension CreationOptionsStoreTests {
 
         fake.simulateConnect()
         try await waitFor("model freshness expired") { !store.modelCatalog(for: "auggie").isFresh }
-        try await Task.sleep(nanoseconds: 200_000_000)
+        await drainMainQueue()
 
         #expect(store.loadGeneration == 1)
         #expect(fake.requestLog.isEmpty)
@@ -465,13 +463,13 @@ extension CreationOptionsStoreTests {
         #expect(fake.didCallMethod("specialist.list") == false)
     }
 
-    @Test func reconnectWithoutCacheDoesNotFetch() async throws {
+    @Test func reconnectWithoutCacheDoesNotFetch() async {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
         let store = CreationOptionsStore(connectionManager: fake)
 
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 200_000_000)
+        await drainMainQueue()
 
         #expect(fake.requestLog.isEmpty)
         #expect(store.hasLoaded == false)

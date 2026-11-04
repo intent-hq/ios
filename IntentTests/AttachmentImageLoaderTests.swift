@@ -141,14 +141,29 @@ struct AttachmentImageLoaderTests {
     @Test func concurrentLoadsShareOneResolution() async throws {
         let png = Self.pngBytes()
         let fake = FakeConnectionManager()
-        fake.delayMap["file.getAttachmentInfo"] = 50_000_000
-        fake.responseMap["file.getAttachmentInfo"] = Self.infoResponse(path: ".intent/attachments/pic.png")
+        fake.pendingMethods = ["file.getAttachmentInfo"]
         fake.responseMap["file.readChunk"] = Self.chunkResponse(png)
         let loader = Self.makeLoader(fake)
 
-        async let firstLoad = loader.image(workspaceId: "ws-1", attachmentId: "att-1")
-        async let secondLoad = loader.image(workspaceId: "ws-1", attachmentId: "att-1")
-        let (first, second) = try await (firstLoad, secondLoad)
+        // Main-actor tasks start in creation order: once the first read is
+        // suspended, draining the main queue lets the second load reach its
+        // join point before the read resolves.
+        let firstLoad = Task { try await loader.image(workspaceId: "ws-1", attachmentId: "att-1") }
+        let secondLoad = Task { try await loader.image(workspaceId: "ws-1", attachmentId: "att-1") }
+        try await fake.waitForPendingRequests("file.getAttachmentInfo")
+        await drainMainQueue()
+        // Answer any later read at once and resolve every suspended one, so a
+        // regression that skips the join fails the count below, not hangs.
+        fake.pendingMethods = []
+        fake.responseMap["file.getAttachmentInfo"] = Self.infoResponse(path: ".intent/attachments/pic.png")
+        while fake.pendingRequestCount("file.getAttachmentInfo") > 0 {
+            fake.resolvePending(
+                "file.getAttachmentInfo",
+                with: Self.infoResponse(path: ".intent/attachments/pic.png")
+            )
+        }
+        let first = try await firstLoad.value
+        let second = try await secondLoad.value
 
         #expect(first === second)
         #expect(fake.paramsForMethod("file.getAttachmentInfo").count == 1)

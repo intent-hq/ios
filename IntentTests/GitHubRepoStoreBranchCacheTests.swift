@@ -68,8 +68,9 @@ extension GitHubRepoStoreTests {
         // A known default branch skips the github.repos.get round-trip.
         #expect(!fake.didCallMethod("github.repos.get"))
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState(listing: listing))
-        // The cache hit is synchronous: no request behind it.
-        try await Task.sleep(nanoseconds: 20_000_000)
+        // The cache hit is synchronous: no request behind it. The cold load's
+        // fire-and-forget first-paint read must be logged before clearing.
+        try await waitFor("paint read") { fake.didCallMethod("github.branches.listCached") }
         fake.clearRequestLog()
         #expect(store.cachedBranchListing(owner: "o", repo: "r") == listing)
         #expect(fake.requestLog.isEmpty)
@@ -108,7 +109,7 @@ extension GitHubRepoStoreTests {
         let listing = try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
         try await waitFor("paint read") { fake.didCallMethod("github.branches.listCached") }
         fake.resolvePending("github.branches.listCached", with: ["cached": true, "branches": ["stale"]])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
 
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState(listing: listing))
     }
@@ -118,15 +119,15 @@ extension GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         // The paint answers at once; the authoritative read fails later.
         fake.responseMap["github.branches.listCached"] = ["cached": true, "branches": ["main"]]
-        fake.delayMap["github.branches.list"] = 100_000_000
-        fake.errorMap["github.branches.list"] = NSError(
-            domain: "t",
-            code: -1,
-            userInfo: [NSLocalizedDescriptionKey: "offline"]
-        )
+        fake.pendingMethods = ["github.branches.list"]
 
         let load = Task { try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main") }
         try await waitFor("paint") { store.branchState(owner: "o", repo: "r").paint != nil }
+        try await fake.waitForPendingRequests("github.branches.list")
+        fake.failPending(
+            "github.branches.list",
+            with: NSError(domain: "t", code: -1, userInfo: [NSLocalizedDescriptionKey: "offline"])
+        )
         await #expect(throws: (any Error).self) { try await load.value }
 
         let state = store.branchState(owner: "o", repo: "r")
@@ -134,7 +135,7 @@ extension GitHubRepoStoreTests {
         #expect(state.displayed == nil)
         #expect(state.listing == nil)
         // Retry from another consumer: the error clears for everyone.
-        fake.errorMap["github.branches.list"] = nil
+        fake.pendingMethods = []
         fake.responseMap["github.branches.list"] = ["branches": ["main"]]
         let listing = try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState(listing: listing))
@@ -258,7 +259,7 @@ extension GitHubRepoStoreTests {
         fake.pendingMethods = ["github.branches.list"]
         fake.responseMap["github.branches.listCached"] = ["cached": true, "branches": ["main"]]
         let generation = store.loadGeneration
-        _ = Task { try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main") }
+        let load = Task { try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main") }
         try await waitFor("paint") { store.branchState(owner: "o", repo: "r").paint != nil }
 
         fake.simulateConnect()
@@ -267,7 +268,7 @@ extension GitHubRepoStoreTests {
         #expect(store.branchState(owner: "o", repo: "r").displayed == nil)
         // The old flight's answer is dropped, not published.
         fake.resolvePending("github.branches.list", with: ["branches": ["stale"]])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        _ = try await load.value
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState())
     }
 
@@ -302,7 +303,7 @@ extension GitHubRepoStoreTests {
         try await waitFor("fresh reads") { fake.paramsForMethod("github.branches.list").count == 2 }
 
         fake.resolvePending("github.branches.listCached", with: ["cached": true, "branches": ["old-paint"]])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
         #expect(store.branchState(owner: "o", repo: "r").paint == nil)
 
         // The new connection's own paint still lands.
@@ -339,7 +340,7 @@ extension GitHubRepoStoreTests {
         store.warmRepoCache(owner: "o", repo: "r")
         store.warmRepoCache(owner: "o", repo: "r")
         try await waitFor("second warm") { fake.paramsForMethod("repo.warmCache").count == 2 }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
         #expect(fake.paramsForMethod("repo.warmCache").count == 2)
     }
 
@@ -354,7 +355,7 @@ extension GitHubRepoStoreTests {
         store.warmRepoCache(owner: "intent-hq", repo: "intentd")
         store.warmRepoCache(owner: "intent-hq", repo: "ios")
         try await waitFor("warm requests") { fake.paramsForMethod("repo.warmCache").count == 2 }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
 
         let calls = fake.paramsForMethod("repo.warmCache")
         #expect(calls.count == 2)
@@ -374,7 +375,7 @@ extension GitHubRepoStoreTests {
 
         store.warmRepoCache(owner: "o", repo: "r")
         try await waitFor("warm request") { fake.didCallMethod("repo.warmCache") }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        await drainMainQueue()
 
         #expect(store.lastError == nil)
     }

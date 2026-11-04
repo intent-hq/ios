@@ -215,7 +215,7 @@ extension GitHubRepoStoreTests {
         fake.clearRequestLog()
         await store.loadIfNeeded()
         try await waitFor { fake.didCallMethod("github.authStatus") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
         #expect(store.isConfigured == true)
         #expect(store.ownRepos == cachedOwn)
     }
@@ -260,7 +260,7 @@ extension GitHubRepoStoreTests {
         // The superseded refresh completes with data from before the
         // invalidation: it must not repopulate the cache or mark it loaded.
         fake.resolvePending("github.repos.list", with: ["repos": [makeRepoDict(name: "stale")]])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await drainMainQueue()
         #expect(store.ownRepos.isEmpty)
         #expect(store.recentRepos.isEmpty)
         #expect(store.hasLoaded == false)
@@ -277,7 +277,7 @@ extension GitHubRepoStoreTests {
         #expect(fake.paramsForMethod("github.repos.list").count == 3)
     }
 
-    @Test func loadTaskStartingAfterInvalidateTouchesNothing() async throws {
+    @Test func loadTaskStartingAfterInvalidateTouchesNothing() async {
         let (store, fake) = await makeLoadedStore()
         fake.clearRequestLog()
         // The cached path spawns a silent refresh task and returns without
@@ -286,7 +286,7 @@ extension GitHubRepoStoreTests {
         await store.loadIfNeeded()
         store.invalidate()
 
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await drainMainQueue()
         #expect(fake.requestLog.isEmpty)
         #expect(store.isLoading == false)
         #expect(store.hasLoaded == false)
@@ -424,7 +424,7 @@ extension GitHubRepoStoreTests {
         // The pre-reconnect read resolves first (oldest pending) with stale
         // data: dropped.
         fake.resolvePending("github.repos.list", with: ["repos": [makeRepoDict(name: "stale")]])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await drainMainQueue()
         #expect(store.ownRepos.isEmpty)
         #expect(store.hasLoaded == false)
         #expect(store.isLoading)
@@ -436,7 +436,7 @@ extension GitHubRepoStoreTests {
         #expect(store.isLoading == false)
     }
 
-    @Test func reconnectWithoutCacheDoesNotFetch() async throws {
+    @Test func reconnectWithoutCacheDoesNotFetch() async {
         let fake = FakeConnectionManager()
         fake.responseMap["github.authStatus"] = ["isConfigured": true]
         fake.responseMap["repo.list"] = ["repos": []]
@@ -444,7 +444,7 @@ extension GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
 
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 200_000_000)
+        await drainMainQueue()
 
         #expect(fake.requestLog.isEmpty)
         #expect(store.hasLoaded == false)
