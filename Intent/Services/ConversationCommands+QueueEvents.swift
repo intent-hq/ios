@@ -108,4 +108,63 @@ extension ConversationCommands {
         let remaining = queuedMessages.filter { $0.id != messageId }
         queuedMessages = queueMutations.applying(to: remaining, after: receivedAt)
     }
+
+    /// A newer queue state (event or local mutation) overtook a paged read.
+    struct QueueReadSuperseded: Error {}
+
+    // Shared getQueue/queue:updated decoder (PROTOCOL §5.5). Non-arrays return
+    // nil; invalid elements are dropped, retaining valid rows' order and ids.
+    // Logs only array positions/error shapes, never content or metadata.
+    // Nil preserves the current queue for malformed input; an empty array clears it.
+    // swiftlint:disable:next discouraged_optional_collection
+    static func decodeQueueSnapshot(_ queue: Any?, source: String) -> [QueuedMessage]? {
+        guard let items = queue as? [Any] else { return nil }
+        let decoder = JSONDecoder()
+        var messages: [QueuedMessage] = []
+        messages.reserveCapacity(items.count)
+        for (index, item) in items.enumerated() {
+            do {
+                guard let dictionary = item as? [String: Any] else {
+                    throw DecodingError.typeMismatch(
+                        [String: Any].self,
+                        DecodingError.Context(
+                            codingPath: [],
+                            debugDescription: "element is not an object"
+                        )
+                    )
+                }
+                let data = try JSONSerialization.data(withJSONObject: dictionary)
+                messages.append(try decoder.decode(QueuedMessage.self, from: data))
+            } catch {
+                AppLog.conversation.error(
+                    "[ConversationStore] Dropping undecodable queue element \(index + 1)/"
+                        + "\(items.count) from \(source): \(Self.describeDecodingFailure(error))"
+                )
+            }
+        }
+        return messages
+    }
+
+    /// Content-free failure description: decoding case/path or other error type.
+    private static func describeDecodingFailure(_ error: Error) -> String {
+        guard let decodingError = error as? DecodingError else {
+            return String(describing: type(of: error))
+        }
+        let path: (DecodingError.Context) -> String = { context in
+            context.codingPath.map(\.stringValue).joined(separator: ".")
+        }
+        if case let .keyNotFound(key, context) = decodingError {
+            return "keyNotFound(\(key.stringValue)) at [\(path(context))]"
+        }
+        if case let .typeMismatch(_, context) = decodingError {
+            return "typeMismatch at [\(path(context))]"
+        }
+        if case let .valueNotFound(_, context) = decodingError {
+            return "valueNotFound at [\(path(context))]"
+        }
+        if case .dataCorrupted(let context) = decodingError {
+            return "dataCorrupted at [\(path(context))]"
+        }
+        return "DecodingError"
+    }
 }
