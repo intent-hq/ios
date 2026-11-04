@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 @testable import Intent
 import Testing
@@ -214,3 +215,4 @@ private final class DesignFixtureConnection: FakeConnectionManager {
         router.unregister(id: id)
     }
 }
+#endif

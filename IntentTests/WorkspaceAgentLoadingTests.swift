@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 @testable import Intent
 import SwiftUI
@@ -242,3 +243,4 @@ private final class AgentGroupFixtureConnection: FakeConnectionManager {
         return try await super.request(method, params: params, timeout: timeout)
     }
 }
+#endif

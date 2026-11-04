@@ -5,6 +5,7 @@ import UIKit
 @testable import Intent
 
 extension MarkdownTextViewTests {
+    #if DEBUG
     /// Layout owns readability; the UI suite separately owns gesture routing in the transcript.
     @MainActor
     @Test func wideTableKeepsReadableCellsAcrossWidthsAndTextSizes() async throws {
@@ -45,6 +46,7 @@ extension MarkdownTextViewTests {
             }
         }
     }
+    #endif
 
     @MainActor
     @Test func smallTableAndProseStayWithinTheViewport() async throws {

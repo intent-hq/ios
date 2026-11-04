@@ -322,7 +322,9 @@ struct RootView: View {
         .onChange(of: isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil, initial: true) { _, workspaceId in
             updateWorkspaceStatusLease(workspaceId)
         }
+        #if DEBUG
         .task { await DemoConnectionLoss.run(connection: session.connection, coordinator: coordinator) }
+        #endif
         // intent://pair deep-link confirmation — presented over whichever
         // screen is current (first-run pairing or an existing connection).
         .sheet(item: $coordinator.pendingDeepLinkPairing) { request in

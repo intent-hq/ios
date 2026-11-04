@@ -36,6 +36,18 @@ extension ConversationTranscriptView {
 
     // MARK: - Demo-only controlled end derealization (#338)
 
+    /// True only while a Debug demo has withdrawn the end row; always false
+    /// in Release, where the demo fixtures are compiled out.
+    var isDemoEndWithdrawn: Bool {
+        #if DEBUG
+        demoWithdrawnEnd != nil
+        #else
+        false
+        #endif
+    }
+
+    #if DEBUG
+
     /// Nil outside `--demo-data` without reading the state, so production
     /// bodies take no dependency on it.
     var demoWithdrawnEnd: ConversationTranscriptScrollState.DemoEndDerealization? {
@@ -85,6 +97,7 @@ extension ConversationTranscriptView {
         releaseHooksRowDuringDemoRecovery(geometry: geometry)
         scrollState.demoEndDerealization = nil
     }
+    #endif
 }
 
 extension View {
@@ -92,6 +105,7 @@ extension View {
     /// overlay does not participate in transcript layout or receive gestures.
     @ViewBuilder
     func demoStartupGestureProbe(scrollState: ConversationTranscriptScrollState) -> some View {
+        #if DEBUG
         if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript || DemoFixtures.usesHistoryPages {
             overlay(alignment: .topLeading) {
                 TranscriptGestureProbe(scrollState: scrollState)
@@ -101,6 +115,9 @@ extension View {
         } else {
             self
         }
+        #else
+        self
+        #endif
     }
 
     /// Under `--demo-data` only: exposes `value` as the view's accessibility
@@ -116,6 +133,7 @@ extension View {
         }
     }
 
+    #if DEBUG
     /// Under `--demo-data` with `--demo-end-derealization-trigger-file` only:
     /// polls for the trigger file and calls `onTrigger` once it exists, and
     /// calls `onGeometryChange` on every content offset change so the
@@ -142,6 +160,7 @@ extension View {
             self
         }
     }
+    #endif
 }
 
 private struct TranscriptGestureProbe: UIViewRepresentable {

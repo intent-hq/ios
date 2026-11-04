@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 @testable import Intent
 import Testing
@@ -53,3 +54,4 @@ extension ConnectionManagerTests {
         #expect(manager.globalSubscriptionState == .failed(attempts: 5, lastError: "No feed"))
     }
 }
+#endif

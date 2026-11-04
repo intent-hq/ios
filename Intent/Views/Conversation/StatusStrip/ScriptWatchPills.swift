@@ -18,7 +18,7 @@ struct ScriptWatchPills: View {
         .transaction { $0.animation = nil }
         .background {
             #if DEBUG
-            if DemoMode.isEnabled, ProcessInfo.processInfo.arguments.contains("--demo-script-monitor-hit-probe") {
+            if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-script-monitor-hit-probe") {
                 DemoIPadPaneGeometry(identifier: "script-monitors")
             }
             #endif

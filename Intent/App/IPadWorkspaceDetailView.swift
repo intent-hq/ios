@@ -40,7 +40,9 @@ struct IPadWorkspaceDetailView: View {
         .onChange(of: coordinator.conversationRequestId) {
             if !notePath.isEmpty { notePath = NavigationPath() }
         }
+        #if DEBUG
         .task { await DemoFixtures.reselectConversationIfRequested(coordinator: coordinator) }
+        #endif
     }
 
     private func changeHeader(_ destination: WorkspaceChangeDestination) -> some View {

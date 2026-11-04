@@ -34,7 +34,7 @@ struct IPadPaneBounds: ViewModifier {
         content
             #if DEBUG
             .background {
-                if DemoMode.isEnabled, ProcessInfo.processInfo.arguments.contains("--demo-ipad-pane-geometry") {
+                if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-ipad-pane-geometry") {
                     DemoIPadPaneGeometry(identifier: identifier)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .allowsHitTesting(false)

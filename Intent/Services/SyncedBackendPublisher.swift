@@ -46,8 +46,7 @@ struct SyncedBackendPublisher {
     static func production() -> Self? {
         guard !DemoMode.isEnabled,
               NSClassFromString("XCTestCase") == nil,
-              ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil,
-              ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1"
+              !LaunchOptions.current.isTestOrPreviewHost
         else { return nil }
         return Self(keychain: SecItemSyncedKeychain(), accessGroup: SyncedBackendRegistry.resolveSharedAccessGroup())
     }

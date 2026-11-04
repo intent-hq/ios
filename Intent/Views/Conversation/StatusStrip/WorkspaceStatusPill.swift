@@ -137,7 +137,7 @@ struct WorkspaceStatusPillsRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             #if DEBUG
-            if DemoMode.isEnabled, ProcessInfo.processInfo.arguments.contains("--demo-script-monitor-hit-probe") {
+            if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-script-monitor-hit-probe") {
                 DemoIPadPaneGeometry(identifier: "workspace-status-pills")
             }
             #endif
