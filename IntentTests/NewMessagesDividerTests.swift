@@ -49,10 +49,7 @@ struct ConversationTranscriptScrollPolicyTests {
     @Test func emptyReplacementRearmsEntryScrollForTheNextSnapshot() {
         let state = ConversationTranscriptScrollState()
         state.userIsScrolledAway = true
-        state.hasInitiallyScrolled = true
-        state.initialScrollScheduled = true
-        state.initialScrollAwaitingScrollView = true
-        state.initialScrollPerformed = true
+        state.entryScroll = .positioned
         state.isScrollingToBottom = true
         let generation = state.initialScrollGeneration
 
@@ -63,10 +60,7 @@ struct ConversationTranscriptScrollPolicyTests {
         ) == .rearmEntryScroll)
         state.rearmAfterTranscriptEmptied()
         #expect(!state.userIsScrolledAway)
-        #expect(!state.hasInitiallyScrolled)
-        #expect(!state.initialScrollScheduled)
-        #expect(!state.initialScrollAwaitingScrollView)
-        #expect(!state.initialScrollPerformed)
+        #expect(state.entryScroll == .idle)
         #expect(!state.isScrollingToBottom)
         #expect(state.initialScrollGeneration == generation + 1)
         #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
@@ -623,21 +617,18 @@ extension ConversationTranscriptScrollPolicyTests {
     @Test(arguments: [CGFloat(0), CGFloat(100)])
     func visibleTranscriptConsumesDeferredEntryWithoutChangingItsViewport(distance: CGFloat) {
         let state = ConversationTranscriptScrollState()
-        state.presentedBeforeEntryMetadata = true
-        state.initialScrollAwaitingScrollView = true
+        state.entryScroll = .awaitingScrollView
         let generation = state.initialScrollGeneration
         state.preservePresentedViewport(distanceToBottom: distance)
         #expect(state.initialScrollGeneration != generation, "old entry timers and divider probes are invalid")
-        #expect(state.hasInitiallyScrolled && state.initialScrollPerformed && state.initialScrollScheduled)
-        #expect(!state.initialScrollAwaitingScrollView)
+        #expect(state.entryScroll == .preserved)
         #expect(state.userIsScrolledAway == (distance > 50))
         let consumed = state.initialScrollGeneration
         state.preservePresentedViewport(distanceToBottom: nil)
         #expect(state.initialScrollGeneration == consumed, "same-binding reappearance cannot position again")
         #expect(state.entryViewportPreserved)
         state.rearmAfterTranscriptEmptied()
-        #expect(!state.presentedBeforeEntryMetadata && !state.initialScrollPerformed)
-        #expect(!state.entryViewportPreserved)
+        #expect(state.entryScroll == .idle)
     }
 }
 
@@ -685,17 +676,12 @@ extension ConversationTranscriptScrollPolicyTests {
     @Test(arguments: [false, true])
     func disappearingBeforeEntrySettlesAllowsANewEntry(performed: Bool) {
         let state = ConversationTranscriptScrollState()
-        state.initialScrollScheduled = true
-        state.initialScrollAwaitingScrollView = !performed
-        state.initialScrollPerformed = performed
+        state.entryScroll = performed ? .settling : .awaitingScrollView
         let previousGeneration = state.initialScrollGeneration
 
         state.suspendEntryScroll()
 
-        #expect(!state.hasInitiallyScrolled)
-        #expect(!state.initialScrollScheduled)
-        #expect(!state.initialScrollAwaitingScrollView)
-        #expect(!state.initialScrollPerformed)
+        #expect(state.entryScroll == .idle)
         #expect(state.initialScrollGeneration == previousGeneration + 1)
         state.applyDividerProbe(distanceToBottom: 100, generation: previousGeneration)
         #expect(!state.userIsScrolledAway)
@@ -711,9 +697,7 @@ extension ConversationTranscriptScrollPolicyTests {
 
         state.suspendEntryScroll()
 
-        #expect(state.hasInitiallyScrolled)
-        #expect(state.initialScrollScheduled)
-        #expect(state.initialScrollPerformed)
+        #expect(state.entryScroll == .preserved)
         #expect(state.userIsScrolledAway)
         #expect(state.forcedFollowTakenOverByGesture)
         #expect(state.initialScrollGeneration == previousGeneration + 1)

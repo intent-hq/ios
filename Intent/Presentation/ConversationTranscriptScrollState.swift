@@ -184,13 +184,26 @@ final class ConversationTranscriptScrollState {
     /// content-raised forced follows are refused (see
     /// `ConversationTranscriptScrollPolicy.forcedFollowTakeoverLatch`).
     @ObservationIgnored var forcedFollowTakenOverByGesture = false
-    var hasInitiallyScrolled = false
-    var initialScrollScheduled = false
-    /// True while the scheduled entry scroll waits for the finder to resolve.
-    var initialScrollAwaitingScrollView = false
-    var initialScrollPerformed = false
-    var presentedBeforeEntryMetadata = false
-    private(set) var entryViewportPreserved = false
+    /// Where the once-per-transcript entry scroll stands.
+    enum EntryScroll: Equatable {
+        case idle
+        /// A loading trigger queued the entry timer.
+        case scheduled
+        /// The timer beat hosting; the scroll waits for the finder to resolve.
+        case awaitingScrollView
+        /// The scroll was issued; positioned once the settle delay passes.
+        case settling
+        case positioned
+        /// Rows were presented before entry metadata, so the viewport was kept.
+        case preserved
+
+        var isScheduled: Bool { self != .idle }
+        var isPerformed: Bool { self == .settling || self == .positioned || self == .preserved }
+        var isSettled: Bool { self == .positioned || self == .preserved }
+    }
+    var entryScroll = EntryScroll.idle
+    var hasInitiallyScrolled: Bool { entryScroll.isSettled }
+    var entryViewportPreserved: Bool { entryScroll == .preserved }
     @ObservationIgnored var viewportAnchor = ConversationTranscriptViewportAnchor()
     @ObservationIgnored private var retainedViewport: ConversationTranscriptViewportAnchor.Position?
     @ObservationIgnored var pendingEntryDivider: String?
@@ -248,11 +261,7 @@ final class ConversationTranscriptScrollState {
     func preservePresentedViewport(distanceToBottom: CGFloat?) {
         guard !hasInitiallyScrolled else { return }
         initialScrollGeneration += 1
-        initialScrollScheduled = true
-        initialScrollAwaitingScrollView = false
-        initialScrollPerformed = true
-        hasInitiallyScrolled = true
-        entryViewportPreserved = true
+        entryScroll = .preserved
         userIsScrolledAway = NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: distanceToBottom)
     }
 
@@ -287,9 +296,7 @@ final class ConversationTranscriptScrollState {
     func suspendEntryScroll() {
         initialScrollGeneration += 1
         guard !hasInitiallyScrolled else { return }
-        initialScrollScheduled = false
-        initialScrollAwaitingScrollView = false
-        initialScrollPerformed = false
+        entryScroll = .idle
     }
 
     var hasPendingViewportRestoration: Bool {
@@ -334,12 +341,7 @@ final class ConversationTranscriptScrollState {
         initialScrollGeneration += 1
         pendingEntryDivider = nil
         userIsScrolledAway = false
-        hasInitiallyScrolled = false
-        initialScrollScheduled = false
-        initialScrollAwaitingScrollView = false
-        initialScrollPerformed = false
-        presentedBeforeEntryMetadata = false
-        entryViewportPreserved = false
+        entryScroll = .idle
         viewportGestureActive = false
         viewportAnchor.reset()
         viewportOwnershipRevision = viewportAnchor.ownershipRevision

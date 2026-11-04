@@ -110,14 +110,14 @@ extension ConversationTranscriptView {
     /// fires first, after LazyVStack has had time to finish layout.
     func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
         guard lifecycle.isVisible else { return }
-        guard !scrollState.initialScrollScheduled else {
+        guard !scrollState.entryScroll.isScheduled else {
             traceEvent("EntrySkipped", "reason=alreadyScheduled")
             return
         }
         traceSnapshot("entryScheduled")
         // Snapshot appearance can precede an already-running detail read by a
         // layout pass. Decide at initial layout, not at this scheduling edge.
-        scrollState.initialScrollScheduled = true
+        scrollState.entryScroll = .scheduled
         let generation = scrollState.initialScrollGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
             performInitialScrollWhenReady(
@@ -135,7 +135,7 @@ extension ConversationTranscriptView {
     func handleScrollViewResolved(proxy: ScrollViewProxy) {
         guard lifecycle.isVisible else { return }
         let generation = scrollState.initialScrollGeneration
-        guard scrollState.initialScrollAwaitingScrollView else {
+        guard scrollState.entryScroll == .awaitingScrollView else {
             // Defensive: onAppear / isLoading already schedule the entry
             // scroll, so this only matters if the edge ever precedes both.
             if !viewModel.isLoading {
@@ -168,7 +168,7 @@ extension ConversationTranscriptView {
             return
         }
         let step = ConversationTranscriptScrollPolicy.initialScrollStep(
-            alreadyPerformed: scrollState.initialScrollPerformed,
+            alreadyPerformed: scrollState.entryScroll.isPerformed,
             scrollViewResolved: scrollMomentumProxy.hasResolvedScrollView,
             scrollViewWaitElapsed: scrollViewWaitElapsed,
             entryMetadataReady: viewModel.isEntryScrollReady
@@ -178,10 +178,9 @@ extension ConversationTranscriptView {
         case .skip:
             return
         case .preserveViewport:
-            scrollState.presentedBeforeEntryMetadata = true
             scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom)
         case .waitForScrollView:
-            scrollState.initialScrollAwaitingScrollView = true
+            scrollState.entryScroll = .awaitingScrollView
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollHostingTimeout
             ) {
@@ -192,15 +191,14 @@ extension ConversationTranscriptView {
                 )
             }
         case .perform:
-            scrollState.initialScrollPerformed = true
-            scrollState.initialScrollAwaitingScrollView = false
+            scrollState.entryScroll = .settling
             performInitialScroll(proxy: proxy, generation: generation)
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
             ) {
                 guard generation == scrollState.initialScrollGeneration else { return }
                 scrollState.pendingEntryDivider = nil
-                scrollState.hasInitiallyScrolled = true
+                scrollState.entryScroll = .positioned
             }
         }
     }
