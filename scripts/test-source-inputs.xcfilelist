@@ -610,6 +610,7 @@ $(SRCROOT)/Intent/Utils/NotificationManager.swift
 $(SRCROOT)/Intent/Utils/PairingPayload.swift
 $(SRCROOT)/Intent/Utils/TaskStats.swift
 $(SRCROOT)/Intent/Utils/TcAddressDisplay.swift
+$(SRCROOT)/Intent/Utils/WKWebView+PageJavaScript.swift
 $(SRCROOT)/Intent/Utils/WorkspaceActivityTime.swift
 $(SRCROOT)/Intent/Utils/WorkspaceAssetLink.swift
 $(SRCROOT)/Intent/ViewModels
@@ -1289,6 +1290,7 @@ $(SRCROOT)/IntentTests/TransferDestinationPolicyTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
+$(SRCROOT)/IntentTests/WKWebViewPageJavaScriptTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WatcherMessagePresentationTests.swift
 $(SRCROOT)/IntentTests/WebSocketCompressionServer.swift
