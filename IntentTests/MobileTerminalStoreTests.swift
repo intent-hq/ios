@@ -263,6 +263,52 @@ struct MobileTerminalStoreTests {
         #expect(fixture.store.title(for: elsewhere) == "top")
     }
 
+    @Test func aCustomNameWinsUntilItIsCleared() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.processEvent(id: terminal.id, foreground: nil, last: "npm")
+        fixture.store.rename(terminal, to: "  dev server ")
+        #expect(fixture.store.title(for: terminal) == "dev server")
+        #expect(!fixture.store.hasExitedProcess(terminal))
+
+        fixture.store.rename(terminal, to: "  ")
+        #expect(fixture.store.title(for: terminal) == "npm")
+        #expect(fixture.store.hasExitedProcess(terminal))
+    }
+
+    @Test func customNamesSurviveRelaunchAndEndWithTheirTerminal() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.store.rename(terminal, to: "logs")
+        let restored = MobileTerminalStore(connection: fixture.fake, persistence: fixture.persistence)
+        #expect(restored.title(for: terminal) == "logs")
+
+        fixture.event(type: "terminal:exit", id: terminal.id)
+        #expect(fixture.persistence.loadNames().isEmpty)
+    }
+
+    @Test func renamingAnEndedTerminalChangesNothing() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.event(type: "terminal:exit", id: terminal.id)
+        fixture.store.rename(terminal, to: "logs")
+        #expect(fixture.store.customNames.isEmpty)
+        #expect(fixture.persistence.loadNames().isEmpty)
+    }
+
+    @Test func aStaleHandleCannotRenameAReplacementWithTheSameId() async throws {
+        let fixture = try MobileTerminalFixture()
+        let old = try await fixture.create()
+        fixture.list(ids: [], bootId: "new-boot")
+        let replacement = try #require(await fixture.store.create(workspaceId: "workspace"))
+        #expect(replacement.id == old.id)
+        #expect(replacement.daemonBootId == "new-boot")
+
+        fixture.store.rename(old, to: "logs")
+        #expect(fixture.store.title(for: replacement) == replacement.name)
+        #expect(fixture.persistence.loadNames().isEmpty)
+    }
+
     @Test func persistenceIsScopedToTheBackend() async throws {
         let fixture = try MobileTerminalFixture()
         _ = try await fixture.create()

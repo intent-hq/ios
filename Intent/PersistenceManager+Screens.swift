@@ -89,18 +89,21 @@ extension PersistenceManager {
         defaults.string(forKey: Self.workspaceListViewModeKey).flatMap(ViewMode.init(rawValue:)) ?? .recent
     }
 
-    private static let collapsedRepoGroupsKey = "workspaceListCollapsedRepoGroups"
+    /// `workspaceListCollapsedRepoGroups` or `workspaceListCollapsedStatusGroups`.
+    private static func collapsedGroupsKey(for mode: ViewMode) -> String {
+        "workspaceListCollapsed\(mode.rawValue)Groups"
+    }
 
-    func saveCollapsedRepoGroups(_ keys: Set<String>) {
+    func saveCollapsedGroups(_ keys: Set<String>, for mode: ViewMode) {
         if keys.isEmpty {
-            defaults.removeObject(forKey: Self.collapsedRepoGroupsKey)
+            defaults.removeObject(forKey: Self.collapsedGroupsKey(for: mode))
         } else {
-            defaults.set(keys.sorted(), forKey: Self.collapsedRepoGroupsKey)
+            defaults.set(keys.sorted(), forKey: Self.collapsedGroupsKey(for: mode))
         }
     }
 
-    func loadCollapsedRepoGroups() -> Set<String> {
-        Set(defaults.stringArray(forKey: Self.collapsedRepoGroupsKey) ?? [])
+    func loadCollapsedGroups(for mode: ViewMode) -> Set<String> {
+        Set(defaults.stringArray(forKey: Self.collapsedGroupsKey(for: mode)) ?? [])
     }
 
     // MARK: - Per-Workspace Tab
