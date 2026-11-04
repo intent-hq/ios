@@ -251,9 +251,15 @@ struct NotificationChimeTests {
         #expect(Int(chunkSize) == data.count - 8)
     }
 
-    @Test func chimeIsAudible() {
+    @Test func chimeIsQuietWithClickFreeEdges() {
         let samples = NotificationChime.chimeSamples()
-        #expect(samples.contains { abs(Int($0)) > 8000 })
+        let peak = samples.map { abs(Int($0)) }.max() ?? 0
+        #expect(peak > 500)
+        #expect(peak < 6000)
+        #expect(samples.first == 0)
+        #expect(samples.last == 0)
+        let largestStep = zip(samples, samples.dropFirst()).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        #expect(largestStep < 500)
     }
 
     @Test func fileURLIsCreatedOnceAndStable() throws {
