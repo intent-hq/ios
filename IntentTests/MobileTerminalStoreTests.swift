@@ -287,6 +287,28 @@ struct MobileTerminalStoreTests {
         #expect(fixture.persistence.loadNames().isEmpty)
     }
 
+    @Test func renamingAnEndedTerminalChangesNothing() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.event(type: "terminal:exit", id: terminal.id)
+        fixture.store.rename(terminal, to: "logs")
+        #expect(fixture.store.customNames.isEmpty)
+        #expect(fixture.persistence.loadNames().isEmpty)
+    }
+
+    @Test func aStaleHandleCannotRenameAReplacementWithTheSameId() async throws {
+        let fixture = try MobileTerminalFixture()
+        let old = try await fixture.create()
+        fixture.list(ids: [], bootId: "new-boot")
+        let replacement = try #require(await fixture.store.create(workspaceId: "workspace"))
+        #expect(replacement.id == old.id)
+        #expect(replacement.daemonBootId == "new-boot")
+
+        fixture.store.rename(old, to: "logs")
+        #expect(fixture.store.title(for: replacement) == replacement.name)
+        #expect(fixture.persistence.loadNames().isEmpty)
+    }
+
     @Test func persistenceIsScopedToTheBackend() async throws {
         let fixture = try MobileTerminalFixture()
         _ = try await fixture.create()

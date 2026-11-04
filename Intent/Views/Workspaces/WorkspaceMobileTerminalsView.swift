@@ -177,5 +177,8 @@ struct TerminalRenameAlert: ViewModifier {
             .onChange(of: isPresented) { _, presented in
                 if presented { name = store.title(for: terminal) }
             }
+            .onChange(of: store.isActive(terminal)) { _, active in
+                if !active { isPresented = false }
+            }
     }
 }

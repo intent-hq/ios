@@ -108,18 +108,23 @@ struct MobileTerminalView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var renameButton: some View {
+        Button {
+            isRenaming = true
+        } label: {
+            Label {
+                Text("Rename").interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(.edit)
+            }
+        }
+        .accessibilityIdentifier("mobile-terminal-rename")
+        .disabled(!store.isActive(terminal))
+    }
+
     private var terminalMenu: some View {
         Menu {
-            Button {
-                isRenaming = true
-            } label: {
-                Label {
-                    Text("Rename").interFont(Constants.Typography.bodyS)
-                } icon: {
-                    Image(.edit)
-                }
-            }
-            .accessibilityIdentifier("mobile-terminal-rename")
+            renameButton
             Button {
                 Task { await connection.attach() }
             } label: {

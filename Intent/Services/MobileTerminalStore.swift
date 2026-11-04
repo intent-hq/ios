@@ -67,7 +67,9 @@ final class MobileTerminalStore {
     }
 
     /// Sets the terminal's name; an empty name returns it to automatic naming.
+    /// Ignored for an ended terminal or a stale handle to a reused id.
     func rename(_ terminal: MobileTerminal, to name: String) {
+        guard isActive(terminal) else { return }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         customNames[terminal.id] = name.isEmpty ? nil : name
         persistence.saveNames(customNames)
