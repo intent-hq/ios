@@ -35,8 +35,9 @@
 - Use separate derived-data directories and simulators for concurrent runs; the wrapper serializes tests on a shared simulator.
 - `ONLY_TESTING` accepts whitespace-separated runnable `Target[/Suite[/test]]` identifiers; filenames are not selectors. Inspect executed/skipped counts before claiming coverage; all-skipped selections can pass.
 - For Release split runs, set `BUILD_CONFIGURATION=Release` on both commands; Debug results and Debug-only fixtures are not Release coverage.
-- When adding, removing, or moving Swift files, update [SwiftLint inputs](scripts/swiftlint-xcode-inputs.xcfilelist), sorted with `LC_ALL=C`, and run `scripts/check-swiftlint-inputs.sh`.
-- Read the [wrapper header](scripts/xcodebuild.sh) for locks, crash retries, and exit codes; use [prerequisites](README.md#clean-checkout-prerequisites), [wrapper commands](README.md#xcode-wrapper-commands), and [SwiftLint setup](README.md#strict-lint-on-linux) for toolchain details.
+- After adding, removing, splitting, or moving Swift files, run `scripts/update-source-lists.sh`; it regenerates both Xcode input lists (test sources and SwiftLint) from the working tree.
+- Linux agents cannot compile Swift, so a Mac helper agent runs iOS tests. Give it one command: `scripts/run_commit_tests.sh <full-sha> 'IntentTests/<Suite>' ...` (single-quote each selector). It tests that commit in a clean temporary checkout through the wrapper and writes `~/Library/Caches/intent-ios-test-run/summary.md`: verdict, per-suite counts, failing tests, and the rerun command. Run it in the foreground; a restarted agent reads the summary instead of asking for the steps again.
+- Read the [wrapper header](scripts/xcodebuild.sh) for locks, crash retries, the launch watchdog (exit 84: the app aborted before `main`; never retried), and exit codes; use [prerequisites](README.md#clean-checkout-prerequisites), [wrapper commands](README.md#xcode-wrapper-commands), and [SwiftLint setup](README.md#strict-lint-on-linux) for toolchain details.
 
 ## CI and UI evidence
 
@@ -44,7 +45,7 @@
 - Keep [smoke selectors](scripts/ui-smoke-tests.txt) small, update renamed tests, and maintain valid shard annotations; selection must reject duplicates and empty shards before native tests run.
 - Both workspace creation entry tests in [WorkspaceListMenuUITests](IntentUITests/WorkspaceListMenuUITests.swift) must exercise light and dark appearances on every run.
 - Transcript quarantine: [ConversationTranscriptFullGateUITests.swift](IntentUITests/ConversationTranscriptFullGateUITests.swift) extends `ConversationTranscriptScrollUITests`; select `ONLY_TESTING='IntentUITests/ConversationTranscriptScrollUITests'` with `TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1` on a local wrapper run.
-- Full runs still honor skips and quarantines; keep `AppStoreScreenshotTests` excluded from both schemes and follow the separate [Mermaid quarantine](README.md#mermaid-ui-quarantine).
+- Full runs still honor skips and quarantines; keep `AppStoreScreenshotTests` excluded from both schemes and follow the separate [Mermaid quarantine](README.md#mermaid-ui-quarantine) (ios#735 is closed; lifting the remaining guard is tracked in ios#940).
 - Preserve full-suite inventory partitioning and cross-lane coverage verification; only the first iPhone shard owns the [screenshot-retention contract](README.md#ui-evidence-artifacts).
 - Extend the explicit allowlist in [export_ui_evidence.py](scripts/export_ui_evidence.py); review the exported PNGs before claiming visual coverage and keep screenshots outside git.
 - Keep evidence exports separate per lane, record runner/toolchain details for timings, and retain failure/cancellation results and logs with `pipefail`.
@@ -56,12 +57,19 @@ Run the matching checks after changing tooling:
 | Changed area | Checks |
 | --- | --- |
 | Xcode wrapper | `scripts/test_xcodebuild.sh` |
+| Mac commit test runner | `scripts/test_run_commit_tests.sh` |
 | Source-input generator | `scripts/test-generate-test-inputs.sh` |
+| Source-list updater / shared enumeration (`scripts/source-lists.sh`) | `scripts/test-update-source-lists.sh`; `scripts/test-check-swiftlint-inputs.sh`; `scripts/test-generate-test-inputs.sh` |
 | CI / test selection | `python3 scripts/test_ci_simulator.py`; `python3 scripts/test_ui_smoke_tests.py`; `python3 scripts/test_ui_full_tests.py` |
 | Runner / capture selection | `python3 scripts/test_select_macos_runner.py`; `python3 scripts/test_select_fixture_capture_repetitions.py` |
 | Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`) |
 | SwiftLint wrapper / input checker | `scripts/test-swiftlint.sh`; `scripts/test-check-swiftlint-inputs.sh`; Linux setup/runtime checks are in the [lint guide](README.md#strict-lint-on-linux) |
 | Xcode Cloud preparation | `scripts/test-ci-post-clone.sh` |
+| UI attachment lifecycle check | `python3 scripts/check_ui_attachment_lifecycle.py`; `python3 scripts/test_check_ui_attachment_lifecycle.py` |
+| Capture-lifecycle verifier | `python3 scripts/test_fixture_capture_lifecycle.py` |
+| Protocol fixture versions | `python3 scripts/test_protocol_fixture_version.py`; `python3 scripts/protocol_fixture_version.py lint` |
+| Deferred row-provider boundary | `scripts/test-row-provider-isolation.sh` (macOS) |
+| WebKit overlay linkage check | `scripts/test-check-webkit-overlay-linkage.sh` (macOS) |
 
 ## Transport and bundled content
 

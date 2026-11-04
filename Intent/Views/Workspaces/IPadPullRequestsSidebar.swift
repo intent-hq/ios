@@ -69,6 +69,13 @@ struct IPadPullRequestsSidebar: View {
             }
             .padding(.top, IPadSidebarStyle.compactSectionSpacing)
         }
+        .mask(alignment: .top) {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: min(IPadSidebarStyle.scrollFadeHeight, IPadSidebarStyle.compactSectionSpacing))
+                Color.black
+            }
+        }
         .refreshable { await session.pullRequestListStore.load(query) }
     }
 

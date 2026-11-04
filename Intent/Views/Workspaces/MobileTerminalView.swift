@@ -4,24 +4,31 @@ struct MobileTerminalView: View {
     let terminal: MobileTerminal
     let workspaceName: String
     let store: MobileTerminalStore
+    var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isIPadPaneVisible) private var isPaneVisible
     @State private var connection: MobileTerminalConnection
     @State private var controls = MobileTerminalControls()
     @State private var confirmClose = false
+    @State private var isRenaming = false
     @State private var isClosing = false
     @State private var hasPresented = false
 
-    init(terminal: MobileTerminal, workspaceName: String, store: MobileTerminalStore) {
+    init(terminal: MobileTerminal, workspaceName: String, store: MobileTerminalStore, onClose: (() -> Void)? = nil) {
         self.terminal = terminal
         self.workspaceName = workspaceName
         self.store = store
+        self.onClose = onClose
         _connection = State(initialValue: MobileTerminalConnection(store: store, terminal: terminal))
     }
 
     private var attachmentKey: String {
-        "\(store.connectionGeneration)-\(scenePhase == .active)"
+        "\(store.connectionGeneration)-\(canAttach)"
     }
+
+    private var canAttach: Bool { isPaneVisible && scenePhase == .active && store.isActive(terminal) }
+    private var canInteract: Bool { canAttach && connection.isReady }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,18 +37,23 @@ struct MobileTerminalView: View {
             terminalContent
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            TerminalKeyBar(controls: controls, isEnabled: connection.isReady && store.isActive(terminal))
+            TerminalKeyBar(controls: controls, isEnabled: canInteract)
         }
         .background(TerminalAppearance.background.ignoresSafeArea())
         .background(TerminalPresentationObserver { hasPresented = true })
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(onClose == nil ? .dark : nil)
+        .environment(\.colorScheme, .dark)
         .tint(.white)
         .interactiveDismissDisabled(isClosing)
+        .modifier(TerminalRenameAlert(isPresented: $isRenaming, terminal: terminal, store: store))
         .alert("Close terminal?", isPresented: $confirmClose) { closeActions } message: {
             Text("This stops the shell and any commands running in it. Go back to leave it running.")
         }
-        .onChange(of: store.isActive(terminal)) { _, active in
-            if !active { connection.detach() }
+        .onChange(of: canAttach) { _, active in
+            if !active {
+                controls.terminalView?.resignFirstResponder()
+                connection.detach()
+            }
         }
     }
 
@@ -49,9 +61,9 @@ struct MobileTerminalView: View {
         ZStack(alignment: .top) {
             if hasPresented {
                 TerminalEmulatorView(connection: connection, controls: controls)
-                    .disabled(!connection.isReady || !store.isActive(terminal))
+                    .disabled(!canInteract)
                     .task(id: attachmentKey) {
-                        if scenePhase == .active { await connection.attach() } else { connection.detach() }
+                        if canAttach { await connection.attach() } else { connection.detach() }
                     }
                     .onDisappear { connection.detach() }
             } else {
@@ -70,9 +82,30 @@ struct MobileTerminalView: View {
         .padding(.horizontal, TerminalAppearance.terminalInset)
     }
 
+    @ViewBuilder
     private var header: some View {
+        if onClose != nil {
+            WorkspaceNavigationHeader(
+                title: store.title(for: terminal),
+                subtitle: "\(workspaceName)",
+                backLabel: "Back to workspace",
+                backIdentifier: "terminal.main.close",
+                titleIdentifier: "mobile-terminal-title",
+                isLeadingActionEnabled: !isClosing,
+                showsBackground: false,
+                usesConversationLayout: true,
+                onBack: leaveTerminal
+            ) {
+                terminalMenu
+            }
+        } else {
+            standaloneHeader
+        }
+    }
+
+    private var standaloneHeader: some View {
         HStack(spacing: TerminalAppearance.headerSpacing) {
-            Button { dismiss() } label: {
+            Button(action: leaveTerminal) {
                 Image(.arrowLeft)
                     .resizable()
                     .scaledToFit()
@@ -86,6 +119,8 @@ struct MobileTerminalView: View {
             .disabled(isClosing)
             title
             terminalMenu
+                .buttonStyle(TerminalControlStyle())
+                .modifier(TerminalControlSurface())
         }
         .padding(.horizontal, TerminalAppearance.horizontalInset)
         .padding(.top, TerminalAppearance.headerSpacing)
@@ -94,7 +129,7 @@ struct MobileTerminalView: View {
 
     private var title: some View {
         VStack(spacing: TerminalAppearance.groupInset) {
-            Text(terminal.name)
+            Text(store.title(for: terminal))
                 .interFont(Constants.Typography.bodyM.withFace(.semibold))
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("mobile-terminal-title")
@@ -106,10 +141,25 @@ struct MobileTerminalView: View {
         .frame(maxWidth: .infinity)
     }
 
+    private var renameButton: some View {
+        Button {
+            isRenaming = true
+        } label: {
+            Label {
+                Text("Rename").interFont(Constants.Typography.bodyS)
+            } icon: {
+                Image(.edit)
+            }
+        }
+        .accessibilityIdentifier("mobile-terminal-rename")
+        .disabled(!store.isActive(terminal))
+    }
+
     private var terminalMenu: some View {
         Menu {
+            renameButton
             Button {
-                Task { await connection.attach() }
+                Task { if canAttach { await connection.attach() } }
             } label: {
                 Label {
                     Text("Reconnect").interFont(Constants.Typography.bodyS)
@@ -117,7 +167,7 @@ struct MobileTerminalView: View {
                     Image(.clockwiseArrow)
                 }
             }
-            .disabled(!hasPresented || !store.isConnected || !store.isActive(terminal))
+            .disabled(!hasPresented || !store.isConnected || !canAttach)
             Button(role: .destructive) {
                 confirmClose = true
             } label: {
@@ -133,12 +183,14 @@ struct MobileTerminalView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
-                .frame(width: TerminalAppearance.controlSize, height: TerminalAppearance.controlSize)
+                .frame(width: headerControlSize, height: headerControlSize)
                 .accessibilityHidden(true)
         }
-        .buttonStyle(TerminalControlStyle())
-        .modifier(TerminalControlSurface())
         .accessibilityLabel("Terminal actions")
+    }
+
+    private var headerControlSize: CGFloat {
+        onClose == nil ? TerminalAppearance.controlSize : Constants.Conversation.Design.Header.controlSize
     }
 
     @ViewBuilder
@@ -147,7 +199,7 @@ struct MobileTerminalView: View {
         Button("Close terminal", role: .destructive) {
             isClosing = true
             Task {
-                if await store.close(terminal) { dismiss() }
+                if await store.close(terminal) { leaveTerminal() }
                 isClosing = false
             }
         }
@@ -172,5 +224,9 @@ struct MobileTerminalView: View {
             .padding(.horizontal, TerminalAppearance.horizontalInset)
             .padding(.bottom, TerminalAppearance.headerSpacing)
             .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private func leaveTerminal() {
+        if let onClose { onClose() } else { dismiss() }
     }
 }

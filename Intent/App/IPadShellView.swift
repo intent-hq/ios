@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// One view hierarchy spans expanded, collapsed and drawer layouts. In particular,
-/// the workspace and Assistant detail subtrees never move between containers.
+/// The workspace route keeps its identity as tools move its chat into the sidebar.
 struct IPadShellView: View {
     /// Pages shift this far while fading, so a slow first frame cannot turn into a visible jump.
     static let pageParallax: CGFloat = 48
+    private static let sidebarChatLayer = 1.5
+    private static let workspaceLayer = 0.5
 
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
@@ -21,7 +22,7 @@ struct IPadShellView: View {
     @State private var showingCreateWorkspace = false
     @State private var showingConnectionSwitcher = false
     @State private var connectionSwitcherOpen = false
-    @AccessibilityFocusState private var detailFocused: Bool
+    @AccessibilityFocusState private var focusedPane: IPadAccessiblePane?
 
     private var navigation: IPadNavigationState { coordinator.iPadNavigation }
     private var layout: IPadShellLayout {
@@ -44,6 +45,7 @@ struct IPadShellView: View {
     }
     private var isFocused: Bool { navigation.focusPresentation != .normal }
     private var isEditing: Bool { navigation.focusPresentation == .conversationEditing }
+    private var isDetailEditing: Bool { isEditing && navigation.detail != .workspace }
     private var isDrawerVisible: Bool { navigation.usesSidebarOverlay && navigation.isSidebarVisible && !isFocused }
     private var isDetailAccessible: Bool { !isDrawerVisible && !workspaceSearchVisible }
     private var isSidebarAccessible: Bool { (navigation.isSidebarVisible || workspaceSearchVisible) && !isEditing }
@@ -69,6 +71,16 @@ struct IPadShellView: View {
     }
     private var workspaceSearchVisible: Bool {
         navigation.focusPresentation == .workspaceSearch
+    }
+    private var workspaceRouteInSidebar: Bool { navigation.mainTool != nil }
+    private var showsSidebarChat: Bool {
+        guard workspaceRouteInSidebar, navigation.section == .workspaces else { return false }
+        if case .agentConversation = coordinator.currentScreen { return true }
+        return false
+    }
+    private var workspaceRouteVisible: Bool {
+        navigation.detail == .workspace && navigation.pairing == nil
+            && (!workspaceRouteInSidebar || showsSidebarChat)
     }
     var body: some View {
         AgentHistoryDrawer(isEnabled: workspaceActionsEnabled && !connectionSwitcherOpen) {
@@ -105,7 +117,10 @@ struct IPadShellView: View {
             }
             detailPane
                 .padding(paneInsets)
-                .zIndex(isEditing ? IPadShellLayout.focusLayer : 0)
+                .zIndex(isDetailEditing ? IPadShellLayout.focusLayer : 0)
+            workspaceRoutePane
+                .padding(paneInsets)
+                .zIndex(isEditing ? IPadShellLayout.focusLayer : (workspaceRouteInSidebar ? Self.sidebarChatLayer : Self.workspaceLayer))
             drawerBackdrop
                 .frame(width: layout.contentWidth)
                 .offset(x: layout.railLeadingInset)
@@ -165,10 +180,17 @@ struct IPadShellView: View {
         }
         .onChange(of: sidebarPresentation) { old, new in
             // Layout changes (first measurement, rotation) must not move VoiceOver focus.
-            if old.usesOverlay == new.usesOverlay, old.isVisible, !new.isVisible { detailFocused = true }
+            if old.usesOverlay == new.usesOverlay, old.isVisible, !new.isVisible {
+                focusedPane = workspaceRouteVisible && !workspaceRouteInSidebar ? .workspace : .detail
+            }
+        }
+        .onChange(of: workspaceSearchVisible) { _, visible in
+            if visible { focusedPane = nil }
         }
     }
+}
 
+extension IPadShellView {
     private var navigationRail: some View {
         IPadNavigationRail(
             section: navigation.section,
@@ -189,31 +211,76 @@ struct IPadShellView: View {
     }
 
     private var detailPane: some View {
-        detail
-            .frame(width: isEditing ? layout.focusedPanelWidth : max(0, layout.contentWidth - layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible)))
-            .modifier(IPadPaneBounds(identifier: "ipad.detail.panel", isAccessible: isDetailAccessible))
-            .padding(.leading, isEditing ? 0 : layout.railLeadingInset + layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
-            .frame(maxWidth: .infinity, alignment: isEditing ? .center : .leading)
-            .blur(radius: workspaceSearchVisible ? IPadShellLayout.focusBlurRadius : 0)
-            .environment(\.isIPadPaneVisible, isDetailAccessible)
-            .allowsHitTesting(isDetailAccessible)
-            .accessibilityFocused($detailFocused)
+        let accessible = isDetailAccessible && (!workspaceRouteVisible || workspaceRouteInSidebar) && (!isEditing || isDetailEditing)
+        return detail
+            .modifier(IPadToolDropTarget(session: session))
+            .frame(width: isDetailEditing ? layout.focusedPanelWidth : max(0, layout.contentWidth - layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible)))
+            .modifier(IPadPaneBounds(
+                identifier: workspaceRouteVisible && !workspaceRouteInSidebar ? "ipad.background.panel" : "ipad.detail.panel",
+                isAccessible: accessible
+            ))
+            .padding(.leading, isDetailEditing ? 0 : layout.railLeadingInset + layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
+            .frame(maxWidth: .infinity, alignment: isDetailEditing ? .center : .leading)
+            .blur(radius: isFocused && !isDetailEditing ? IPadShellLayout.focusBlurRadius : 0)
+            .environment(\.isIPadPaneVisible, accessible)
+            .allowsHitTesting(accessible)
+            .accessibilityFocused($focusedPane, equals: .detail)
     }
 
     private var sidebarPane: some View {
         sidebars
+            .opacity(showsSidebarChat ? 0 : 1)
             .safeAreaPadding(.bottom, layout.usesCompactNavigation && !workspaceSearchVisible ? AssistantLaunchButton.scrollClearance : 0)
             .frame(width: workspaceSearchVisible ? layout.focusedPanelWidth : layout.sidebarPaneWidth)
             .frame(maxHeight: .infinity)
             .background(IPadShellStyle.background(for: colorScheme))
             .clipShape(sidebarShape)
-            .modifier(IPadPaneBounds(identifier: "ipad.sidebar.panel", isAccessible: isSidebarAccessible))
+            .modifier(IPadPaneBounds(
+                identifier: showsSidebarChat ? "ipad.background.sidebar.panel" : "ipad.sidebar.panel",
+                isAccessible: isSidebarAccessible && !showsSidebarChat
+            ))
             .padding(.leading, workspaceSearchVisible ? 0 : layout.sidebarLeadingInset)
             .frame(maxWidth: .infinity, alignment: workspaceSearchVisible ? .center : .leading)
             .blur(radius: isEditing ? IPadShellLayout.focusBlurRadius : 0)
             .opacity(navigation.isSidebarVisible || workspaceSearchVisible ? 1 : 0)
-            .allowsHitTesting(isSidebarAccessible)
-            .environment(\.isIPadPaneVisible, isSidebarAccessible)
+            .allowsHitTesting(isSidebarAccessible && !showsSidebarChat)
+            .environment(\.isIPadPaneVisible, isSidebarAccessible && !showsSidebarChat)
+    }
+
+    private var workspaceRoutePane: some View {
+        let visible = workspaceRouteVisible && (!workspaceRouteInSidebar || navigation.isSidebarVisible || isEditing)
+        let accessible = visible && (workspaceRouteInSidebar ? !workspaceSearchVisible : isDetailAccessible)
+        let mainWidth = max(0, layout.contentWidth - layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible))
+        let leading = workspaceRouteInSidebar ? layout.sidebarLeadingInset
+            : layout.railLeadingInset + layout.detailLeadingInset(sidebarVisible: navigation.isSidebarVisible)
+        return RetainedIPadPane(isVisible: visible, keepsCoveredContentVisible: true) {
+            IPadWorkspaceDetailView(session: session)
+        }
+            .frame(width: isEditing ? layout.focusedPanelWidth : (workspaceRouteInSidebar ? layout.sidebarPaneWidth : mainWidth))
+            .frame(maxHeight: .infinity)
+            .background(workspaceRouteInSidebar ? IPadSidebarStyle.background(for: colorScheme) : IPadShellStyle.panel(for: colorScheme))
+            .clipShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))
+            .modifier(IPadToolDropTarget(session: session, isEnabled: !workspaceRouteInSidebar))
+            .modifier(IPadPaneBounds(
+                identifier: workspaceRouteVisible ? (workspaceRouteInSidebar ? "ipad.sidebar.panel" : "ipad.detail.panel") : "ipad.workspace.panel",
+                isAccessible: accessible
+            ))
+            .environment(\.isIPadPaneVisible, accessible)
+            .environment(\.iPadFocusPresentation, workspaceRouteInSidebar ? nil : focusPresentation)
+            .environment(\.conversationBackgroundColor, workspaceRouteInSidebar ? IPadSidebarStyle.background(for: colorScheme) : nil)
+            .environment(
+                \.conversationComposerBackgroundColor,
+                workspaceRouteInSidebar ? Constants.Conversation.Design.Palette.raisedSurface(for: colorScheme) : nil
+            )
+            .transformPreference(WorkspaceActionMenuInputTop.self) { inputTop in
+                if !accessible { inputTop = nil }
+            }
+            .opacity(visible ? 1 : 0)
+            .allowsHitTesting(accessible)
+            .accessibilityFocused($focusedPane, equals: .workspace)
+            .blur(radius: workspaceSearchVisible ? IPadShellLayout.focusBlurRadius : 0)
+            .padding(.leading, isEditing ? 0 : leading)
+            .frame(maxWidth: .infinity, alignment: isEditing ? .center : .leading)
     }
 
     /// A drawer sits flush against the undimmed shell, so only its trailing edge is rounded.
@@ -230,11 +297,11 @@ struct IPadShellView: View {
 
     private var detail: some View {
         ZStack {
-            RetainedIPadPane(
-                isVisible: navigation.detail == .workspace && navigation.pairing == nil,
-                keepsCoveredContentVisible: true
-            ) {
-                IPadWorkspaceDetailView(session: session)
+            if let tool = navigation.mainTool {
+                RetainedIPadPane(isVisible: navigation.detail == .workspace && navigation.pairing == nil) {
+                    IPadWorkspaceToolView(tool: tool, session: session)
+                        .id(tool.id)
+                }
             }
             if navigation.hasOpenedAssistant {
                 RetainedIPadPane(
@@ -334,7 +401,8 @@ private extension IPadShellView {
 extension IPadShellView {
     /// A persistent sidebar beside the detail pane; drawers and compact windows keep the list.
     private var workspaceSidebarContent: WorkspaceSidebarContent {
-        WorkspaceSidebarContent.resolve(
+        if let tool = navigation.mainTool { return .workspace(id: tool.workspaceId) }
+        return WorkspaceSidebarContent.resolve(
             screen: coordinator.currentScreen,
             isPersistent: width != nil && !layout.usesCompactNavigation && !layout.usesSidebarOverlay && !workspaceSearchVisible
         )
@@ -359,6 +427,7 @@ extension IPadShellView {
                     sidebar: WorkspaceDetailSidebar(onCollapse: collapseSidebar)
                 )
                 .id(workspaceId)
+                .environment(\.iPadToolDraggingEnabled, !usesVerticalBar)
                 .transition(.opacity)
             }
         }
@@ -370,4 +439,9 @@ extension IPadShellView {
 private struct SidebarPresentation: Equatable {
     let isVisible: Bool
     let usesOverlay: Bool
+}
+
+private enum IPadAccessiblePane: Hashable {
+    case detail
+    case workspace
 }

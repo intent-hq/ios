@@ -308,8 +308,7 @@ extension AppCoordinatorTests {
     }
 
     @MainActor private func compactEditor(in host: UIView) -> KeyCommandTextView? {
-        if let editor = host as? KeyCommandTextView { return editor }
-        return host.subviews.lazy.compactMap { self.compactEditor(in: $0) }.first
+        compactControls("composer.textView", in: host).compactMap { $0 as? KeyCommandTextView }.first
     }
 
     @MainActor private func waitForCompactShell(sourceLocation: SourceLocation = #_sourceLocation, _ ready: () -> Bool) throws {

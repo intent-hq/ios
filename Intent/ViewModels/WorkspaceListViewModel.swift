@@ -168,6 +168,9 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         didSet { persistence.saveWorkspaceListViewMode(viewMode) }
     }
     var searchText = ""
+    /// Group keys the user has collapsed, per grouped view mode. Persisted so
+    /// the iPhone list and iPad sidebar share them across launches.
+    private(set) var collapsedGroups: [ViewMode: Set<String>]
 
     var showArchived: Bool {
         get { workspaceStore.showArchived }
@@ -190,6 +193,10 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         self.workspaceStore = workspaceStore
         self.persistence = persistence
         self.viewMode = persistence.loadWorkspaceListViewMode()
+        self.collapsedGroups = [
+            .repo: persistence.loadCollapsedGroups(for: .repo),
+            .status: persistence.loadCollapsedGroups(for: .status)
+        ]
         self.activityTime = activityTime
     }
 
@@ -214,6 +221,20 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     /// — the same rule as the FE sidebar's `groupedByRepo`.
     var groupedByRepo: [(String, [Workspace])] {
         derivedWorkspaces.byRepo
+    }
+
+    /// Searching always shows every group expanded so matches are never hidden.
+    func isGroupExpanded(_ key: String, in mode: ViewMode) -> Bool {
+        hasSearchQuery || collapsedGroups[mode]?.contains(key) != true
+    }
+
+    /// Toggles a Repo or Status group; a no-op while searching, where groups are forced open.
+    func toggleGroup(_ key: String, in mode: ViewMode) {
+        guard !hasSearchQuery else { return }
+        var keys = collapsedGroups[mode, default: []]
+        if keys.remove(key) == nil { keys.insert(key) }
+        collapsedGroups[mode] = keys
+        persistence.saveCollapsedGroups(keys, for: mode)
     }
 
     var groupedByStatus: [(String, [Workspace])] {

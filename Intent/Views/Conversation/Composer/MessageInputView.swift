@@ -62,8 +62,9 @@ struct MessageInputView: View {
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
-            maxSelectionCount: Constants.Conversation.Composer.maximumImageSelectionCount,
-            matching: viewModel.workspaceId == Workspace.chiefWorkspaceId ? .images : .any(of: [.images, .videos])
+            // Earlier picks stay pending after import; size and filter from the remaining image slots.
+            maxSelectionCount: viewModel.photoPickerMaxSelectionCount,
+            matching: viewModel.photoPickerFilter
         )
         .onChange(of: viewModel.selectedPhotoItems) { _, _ in
             viewModel.loadSelectedPhotos()
@@ -76,9 +77,7 @@ struct MessageInputView: View {
             allowedContentTypes: [.item],
             allowsMultipleSelection: true
         ) { result in
-            if case .success(let urls) = result {
-                viewModel.addFiles(urls)
-            }
+            do { try viewModel.addFiles(result.get()) } catch { viewModel.reportFileImportFailure(error) }
         }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled { isFocused = false }
@@ -122,6 +121,7 @@ private extension MessageInputView {
                     },
                     onPhotos: { isPhotoPickerPresented = true },
                     onFiles: { isFilePickerPresented = true },
+                    photosEnabled: viewModel.isPhotosPickerEnabled,
                     onPasteImages: viewModel.pasteImages,
                     skillCompletion: skillCompletion
                 )
@@ -213,6 +213,7 @@ private extension MessageInputView {
             Button { isPhotoPickerPresented = true } label: {
                 photosAttachmentLabel
             }
+            .disabled(!viewModel.isPhotosPickerEnabled)
             Button { isFilePickerPresented = true } label: {
                 filesAttachmentLabel
             }

@@ -71,7 +71,8 @@ struct WorkspaceListSidebar: View {
                     isSearching: $isSearching,
                     isFocused: $searchFocused,
                     surfaceColor: isFocusedSearch ? IPadShellStyle.panel(for: colorScheme) : nil,
-                    horizontalPadding: isFocusedSearch ? contentInset : Constants.WorkspaceSearch.contentSpacing
+                    horizontalPadding: isFocusedSearch ? contentInset : Constants.WorkspaceSearch.contentSpacing,
+                    focusesOnAppear: !isEmbedded
                 )
             }
         }
@@ -239,26 +240,15 @@ extension WorkspaceListSidebar {
             case .recent:
                 sidebarRows(viewModel.filteredWorkspaces)
             case .repo:
-                let groups = viewModel.groupedByRepo.map { repoName, workspaces in
-                    let content = sidebarGroup(
-                        workspaces,
-                        isFirst: repoName == viewModel.groupedByRepo.first?.0,
-                        showRepo: false
-                    ) {
-                        HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
-                            RepoOwnerAvatarView(
-                                owner: workspaces.first?.repositoryOwner,
-                                size: Constants.WorkspaceList.sidebarSectionAvatarSize
-                            )
-                            Text(repoName).interFont(Constants.Typography.eyebrow)
-                        }
-                    }
-                    return (id: repoName, content: content)
-                }
-                ForEach(groups, id: \.id) { @Sendable group in group.content }
+                repoGroups
             case .status:
                 let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
-                    let content = sidebarGroup(workspaces, isFirst: statusLabel == viewModel.groupedByStatus.first?.0) {
+                    let content = sidebarGroup(
+                        workspaces,
+                        key: statusLabel,
+                        mode: .status,
+                        isFirst: statusLabel == viewModel.groupedByStatus.first?.0
+                    ) {
                         Text(statusLabel).interFont(Constants.Typography.eyebrow)
                     }
                     return (id: statusLabel, content: content)
@@ -269,30 +259,80 @@ extension WorkspaceListSidebar {
     }
 
     @ViewBuilder
+    private var repoGroups: some View {
+        let groups = viewModel.groupedByRepo.map { repoName, workspaces in
+            let content = sidebarGroup(
+                workspaces,
+                key: repoName,
+                mode: .repo,
+                isFirst: repoName == viewModel.groupedByRepo.first?.0,
+                showRepo: false
+            ) {
+                HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
+                    RepoOwnerAvatarView(
+                        owner: workspaces.first?.repositoryOwner,
+                        size: Constants.WorkspaceList.sidebarSectionAvatarSize
+                    )
+                    Text(repoName).interFont(Constants.Typography.eyebrow)
+                }
+            }
+            return (id: repoName, content: content)
+        }
+        ForEach(groups, id: \.id) { @Sendable group in group.content }
+    }
+
+    @ViewBuilder
     private func sidebarGroup<Header: View>(
         _ workspaces: [Workspace],
+        key: String,
+        mode: ViewMode,
         isFirst: Bool,
         showRepo: Bool = true,
         @ViewBuilder header: () -> Header
     ) -> some View {
+        let isExpanded = viewModel.isGroupExpanded(key, in: mode)
         if isEmbedded {
             // Ordinary header rows avoid the List's implicit section padding.
             // The scroll-content top margin is the entire filter-to-label gap.
-            header()
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, IPadSidebarStyle.rowInset)
-                .padding(.top, isFirst ? 0 : IPadSidebarStyle.sectionSpacing)
-                .padding(.bottom, IPadSidebarStyle.groupLabelSpacing)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .accessibilityAddTraits(.isHeader)
-            sidebarRows(workspaces, showRepo: showRepo)
+            let insets = EdgeInsets(
+                top: isFirst ? 0 : IPadSidebarStyle.sectionSpacing,
+                leading: IPadSidebarStyle.rowInset,
+                bottom: IPadSidebarStyle.groupLabelSpacing,
+                trailing: IPadSidebarStyle.rowInset
+            )
+            groupHeader(key, mode: mode, isExpanded: isExpanded, insets: insets, label: header())
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            if isExpanded { sidebarRows(workspaces, showRepo: showRepo) }
         } else {
-            Section(header: header()) { sidebarRows(workspaces, showRepo: showRepo) }
+            Section(header: groupHeader(key, mode: mode, isExpanded: isExpanded, insets: EdgeInsets(), label: header())) {
+                if isExpanded { sidebarRows(workspaces, showRepo: showRepo) }
+            }
         }
+    }
+
+    private func groupHeader<Label: View>(
+        _ key: String,
+        mode: ViewMode,
+        isExpanded: Bool,
+        insets: EdgeInsets,
+        label: Label
+    ) -> some View {
+        // Bottom alignment keeps the label-to-rows gap when the tap target is taller.
+        CollapsibleSectionHeader(
+            isExpanded: isExpanded,
+            insets: insets,
+            alignment: .bottomLeading
+        ) {
+            viewModel.toggleGroup(key, in: mode)
+        } label: {
+            label
+        }
+        .disabled(viewModel.hasSearchQuery)
+        .accessibilityLabel(Text(key))
+        .accessibilityIdentifier(WorkspaceListGroupHeading.accessibilityIdentifier(for: key, in: mode))
     }
 
     private func sidebarRows(_ workspaces: [Workspace], showRepo: Bool = true) -> some View {

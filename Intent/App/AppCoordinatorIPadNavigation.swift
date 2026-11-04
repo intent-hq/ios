@@ -2,16 +2,19 @@ import Foundation
 
 extension AppCoordinator {
     func onSelectWorkspaceCommit(_ commit: WorkspaceCommit, workspaceId: String, gitRootId: String?) {
+        iPadNavigation.closeTool()
         workspaceChange = WorkspaceChangeDestination(workspaceId: workspaceId, gitRootId: gitRootId, content: .commit(commit))
         revealIPadWorkspaceRoute()
     }
 
     func onSelectWorkspaceFileDiff(_ file: WorkspaceChange, workspaceId: String, gitRootId: String?) {
+        iPadNavigation.closeTool()
         workspaceChange = WorkspaceChangeDestination(workspaceId: workspaceId, gitRootId: gitRootId, content: .file(file))
         revealIPadWorkspaceRoute()
     }
 
     func onSelectIPadPullRequest(_ item: PullRequestListItem) {
+        iPadNavigation.closeTool()
         iPadPullRequest = item
         iPadNavigation.showPullRequestDetail()
     }
@@ -58,6 +61,7 @@ extension AppCoordinator {
             guard canUseAssistant else { return }
             onSelectAssistant()
         } else if section == .workspaces {
+            iPadNavigation.closeTool()
             if showsIPadSidebarWorkspace { onBackToWorkspaceDetail() }
             selectedSection = .workspaces
         }
@@ -88,6 +92,14 @@ extension AppCoordinator {
     func revealIPadWorkspaceRoute() {
         guard usesIPadShell else { return }
         iPadNavigation.showWorkspaceDetail()
+        if iPadNavigation.mainTool != nil { iPadNavigation.revealSidebar() }
+    }
+
+    @discardableResult
+    func placeIPadTool(_ tool: IPadWorkspaceTool) -> Bool {
+        guard usesIPadShell, selectedWorkspaceId == tool.workspaceId else { return false }
+        workspaceChange = nil
+        return iPadNavigation.placeTool(tool)
     }
 
     func onIPadAssistantAccessChanged() {

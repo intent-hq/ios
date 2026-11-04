@@ -69,8 +69,7 @@ private struct WorkspaceQuestionAnswerCard: View {
             .overlay {
                 RoundedRectangle(cornerRadius: Design.innerCornerRadius)
                     .strokeBorder(
-                        selected && contrast != .increased
-                            ? .clear : Design.Palette.border(for: colorScheme, contrast: contrast),
+                        Design.Palette.border(for: colorScheme, contrast: contrast),
                         lineWidth: Design.Question.borderWidth
                     )
             }

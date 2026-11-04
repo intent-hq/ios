@@ -46,8 +46,9 @@
 #                         build-ios/build-visionos keep production testability.
 #   DEVICE_UDID           Required physical iOS device for build-ios-device;
 #                         preserves project signing and never installs or uploads.
-#   SIM_UDID              Simulator UDID for test destinations; when unset the
-#                         newest available iPhone simulator is picked automatically.
+#   SIM_UDID              Simulator UDID for test destinations; when unset,
+#                         an iPhone on the newest iOS runtime the selected Xcode
+#                         can run is picked automatically (see pick_simulator).
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
 #   DERIVED_DATA_DIR      Passed as -derivedDataPath to every build/test call.
 #                         CI uses a fresh directory per job and run attempt.
@@ -109,8 +110,15 @@
 #   SIM_LOCK_DIR          Directory holding simulator lock files; default $TMPDIR
 #                         (falling back to /tmp). Must be a local filesystem.
 #   SIM_LOCK_KILL_GRACE   Seconds an xcodebuild orphaned by this script's death
-#                         (with every process under it) gets to exit after
-#                         SIGTERM before the survivors are SIGKILLed; default 30.
+#                         (with every process under it), or stopped by the
+#                         launch watchdog, gets to exit after SIGTERM before the
+#                         survivors are SIGKILLed; default 30.
+#   LAUNCH_CRASH_WATCH    Set to 0 to disable the launch watchdog (exit code 84
+#                         below); a launch failure then hangs or exits as before.
+#   LAUNCH_CRASH_REPORTS_DIR
+#                         Where the watchdog looks for .ips crash reports;
+#                         default ~/Library/Logs/DiagnosticReports, where the
+#                         simulator's crash reporter writes them.
 #
 # Release verification (intent-hq/ios#468):
 #   BUILD_CONFIGURATION=Release scripts/xcodebuild.sh build-ios
@@ -205,7 +213,19 @@
 #       than Passed / Failed / Skipped / Expected Failure (counted in the
 #       table's "unknown" column, never as executed). Never passed through
 #       silently.
-#   Precedence: 80 and xcodebuild's own nonzero status win over 82/83, which
+#   84  the app (or a hosted test's host app) could not launch: dyld aborted it
+#       before main, typically on a library or symbol the simulator runtime
+#       lacks (intent-hq/ios#905). XCUITest does not fail on this; it waits on
+#       "Launch <bundle id>" and then on "Checking for reports corresponding
+#       to termination" until the job times out. The launch watchdog (see
+#       LAUNCH_CRASH_WATCH_PY) recognises the DYLD crash report for this
+#       simulator, or dyld's "Library not loaded" / "Symbol not found" lines
+#       in the xcodebuild output, within seconds during test enumeration, the
+#       test run, or a crash re-run, stops xcodebuild, and names the process,
+#       dyld's reason, the crash report, and the simulator and its runtime.
+#       Never re-run; keeps the log.
+#   Precedence: 84 wins over everything (it is checked as soon as xcodebuild
+#   returns); 80 and xcodebuild's own nonzero status win over 82/83, which
 #   only ever upgrade a 0 (the table and a warning are still printed).
 set -euo pipefail
 
@@ -213,6 +233,7 @@ EXIT_TEST_PROCESS_CRASHED=80
 EXIT_SIM_LOCK_TIMEOUT=81
 EXIT_SELECTOR_UNMATCHED=82
 EXIT_SELECTION_UNVERIFIED=83
+EXIT_APP_LAUNCH_FAILED=84
 
 cd "$(dirname "$0")/.."
 
@@ -245,8 +266,8 @@ Usage: scripts/xcodebuild.sh <subcommand>
 
 Optional env knobs: BUILD_CONFIGURATION (Debug or Release; unset keeps defaults),
 SIM_UDID, DEVICE_UDID, SPM_CLONE_DIR, DERIVED_DATA_DIR, RESULT_BUNDLE, ONLY_TESTING,
-TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see
-script header).
+TAILCATKIT_AUTOBUILD, TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR,
+LAUNCH_CRASH_WATCH (see script header).
 Release tests enable @testable access, not DEBUG. Use focused release-compatible
 suites; DEBUG-only plaintext fixtures fail in Release. See the script header
 for production build proof and executable ReleaseConfigurationTests commands.
@@ -258,36 +279,79 @@ re-run keeps the run green (TEST_CRASH_RETRY=0 disables this).
 Exit codes: xcodebuild's own, plus 80 (test process crashed/terminated, and
 the re-run did not recover), 81 (timed out waiting for the simulator lock),
 82 (an ONLY_TESTING selector matched or executed no test, or the crash re-run
-left an interrupted suite or failed test unrecovered) and 83 (the
-ONLY_TESTING selection could not be verified).
+left an interrupted suite or failed test unrecovered), 83 (the
+ONLY_TESTING selection could not be verified) and 84 (the app could not
+launch on the simulator: dyld aborted it before main; never re-run).
 EOF
   exit 2
 }
 
-# Prefer the iPhone 16 simulator, else any available iPhone; fail early with a
-# clear message if there is none. Select by UDID: it keeps parenthesized names
-# (e.g. "iPhone SE (3rd generation)") intact, disambiguates duplicate names
-# across runtimes, and pins the destination to one concrete device. tail -n 1
-# prefers the newest installed runtime (simctl groups devices by runtime,
-# oldest first). SIM_UDID overrides the pick (CI selects once, pre-boots, and
-# reuses the same device here).
+# Pick a simulator on the newest installed iOS runtime the selected Xcode can
+# run (its major version at most the iphonesimulator SDK's; any runtime when the
+# SDK version is unknown) that has an iPhone. Within that runtime prefer the
+# iPhone 16, else the newest base "iPhone <N>", else the first iPhone listed.
+# Preferring an iPhone 16 across runtimes picked an old runtime on hosts whose
+# newer runtimes no longer offer that model, so local runs silently tested
+# iOS 18 while CI tested iOS 26 (ios#905). The runtime is printed with the
+# device. Fail early with a clear message if there is none. Select by UDID: it
+# keeps parenthesized names (e.g. "iPhone SE (3rd generation)") intact,
+# disambiguates duplicate names across runtimes, and pins the destination to
+# one concrete device. SIM_UDID overrides the pick (CI selects once, pre-boots,
+# and reuses the same device here).
+PICK_SIMULATOR_PY='
+import json, re, sys
+
+sdk_major = int(sys.argv[1]) if sys.argv[1].isdigit() else None
+devices = json.load(sys.stdin).get("devices", {})
+candidates = []
+for runtime, entries in devices.items():
+    match = re.search(r"\.iOS-(\d+)-(\d+)(?:-(\d+))?$", runtime)
+    if not match:
+        continue
+    version = tuple(int(part or 0) for part in match.groups())
+    if sdk_major is not None and version[0] > sdk_major:
+        continue
+    iphones = [d for d in entries if d.get("isAvailable", True) and d.get("name", "").startswith("iPhone")]
+    if iphones:
+        candidates.append((version, iphones))
+if not candidates:
+    sys.exit(3)
+version, iphones = max(candidates, key=lambda candidate: candidate[0])
+
+def rank(item):
+    index, device = item
+    name = device["name"]
+    if name == "iPhone 16":
+        return (0, 0, index)
+    base = re.fullmatch(r"iPhone (\d+)", name)
+    if base:
+        return (1, -int(base.group(1)), index)
+    return (2, 0, index)
+
+device = min(enumerate(iphones), key=rank)[1]
+label = ".".join(str(part) for part in (version if version[2] else version[:2]))
+print(device["udid"])
+print("%s (iOS %s)" % (device["name"], label))
+'
 pick_simulator() {
   if [ -n "${SIM_UDID:-}" ]; then
     echo "$SIM_UDID"
     return
   fi
-  local devices line udid name
-  devices=$(xcrun simctl list devices available)
-  line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone 16 \(' | tail -n 1 || true)
-  if [ -z "$line" ]; then
-    line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone' | tail -n 1 || true)
-  fi
-  udid=$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -n 1 || true)
-  if [ -z "$udid" ]; then
-    die "no available iPhone simulator on this machine"
-  fi
-  name=$(echo "$line" | sed -E "s/^[[:space:]]*(.*) \($udid\).*/\1/")
-  echo "Selected simulator: $name ($udid)" >&2
+  command -v python3 >/dev/null 2>&1 \
+    || die "python3 is required to pick a simulator (on macOS it ships with Xcode's Command Line Tools); or set SIM_UDID"
+  local sdk_version devices picked udid status=0
+  sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version 2>/dev/null || true)
+  devices=$(xcrun simctl list devices available -j) \
+    || die "xcrun simctl list devices available -j failed; check the simulator service or set SIM_UDID"
+  picked=$(printf '%s\n' "$devices" | python3 -c "$PICK_SIMULATOR_PY" "${sdk_version%%.*}") || status=$?
+  case "$status" in
+    0) ;;
+    3) die "no available iPhone simulator on this machine${sdk_version:+ for the iOS $sdk_version simulator SDK}" ;;
+    *) die "could not read the simulator list from xcrun simctl list devices available -j (see above); set SIM_UDID to bypass" ;;
+  esac
+  udid=$(echo "$picked" | sed -n 1p)
+  echo "Selected simulator: $(echo "$picked" | sed -n 2p) ($udid)" >&2
   echo "$udid"
 }
 
@@ -356,14 +420,19 @@ run_xcodebuild() {
 # the simulator lock: the subshell tells the keeper on fd 9 which PID is about
 # to become xcodebuild (exec keeps the PID; Bash 3.2 has no $BASHPID, hence
 # the sh -c trick) and then closes fd 9 so xcodebuild's helpers cannot hold
-# the lock open, and the caller reports "done" once xcodebuild has returned.
+# the lock open, and the caller reports "done" once xcodebuild has returned
+# and then calls check_launch_failure. The same PID is handed to the launch
+# watchdog (see LAUNCH_CRASH_WATCH_PY).
 run_xcodebuild_logged() {
-  local log=$1 extra=()
+  local log=$1 extra=() pid
   shift
   while IFS= read -r arg; do extra+=("$arg"); done < <(common_args)
+  prepare_launch_watch
   (
-    echo "run $(sh -c 'echo $PPID')" >&9
+    pid=$(sh -c 'echo $PPID')
+    echo "run $pid" >&9
     exec 9>&-
+    start_launch_watch "$pid" "$log"
     set -x
     exec xcodebuild "$@" ${extra+"${extra[@]}"}
   ) 2>&1 | tee "$log" 9>&-
@@ -380,28 +449,27 @@ run_xcodebuild_logged() {
 #
 # The shell writes "run <pid>" on fd 9 when xcodebuild starts and "done" when
 # it has returned. EOF between the two means the shell died mid-run while
-# xcodebuild kept going: the keeper then SIGTERMs that process tree (parents
-# before children, so a parent cannot outlive a child's exit and carry on), waits
-# up to SIM_LOCK_KILL_GRACE seconds for every process in it to exit (tracking
-# the PIDs it saw, so a descendant that outlives and reparents away from its
-# parent is still waited for, plus any new descendants that appear meanwhile),
-# SIGKILLs the survivors, and releases only once none is left, so the next run
+# xcodebuild kept going: the keeper then terminates that process tree with
+# terminate_tree (PROCESS_TREE_PY: SIGTERM, up to SIM_LOCK_KILL_GRACE seconds,
+# SIGKILL for the survivors) and releases only once none is left, so the next run
 # never shares the device with an orphaned test process (helpers that merely
 # outlive a completed xcodebuild are never touched).
 #
 # Keeper protocol on stdout, one line each: "waiting <holder>" once if the
 # lock was busy, then "acquired <keeper pid> <seconds waited>" or
 # "timeout <holder>"; <holder> is the PID recorded in the file or "unknown".
-SIM_LOCK_KEEPER_PY='
-import errno, fcntl, os, signal, subprocess, sys, time
-path, owner, timeout, grace = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
-def holder():
-    os.lseek(fd, 0, os.SEEK_SET)
-    return os.read(fd, 64).decode("ascii", "replace").strip() or "unknown"
-def say(line):
-    sys.stdout.write(line + "\n")
-    sys.stdout.flush()
+# Process-tree termination shared by the simulator lock keeper and the launch
+# watchdog (each python program below that needs it is run as this prelude
+# plus its own body). terminate_tree SIGTERMs a process and every descendant,
+# parents before children (so a parent cannot outlive a child's exit and
+# carry on), then waits up to <grace> seconds for every process in the tree
+# to exit, tracking the PIDs it saw (a descendant that outlives and reparents
+# away from its parent is still waited for) plus any new descendants that
+# appear meanwhile, and SIGKILLs the survivors; it returns once none is left.
+# give_up(), polled while waiting, ends the wait early (the survivors are
+# SIGKILLed at once); on_kill(count) is called before the SIGKILLs.
+PROCESS_TREE_PY='
+import os, signal, subprocess, time
 def alive(pid):
     try:
         os.kill(pid, 0)
@@ -442,9 +510,7 @@ def signal_all(pids, sig):
             os.kill(pid, sig)
         except (ProcessLookupError, PermissionError):
             pass
-def terminate_orphaned_run(root):
-    sys.stderr.write("xcodebuild.sh: PID %s died while xcodebuild PID %d was still running; terminating it before releasing the simulator lock\n" % (owner, root))
-    sys.stderr.flush()
+def terminate_tree(root, grace, on_kill=None, give_up=None):
     tracked = with_descendants([root], process_table())
     signal_all(tracked, signal.SIGTERM)
     deadline = time.time() + grace
@@ -452,18 +518,36 @@ def terminate_orphaned_run(root):
         table = process_table()
         tracked = with_descendants(tracked, table)
         remaining = still_running(tracked, table)
-        if not remaining or time.time() >= deadline:
+        if not remaining or time.time() >= deadline or (give_up and give_up()):
             break
         time.sleep(0.2)
-    if remaining:
-        sys.stderr.write("xcodebuild.sh: %d process(es) of xcodebuild PID %d ignored SIGTERM for %ds; sending SIGKILL\n" % (len(remaining), root, grace))
+    if remaining and on_kill:
+        on_kill(len(remaining))
+    while remaining:
+        signal_all(remaining, signal.SIGKILL)
+        time.sleep(0.1)
+        table = process_table()
+        tracked = with_descendants(tracked, table)
+        remaining = still_running(tracked, table)
+'
+
+SIM_LOCK_KEEPER_PY='
+import errno, fcntl, os, signal, subprocess, sys, time
+path, owner, timeout, grace = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+def holder():
+    os.lseek(fd, 0, os.SEEK_SET)
+    return os.read(fd, 64).decode("ascii", "replace").strip() or "unknown"
+def say(line):
+    sys.stdout.write(line + "\n")
+    sys.stdout.flush()
+def terminate_orphaned_run(root):
+    sys.stderr.write("xcodebuild.sh: PID %s died while xcodebuild PID %d was still running; terminating it before releasing the simulator lock\n" % (owner, root))
+    sys.stderr.flush()
+    def killing(count):
+        sys.stderr.write("xcodebuild.sh: %d process(es) of xcodebuild PID %d ignored SIGTERM for %ds; sending SIGKILL\n" % (count, root, grace))
         sys.stderr.flush()
-        while remaining:
-            signal_all(remaining, signal.SIGKILL)
-            time.sleep(0.1)
-            table = process_table()
-            tracked = with_descendants(tracked, table)
-            remaining = still_running(tracked, table)
+    terminate_tree(root, grace, killing)
 start = time.time()
 announced = False
 while True:
@@ -513,7 +597,7 @@ acquire_simulator_lock() {
   SIM_LOCK_PATH="${dir%/}/xcodebuild-sim-$udid.lock"
   fifo=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-lock.XXXXXX")/status
   mkfifo "$fifo"
-  exec 9> >(python3 -c "$SIM_LOCK_KEEPER_PY" "$SIM_LOCK_PATH" "$$" "$timeout" "$grace" > "$fifo")
+  exec 9> >(python3 -c "$PROCESS_TREE_PY$SIM_LOCK_KEEPER_PY" "$SIM_LOCK_PATH" "$$" "$timeout" "$grace" > "$fifo")
   exec 8< "$fifo"
   rm -rf -- "${fifo%/status}"
   while :; do
@@ -583,6 +667,269 @@ append_step_summary() {
   [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
   printf '%s\n' "$@" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null \
     || echo "warning: could not append to GITHUB_STEP_SUMMARY ($GITHUB_STEP_SUMMARY)" >&2
+}
+
+# Launch watchdog (intent-hq/ios#905). When the app under test (or a test
+# host) cannot even reach main, typically dyld aborting on a library or symbol
+# the simulator runtime lacks, XCUITest does not fail: it waits on "Launch
+# <bundle id>" / "Setting up automation session" and then on "Checking for
+# reports corresponding to termination" until the CI job times out (more than
+# an hour in ios#905). A hosted unit run ends by itself but reads as a
+# test-process crash (exit 80), and a hosted test enumeration "succeeds" with
+# an empty catalog (exit 82). The crash reporter, however, writes an .ips
+# report within seconds whose termination namespace is DYLD and whose
+# procPath lies under the simulator's own device directory, and a hosted
+# launch prints dyld's "dyld[<pid>]: Library not loaded" / "Symbol not
+# found" lines into the xcodebuild log. So every xcodebuild run under the
+# simulator lock (enumeration, test run, crash re-run) gets a watcher that
+# polls both once a second and, on the first hit, writes the reason to a
+# marker file and stops xcodebuild's whole process tree with terminate_tree
+# (PROCESS_TREE_PY: SIGTERM, SIGKILL for the survivors after
+# SIM_LOCK_KILL_GRACE seconds). A survivor holding the log pipe keeps the
+# wrapper waiting for that grace period; one that does not (xcodebuild's
+# DTServiceHub ignores SIGTERM) is SIGKILLed as soon as the wrapper reports
+# that the run's pipeline has ended, so the tree never outlives the lock and
+# the grace period is only spent when something actually blocks. The wrapper then exits
+# EXIT_APP_LAUNCH_FAILED naming the process, the dyld reason, the crash
+# report and the simulator runtime, and never re-runs: a launch failure is
+# deterministic. Only reports modified since the run started and belonging to
+# this device count, so earlier reports, other simulators' crashes, and
+# ordinary crashes (any namespace other than DYLD, which stay with exit 80)
+# never trigger it. LAUNCH_CRASH_WATCH=0 disables the watcher;
+# LAUNCH_CRASH_REPORTS_DIR overrides ~/Library/Logs/DiagnosticReports.
+#
+# argv: watch|scan <udid> <reports dir> <log> <marker> <since epoch>
+# <xcodebuild pid (watch) or seconds to keep looking (scan)> <grace>.
+# watch runs until xcodebuild exits (one last scan then) or a hit; scan looks
+# for up to the given seconds after xcodebuild has already returned. A hit
+# writes <marker> at once and <marker>.stopped once xcodebuild is gone; a log hit waits up to 3 s for the matching crash report,
+# whose details are richer. <marker>.done, written by the wrapper once the
+# pipeline has ended, cuts the grace period short.
+LAUNCH_CRASH_WATCH_PY='
+import json, os, re, sys, time
+mode, udid, reports, log, marker, since, arg, grace = sys.argv[1:9]
+since, grace = int(since), int(grace)
+device = "/devices/%s/" % udid.lower()
+dyld_line = re.compile(r"dyld\[\d+\]: (Library not loaded|Symbol not found)")
+done, offset, pending = set(), 0, ""
+def from_report(path):
+    with open(path, errors="replace") as f:
+        header, _, body = f.read().partition("\n")
+    head, report = json.loads(header), json.loads(body)
+    termination = report.get("termination") or {}
+    if str(termination.get("namespace", "")).upper() != "DYLD":
+        return None
+    if device not in str(report.get("procPath", "")).lower():
+        return None
+    name = report.get("procName") or head.get("app_name") or head.get("name") or "?"
+    bundle = (report.get("bundleInfo") or {}).get("CFBundleIdentifier") or head.get("bundleID")
+    fields = [("process", "%s (%s)" % (name, bundle) if bundle else name),
+              ("indicator", str(termination.get("indicator") or "dyld termination")),
+              ("source", "crash report " + path)]
+    return fields + [("reason", str(r)) for r in termination.get("reasons") or []]
+def scan_reports():
+    try:
+        names = os.listdir(reports)
+    except OSError:
+        return None
+    for name in sorted(names):
+        path = os.path.join(reports, name)
+        if not name.endswith(".ips") or path in done:
+            continue
+        try:
+            mtime = os.stat(path).st_mtime
+        except OSError:
+            continue
+        if mtime < since:
+            done.add(path)
+            continue
+        try:
+            found = from_report(path)
+        except (OSError, ValueError, AttributeError):
+            if time.time() - mtime > 10:
+                done.add(path)
+            continue
+        done.add(path)
+        if found:
+            return found
+    return None
+def scan_log():
+    global offset, pending
+    try:
+        with open(log, "rb") as f:
+            f.seek(offset)
+            chunk = f.read()
+    except OSError:
+        return None
+    offset += len(chunk)
+    lines = (pending + chunk.decode("utf-8", "replace")).split("\n")
+    pending = lines.pop()
+    for i, line in enumerate(lines):
+        match = dyld_line.search(line)
+        if match:
+            reasons = [line[match.start():].split(": ", 1)[1].strip()]
+            reasons += [l.strip() for l in lines[i + 1:i + 3] if l[:1] in (" ", "\t") and l.strip()]
+            pid = re.search(r"\d+", line[match.start():]).group(0)
+            return [("process", "the launched process (pid %s)" % pid), ("indicator", match.group(1)),
+                    ("source", "xcodebuild output")] + [("reason", r) for r in reasons]
+    return None
+def record(found, elapsed):
+    tmp = "%s.%d.tmp" % (marker, os.getpid())
+    with open(tmp, "w") as f:
+        for key, value in found + [("elapsed", elapsed)]:
+            f.write("%s\t%s\n" % (key, " ".join(value.split())))
+    os.replace(tmp, marker)
+def running(pid):
+    return bool(still_running([pid], process_table()))
+def hit(found, from_log, root):
+    elapsed = str(max(0, int(time.time()) - since))
+    record(found, elapsed)
+    if root is not None and running(root):
+        terminate_tree(root, grace, give_up=lambda: os.path.exists(marker + ".done"))
+    for _ in range(3 if from_log else 0):
+        report = scan_reports()
+        if report:
+            record(report, elapsed)
+            break
+        time.sleep(1)
+    open(marker + ".stopped", "w").close()
+root = int(arg) if mode == "watch" else None
+deadline = time.time() + (0 if root is not None else int(arg))
+while True:
+    active = root is not None and running(root)
+    found = scan_reports()
+    from_log = not found
+    found = found or scan_log()
+    if found:
+        hit(found, from_log, root)
+        break
+    if not active and time.time() >= deadline:
+        break
+    time.sleep(1)
+'
+LAUNCH_STAGE_PATTERN='before establishing connection|never finished bootstrapping|Test runner never began executing'
+LAUNCH_WATCH_UDID=
+LAUNCH_TEMP_BUNDLE=
+LAUNCH_WATCH_SINCE=0
+LAUNCH_WATCH_MARKER=
+launch_watch_enabled() {
+  [ -n "$LAUNCH_WATCH_UDID" ] && [ "${LAUNCH_CRASH_WATCH:-1}" != "0" ]
+}
+launch_reports_dir() {
+  echo "${LAUNCH_CRASH_REPORTS_DIR:-$HOME/Library/Logs/DiagnosticReports}"
+}
+
+# Prepares a fresh marker for the run about to start (run_xcodebuild_logged).
+prepare_launch_watch() {
+  LAUNCH_WATCH_MARKER=
+  launch_watch_enabled || return 0
+  LAUNCH_WATCH_SINCE=$(date +%s)
+  LAUNCH_WATCH_MARKER=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-launch.XXXXXX")/launch-failure
+}
+
+# Started inside run_xcodebuild_logged's subshell, whose PID ($1) is about to
+# become xcodebuild. Double-forked so the watcher is nobody's child, with fd 9
+# closed and its output kept out of the tee'd log.
+start_launch_watch() {
+  local reports
+  [ -n "$LAUNCH_WATCH_MARKER" ] || return 0
+  reports=$(launch_reports_dir)
+  ( python3 -c "$PROCESS_TREE_PY$LAUNCH_CRASH_WATCH_PY" watch "$LAUNCH_WATCH_UDID" "$reports" "$2" "$LAUNCH_WATCH_MARKER" \
+      "$LAUNCH_WATCH_SINCE" "$1" "${SIM_LOCK_KILL_GRACE:-30}" \
+      < /dev/null > /dev/null 2>> "${LAUNCH_WATCH_MARKER%/*}/watch.err" 9>&- & )
+}
+
+# Prints "<device name> (iOS <version>)" for a UDID from the simulator list,
+# or "simulator" when it cannot be read.
+simulator_label() {
+  xcrun simctl list devices available -j 2>/dev/null 9>&- | python3 -c '
+import json, re, sys
+try:
+    devices = json.load(sys.stdin).get("devices", {})
+except ValueError:
+    devices = {}
+for runtime, entries in devices.items():
+    for device in entries:
+        if device.get("udid", "").lower() == sys.argv[1].lower():
+            match = re.search(r"\.(iOS|xrOS|visionOS)-(\d+(?:-\d+)*)$", runtime)
+            version = "%s %s" % (match.group(1), match.group(2).replace("-", ".")) if match else runtime
+            print("%s (%s)" % (device.get("name", "simulator"), version))
+            sys.exit(0)
+print("simulator")
+' "$1" 2>/dev/null || echo simulator
+}
+
+# Called right after each run_xcodebuild_logged under the lock (after "done"
+# is sent): $1 = xcodebuild's status, $2 = its log, $3 = what the run was,
+# $4 = an optional scratch directory holding the log, removed on a hit after
+# the log is moved out of it.
+# Returns when no launch failure was seen. Without a watcher hit, the reports
+# and the log get one more look (the watcher polls once a second, so a short
+# run can end first), for up to 5 s when the log says the test process died
+# before it connected (LAUNCH_STAGE_PATTERN): the report lands a few seconds
+# after the abort, and a hosted launch failure can make xcodebuild exit first.
+# On a hit, reports it and exits EXIT_APP_LAUNCH_FAILED, skipping the crash
+# re-run and selector checks; the log and a filtered run's temporary result
+# bundle(s) (LAUNCH_TEMP_BUNDLE and any RETRY_BUNDLE) are kept and named, as
+# after any failing filtered run.
+check_launch_failure() {
+  local status=$1 log=$2 label=$3 scratch=${4:-} kept wait=0 key value process='' indicator='' source='' elapsed='' reasons='' device
+  [ -n "$LAUNCH_WATCH_MARKER" ] || return 0
+  if [ ! -e "$LAUNCH_WATCH_MARKER" ]; then
+    [ "$status" -eq 0 ] || ! grep -qiE "$LAUNCH_STAGE_PATTERN" "$log" 2>/dev/null || wait=5
+    python3 -c "$PROCESS_TREE_PY$LAUNCH_CRASH_WATCH_PY" scan "$LAUNCH_WATCH_UDID" "$(launch_reports_dir)" "$log" \
+      "$LAUNCH_WATCH_MARKER" "$LAUNCH_WATCH_SINCE" "$wait" 0 9>&- || true
+    wait=0
+  fi
+  if [ ! -e "$LAUNCH_WATCH_MARKER" ]; then
+    rm -rf -- "${LAUNCH_WATCH_MARKER%/*}"
+    LAUNCH_WATCH_MARKER=
+    return 0
+  fi
+  # The lock is not released while the watcher is still stopping xcodebuild's
+  # tree; the pipeline has ended, so survivors no longer get the grace period.
+  : > "$LAUNCH_WATCH_MARKER.done"
+  while [ ! -e "$LAUNCH_WATCH_MARKER.stopped" ] && [ "$wait" -lt $(( (${SIM_LOCK_KILL_GRACE:-30} + 10) * 10 )) ]; do
+    sleep 0.1 2>/dev/null || sleep 1
+    wait=$((wait + 1))
+  done
+  while IFS="$(printf '\t')" read -r key value; do
+    case "$key" in
+      process) process=$value ;;
+      indicator) indicator=$value ;;
+      source) source=$value ;;
+      elapsed) elapsed=$value ;;
+      reason) reasons="$reasons  ${value:0:400}
+" ;;
+    esac
+  done < "$LAUNCH_WATCH_MARKER"
+  rm -rf -- "${LAUNCH_WATCH_MARKER%/*}"
+  LAUNCH_WATCH_MARKER=
+  release_simulator_lock
+  if [ -n "$scratch" ]; then
+    kept=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-test.XXXXXX")
+    mv -f -- "$log" "$kept" && log=$kept
+    rm -rf -- "$scratch"
+  fi
+  device="$(simulator_label "$LAUNCH_WATCH_UDID") $LAUNCH_WATCH_UDID"
+  cat >&2 <<EOF
+
+error: the app could not launch on $device: dyld terminated $process before main ($indicator).
+${reasons}Seen in the $source, ${elapsed}s into $label; xcodebuild was stopped rather than left waiting for the launch (ios#905).
+A launch failure is deterministic, so nothing is re-run. Check that every library the app links exists on this
+runtime (deployment target vs. SDK), or pick a simulator on another runtime with SIM_UDID.
+Full xcodebuild output kept at: $log
+EOF
+  if [ -n "$LAUNCH_TEMP_BUNDLE" ]; then
+    echo "Result bundle kept at: $LAUNCH_TEMP_BUNDLE" >&2
+    [ -z "$RETRY_BUNDLE" ] || echo "Re-run result bundle kept at: $RETRY_BUNDLE" >&2
+  fi
+  echo "Exiting $EXIT_APP_LAUNCH_FAILED (app launch failure)." >&2
+  append_step_summary "### App launch failure ($label)" "" \
+    "dyld terminated \`$process\` before main ($indicator) on $device; xcodebuild was stopped after ${elapsed}s and nothing was re-run (exit $EXIT_APP_LAUNCH_FAILED)." "" \
+    '```' "${reasons%
+}" '```' "" "Seen in the $source." ""
+  exit "$EXIT_APP_LAUNCH_FAILED"
 }
 
 # $1 = xcodebuild status, $2 = log path, $3 = what the log is of (default
@@ -754,6 +1101,7 @@ Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash), not 65." >&2
     -destination "platform=iOS Simulator,id=$udid" \
     -parallel-testing-enabled NO ${extra+"${extra[@]}"} "${selectors[@]}" "$@" || status=$?
   echo done >&9
+  check_launch_failure "$status" "$retry_log" "the re-run"
   release_simulator_lock
   report_test_outcome "$status" "$retry_log" "the re-run" || outcome=$?
   case "$outcome" in
@@ -1013,6 +1361,7 @@ resolve_only_testing() {
     -enumerate-tests -test-enumeration-style flat -test-enumeration-format json \
     -test-enumeration-output-path "$catalog" "$@" || status=$?
   echo done >&9
+  check_launch_failure "$status" "$log" "test enumeration" "$dir"
   if [ "$status" -ne 0 ]; then
     rm -rf -- "$dir"
     release_simulator_lock
@@ -1279,6 +1628,7 @@ cmd_test_without_building() {
   local udid extra=() log bundle= bundle_dir= status=0 outcome=0
   parse_only_testing
   udid=$(pick_simulator)
+  LAUNCH_WATCH_UDID=$udid
   acquire_simulator_lock "$udid"
   enable_simulator_accessibility "$udid"
   resolve_only_testing "$udid" "$@"
@@ -1288,6 +1638,7 @@ cmd_test_without_building() {
   elif [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ]; then
     bundle_dir=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-result.XXXXXX")
     bundle=$bundle_dir/Intent.xcresult
+    LAUNCH_TEMP_BUNDLE=$bundle
   fi
   [ -z "$bundle" ] || extra+=(-resultBundlePath "$bundle")
   log=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-test.XXXXXX")
@@ -1296,6 +1647,7 @@ cmd_test_without_building() {
     -parallel-testing-enabled NO ${extra+"${extra[@]}"} \
     ${ONLY_TESTING_ARGS+"${ONLY_TESTING_ARGS[@]}"} "$@" || status=$?
   echo done >&9
+  check_launch_failure "$status" "$log" "the test run"
   release_simulator_lock
   report_test_outcome "$status" "$log" || outcome=$?
   if [ "$outcome" -eq "$EXIT_TEST_PROCESS_CRASHED" ]; then

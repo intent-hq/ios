@@ -20,7 +20,10 @@ struct WorkspaceChangesFileTree: View {
                     .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(secondary)
             } else {
-                tree
+                WorkspaceFileTreeScrollView {
+                    tree
+                }
+                .accessibilityIdentifier("changes.tree.\(identifier)")
             }
         }
         .onChange(of: scope) { _, _ in collapsedDirectories.removeAll() }
@@ -47,7 +50,6 @@ struct WorkspaceChangesFileTree: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .fileTreeOutdent()
     }
 
     private func directoryRow(_ row: WorkspaceChangeTree.TreeRow) -> some View {

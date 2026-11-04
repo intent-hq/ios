@@ -14,6 +14,17 @@ struct WorkspaceFilesView: View {
     }
 
     var body: some View {
+        WorkspaceFileTreeScrollView {
+            tree
+        }
+        .accessibilityIdentifier("files.tree")
+        .fullScreenCover(item: $selectedFile) { file in
+            WorkspaceFilePreview(link: .init(workspaceId: workspaceId, path: file.path), connection: session.connection)
+        }
+        .onChange(of: workspaceId) { _, _ in selectedFile = nil }
+    }
+
+    private var tree: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             directoryState(path: ".")
             ForEach(store.rows) { row in
@@ -26,14 +37,9 @@ struct WorkspaceFilesView: View {
                 }
                 .padding(.leading, indentation(for: row.depth))
                 .fileTreeGuides(depth: row.depth)
-                .fileTreeOutdent()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .fullScreenCover(item: $selectedFile) { file in
-            WorkspaceFilePreview(link: .init(workspaceId: workspaceId, path: file.path), connection: session.connection)
-        }
-        .onChange(of: workspaceId) { _, _ in selectedFile = nil }
     }
 
     private func entryButton(_ row: WorkspaceFileTreeRow) -> some View {

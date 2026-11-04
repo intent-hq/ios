@@ -79,11 +79,10 @@ struct HTMLFileWebViewTests {
 
     private func checkInertLinks(in webView: WKWebView, address: String, server: ImageServer, baseline: Int) async throws {
         for target in [address, "https://example.com", "file:///tmp/page.html", "about:blank", "data:text/html,Replaced", "intent://local/note/spec"] {
-            _ = try await webView.callAsyncJavaScript(
+            _ = try await webView.callJavaScript(
                 "document.getElementById('link').href = target; document.getElementById('link').click();",
                 arguments: ["target": target],
-                in: nil,
-                contentWorld: .defaultClient
+                in: .defaultClient
             )
             try await Task.sleep(for: .milliseconds(100))
             print("HTML target", target, "requests", server.requests, "connections", server.acceptedConnections)
@@ -116,7 +115,7 @@ struct HTMLFileWebViewTests {
 
     private func evaluate(_ expression: String, in webView: WKWebView) async throws -> Any? {
         // App-owned isolated-world inspection is allowed; page scripts remain disabled.
-        try await webView.callAsyncJavaScript("return \(expression)", arguments: [:], in: nil, contentWorld: .defaultClient)
+        try await webView.callJavaScript("return \(expression)", arguments: [:], in: .defaultClient)
     }
 
     private func waitUntil(_ predicate: () async throws -> Bool) async throws {

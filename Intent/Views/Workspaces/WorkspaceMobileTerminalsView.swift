@@ -38,6 +38,7 @@ private struct WorkspaceTerminalRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var confirmDelete = false
     @State private var isDeleting = false
+    @State private var isRenaming = false
 
     var body: some View {
         WorkspaceSwipeContainer(
@@ -52,6 +53,7 @@ private struct WorkspaceTerminalRow: View {
             deleteButton
         }
         .disabled(isDeleting)
+        .modifier(TerminalRenameAlert(isPresented: $isRenaming, terminal: terminal, store: store))
         .alert("Delete terminal?", isPresented: $confirmDelete) {
             Button("Cancel", role: .cancel) {}
             Button("Delete terminal", role: .destructive, action: deleteTerminal)
@@ -74,12 +76,17 @@ private struct WorkspaceTerminalRow: View {
         .buttonStyle(TerminalRowButtonStyle())
         .visionListRowHitTarget()
         .contextMenu {
+            IPadToolPlacementAction(tool: .terminal(terminal))
+            Button("Rename terminal") { isRenaming = true }
             Button("Delete terminal", role: .destructive) { confirmDelete = true }
                 .disabled(!store.isConnected)
         }
+        .accessibilityAction(named: "Rename terminal") { isRenaming = true }
         .accessibilityAction(named: "Delete terminal") {
             if store.isConnected { confirmDelete = true }
         }
+        .accessibilityIdentifier("terminal.row.\(terminal.id)")
+        .modifier(IPadToolDragSource(tool: .terminal(terminal)))
     }
 
     private var deleteButton: some View {
@@ -108,16 +115,22 @@ private struct WorkspaceTerminalRow: View {
         }
     }
 
+    private var status: String? {
+        if !store.isConnected { return "Disconnected" }
+        return store.hasExitedProcess(terminal) ? "Exited" : nil
+    }
+
     private var terminalRow: some View {
-        HStack(alignment: store.isConnected ? .center : .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
+        let status = status
+        return HStack(alignment: status == nil ? .center : .top, spacing: WorkspaceDetailStyle.avatarSpacing) {
             terminalIcon
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.noteTitleSpacing) {
-                Text(terminal.name)
+                Text(store.title(for: terminal))
                     .interFont(Constants.Typography.bodyM)
                     .tracking(WorkspaceDetailStyle.rowTitleTracking)
                     .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                if !store.isConnected {
-                    Text("Disconnected")
+                if let status {
+                    Text(status)
                         .interFont(Constants.Typography.bodyS)
                         .tracking(WorkspaceDetailStyle.bodyTracking)
                         .foregroundStyle(WorkspaceDetailStyle.secondary(for: colorScheme, contrast: colorSchemeContrast))
@@ -126,7 +139,7 @@ private struct WorkspaceTerminalRow: View {
             .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: store.isConnected ? .center : .top)
+        .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: status == nil ? .center : .top)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
@@ -145,5 +158,30 @@ private struct WorkspaceTerminalRow: View {
                 cornerRadius: WorkspaceDetailStyle.avatarSize * WorkspaceDetailStyle.avatarCornerRatio
             ))
             .accessibilityHidden(true)
+    }
+}
+
+/// Names a terminal; an empty name returns it to automatic naming.
+struct TerminalRenameAlert: ViewModifier {
+    @Binding var isPresented: Bool
+    let terminal: MobileTerminal
+    let store: MobileTerminalStore
+    @State private var name = ""
+
+    func body(content: Content) -> some View {
+        content
+            .alert("Rename Terminal", isPresented: $isPresented) {
+                TextField("Terminal name", text: $name)
+                Button("Rename") { store.rename(terminal, to: name) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Leave empty to use the program name.")
+            }
+            .onChange(of: isPresented) { _, presented in
+                if presented { name = store.title(for: terminal) }
+            }
+            .onChange(of: store.isActive(terminal)) { _, active in
+                if !active { isPresented = false }
+            }
     }
 }

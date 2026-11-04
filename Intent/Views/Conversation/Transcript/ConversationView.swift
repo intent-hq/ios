@@ -190,6 +190,7 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The message was not sent. " + detail)
             }
+            .attachmentImportAlert(viewModel.attachmentPipeline)
     }
 }
 
@@ -252,13 +253,14 @@ private extension ConversationViewContent {
             // In the Duo shell the rail replaces the vertical toolbar, so no bar sits over the transcript top.
             .toolbar(usesWorkspaceDesign && (!usesVerticalNavigation || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
-            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign, floats: isNamedBySidebar && !usesVerticalNavigation) {
+            .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign, floats: isNamedBySidebar && !usesVerticalNavigation) { usesMiniHeader in
                 if usesVerticalNavigation, presentation != .iPad {
                     WorkspaceVerticalConversationHeader(title: viewModel.agentName, workspaceId: viewModel.workspaceId)
                 } else {
                     WorkspaceConversationHeader(
                         title: viewModel.agentName,
-                        showsBackground: !viewModel.showsLoadingState && !isNamedBySidebar,
+                        showsBackground: !viewModel.showsLoadingState && (!isNamedBySidebar || usesMiniHeader),
+                        bottomPadding: usesMiniHeader ? Constants.Conversation.Design.IPad.miniHeaderBottomInset : nil,
                         showsContextualActions: !usesVerticalNavigation,
                         showsTitle: !isNamedBySidebar,
                         assistantStore: assistantStore,
@@ -476,11 +478,7 @@ private extension ConversationViewContent {
     }
 
     private func navigateToNote(noteId: String, workspaceId: String, title: String) {
-        presentedNote = NoteSheetInfo(
-            noteId: noteId,
-            workspaceId: workspaceId,
-            noteTitle: title
-        )
+        presentedNote = NoteSheetInfo(noteId: noteId, workspaceId: workspaceId, noteTitle: title)
     }
 
     private func navigateToAgent(agentId: String, workspaceId: String, name: String) {

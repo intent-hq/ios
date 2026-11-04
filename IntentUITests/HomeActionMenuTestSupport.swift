@@ -105,6 +105,16 @@ private enum HomeActionMenuTestSupport {
 
 extension XCUIApplication {
     @MainActor
+    func hideWorkspaceSidebar(file: StaticString = #filePath, line: UInt = #line) {
+        let actions = buttons["Workspace actions"].firstMatch
+        XCTAssertTrue(actions.wait(for: \.isHittable, toEqual: true, timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
+        actions.tap()
+        let collapse = buttons["ipad.sidebar.collapse"]
+        XCTAssertTrue(collapse.wait(for: \.isHittable, toEqual: true, timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
+        collapse.tap()
+    }
+
+    @MainActor
     func renderedHomeActionIsDark(_ action: String) throws -> Bool {
         let tile = buttons["intent.menu.\(action)"]
         let image = try XCTUnwrap(screenshot().image.cgImage)

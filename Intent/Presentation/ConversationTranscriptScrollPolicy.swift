@@ -170,6 +170,23 @@ enum ConversationTranscriptScrollPolicy {
         return distance <= visibleHeight
     }
 
+    /// How Go to End appears and disappears (#426): sliding in from the
+    /// bottom by default, a fade only when Reduce Motion is on.
+    enum GoToEndVisibilityTransition: Equatable {
+        case fade
+        case slideAndFade
+    }
+
+    static func goToEndVisibilityTransition(reduceMotion: Bool) -> GoToEndVisibilityTransition {
+        reduceMotion ? .fade : .slideAndFade
+    }
+
+    /// Reduce Motion turns every transcript follow (Go to End, auto-follow,
+    /// landing corrections) into a jump; otherwise the caller's choice stands.
+    static func animatesFollow(requested: Bool, reduceMotion: Bool) -> Bool {
+        requested && !reduceMotion
+    }
+
     /// Streaming deltas grow content that `.defaultScrollAnchor(.bottom)`
     /// already keeps pinned, so a viewport at the bottom is never scrolled for
     /// them. A delta only re-pins a viewport that drifted past

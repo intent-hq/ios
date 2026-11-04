@@ -322,6 +322,7 @@ struct ContentBlockBody: View, Equatable {
                     ImageActionMenuItems(image: uiImage, originalData: imageData)
                 }
             }
+            .imageSaveAlert()
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage, data: imageData)
                     .coversConversationComposers()

@@ -56,6 +56,7 @@ final class TerminalCanvasView: SwiftTerm.TerminalView {
     var focusChanged: (() -> Void)?
 
     override func becomeFirstResponder() -> Bool {
+        guard isUserInteractionEnabled else { return false }
         let result = super.becomeFirstResponder()
         Task { @MainActor [weak self] in self?.focusChanged?() }
         return result

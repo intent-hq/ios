@@ -8,8 +8,9 @@ The **Intent companion app** is a native SwiftUI client for iPhone, iPad, and Ap
 - **Secure pairing.** Pair with `intentd` via **QR code (iPhone/iPad), `intent://pair` deep link, or manual entry**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. Connections without a trusted fingerprint are rejected, including legacy fingerprint-less pairings. Plain `ws://` is available only through an explicit Debug-only loopback test override, never as an app fallback.
 - **Local-first mirror.** The app maintains a local cache of workspaces, notes, and agent sessions for offline read access, synced via WebSocket JSON-RPC push notifications.
 - **JSON-RPC client.** Talks to `intentd`'s WebSocket transport using the same JSON-RPC 2.0 protocol the desktop client uses.
-- **Workspace tools.** Create and transfer workspaces, review staged and unstaged changes and commit diffs, use workspace terminals, and open browser previews served through the daemon.
-- **Rich content.** Render Markdown, tables, attachments, and offline Mermaid diagrams in notes and conversations.
+- **Workspace tools.** Create and transfer workspaces, review staged and unstaged changes and commit diffs, browse workspace files, run and monitor workspace scripts, use workspace terminals, and open browser previews served through the daemon.
+- **Pull requests.** Switch the workspace list to pull requests from its overflow menu (iPad: the Pull Requests sidebar section), filter and search them, and open a detail page with checks, reviews, and changed files.
+- **Rich content.** Render Markdown, tables, attachments, and offline Mermaid diagrams in notes and conversations. Messages, question answers, and new workspaces accept up to 10 images.
 
 ## Architecture
 
@@ -30,19 +31,27 @@ Intent/
 │                              input, and content rendering
 ├── DesignSystem/              Colors, theme, layout, and avatar design
 ├── Utils/                     Shared formatting, links, haptics, and notifications
-├── Assets.xcassets            App icons and colors
-├── Resources/                 Inter fonts, Lottie animations, and offline Mermaid assets
+├── AppIcon.icon               Icon Composer app icon
+├── Assets.xcassets            App icon sets, colors, and Intent icons
+├── Resources/                 Inter fonts, Lottie animations, and offline
+│                              Mermaid and syntax-highlighting assets
 ├── Constants.swift, Models.swift
+├── Info.plist, Intent.entitlements
 ├── PrivacyInfo.xcprivacy      Privacy manifest
+├── ConnectionRegistryReadResult.swift
+├── PersistenceKeychainStorage.swift
 └── PersistenceManager*.swift  Keychain credentials, cached state, drafts, and preferences
+Info-visionOS.plist            visionOS Info.plist
 IntentTests/                   Unit and integration tests
 IntentUITests/                 UI and screenshot tests
 TailcatKit/                    Go bridge for iOS Tailcat tunnels
-scripts/                       Build/test/lint wrappers and Mermaid vendoring tools
+scripts/                       Build/test/lint wrappers, CI helpers, and
+                               Mermaid/highlighting vendoring tools
+.github/                       CI workflows, runner selection, and actions
 ci_scripts/                    Xcode Cloud dependency preparation
 ```
 
-The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport, **Textual** for Markdown, **SwiftTerm** for terminal emulation, and **Lottie** for bundled animations. Mermaid diagrams render through bundled **Pele** JavaScript in a `WKWebView`, without a CDN or runtime Node dependency.
+The app uses **Network.framework** `NWConnection` for TCP/TLS (certificate pinning and path observation) and performs the RFC 6455 WebSocket upgrade and framing itself, negotiating **permessage-deflate** compression (`NWProtocolWebSocket` cannot accept server extensions). It uses **Textual** for Markdown, **SwiftTerm** for terminal emulation, and **Lottie** for bundled animations. Mermaid diagrams render through bundled **Pele** JavaScript in a `WKWebView`, without a CDN or runtime Node dependency.
 
 ## Pairing
 
@@ -75,11 +84,13 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 - workspace discovery, creation, lifecycle actions, and live state;
 - note and comment reading and live state, plus task listing, status changes, and live state;
 - agent discovery and lifecycle plus conversation history, sending, queue management, questions, models, and streaming controls;
-- attachment upload, placement, and download;
+- attachment upload, placement, and download, plus workspace file listing and reading;
 - repository, branch, provider, model, specialist, and workspace skill discovery;
 - Git status, diffs, and commit history across workspace repositories;
-- workspace transfer and mobile terminal lifecycle, input, output, and resizing; and
-- background-hook and pull-request-monitor status and controls.
+- GitHub authentication status and pull request search, detail, checks, reviews, and files;
+- workspace transfer and mobile terminal lifecycle, input, output, and resizing;
+- workspace script creation, start/stop, status, and removal; and
+- background-hook, script-monitor, and pull-request-monitor status and controls.
 
 Live updates combine domain subscriptions for workspaces, notes, tasks, comments, and chats—delivered as `subscription.push` notifications—with filtered `events.subscribe` streams for agent, hook, and pull-request-monitor events.
 Browser previews use an auxiliary authenticated WebSocket tunnel rather than
@@ -92,9 +103,11 @@ Transport Security exception for web content so user-entered HTTP sites can
 load; daemon connections still require pinned WSS/TLS.
 
 In an agent conversation, type `/` in the prompt to browse available workspace
-skills. Keep typing to filter by name or description, then tap a skill to insert
-its slash command. Hardware keyboards can use Up/Down to select, Tab to insert,
-and Escape to dismiss the suggestions.
+skills. Matching skills appear as a horizontally scrolling row of chips above the
+composer; keep typing to filter by name or description, then tap a chip to insert
+its slash command. Hardware keyboards can use Up/Down to move the highlight, Tab
+to insert, and Escape to dismiss the chips. Each agent's skill list is cached for
+the rest of the app session.
 
 ## Quickstart
 
@@ -343,8 +356,8 @@ scripts/test-setup-swiftlint.sh
 
 On macOS, use `scripts/test-swiftlint.sh` for wrapper smoke tests. The Linux
 prerequisite/setup fixtures need Linux host tools; the prerequisite suite currently
-depends on `ldd` even though it stubs the reported operating system
-([ios#733](https://github.com/intent-hq/ios/issues/733)).
+depends on `ldd` even though it stubs the reported operating system, a
+documented Linux-only limitation ([ios#733](https://github.com/intent-hq/ios/issues/733), closed).
 
 Setup reuses SwiftLint 0.65.1 from `PATH` and an existing usable runtime. If tools
 are missing, it installs the checksum-pinned [official SwiftLint release](https://github.com/realm/SwiftLint/releases/tag/0.65.1)
@@ -392,7 +405,7 @@ The Xcode wrapper supports these subcommands:
 | `test-without-building-unit` | Run previously built tests without `IntentUITests`. |
 | `test-ios` | Build and run the complete unit and UI test gate. |
 | `test-ios-unit` | Build and run tests without `IntentUITests`. |
-| `pick-simulator` | Print the automatically selected iPhone simulator UDID. |
+| `pick-simulator` | Print the automatically selected iPhone simulator UDID: an iPhone on the newest iOS runtime the selected Xcode can run (an iPhone 16 there when available). The device name and runtime go to stderr. Set `SIM_UDID` to choose another device or runtime. |
 
 For a focused run, set `ONLY_TESTING` to one or more whitespace-separated
 `Target[/Suite[/test]]` selectors. Selectors are test identifiers, not Swift file
@@ -406,6 +419,17 @@ ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-ios-unit
 A selector whose tests were all skipped at runtime exits 0 with a notice. Inspect
 the per-selector summary and confirm a nonzero executed count before claiming that
 a green focused run executed the intended tests.
+
+Besides xcodebuild's own status (65 for a build or test failure), the wrapper exits
+80 when the test process crashed and its one re-run did not recover, 81 when the
+simulator lock timed out, 82 when a selector matched or ran no test, 83 when the
+selection could not be verified, and 84 when the app could not launch on the
+simulator. For 84, a watchdog spots dyld aborting the app before `main` (for example,
+a library the simulator runtime lacks) within seconds. It stops the run instead of
+letting XCUITest wait until the job times out, prints the missing library and the
+simulator runtime, and does not re-run. Try a simulator on another runtime with
+`SIM_UDID`. The [wrapper header](scripts/xcodebuild.sh) has the details and the
+`LAUNCH_CRASH_WATCH=0` opt-out.
 
 For repeated focused runs, build once and reuse that build:
 
@@ -434,6 +458,22 @@ test commands (or use `test-ios-unit` to do both). A focused example is
 Do not reuse a Debug build as Release evidence: `ReleaseConfigurationTests` is
 absent in Debug, and some other suites require Debug-only plaintext fixtures.
 
+To test one commit on a Mac, for example for an agent working on Linux, use
+`scripts/run_commit_tests.sh`. It checks the commit out into a clean temporary
+directory (fetching it from `origin` if needed), runs the selected tests through
+the wrapper, and writes a summary to
+`~/Library/Caches/intent-ios-test-run/summary.md`. The summary gives the verdict,
+per-suite executed, passed, failed and skipped counts, each failing test with its
+first failure message, the log path, and a command that repeats the run. Any
+`IntentUITests` selector runs `test-ios`; otherwise it runs `test-ios-unit`:
+
+```bash
+scripts/run_commit_tests.sh <full-sha> 'IntentTests/AgentListPagingTests'
+```
+
+The exit status is the wrapper's. Run it in the foreground. See the script header for
+the files it keeps and the environment it passes through.
+
 The `build-visionos` command always uses the generic visionOS Simulator destination,
 never `-sdk`: an `-sdk xros...` invocation can silently fall back to `iphoneos` when
 the visionOS platform is absent and produce a bogus successful build.
@@ -445,8 +485,9 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
 `scripts/ui-smoke-tests.txt`, and a visionOS build for pull requests and the merge
 queue. Smoke coverage uses two balanced iPhone shards and an independent job for
-all eight focused iPad navigation regressions, including commit and file diff
-viewing in the main pane. Each lane owns its build directory,
+all eleven focused iPad regressions: sidebar and rail navigation, search, the
+Pull Requests section, the empty detail-pane placeholder, and commit and file
+diff viewing in the main pane. Each lane owns its build directory,
 disposable simulator, results, and evidence. All lanes prefer an idle
 self-hosted Mac; GitHub-hosted Macs handle overflow when the local pool is busy.
 Matrix fail-fast is
@@ -516,8 +557,10 @@ extend `ConversationTranscriptScrollUITests`. Select
 #### Mermaid UI quarantine
 
 `IntentUITests/ConversationMermaidUITests/testFullscreenButtonEdgeAndInlinePinchAndPan`
-is quarantined for intermittent inline and fullscreen render failures tracked in
-[ios#735](https://github.com/intent-hq/ios/issues/735). The root cause is unconfirmed.
+is quarantined for intermittent inline and fullscreen render failures first reported in
+[ios#735](https://github.com/intent-hq/ios/issues/735). That issue was closed as stale
+after repeated passing filtered runs, but the guard remains; lifting it is tracked in
+[ios#940](https://github.com/intent-hq/ios/issues/940). The root cause is unconfirmed.
 It is absent from PR/merge-queue smoke selection and skips before app launch in
 scheduled full runs, manual full runs, and focused runs unless explicitly enabled.
 Neither `ui_suite=full` nor `only_testing` alone enables it.
@@ -536,7 +579,7 @@ TEST_RUNNER_INTENT_UITEST_MERMAID_REPRO=1 \
 
 Only the exact value `1` opts in; the transcript quarantine flag is independent.
 Check the wrapper's executed/skipped counts: a skip is not runtime coverage.
-Remove the guard and restore the smoke selector together after ios#735 has a
+Remove the guard and restore the smoke selector together (ios#940) after a
 validated fix and repeated unchanged runs pass on the affected CI simulator/Xcode
 configurations with the original assertions and timeouts.
 
@@ -545,8 +588,9 @@ configurations with the original assertions and timeouts.
 CI uploads `ios-ui-review-evidence` for 14 days when allowlisted captures exist,
 on success or failure and for filtered UI runs. Open its PNGs directly;
 `manifest.json` records the tested revision, suite/test, source bundle, and retry
-origin. Parallel iPad exports append `-ipad` to evidence artifact names, including
-`ios-ui-review-evidence-ipad`, to avoid collisions with the iPhone job. Captures
+origin. UI lane exports append the lane name (`-iphone-1`, `-iphone-2`, or `-ipad`),
+for example `ios-ui-review-evidence-ipad`, to avoid collisions; filtered and
+`pre_pr_gate` dispatches upload the unsuffixed `ios-ui-review-evidence`. Captures
 include workspace creation, iPad sidebars and pairing, menus, changes, and connection-loss
 flows; `scripts/export_ui_evidence.py` is the complete allowlist. Missing images
 are not proof that a view was captured. `ios-agent-group-evidence` and
@@ -558,7 +602,8 @@ to avoid the fixture's symlinked temporary-path mismatch
 
 Final diagnostic attachments use XCTest teardown, since an assertion with
 `continueAfterFailure = false` can bypass Swift `defer`. The Linux CI job runs
-`python3 scripts/check_ui_attachment_lifecycle.py` and its mutation tests to
+`python3 scripts/check_ui_attachment_lifecycle.py` and its mutation tests
+(`scripts/test_check_ui_attachment_lifecycle.py`) to
 reject attachment-producing defer blocks (including named helper calls);
 ordinary cleanup remains allowed. The source check is conservative by function
 name, not a Swift type checker: it includes parameter defaults but does not
@@ -588,10 +633,60 @@ teardown back to defer must fail
 both the source check and this native contract after rebuilding; restore and
 rebuild afterward. XCTest teardown does not guarantee evidence after a process crash.
 
+Other repository checks: `scripts/test-row-provider-isolation.sh` compiles positive
+and negative SwiftUI fixtures against the deferred row-provider boundary on the macOS
+CI job. On Linux, `python3 scripts/protocol_fixture_version.py lint` keeps test
+`client.hello` fixtures on the current intentd protocol version (`check` warns when
+`IntentTests/CurrentProtocolVersion.swift` is behind; `sync` updates it), with
+`python3 scripts/test_protocol_fixture_version.py` as its contract test, and
+`python3 scripts/test_fixture_capture_lifecycle.py` rejects false greens in the
+capture-lifecycle verifier. `scripts/generate-inter-instances.py` rebuilds the bundled
+static Inter faces from the pinned Inter release (see its header for the command).
+The Linux job also runs the offline tooling self-tests `scripts/test_xcodebuild.sh`,
+`scripts/test_run_commit_tests.sh`,
+`scripts/test-ci-post-clone.sh`, `scripts/test-check-swiftlint-inputs.sh`,
+`scripts/test-update-source-lists.sh`, `scripts/test-generate-test-inputs.sh`, and `python3 scripts/test_select_macos_runner.py`;
+`scripts/check-swiftlint-inputs.sh` keeps `scripts/swiftlint-xcode-inputs.xcfilelist`
+in sync with the Swift sources; `scripts/update-source-lists.sh` regenerates it and
+`scripts/test-source-inputs.xcfilelist` after Swift files are added, split, moved, or removed.
+After building, the macOS job runs `scripts/check-webkit-overlay-linkage.sh`, which
+fails if `Intent.app` or a test bundle built next to it links
+`/usr/lib/swift/libswiftWebKit.dylib` (which cannot load on iOS 18.4–18.5 simulators); `scripts/test-check-webkit-overlay-linkage.sh` is
+its macOS self-test.
+
+Two auxiliary workflows run on pushes to `main`: `warm-cache.yml` (also weekly on
+Mondays at 06:17 UTC and on manual dispatch) seeds the Go, TailcatKit, and SPM caches
+that `ci.yml` restores, and `notify-monorepo.yml` sends a fail-soft
+`repository_dispatch` so intent-hq/intent can advance its submodule pin.
+
 Xcode Cloud uses `ci_scripts/ci_post_clone.sh` to prepare TailcatKit for iOS with
 a checksum-pinned Go toolchain; it skips that setup for visionOS. This is build
 preparation, not release automation. See [AGENTS.md](AGENTS.md#releases) for
 version/build-number checks and the human-controlled upload and release policy.
+
+### GitHub Actions runners
+
+Script and Go jobs use GitHub-hosted `ubuntu-24.04`. All macOS jobs prefer
+self-hosted Macs: iOS builds and every iPhone/iPad UI lane use the `intent-ios`
+pool; visionOS builds and cache warming prefer `intent-ios-build`, then
+`intent-ios`. Each pool selects its installed Xcode independently.
+The 18 October 2026 validation used Xcode 26.5 on a Depot Mac (the hosted pool
+before the move to GitHub-hosted runners) for iPad and 26.3 on the local iPhone Mac.
+The pools do not guarantee the same toolchain or simulator runtime. Record the
+runner, Xcode, and runtime when comparing timings or investigating failures.
+Selectors (`.github/scripts/select-macos-runner.sh`) use `RUNNER_STATUS_TOKEN` to inspect the pools and fall back to
+GitHub-hosted `macos-26-xlarge` (Apple Silicon) when every matching local runner is
+busy or offline, or runner status cannot be read. Selection uses a snapshot of
+runner availability. CI allocates each idle service once across builds and UI
+lanes, then sends remaining jobs to hosted Macs. Independent workflows can still
+race for the same capacity before GitHub assigns them.
+Each local registration must carry `intent-ios-runner-<id>`, using its GitHub
+runner ID. The selector verifies that label is unique and includes it in the
+job's routing labels, so GitHub schedules the service counted by the allocation.
+Missing or duplicate routing labels make that service ineligible for selection.
+The selected image needs Xcode 26;
+runtime and Metal provisioning run as needed. Go and Swift package caches and
+Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.
 
 ### Contributor rules
 
@@ -612,27 +707,3 @@ monorepo issue tracker.
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
-
-### GitHub Actions runners
-
-Script and Go jobs use GitHub-hosted `ubuntu-24.04`. All macOS jobs prefer
-self-hosted Macs: iOS builds and every iPhone/iPad UI lane use the `intent-ios`
-pool; visionOS builds and cache warming prefer `intent-ios-build`, then
-`intent-ios`. Each pool selects its installed Xcode independently.
-The 18 October 2026 validation used Xcode 26.5 on a Depot Mac (the hosted pool
-before the move to GitHub-hosted runners) for iPad and 26.3 on the local iPhone Mac.
-The pools do not guarantee the same toolchain or simulator runtime. Record the
-runner, Xcode, and runtime when comparing timings or investigating failures.
-Selectors use `RUNNER_STATUS_TOKEN` to inspect the pools and fall back to
-GitHub-hosted `macos-26-xlarge` (Apple Silicon) when every matching local runner is
-busy or offline, or runner status cannot be read. Selection uses a snapshot of
-runner availability. CI allocates each idle service once across builds and UI
-lanes, then sends remaining jobs to hosted Macs. Independent workflows can still
-race for the same capacity before GitHub assigns them.
-Each local registration must carry `intent-ios-runner-<id>`, using its GitHub
-runner ID. The selector verifies that label is unique and includes it in the
-job's routing labels, so GitHub schedules the service counted by the allocation.
-Missing or duplicate routing labels make that service ineligible for selection.
-The selected image needs Xcode 26;
-runtime and Metal provisioning run as needed. Go and Swift package caches and
-Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.

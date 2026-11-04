@@ -40,3 +40,6 @@ fastlane/report.xml
 
 # OS files
 .DS_Store
+
+# Python bytecode from the tooling self-tests
+__pycache__/

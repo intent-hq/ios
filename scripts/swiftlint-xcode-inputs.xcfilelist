@@ -123,6 +123,7 @@ $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/FileLineIndex.swift
 $(SRCROOT)/Intent/Presentation/FileSyntaxRun.swift
 $(SRCROOT)/Intent/Presentation/IPadTypingFocus.swift
+$(SRCROOT)/Intent/Presentation/IPadWorkspaceTool.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
 $(SRCROOT)/Intent/Presentation/MarkdownContentCache.swift
@@ -256,9 +257,11 @@ $(SRCROOT)/Intent/Services/NetworkAvailability.swift
 $(SRCROOT)/Intent/Services/NetworkCopyDiagnostics.swift
 $(SRCROOT)/Intent/Services/NetworkPathMonitoring.swift
 $(SRCROOT)/Intent/Services/NoteStore+Events.swift
+$(SRCROOT)/Intent/Services/NoteStore+TaskStatus.swift
 $(SRCROOT)/Intent/Services/NoteStore.swift
 $(SRCROOT)/Intent/Services/NoteStoreCollections.swift
 $(SRCROOT)/Intent/Services/OutgoingImagePayload.swift
+$(SRCROOT)/Intent/Services/PagedReads.swift
 $(SRCROOT)/Intent/Services/PairingDiagnostics.swift
 $(SRCROOT)/Intent/Services/PairingFlow.swift
 $(SRCROOT)/Intent/Services/PerMessageDeflate.swift
@@ -306,6 +309,7 @@ $(SRCROOT)/Intent/Services/WorkspaceStatusStore+Pages.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusWaiters.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore+EventClassification.swift
+$(SRCROOT)/Intent/Services/WorkspaceStore+LocalPatches.swift
 $(SRCROOT)/Intent/Services/WorkspaceStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceTextFile.swift
 $(SRCROOT)/Intent/Services/WorkspaceTransferExport.swift
@@ -343,6 +347,7 @@ $(SRCROOT)/Intent/Utils/NotificationManager.swift
 $(SRCROOT)/Intent/Utils/PairingPayload.swift
 $(SRCROOT)/Intent/Utils/TaskStats.swift
 $(SRCROOT)/Intent/Utils/TcAddressDisplay.swift
+$(SRCROOT)/Intent/Utils/WKWebView+PageJavaScript.swift
 $(SRCROOT)/Intent/Utils/WorkspaceActivityTime.swift
 $(SRCROOT)/Intent/Utils/WorkspaceAssetLink.swift
 $(SRCROOT)/Intent/ViewModels/AgentListIndex.swift
@@ -505,6 +510,7 @@ $(SRCROOT)/Intent/Views/Conversation/Transcript/WorkspaceTranscriptDesign.swift
 $(SRCROOT)/Intent/Views/Notes/NoteContentView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteDetailView.swift
 $(SRCROOT)/Intent/Views/Notes/NoteListView.swift
+$(SRCROOT)/Intent/Views/Notes/NoteTruncationNotice.swift
 $(SRCROOT)/Intent/Views/Notes/TaskMetadataHeaderView.swift
 $(SRCROOT)/Intent/Views/Notes/WorkspaceNoteIcon.swift
 $(SRCROOT)/Intent/Views/Onboarding/DeepLinkPairingView.swift
@@ -531,6 +537,7 @@ $(SRCROOT)/Intent/Views/Settings/SettingsStyle.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces/AgentModelFields.swift
+$(SRCROOT)/Intent/Views/Workspaces/CollapsibleSectionHeader.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
@@ -546,6 +553,7 @@ $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/HomeActionTiles.swift
 $(SRCROOT)/Intent/Views/Workspaces/IPadPullRequestsSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/IPadSidebarComponents.swift
+$(SRCROOT)/Intent/Views/Workspaces/IPadToolPlacement.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
@@ -587,6 +595,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilePreview.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileTreeLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFilesView.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceListGroupHeading.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListMenu.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceListView.swift
@@ -614,6 +623,7 @@ $(SRCROOT)/IntentTests/AgentAvatarPulseTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
 $(SRCROOT)/IntentTests/AgentGroupingTests.swift
 $(SRCROOT)/IntentTests/AgentHistoryTests.swift
+$(SRCROOT)/IntentTests/AgentListPagingTests.swift
 $(SRCROOT)/IntentTests/AgentListScaleTests.swift
 $(SRCROOT)/IntentTests/AgentListViewModelTests.swift
 $(SRCROOT)/IntentTests/AgentMessageAttributionTests.swift
@@ -665,8 +675,10 @@ $(SRCROOT)/IntentTests/CertMismatchListViewTests.swift
 $(SRCROOT)/IntentTests/ChatImageActionsTests.swift
 $(SRCROOT)/IntentTests/CommentStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/CommentStoreLiveStateTests.swift
+$(SRCROOT)/IntentTests/CommentStorePagingTests.swift
 $(SRCROOT)/IntentTests/ComposerDraftBindingTests.swift
 $(SRCROOT)/IntentTests/ComposerFocusBindingTests.swift
+$(SRCROOT)/IntentTests/ComposerPhotoLimitTests.swift
 $(SRCROOT)/IntentTests/ComposerSkillCompletionTests.swift
 $(SRCROOT)/IntentTests/ComposerSubmitPolicyTests.swift
 $(SRCROOT)/IntentTests/ConnectionAdmissionRaceTests.swift
@@ -712,6 +724,7 @@ $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationMetadataSharingTests.swift
 $(SRCROOT)/IntentTests/ConversationModelSelectionTests.swift
 $(SRCROOT)/IntentTests/ConversationQuestionAttachmentTests.swift
+$(SRCROOT)/IntentTests/ConversationQueuePagingTests.swift
 $(SRCROOT)/IntentTests/ConversationRetryNowTests.swift
 $(SRCROOT)/IntentTests/ConversationSendRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStartupAuthorityTests.swift
@@ -784,6 +797,7 @@ $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
 $(SRCROOT)/IntentTests/CreationPickerRenderedGeometry.swift
 $(SRCROOT)/IntentTests/CurrentProtocolVersion.swift
+$(SRCROOT)/IntentTests/DeltaReconcilerPagingTests.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoConversationStartupTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesDesignTests.swift
@@ -822,6 +836,7 @@ $(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
 $(SRCROOT)/IntentTests/IPadCompactShellTests.swift
 $(SRCROOT)/IntentTests/IPadNavigationVisibilityTests.swift
 $(SRCROOT)/IntentTests/IPadShellNavigationTests.swift
+$(SRCROOT)/IntentTests/IPadToolPlacementTests.swift
 $(SRCROOT)/IntentTests/ImagePasteboardFixture.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
 $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests+PDF.swift
@@ -867,6 +882,7 @@ $(SRCROOT)/IntentTests/NetworkAvailabilityTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerAnchorTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerTests.swift
 $(SRCROOT)/IntentTests/NewRepositoryDraftTests.swift
+$(SRCROOT)/IntentTests/NoteContentPagesTests.swift
 $(SRCROOT)/IntentTests/NoteContentSegmentsTests.swift
 $(SRCROOT)/IntentTests/NoteDetailViewLifecycleTests.swift
 $(SRCROOT)/IntentTests/NoteRowIconTests.swift
@@ -875,12 +891,15 @@ $(SRCROOT)/IntentTests/NoteStoreCancellationAndEventTests.swift
 $(SRCROOT)/IntentTests/NoteStoreFetchIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/NoteStoreLiveStateTests.swift
+$(SRCROOT)/IntentTests/NoteStorePagingTests.swift
+$(SRCROOT)/IntentTests/NotificationAgentListPagingTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerPresentationAndRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerSoundDeliveryTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
 $(SRCROOT)/IntentTests/ObjCCallbackIsolationTests.swift
+$(SRCROOT)/IntentTests/PagedReadsTests.swift
 $(SRCROOT)/IntentTests/PairingAuthorityRaceTests.swift
 $(SRCROOT)/IntentTests/PairingDesignTests.swift
 $(SRCROOT)/IntentTests/PairingFlowTests.swift
@@ -917,6 +936,7 @@ $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
+$(SRCROOT)/IntentTests/ScriptListPagingTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorPresentationTests+Conversation.swift
 $(SRCROOT)/IntentTests/ScriptMonitorPresentationTests.swift
@@ -961,6 +981,7 @@ $(SRCROOT)/IntentTests/TaskMetadataHeaderTests.swift
 $(SRCROOT)/IntentTests/TaskStatsTests.swift
 $(SRCROOT)/IntentTests/TaskStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/TaskStoreLiveStateTests.swift
+$(SRCROOT)/IntentTests/TaskStorePagingTests.swift
 $(SRCROOT)/IntentTests/TestBundleInputs.swift
 $(SRCROOT)/IntentTests/TestBundleInputsTests.swift
 $(SRCROOT)/IntentTests/TestSourceInputs.swift
@@ -983,6 +1004,7 @@ $(SRCROOT)/IntentTests/TransferDestinationPolicyTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
+$(SRCROOT)/IntentTests/WKWebViewPageJavaScriptTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WatcherMessagePresentationTests.swift
 $(SRCROOT)/IntentTests/WebSocketCompressionServer.swift
@@ -1025,6 +1047,7 @@ $(SRCROOT)/IntentTests/WorkspaceFilesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFilesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListCacheTests.swift
+$(SRCROOT)/IntentTests/WorkspaceListGroupCollapseTests.swift
 $(SRCROOT)/IntentTests/WorkspaceListViewModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceParsingTests.swift
 $(SRCROOT)/IntentTests/WorkspacePrMonitorsStoreTests.swift
@@ -1052,6 +1075,7 @@ $(SRCROOT)/IntentTests/WorkspaceStatusMessageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusTestSupport.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreAgentLifecycleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreEventAllowlistTests.swift
+$(SRCROOT)/IntentTests/WorkspaceStorePagingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStateTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStatusImageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreTests.swift
@@ -1101,6 +1125,7 @@ $(SRCROOT)/IntentUITests/IPadFocusInteractionTestSupport.swift
 $(SRCROOT)/IntentUITests/IPadProducerVisibilityUITests.swift
 $(SRCROOT)/IntentUITests/IPadPullRequestsUITests.swift
 $(SRCROOT)/IntentUITests/IPadSidebarUITests.swift
+$(SRCROOT)/IntentUITests/IPadToolPlacementUITests.swift
 $(SRCROOT)/IntentUITests/IPadWorkspaceSidebarUITests.swift
 $(SRCROOT)/IntentUITests/IPhoneAssistantHistoryUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests+PDF.swift

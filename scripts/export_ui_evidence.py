@@ -11,6 +11,23 @@ import tempfile
 
 
 CAPTURES = {
+    "IPadToolPlacementUITests": {
+        "testBrowserDragKeepsChatDraftAndRestoresMainChatInBothThemes": tuple(
+            f"ipad-tool-{state}-{appearance}"
+            for state in ("before", "browser-chat", "restored")
+            for appearance in ("light", "dark")
+        ),
+        "testTerminalDragAllowsAgentSelectionAndLeavesShellRunning": tuple(
+            f"ipad-tool-terminal-chat-{appearance}" for appearance in ("light", "dark")
+        ),
+    },
+    "IPadWorkspaceSidebarUITests": {
+        "testOpenAgentAndNoteMoveTheWorkspaceIntoTheSidebarInBothThemes": tuple(
+            f"ipad-workspace-{state}-{appearance}"
+            for state in ("overview", "sidebar-agent", "sidebar-menu", "sidebar-note", "sidebar-portrait", "sidebar-back")
+            for appearance in ("light", "dark")
+        ),
+    },
     "SkillAutocompleteUITests": {
         "testSkillSuggestionsFilterInsertAndSendInBothThemes": tuple(
             f"skill-{state}-{appearance}"
@@ -148,6 +165,13 @@ CAPTURES = {
             for mode in ("Recent", "Repo", "Status")
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
+    },
+    "IPadWorkspaceSidebarUITests": {
+        "testDetailPaneShowsPlaceholderWithoutSelectedWorkspaceInBothThemes": tuple(
+            f"ipad-empty-detail-{orientation}-{appearance}"
+            for appearance in ("light", "dark")
+            for orientation in ("landscape", "portrait")
+        ),
     },
     "IPadAssistantSwipeUITests": {
         "testSwipeDeletionPreservesSelectionAndSupportsCancellationInBothThemes": (
@@ -288,6 +312,9 @@ CAPTURES = {
         ),
     },
     "WorkspaceTitleEditingUITests": {
+        "testSidebarFailedSaveKeepsErrorBelowDraftInBothThemes": (
+            "Sidebar title save error light", "Sidebar title save error dark",
+        ),
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",
         ),

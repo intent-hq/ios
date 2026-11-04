@@ -20,6 +20,7 @@ struct ConversationTranscriptView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.workspaceTranscriptDesign) var usesWorkspaceDesign
     @Environment(\.conversationPresentation) var presentation
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @ScaledMetric(relativeTo: .caption) var actionIconSide: CGFloat = 12
 
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle

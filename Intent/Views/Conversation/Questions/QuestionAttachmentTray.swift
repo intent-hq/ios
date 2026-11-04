@@ -30,7 +30,8 @@ struct QuestionAttachmentTray: View {
                 .scrollIndicators(.hidden)
                 .accessibilityIdentifier("question.attachments")
             }
-            if let error = attachments.imagePlacementError ?? attachments.filePlacementError {
+            if let error = attachments.imagePlacementError ?? attachments.filePlacementError
+                ?? attachments.attachmentImportError {
                 Text(error)
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.destructive(for: colorScheme))

@@ -231,18 +231,6 @@ struct WorkspaceListView: View {
         return ForEach(rows, id: \.id) { @Sendable row in row.content }
     }
 
-    private func groupHeading(_ title: String) -> some View {
-        Text(title.uppercased())
-            .interFont(Constants.Typography.eyebrow)
-            .foregroundStyle(Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: colorSchemeContrast))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, Constants.WorkspaceList.groupTopSpacing)
-            .padding(.bottom, Constants.WorkspaceList.groupBottomSpacing)
-            .padding(.horizontal, Constants.WorkspaceList.pageInset)
-            .modifier(WorkspaceListDuoLeadingInset())
-            .accessibilityAddTraits(.isHeader)
-    }
-
     @ViewBuilder
     private func workspaceButton(
         _ workspace: Workspace,
@@ -467,21 +455,28 @@ private extension WorkspaceListView {
             }
             workspaceRows(viewModel.filteredWorkspaces)
         case .repo:
-            let groups = viewModel.groupedByRepo.map { repoName, workspaces in
-                (id: repoName, heading: groupHeading(repoName), rows: workspaceRows(workspaces, showRepo: false))
-            }
-            ForEach(groups, id: \.id) { @Sendable group in
-                group.heading
-                group.rows
-            }
+            groupSections(viewModel.groupedByRepo, mode: .repo) { workspaceRows($0, showRepo: false) }
         case .status:
-            let groups = viewModel.groupedByStatus.map { statusLabel, workspaces in
-                (id: statusLabel, heading: groupHeading(statusLabel), rows: workspaceRows(workspaces, usesVisionHitTarget: false))
-            }
-            ForEach(groups, id: \.id) { @Sendable group in
-                group.heading
-                group.rows
-            }
+            groupSections(viewModel.groupedByStatus, mode: .status) { workspaceRows($0, usesVisionHitTarget: false) }
+        }
+    }
+
+    func groupSections<Rows: View>(
+        _ grouped: [(String, [Workspace])],
+        mode: ViewMode,
+        @ViewBuilder rows: ([Workspace]) -> Rows
+    ) -> some View {
+        let groups = grouped.map { title, workspaces in
+            let isExpanded = viewModel.isGroupExpanded(title, in: mode)
+            let heading = WorkspaceListGroupHeading(
+                title: title, mode: mode, isExpanded: isExpanded, isToggleEnabled: !viewModel.hasSearchQuery
+            ) { viewModel.toggleGroup(title, in: mode) }
+            return (id: title, heading: heading.modifier(WorkspaceListDuoLeadingInset()),
+                    isExpanded: isExpanded, rows: rows(workspaces))
+        }
+        return ForEach(groups, id: \.id) { @Sendable group in
+            group.heading
+            if group.isExpanded { group.rows }
         }
     }
 }

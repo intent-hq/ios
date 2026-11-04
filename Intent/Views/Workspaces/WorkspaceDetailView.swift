@@ -61,28 +61,32 @@ struct WorkspaceDetailView: View {
     var workspaceStore: WorkspaceStore { session.workspaceStore }
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
     private var browserStore: WorkspaceBrowserStore { session.browserStore }
-
     private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
-
     private var workspaceTitle: String {
         guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
         return title
     }
-
     private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
-
     private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
     private var showsNavigationTitle: Bool { !coordinator.usesIPadShell && !usesVerticalBar }
     private var lifecycleContent: some View {
         ZStack {
             surface.ignoresSafeArea()
             VStack(spacing: 0) {
-                if let sidebar {
+                if sidebar != nil {
                     // The Duo sidebar has no collapse control and its rail carries the page actions.
                     if usesVerticalBar {
                         WorkspaceSidebarTitleHeader(title: workspaceName)
                     } else {
-                        WorkspaceSidebarHeader(onCollapse: sidebar.onCollapse) { workspaceActionsMenu }
+                        WorkspaceSidebarHeader {
+                            WorkspaceSidebarEditableTitle(
+                                workspaceId: workspaceId,
+                                workspace: workspace,
+                                titleEditor: titleEditor,
+                                titleFocus: $titleFocused,
+                                onSaveTitle: saveTitle
+                            )
+                        } actions: { workspaceActionsMenu }
                     }
                 }
                 detailContent
@@ -349,7 +353,6 @@ private extension WorkspaceDetailView {
             workspaceActionsMenu
         }
     }
-
     var workspaceActionsMenu: some View {
         WorkspaceActionsMenu(
             workspaceId: workspaceId,
@@ -360,6 +363,7 @@ private extension WorkspaceDetailView {
             onCreateBrowser: { showNewBrowser = true },
             onTransfer: session.connection.currentPrincipal?.isOwner == true
                 && session.connection.connectionState == .connected ? { showTransferWorkspace = true } : nil,
+            onCollapseSidebar: usesVerticalBar ? nil : sidebar?.onCollapse,
             onArchive: { showArchiveConfirmation = true },
             onDelete: { showDeleteConfirmation = true }
         )
@@ -423,28 +427,24 @@ private extension WorkspaceDetailView {
     }
 
     private var detailHeader: some View {
-        VStack(spacing: 0) {
-            WorkspaceDetailHeader(
-                workspaceId: workspaceId,
-                workspace: workspace,
-                title: workspaceTitle,
-                selection: $selectedTab,
-                titleEditor: titleEditor,
-                titleFocus: $titleFocused,
-                headingTopSpacing: sidebarHeadingTopSpacing ?? pageHeadingTopSpacing,
-                usesLargeTitle: sidebar == nil && usesIPadPaneTitle,
-                showsTitle: !isDuoSidebar,
-                onSaveTitle: saveTitle
-            )
-        }
+        WorkspaceDetailHeader(
+            workspaceId: workspaceId,
+            workspace: workspace,
+            title: workspaceTitle,
+            selection: $selectedTab,
+            titleEditor: titleEditor,
+            titleFocus: $titleFocused,
+            headingTopSpacing: sidebarHeadingTopSpacing ?? pageHeadingTopSpacing,
+            usesLargeTitle: sidebar == nil && usesIPadPaneTitle,
+            showsTitle: sidebar == nil,
+            onSaveTitle: saveTitle
+        )
     }
 
     private var showsAgentLoading: Bool {
         (agentStore.isLoading || !agentStore.hasLoaded) && viewModel.agents.isEmpty && !hasWorkspaceResources
     }
-
     private var showsAgentList: Bool { !showsAgentLoading && (viewModel.hasAgentSections || hasWorkspaceResources) }
-
     var hasWorkspaceResources: Bool {
         !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty
             || !browserStore.browsers(workspaceId: workspaceId).isEmpty

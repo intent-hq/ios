@@ -16,6 +16,7 @@ struct WorkspaceComposerRow: View {
     let onStop: () -> Void
     let onPhotos: () -> Void
     let onFiles: () -> Void
+    var photosEnabled = true
     var onPasteImages: (() -> Void)?
     var skillCompletion: ComposerSkillCompletion?
 
@@ -29,7 +30,7 @@ struct WorkspaceComposerRow: View {
     var body: some View {
         HStack(spacing: Layout.controlSpacing - controlInset) {
             WorkspaceComposerEditor(text: $text, isFocused: $isFocused, onSend: onSend, onPasteImages: onPasteImages, skillCompletion: skillCompletion)
-            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles)
+            WorkspaceAttachmentMenu(onPhotos: onPhotos, onFiles: onFiles, photosEnabled: photosEnabled)
             if hasDraft {
                 WorkspaceComposerAction(isStop: false, action: onSend)
                     .disabled(!canSend)
@@ -59,6 +60,7 @@ struct WorkspaceComposerSurface: View {
     let hasAttachments: Bool
     let isStreaming: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.conversationComposerBackgroundColor) private var backgroundColor
 
     private typealias Design = Constants.Conversation.Design
 
@@ -68,7 +70,7 @@ struct WorkspaceComposerSurface: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: isActive ? Design.Composer.activeCornerRadius : Design.cornerRadius)
-            .fill(Design.Palette.surface(for: colorScheme))
+            .fill(backgroundColor ?? Design.Palette.surface(for: colorScheme))
     }
 }
 
