@@ -86,7 +86,8 @@ struct AgentAvatarPulseTests {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.rootViewController = UIViewController()
-        window.makeKeyAndVisible()
+        // Visible but not key: other suites rely on the host window keeping key status.
+        window.isHidden = false
         let view = AgentAvatarPulse.PulseView(cornerRadius: 6)
         view.frame = CGRect(x: 0, y: 0, width: 20, height: 20)
         try #require(window.rootViewController).view.addSubview(view)
