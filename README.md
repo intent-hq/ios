@@ -447,6 +447,22 @@ test commands (or use `test-ios-unit` to do both). A focused example is
 Do not reuse a Debug build as Release evidence: `ReleaseConfigurationTests` is
 absent in Debug, and some other suites require Debug-only plaintext fixtures.
 
+To test one commit on a Mac, for example for an agent working on Linux, use
+`scripts/run_commit_tests.sh`. It checks the commit out into a clean temporary
+directory (fetching it from `origin` if needed), runs the selected tests through
+the wrapper, and writes a summary to
+`~/Library/Caches/intent-ios-test-run/summary.md`. The summary gives the verdict,
+per-suite executed, passed, failed and skipped counts, each failing test with its
+first failure message, the log path, and a command that repeats the run. Any
+`IntentUITests` selector runs `test-ios`; otherwise it runs `test-ios-unit`:
+
+```bash
+scripts/run_commit_tests.sh <full-sha> 'IntentTests/AgentListPagingTests'
+```
+
+The exit status is the wrapper's. Run it in the foreground. See the script header for
+the files it keeps and the environment it passes through.
+
 The `build-visionos` command always uses the generic visionOS Simulator destination,
 never `-sdk`: an `-sdk xros...` invocation can silently fall back to `iphoneos` when
 the visionOS platform is absent and produce a bogus successful build.
@@ -616,6 +632,7 @@ CI job. On Linux, `python3 scripts/protocol_fixture_version.py lint` keeps test
 capture-lifecycle verifier. `scripts/generate-inter-instances.py` rebuilds the bundled
 static Inter faces from the pinned Inter release (see its header for the command).
 The Linux job also runs the offline tooling self-tests `scripts/test_xcodebuild.sh`,
+`scripts/test_run_commit_tests.sh`,
 `scripts/test-ci-post-clone.sh`, `scripts/test-check-swiftlint-inputs.sh`,
 `scripts/test-update-source-lists.sh`, `scripts/test-generate-test-inputs.sh`, and `python3 scripts/test_select_macos_runner.py`;
 `scripts/check-swiftlint-inputs.sh` keeps `scripts/swiftlint-xcode-inputs.xcfilelist`

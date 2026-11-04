@@ -153,6 +153,11 @@ jobs:
       - name: xcodebuild.sh self-tests
         run: scripts/test_xcodebuild.sh
 
+      # Exercises the Mac commit test runner against a throwaway git repo with
+      # a fake wrapper; needs bash, git and python3.
+      - name: run_commit_tests.sh self-tests
+        run: scripts/test_run_commit_tests.sh
+
       - name: Disposable iPad route tests
         run: python3 scripts/test_ci_simulator.py
 
