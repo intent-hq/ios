@@ -77,11 +77,13 @@ private struct WorkspaceBrowserRow: View {
         .visionListRowHitTarget()
         .accessibilityIdentifier("browser.row.\(browser.id)")
         .contextMenu {
+            IPadToolPlacementAction(tool: .browser(browser))
             Button(role: .destructive) { store.remove(browser) } label: {
                 Label { Text("Delete browser") } icon: { Image(.delete) }
             }
         }
         .accessibilityAction(named: "Delete browser") { store.remove(browser) }
+        .modifier(IPadToolDragSource(tool: .browser(browser)))
     }
 
     private var deleteButton: some View {

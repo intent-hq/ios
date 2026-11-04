@@ -149,9 +149,10 @@ struct AssistantConversationHeader<Actions: View>: View {
 /// Softens the edge where scrolled content meets the opaque navigation header.
 struct WorkspaceHeaderFade: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.conversationBackgroundColor) private var backgroundColor
 
     var body: some View {
-        let background = Constants.Conversation.Design.Palette.background(for: colorScheme)
+        let background = backgroundColor ?? Constants.Conversation.Design.Palette.background(for: colorScheme)
         LinearGradient(colors: [background, background.opacity(0)], startPoint: .top, endPoint: .bottom)
             .frame(height: Constants.Conversation.Design.Header.fadeHeight)
             .allowsHitTesting(false)
@@ -180,6 +181,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var onBack: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.conversationBackgroundColor) private var backgroundColor
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -205,7 +207,7 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 Color.clear.frame(height: 0)
             } else {
                 windowAdaptedControls
-                    .background(Design.Palette.background(for: colorScheme).opacity(showsBackground ? 1 : 0))
+                    .background((backgroundColor ?? Design.Palette.background(for: colorScheme)).opacity(showsBackground ? 1 : 0))
             }
         }
             .preference(

@@ -379,6 +379,7 @@ $(SRCROOT)/Intent/Presentation/EdgeDrawerDrag.swift
 $(SRCROOT)/Intent/Presentation/FileLineIndex.swift
 $(SRCROOT)/Intent/Presentation/FileSyntaxRun.swift
 $(SRCROOT)/Intent/Presentation/IPadTypingFocus.swift
+$(SRCROOT)/Intent/Presentation/IPadWorkspaceTool.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
 $(SRCROOT)/Intent/Presentation/MarkdownCodeFence.swift
 $(SRCROOT)/Intent/Presentation/MarkdownContentCache.swift
@@ -831,6 +832,7 @@ $(SRCROOT)/Intent/Views/Workspaces/GitHubRepoPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/HomeActionTiles.swift
 $(SRCROOT)/Intent/Views/Workspaces/IPadPullRequestsSidebar.swift
 $(SRCROOT)/Intent/Views/Workspaces/IPadSidebarComponents.swift
+$(SRCROOT)/Intent/Views/Workspaces/IPadToolPlacement.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
@@ -1119,6 +1121,7 @@ $(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
 $(SRCROOT)/IntentTests/IPadCompactShellTests.swift
 $(SRCROOT)/IntentTests/IPadNavigationVisibilityTests.swift
 $(SRCROOT)/IntentTests/IPadShellNavigationTests.swift
+$(SRCROOT)/IntentTests/IPadToolPlacementTests.swift
 $(SRCROOT)/IntentTests/ImagePasteboardFixture.swift
 $(SRCROOT)/IntentTests/InfoPlistSyncTests.swift
 $(SRCROOT)/IntentTests/IntentFileAttachmentLoaderTests+PDF.swift

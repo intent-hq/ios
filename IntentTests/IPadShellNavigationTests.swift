@@ -280,6 +280,31 @@ extension AppCoordinatorTests {
         }
     }
 
+    @Test @MainActor func iPadToolPlacementKeepsChatAndClearsOnOtherDestinations() {
+        let coordinator = iPadCoordinator(connection: FakeConnectionManager())
+        coordinator.iPadNavigation.updateLayout(usesOverlay: false)
+        coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
+        let tool = IPadWorkspaceTool.terminal(MobileTerminal(
+            id: "terminal", workspaceId: "workspace", daemonBootId: "boot", name: "Terminal"
+        ))
+        #expect(coordinator.placeIPadTool(tool))
+        coordinator.onSelectAgent("reviewer", workspaceId: "workspace", agentName: "Reviewer")
+        #expect(coordinator.iPadNavigation.mainTool == tool)
+        #expect(coordinator.iPadNavigation.isSidebarVisible)
+        coordinator.onBackToWorkspaceDetail()
+        #expect(coordinator.iPadNavigation.mainTool == tool)
+        coordinator.onSelectIPadSection(.workspaces)
+        #expect(coordinator.iPadNavigation.mainTool == nil)
+        #expect(WorkspaceSidebarContent.resolve(screen: coordinator.currentScreen, isPersistent: true) == .workspaceList)
+        #expect(coordinator.placeIPadTool(tool))
+        coordinator.onSelectNote("spec", workspaceId: "workspace", noteTitle: "Spec")
+        #expect(coordinator.iPadNavigation.mainTool == nil)
+        #expect(coordinator.placeIPadTool(tool))
+        coordinator.onSelectWorkspace("other")
+        #expect(coordinator.iPadNavigation.mainTool == nil)
+        #expect(!coordinator.placeIPadTool(tool))
+    }
+
     @MainActor private func iPadCoordinator(connection: FakeConnectionManager) -> AppCoordinator {
         connection.connectionState = .connected
         connection.currentPrincipal = InvitedSessionFixtures.principal("owner", role: .owner)

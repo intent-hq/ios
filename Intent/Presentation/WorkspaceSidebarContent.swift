@@ -21,6 +21,7 @@ extension WorkspaceSidebarContent {
     /// The persistent shell sidebar shows this agent selected inside its workspace. A child agent
     /// opened from the transcript is not the sidebar's selection, so it keeps its own title.
     static func namesAgent(_ agentId: String, coordinator: AppCoordinator) -> Bool {
+        guard coordinator.iPadNavigation.mainTool == nil else { return false }
         guard coordinator.usesIPadShell, case let .agentConversation(selectedId, workspaceId, _) = coordinator.currentScreen,
               selectedId == agentId,
               let listing = coordinator.workspaceSidebarAgents.listing,

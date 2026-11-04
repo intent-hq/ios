@@ -102,6 +102,7 @@ extension AppCoordinator {
     /// (`restoreLastScreenIfAvailable`); explicit agent/note selection and
     /// notification routing go through `onSelectAgent` / `onSelectNote`.
     func onSelectWorkspace(_ workspaceId: String) {
+        iPadNavigation.closeTool()
         if workspaceId == Workspace.chiefWorkspaceId {
             onSelectAssistant()
             return
@@ -246,6 +247,7 @@ extension AppCoordinator {
     }
 
     func onSelectNote(_ noteId: String, workspaceId: String, noteTitle: String) {
+        iPadNavigation.closeTool()
         selectedSection = .workspaces
         currentScreen = .noteDetail(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
         saveCurrentScreen()

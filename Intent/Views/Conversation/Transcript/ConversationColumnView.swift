@@ -463,9 +463,10 @@ struct ConversationBackground: View {
     let isLoading: Bool
     let usesWorkspaceDesign: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.conversationBackgroundColor) private var backgroundColor
 
     var body: some View {
-        (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
+        (backgroundColor ?? (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme)))
             .ignoresSafeArea()
     }
 }
