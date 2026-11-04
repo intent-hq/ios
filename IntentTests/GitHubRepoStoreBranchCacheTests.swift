@@ -108,8 +108,9 @@ extension GitHubRepoStoreTests {
 
         let listing = try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
         try await waitFor("paint read") { fake.didCallMethod("github.branches.listCached") }
+        let paint = try #require(store.latestBranchPaintTask)
         fake.resolvePending("github.branches.listCached", with: ["cached": true, "branches": ["stale"]])
-        await drainMainQueue()
+        await paint.value
 
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState(listing: listing))
     }
@@ -295,6 +296,7 @@ extension GitHubRepoStoreTests {
         let generation = store.loadGeneration
         _ = Task { try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main") }
         try await waitFor("paint read") { fake.didCallMethod("github.branches.listCached") }
+        let oldPaint = try #require(store.latestBranchPaintTask)
 
         fake.simulateConnect()
         try await waitFor("hard clear") { store.loadGeneration != generation }
@@ -302,8 +304,10 @@ extension GitHubRepoStoreTests {
         _ = Task { try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main") }
         try await waitFor("fresh reads") { fake.paramsForMethod("github.branches.list").count == 2 }
 
+        #expect(store.latestBranchPaintTask != oldPaint)
+
         fake.resolvePending("github.branches.listCached", with: ["cached": true, "branches": ["old-paint"]])
-        await drainMainQueue()
+        await oldPaint.value
         #expect(store.branchState(owner: "o", repo: "r").paint == nil)
 
         // The new connection's own paint still lands.
@@ -329,18 +333,18 @@ extension GitHubRepoStoreTests {
         try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
         let generation = store.loadGeneration
 
-        store.warmRepoCache(owner: "o", repo: "r")
-        store.warmRepoCache(owner: "o", repo: "r")
-        try await waitFor("first warm") { fake.paramsForMethod("repo.warmCache").count == 1 }
+        let firstWarm = try #require(store.warmRepoCache(owner: "o", repo: "r"))
+        #expect(store.warmRepoCache(owner: "o", repo: "r") == nil)
+        await firstWarm.value
+        #expect(fake.paramsForMethod("repo.warmCache").count == 1)
 
         fake.simulateConnect()
         try await waitFor("hard clear") { store.loadGeneration != generation }
         // The branch step reloads and re-warms on the new connection: exactly
         // one more request, deduplicated again within it.
-        store.warmRepoCache(owner: "o", repo: "r")
-        store.warmRepoCache(owner: "o", repo: "r")
-        try await waitFor("second warm") { fake.paramsForMethod("repo.warmCache").count == 2 }
-        await drainMainQueue()
+        let secondWarm = try #require(store.warmRepoCache(owner: "o", repo: "r"))
+        #expect(store.warmRepoCache(owner: "o", repo: "r") == nil)
+        await secondWarm.value
         #expect(fake.paramsForMethod("repo.warmCache").count == 2)
     }
 
@@ -351,11 +355,11 @@ extension GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["repo.warmCache"] = ["started": true, "owner": "intent-hq", "repo": "intentd"]
 
-        store.warmRepoCache(owner: "intent-hq", repo: "intentd")
-        store.warmRepoCache(owner: "intent-hq", repo: "intentd")
-        store.warmRepoCache(owner: "intent-hq", repo: "ios")
-        try await waitFor("warm requests") { fake.paramsForMethod("repo.warmCache").count == 2 }
-        await drainMainQueue()
+        let intentdWarm = try #require(store.warmRepoCache(owner: "intent-hq", repo: "intentd"))
+        #expect(store.warmRepoCache(owner: "intent-hq", repo: "intentd") == nil)
+        let iosWarm = try #require(store.warmRepoCache(owner: "intent-hq", repo: "ios"))
+        await intentdWarm.value
+        await iosWarm.value
 
         let calls = fake.paramsForMethod("repo.warmCache")
         #expect(calls.count == 2)
@@ -373,9 +377,9 @@ extension GitHubRepoStoreTests {
             userInfo: [NSLocalizedDescriptionKey: "repo cache warm already in flight for o/r"]
         )
 
-        store.warmRepoCache(owner: "o", repo: "r")
-        try await waitFor("warm request") { fake.didCallMethod("repo.warmCache") }
-        await drainMainQueue()
+        let warm = try #require(store.warmRepoCache(owner: "o", repo: "r"))
+        await warm.value
+        #expect(fake.didCallMethod("repo.warmCache"))
 
         #expect(store.lastError == nil)
     }

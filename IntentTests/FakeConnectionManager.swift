@@ -69,22 +69,6 @@ func expectNever(
     }
 }
 
-/// Lets the main queue run everything already queued on it — a
-/// `.receive(on: DispatchQueue.main)` delivery, a resumed main-actor request,
-/// a `Task` spawned by either — and then the work those jobs queue in turn,
-/// for `rounds` generations. Ordering-based, not time-based: the main actor
-/// runs on the main queue in FIFO order, so each enqueued block runs only
-/// after every job queued before it. For assertions that work did NOT happen
-/// after its trigger was delivered; positive waits must use `waitUntil`.
-@MainActor
-func drainMainQueue(rounds: Int = 10) async {
-    for _ in 0 ..< rounds {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            DispatchQueue.main.async { continuation.resume() }
-        }
-    }
-}
-
 /// One-shot latch for scripting the order of racing fakes: `wait()` suspends
 /// until `open()` (returning immediately once open) and ignores cancellation,
 /// so a fake that must outlive its cancellation holds its lane until the test

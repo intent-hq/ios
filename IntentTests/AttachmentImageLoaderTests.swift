@@ -145,13 +145,20 @@ struct AttachmentImageLoaderTests {
         fake.responseMap["file.readChunk"] = Self.chunkResponse(png)
         let loader = Self.makeLoader(fake)
 
-        // Main-actor tasks start in creation order: once the first read is
-        // suspended, draining the main queue lets the second load reach its
-        // join point before the read resolves.
+        // Once the first read is suspended its resolution is in flight. The
+        // second load marks itself started and then, in the same main-actor
+        // job (same-actor calls do not suspend before the join's `await`),
+        // reaches the in-flight join — so observing the mark proves it joined
+        // before the read resolves.
         let firstLoad = Task { try await loader.image(workspaceId: "ws-1", attachmentId: "att-1") }
-        let secondLoad = Task { try await loader.image(workspaceId: "ws-1", attachmentId: "att-1") }
         try await fake.waitForPendingRequests("file.getAttachmentInfo")
-        await drainMainQueue()
+        let secondStarted = StartMark()
+        let secondLoad = Task {
+            secondStarted.isSet = true
+            return try await loader.image(workspaceId: "ws-1", attachmentId: "att-1")
+        }
+        try await waitUntil("second load at its join point") { secondStarted.isSet }
+        #expect(fake.paramsForMethod("file.getAttachmentInfo").count == 1)
         // Answer any later read at once and resolve every suspended one, so a
         // regression that skips the join fails the count below, not hangs.
         fake.pendingMethods = []
@@ -168,4 +175,10 @@ struct AttachmentImageLoaderTests {
         #expect(first === second)
         #expect(fake.paramsForMethod("file.getAttachmentInfo").count == 1)
     }
+}
+
+/// Main-actor flag a spawned task sets as its first statement.
+@MainActor
+private final class StartMark {
+    var isSet = false
 }

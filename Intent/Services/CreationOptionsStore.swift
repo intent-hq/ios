@@ -31,6 +31,13 @@ import Observation
     @ObservationIgnored var observedFeedReady = false
     @ObservationIgnored var previousConnectionState: ConnectionState
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    /// The most recently spawned `loadTask`, kept after `invalidate()` drops
+    /// `loadTask` so tests can await a superseded load's real completion.
+    /// Never read by the store.
+    @ObservationIgnored private(set) var latestLoadTask: Task<Void, Never>?
+    /// The most recent reconnect revalidation spawned for an open creation
+    /// picker, for tests to await. Never read by the store.
+    @ObservationIgnored var latestCreationRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var loadIdentity = UUID()
     @ObservationIgnored private var loadRequiresInterest = false
     @ObservationIgnored private(set) var isActive = true
@@ -96,6 +103,7 @@ import Observation
                 isLoading = false
                 loadTask = nil
             }
+            latestLoadTask = loadTask
         }
         if force || !silent { await loadTask?.value }
     }

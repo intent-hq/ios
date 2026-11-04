@@ -213,9 +213,12 @@ extension GitHubRepoStoreTests {
 
         // The same holds for the silent revalidation on a cached reopen.
         fake.clearRequestLog()
+        let forcedLoad = store.latestLoadTask
         await store.loadIfNeeded()
-        try await waitFor { fake.didCallMethod("github.authStatus") }
-        await drainMainQueue()
+        let refresh = try #require(store.latestLoadTask)
+        #expect(refresh != forcedLoad)
+        await refresh.value
+        #expect(fake.didCallMethod("github.authStatus"))
         #expect(store.isConfigured == true)
         #expect(store.ownRepos == cachedOwn)
     }
@@ -252,6 +255,7 @@ extension GitHubRepoStoreTests {
         fake.pendingMethods = ["github.repos.list"]
         await store.loadIfNeeded()
         try await waitFor("refresh read") { fake.paramsForMethod("github.repos.list").count == 2 }
+        let staleLoad = try #require(store.latestLoadTask)
 
         store.invalidate()
         #expect(store.ownRepos.isEmpty)
@@ -260,7 +264,7 @@ extension GitHubRepoStoreTests {
         // The superseded refresh completes with data from before the
         // invalidation: it must not repopulate the cache or mark it loaded.
         fake.resolvePending("github.repos.list", with: ["repos": [makeRepoDict(name: "stale")]])
-        await drainMainQueue()
+        await staleLoad.value
         #expect(store.ownRepos.isEmpty)
         #expect(store.recentRepos.isEmpty)
         #expect(store.hasLoaded == false)
@@ -277,16 +281,19 @@ extension GitHubRepoStoreTests {
         #expect(fake.paramsForMethod("github.repos.list").count == 3)
     }
 
-    @Test func loadTaskStartingAfterInvalidateTouchesNothing() async {
+    @Test func loadTaskStartingAfterInvalidateTouchesNothing() async throws {
         let (store, fake) = await makeLoadedStore()
         fake.clearRequestLog()
         // The cached path spawns a silent refresh task and returns without
         // suspending, so this invalidate() runs before that task's first
         // line: the task must exit at entry instead of issuing reads.
+        let previousLoad = store.latestLoadTask
         await store.loadIfNeeded()
+        let refresh = try #require(store.latestLoadTask)
+        #expect(refresh != previousLoad)
         store.invalidate()
 
-        await drainMainQueue()
+        await refresh.value
         #expect(fake.requestLog.isEmpty)
         #expect(store.isLoading == false)
         #expect(store.hasLoaded == false)
@@ -411,6 +418,7 @@ extension GitHubRepoStoreTests {
         fake.pendingMethods = ["github.repos.list"]
         await store.loadIfNeeded()
         try await waitFor("pre-reconnect read") { fake.paramsForMethod("github.repos.list").count == 2 }
+        let staleLoad = try #require(store.latestLoadTask)
 
         fake.simulateConnect()
 
@@ -424,7 +432,7 @@ extension GitHubRepoStoreTests {
         // The pre-reconnect read resolves first (oldest pending) with stale
         // data: dropped.
         fake.resolvePending("github.repos.list", with: ["repos": [makeRepoDict(name: "stale")]])
-        await drainMainQueue()
+        await staleLoad.value
         #expect(store.ownRepos.isEmpty)
         #expect(store.hasLoaded == false)
         #expect(store.isLoading)
@@ -436,7 +444,7 @@ extension GitHubRepoStoreTests {
         #expect(store.isLoading == false)
     }
 
-    @Test func reconnectWithoutCacheDoesNotFetch() async {
+    @Test func reconnectWithoutCacheDoesNotFetch() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["github.authStatus"] = ["isConfigured": true]
         fake.responseMap["repo.list"] = ["repos": []]
@@ -444,7 +452,10 @@ extension GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
 
         fake.simulateConnect()
-        await drainMainQueue()
+        // The connection sink hops to the main queue, then spawns the
+        // reconnect handler: wait for that task to exist, then for it to end.
+        try await waitFor("reconnect handler") { store.latestConnectionTask != nil }
+        await store.latestConnectionTask?.value
 
         #expect(fake.requestLog.isEmpty)
         #expect(store.hasLoaded == false)

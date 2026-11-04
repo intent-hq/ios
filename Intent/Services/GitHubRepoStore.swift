@@ -48,6 +48,11 @@ enum GitHubRepoSearchOutcome {
     private(set) var lastLoadedAt: Date?
 
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    /// Test-visible completion handles, kept after `invalidate()` so a test
+    /// can await superseded work's real completion. Never read by the store.
+    @ObservationIgnored private(set) var latestLoadTask: Task<Void, Never>?
+    @ObservationIgnored private(set) var latestConnectionTask: Task<Void, Never>?
+    @ObservationIgnored private(set) var latestBranchPaintTask: Task<Void, Never>?
     /// Bumped by `invalidate()`: a load captures it on start and every
     /// write after an await is dropped once it no longer matches, so a
     /// completion from before an invalidation cannot repopulate the cache.
@@ -83,7 +88,10 @@ enum GitHubRepoSearchOutcome {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
-                    Task { await self?.onConnected() }
+                    self?.latestConnectionTask = Task { [weak self] in
+                        guard let self else { return }
+                        await onConnected()
+                    }
                 }
             }
     }
@@ -140,6 +148,7 @@ enum GitHubRepoSearchOutcome {
             guard let self, loadGeneration == generation else { return }
             loadTask = nil
         }
+        latestLoadTask = loadTask
     }
 
     private func runLoad(silent: Bool, generation: Int) async {
@@ -379,7 +388,7 @@ enum GitHubRepoSearchOutcome {
     /// listing, no error yet), so a late answer from before a reconnect or
     /// after the authoritative outcome cannot land.
     private func paintCachedBranches(owner: String, repo: String, key: String, generation: Int) {
-        Task { [self] in
+        latestBranchPaintTask = Task { [self] in
             guard let paint = await fetchCachedBranches(owner: owner, repo: repo),
                   generation == loadGeneration,
                   let state = branchStates[key], state.listing == nil, state.error == nil
@@ -416,10 +425,12 @@ enum GitHubRepoSearchOutcome {
     /// so the later `workspace.create` hydrates from a fresh cache (PROTOCOL
     /// §5.11). Best-effort: every failure (warm already in flight, `-32601`
     /// on an older daemon, offline) is logged only. At most one request per
-    /// repo per session.
-    func warmRepoCache(owner: String, repo: String) {
-        guard warmedRepos.insert(Self.branchKey(owner: owner, repo: repo)).inserted else { return }
-        Task { [self] in
+    /// repo per session. Returns the request's task (nil when deduplicated)
+    /// so tests can await its completion; callers need not keep it.
+    @discardableResult
+    func warmRepoCache(owner: String, repo: String) -> Task<Void, Never>? {
+        guard warmedRepos.insert(Self.branchKey(owner: owner, repo: repo)).inserted else { return nil }
+        return Task { [self] in
             do {
                 _ = try await connectionManager.request("repo.warmCache", params: [
                     "githubUrl": "https://github.com/\(owner)/\(repo)"
