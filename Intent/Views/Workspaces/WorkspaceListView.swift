@@ -243,6 +243,28 @@ struct WorkspaceListView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
+    /// Searching forces every group open, so the toggle is disabled meanwhile.
+    private func repoGroupHeading(_ repoName: String, isExpanded: Bool) -> some View {
+        CollapsibleSectionHeader(
+            isExpanded: isExpanded,
+            insets: EdgeInsets(
+                top: Constants.WorkspaceList.groupTopSpacing,
+                leading: Constants.WorkspaceList.pageInset,
+                bottom: Constants.WorkspaceList.groupBottomSpacing,
+                trailing: Constants.WorkspaceList.pageInset
+            )
+        ) {
+            viewModel.toggleRepoGroup(repoName)
+        } label: {
+            Text(repoName.uppercased())
+                .interFont(Constants.Typography.eyebrow)
+        }
+        .foregroundStyle(Constants.WorkspaceList.secondaryText(for: colorScheme, contrast: colorSchemeContrast))
+        .disabled(viewModel.hasSearchQuery)
+        .accessibilityIdentifier("workspaces.repoGroup.\(repoName)")
+        .modifier(WorkspaceListDuoLeadingInset())
+    }
+
     @ViewBuilder
     private func workspaceButton(
         _ workspace: Workspace,
@@ -469,10 +491,7 @@ private extension WorkspaceListView {
         case .repo:
             let groups = viewModel.groupedByRepo.map { repoName, workspaces in
                 let isExpanded = viewModel.isRepoGroupExpanded(repoName)
-                let heading = WorkspaceListRepoGroupHeading(
-                    repoName: repoName, isExpanded: isExpanded, isToggleEnabled: !viewModel.hasSearchQuery
-                ) { viewModel.toggleRepoGroup(repoName) }
-                return (id: repoName, heading: heading.modifier(WorkspaceListDuoLeadingInset()),
+                return (id: repoName, heading: repoGroupHeading(repoName, isExpanded: isExpanded),
                         isExpanded: isExpanded, rows: workspaceRows(workspaces, showRepo: false))
             }
             ForEach(groups, id: \.id) { @Sendable group in

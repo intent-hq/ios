@@ -325,13 +325,16 @@ extension WorkspaceListSidebar {
         insets: EdgeInsets,
         label: Label
     ) -> some View {
-        RepoGroupDisclosureButton(
-            repoKey: disclosure.repoKey,
+        // Bottom alignment keeps the label-to-rows gap when the tap target is taller.
+        CollapsibleSectionHeader(
             isExpanded: isExpanded,
-            isToggleEnabled: !viewModel.hasSearchQuery,
             insets: insets,
-            action: disclosure.toggle
+            alignment: .bottomLeading,
+            onToggle: disclosure.toggle
         ) { label }
+        .disabled(viewModel.hasSearchQuery)
+        .accessibilityLabel(Text(disclosure.repoKey))
+        .accessibilityIdentifier("workspaces.repoGroup.\(disclosure.repoKey)")
     }
 
     private func sidebarRows(_ workspaces: [Workspace], showRepo: Bool = true) -> some View {

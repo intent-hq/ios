@@ -815,6 +815,7 @@ $(SRCROOT)/Intent/Views/Settings/SettingsSupportSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsView.swift
 $(SRCROOT)/Intent/Views/Workspaces
 $(SRCROOT)/Intent/Views/Workspaces/AgentModelFields.swift
+$(SRCROOT)/Intent/Views/Workspaces/CollapsibleSectionHeader.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceBranchStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceChoiceLabel.swift
 $(SRCROOT)/Intent/Views/Workspaces/CreateWorkspaceFormHeader.swift
@@ -842,7 +843,6 @@ $(SRCROOT)/Intent/Views/Workspaces/PullRequestLinkRouting.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestListContent.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestRowView.swift
 $(SRCROOT)/Intent/Views/Workspaces/PullRequestSwipeRow.swift
-$(SRCROOT)/Intent/Views/Workspaces/RepoGroupDisclosureButton.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistPickerView.swift
 $(SRCROOT)/Intent/Views/Workspaces/SpecialistStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/TerminalEmulatorView.swift
