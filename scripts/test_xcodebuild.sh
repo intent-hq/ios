@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-tests for scripts/xcodebuild.sh: the simulator lock, the
-# crash-vs-failure classification of a test run, the resolution of
+# crash-vs-failure classification of a test run, the launch watchdog, the resolution of
 # ONLY_TESTING selectors against the enumerated test catalog, explicit build
 # configuration, and the per-selector summary read back from the result bundle. xcrun and
 # xcodebuild are replaced by stubs on PATH, so this runs anywhere with bash
@@ -71,7 +71,13 @@ EOF
 # directory (not under STUB_NO_BUNDLE=1). An -enumerate-tests invocation
 # copies $STUB_CATALOG to the requested -test-enumeration-output-path and
 # exits 0 (nonzero with STUB_ENUMERATE_FAIL=1) without running the canned
-# outcome.
+# outcome; STUB_ENUM_DYLD=1 makes it print dyld's launch abort first and take
+# three seconds, like a hosted enumeration whose host app cannot launch.
+# Launch failures (ios#905): STUB_REPORT=<file> copies that crash report into
+# $LAUNCH_CRASH_REPORTS_DIR STUB_REPORT_DELAY seconds (default 1) after a test
+# invocation starts, without delaying it; STUB_LOG_DYLD=1 prints dyld's
+# abort lines; mode "hang" waits on "Launch dev.intentapp.ios" for
+# STUB_HANG seconds (default 60), as XCUITest does.
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
@@ -94,9 +100,21 @@ case " $* " in
       [ "$prev" != "-test-enumeration-output-path" ] || out=$arg
       prev=$arg
     done
+    if [ -n "${STUB_ENUM_DYLD:-}" ]; then
+      echo "dyld[4242]: Library not loaded: /usr/lib/swift/libswiftWebKit.dylib"
+      echo "  Referenced from: <UUID> /stub/Intent.app/Intent.debug.dylib"
+      sleep 3
+    fi
     cp "$STUB_CATALOG" "$out"
     exit 0 ;;
 esac
+if [ -n "${STUB_REPORT:-}" ]; then
+  (sleep "${STUB_REPORT_DELAY:-1}"; cp "$STUB_REPORT" "$LAUNCH_CRASH_REPORTS_DIR/Intent-stub-$$.ips") > /dev/null 2>&1 &
+fi
+if [ -n "${STUB_LOG_DYLD:-}" ]; then
+  echo "dyld[4242]: Library not loaded: /usr/lib/swift/libswiftWebKit.dylib"
+  echo "  Referenced from: <UUID> /stub/Intent.app/Intent.debug.dylib"
+fi
 [ -z "${STUB_LOG:-}" ] || echo "start $(date +%s) $$" >> "$STUB_LOG"
 if [ -n "${STUB_WATCH:-}" ]; then
   if kill -0 "$STUB_WATCH" 2>/dev/null; then echo "peer alive" >> "$STUB_LOG"; else echo "peer dead" >> "$STUB_LOG"; fi
@@ -114,6 +132,9 @@ if [ -n "${STUB_THEN:-}" ]; then
   if [ -e "$STUB_STATE" ]; then mode=$STUB_THEN; else : > "$STUB_STATE"; fi
 fi
 case "$mode" in
+  hang)
+    echo "    t =     0.03s     Launch dev.intentapp.ios"
+    exec sleep "${STUB_HANG:-60}" ;;
   marker)
     echo "Test Suite 'FooTests' started"
     echo "$STUB_MARKER"
@@ -227,6 +248,10 @@ unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION DERIVED
 unset UI_TEST_SHARD UI_TEST_SHARD_PLAN_PATH ONLY_TESTING_IDENTITIES_PATH
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
+# Never read this machine's real crash reports.
+export LAUNCH_CRASH_REPORTS_DIR=$work/reports
+mkdir -p "$LAUNCH_CRASH_REPORTS_DIR"
+unset LAUNCH_CRASH_WATCH
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
 
 failures=0
@@ -671,6 +696,123 @@ assert_contains "non-numeric SIM_LOCK_TIMEOUT names the knob" "$(cat "$work/knob
 status=$(SIM_LOCK_KILL_GRACE=-1 run_wrapper "$work/knob2.out" test-without-building)
 assert_eq "non-numeric SIM_LOCK_KILL_GRACE is refused" "$status" 1
 assert_contains "non-numeric SIM_LOCK_KILL_GRACE names the knob" "$(cat "$work/knob2.out")" "SIM_LOCK_KILL_GRACE must be a non-negative integer"
+
+echo "# launch failures (ios#905): a dyld abort stops the run with exit 84 and is never re-run"
+# make_report <file> <udid> <namespace>: an .ips crash report (JSON header
+# line plus JSON body) for the app on that simulator.
+make_report() {
+  python3 - "$@" <<'EOF'
+import json, sys
+out, udid, namespace = sys.argv[1:4]
+header = {"app_name": "Intent", "bundleID": "dev.intentapp.ios", "bug_type": "309", "name": "Intent"}
+dyld = namespace == "DYLD"
+body = {"procName": "Intent", "bundleInfo": {"CFBundleIdentifier": "dev.intentapp.ios"},
+        "procPath": "/Users/USER/Library/Developer/CoreSimulator/Devices/%s/data/Containers/Bundle/Application/X/Intent.app/Intent" % udid,
+        "termination": {"namespace": namespace, "indicator": "Library missing" if dyld else "Abort trap: 6",
+                        "reasons": ["Library not loaded: /usr/lib/swift/libswiftWebKit.dylib",
+                                    "Referenced from: <UUID> /x/Intent.debug.dylib"] if dyld else []}}
+with open(out, "w") as f:
+    f.write(json.dumps(header) + "\n" + json.dumps(body, indent=2) + "\n")
+EOF
+}
+make_report "$work/report-dyld.ips" "$SIM_UDID" DYLD
+make_report "$work/report-other-device.ips" 11111111-2222-3333-4444-555555555555 DYLD
+make_report "$work/report-signal.ips" "$SIM_UDID" SIGNAL
+cat > "$work/sims-launch.json" <<EOF
+{"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-18-4": [
+  {"name": "iPhone 16", "udid": "$SIM_UDID", "isAvailable": true}]}}
+EOF
+reset_reports() { rm -f -- "$LAUNCH_CRASH_REPORTS_DIR"/*; }
+# scratch_count <prefix>: entries of $work whose name starts with <prefix>.
+scratch_count() { find "$work" -maxdepth 1 -name "$1*" | wc -l | tr -d ' '; }
+launch_dirs=$(scratch_count xcodebuild-launch.)
+launch_started=$(date +%s)
+: > "$work/launch-summary.md"
+status=$(run_filtered launchhang "" test-without-building STUB_MODE=hang STUB_REPORT="$work/report-dyld.ips" \
+  STUB_SIMCTL_DEVICES="$work/sims-launch.json" GITHUB_STEP_SUMMARY="$work/launch-summary.md")
+launch_elapsed=$(( $(date +%s) - launch_started ))
+out=$(cat "$work/launchhang.out")
+assert_eq "a hung launch with a dyld crash report exits 84" "$status" 84
+if [ "$launch_elapsed" -lt 20 ]; then pass "a hung launch fails fast (${launch_elapsed}s)"; else fail "a hung launch took ${launch_elapsed}s"; fi
+assert_contains "the launch failure names the process and dyld's indicator" "$out" \
+  "dyld terminated Intent (dev.intentapp.ios) before main (Library missing)"
+assert_contains "the launch failure names the simulator and runtime" "$out" "on iPhone 16 (iOS 18.4) $SIM_UDID"
+assert_contains "the launch failure quotes the missing library" "$out" "  Library not loaded: /usr/lib/swift/libswiftWebKit.dylib"
+assert_contains "the launch failure names the crash report" "$out" "Seen in the crash report $LAUNCH_CRASH_REPORTS_DIR/Intent-stub-"
+assert_contains "the launch failure keeps the log" "$out" "Full xcodebuild output kept at: $work/xcodebuild-test."
+assert_contains "the launch failure says why it exits" "$out" "Exiting 84 (app launch failure)."
+assert_lacks "a launch failure is not reported as a test-process crash" "$out" "crashed or was terminated"
+assert_eq "a launch failure is not re-run" "$(argv_count launchhang)" 1
+assert_contains "the job summary records the launch failure" "$(cat "$work/launch-summary.md")" \
+  "### App launch failure (the test run)"
+assert_lock_free "lock released after a launch failure"
+assert_eq "no launch-watch state is left behind" "$(scratch_count xcodebuild-launch.)" "$launch_dirs"
+
+echo "# a SIGTERM-immune hung xcodebuild is SIGKILLed after the grace period"
+reset_reports
+status=$(run_filtered launchresist "" test-without-building STUB_MODE=hang STUB_RESIST_ROOT=1 SIM_LOCK_KILL_GRACE=1 \
+  STUB_REPORT="$work/report-dyld.ips")
+assert_eq "a SIGTERM-immune hung launch still exits 84" "$status" 84
+assert_lock_free "lock released after killing a SIGTERM-immune launch"
+
+echo "# dyld's abort lines in the xcodebuild output suffice without a crash report"
+reset_reports
+status=$(run_filtered launchlog "" test-without-building STUB_MODE=hang STUB_LOG_DYLD=1)
+out=$(cat "$work/launchlog.out")
+assert_eq "a dyld abort in the log exits 84" "$status" 84
+assert_contains "the log-only launch failure names dyld's process and reason" "$out" \
+  "dyld terminated the launched process (pid 4242) before main (Library not loaded)"
+assert_contains "the log-only launch failure quotes the referencing image" "$out" \
+  "  Referenced from: <UUID> /stub/Intent.app/Intent.debug.dylib"
+assert_contains "the log-only launch failure names the log" "$out" "Seen in the xcodebuild output, "
+
+echo "# a hosted run that exits as a crash before the report lands is a launch failure, not 80"
+reset_reports
+status=$(run_filtered launchhosted "" test-without-building STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/launchhosted.state" \
+  STUB_MARKER="Intent (4242) encountered an error (Test crashed with signal abrt before establishing connection.)" \
+  STUB_NO_FAILING=1 STUB_REPORT="$work/report-dyld.ips" STUB_REPORT_DELAY=2)
+assert_eq "a hosted launch crash exits 84" "$status" 84
+assert_eq "a hosted launch crash is not re-run" "$(argv_count launchhosted)" 1
+assert_lacks "a hosted launch crash is not classified as 80" "$(cat "$work/launchhosted.out")" "Exiting 80"
+
+echo "# a hosted enumeration whose host cannot launch exits 84 before any test runs, not 82"
+reset_reports
+status=$(run_filtered launchenum "IntentTests/DemoFixturesTests" test-without-building STUB_ENUM_DYLD=1)
+out=$(cat "$work/launchenum.out")
+assert_eq "an enumeration launch failure exits 84" "$status" 84
+assert_contains "the enumeration launch failure names the phase" "$out" "into test enumeration"
+assert_eq "an enumeration launch failure starts no test run" "$(argv_count launchenum)" 1
+assert_lacks "an enumeration launch failure is not an unmatched selector" "$out" "matched no test"
+assert_lock_free "lock released after an enumeration launch failure"
+assert_eq "an enumeration launch failure leaves no enumeration scratch files" "$(scratch_count xcodebuild-enumerate.)" 0
+assert_contains "an enumeration launch failure keeps its log" "$out" "Full xcodebuild output kept at: $work/xcodebuild-test."
+
+echo "# no false positives: old, other-device, and non-dyld crash reports"
+reset_reports
+cp "$work/report-dyld.ips" "$LAUNCH_CRASH_REPORTS_DIR/Intent-old.ips"
+touch -t 202001010000 "$LAUNCH_CRASH_REPORTS_DIR/Intent-old.ips"
+status=$(run_filtered launchold "" test-without-building STUB_MODE=pass STUB_SLEEP=2)
+assert_eq "a dyld report from before the run is ignored" "$status" 0
+status=$(run_filtered launchotherdev "" test-without-building STUB_MODE=pass STUB_SLEEP=3 STUB_REPORT="$work/report-other-device.ips")
+assert_eq "another simulator's dyld report is ignored" "$status" 0
+status=$(run_filtered launchsignal "" test-without-building STUB_MODE=pass STUB_SLEEP=3 STUB_REPORT="$work/report-signal.ips")
+assert_eq "a non-dyld crash report during a passing run is ignored" "$status" 0
+status=$(run_filtered launchfailtests "" test-without-building STUB_MODE=fail STUB_REPORT="$work/report-signal.ips" STUB_REPORT_DELAY=0)
+assert_eq "failing tests with a non-dyld crash report keep 65" "$status" 65
+status=$(run_filtered launchcrash "" test-without-building STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/launchcrash.state" \
+  STUB_REPORT="$work/report-signal.ips" STUB_REPORT_DELAY=0)
+assert_eq "an ordinary test-process crash keeps the re-run" "$(argv_count launchcrash)" 2
+assert_eq "an ordinary test-process crash recovered by the re-run exits 0" "$status" 0
+assert_lacks "an ordinary crash is not a launch failure" "$(cat "$work/launchcrash.out")" "could not launch"
+
+echo "# LAUNCH_CRASH_WATCH=0 disables the watchdog"
+reset_reports
+status=$(run_filtered launchoff "" test-without-building STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/launchoff.state" \
+  STUB_MARKER="Test crashed with signal abrt." STUB_REPORT="$work/report-dyld.ips" STUB_REPORT_DELAY=0 STUB_SLEEP=2 \
+  LAUNCH_CRASH_WATCH=0)
+assert_eq "with the watchdog off a launch crash takes the ordinary crash path" "$(argv_count launchoff)" 2
+assert_lacks "with the watchdog off nothing reports a launch failure" "$(cat "$work/launchoff.out")" "could not launch"
+reset_reports
 
 echo "# empty ONLY_TESTING: no enumeration, xcodebuild argv unchanged"
 status=$(run_filtered plain "" test-without-building)
