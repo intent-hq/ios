@@ -165,7 +165,7 @@ extension NotificationManagerTests {
 
     @Test func foregroundDeliveryPresentsFeedbackAndToastWithSystemSoundOnly() async {
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center, outputVolume: { 1 })
+        let service = LocalNotificationService(center: center) { 1 }
         var feedbackCount = 0
         let manager = NotificationManager(
             localNotificationService: service,

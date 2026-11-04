@@ -164,7 +164,7 @@ final class LocalNotificationService: NSObject {
     ) {
         Task { @MainActor [weak self] in
             var options = self?.onWillPresentNotification?(response) ?? []
-            if let self, !(self.outputVolume() > 0) {
+            if let self, !(outputVolume() > 0) {
                 options.remove(.sound)
             }
             completionHandler(options)

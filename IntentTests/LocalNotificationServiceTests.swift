@@ -80,7 +80,7 @@ struct LocalNotificationServiceTests {
     @Test(arguments: [false, true], [Float(0), 0.01, 1])
     func postsExpectedAgentCompletionRequest(foregroundPresentationHandled: Bool, volume: Float) throws {
         let center = FakeLocalNotificationCenter()
-        let service = LocalNotificationService(center: center, outputVolume: { volume })
+        let service = LocalNotificationService(center: center) { volume }
         let connectionId = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
 
         service.postAgentIdleNotification(

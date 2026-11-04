@@ -10,7 +10,7 @@ extension NotificationManagerTests {
         var volume = initialVolume
         var feedbackCount = 0
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center, outputVolume: { volume })
+        let service = LocalNotificationService(center: center) { volume }
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { .active },
@@ -64,7 +64,7 @@ extension NotificationManagerTests {
         var state: UIApplication.State = .background
         var feedbackCount = 0
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center, outputVolume: { 1 })
+        let service = LocalNotificationService(center: center) { 1 }
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { state },
