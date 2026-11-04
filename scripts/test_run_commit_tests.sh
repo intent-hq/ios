@@ -46,11 +46,14 @@ chmod +x "$stubs/xcrun" "$stubs/xcodebuild"
 export PATH="$stubs:$PATH"
 
 # The fake wrapper writes what it saw to $STUB_RECORD, builds a stand-in
-# TailcatKit.xcframework when none exists, then acts out $STUB_OUTCOME:
-# pass/fail copy $STUB_RESULTS into the result bundle (fail exits 65 with an
-# error line), buildfail exits 65 without a bundle, crash also writes
-# $STUB_RETRY_RESULTS to the re-run bundle and exits 0, and sleep touches
-# $STUB_STARTED and waits to be terminated.
+# TailcatKit.xcframework when none exists (without its final LICENSE.tailcat
+# under STUB_TAILCAT_PARTIAL=1), then acts out $STUB_OUTCOME: pass/fail copy
+# $STUB_RESULTS into the result bundle (fail exits 65 with an error line),
+# buildfail exits 65 without a bundle, crash also writes $STUB_RETRY_RESULTS
+# to the re-run bundle and exits 0, and sleep waits on a foreground pipeline
+# like the real wrapper's xcodebuild call: it writes the sleeping process's PID
+# to $STUB_SLEEP_PID, touches $STUB_STARTED, and with STUB_IGNORE_TERM=1
+# ignores TERM (as does the sleep).
 origin=$work/origin
 mkdir -p "$origin/scripts" "$origin/TailcatKit"
 cat > "$origin/scripts/xcodebuild.sh" <<'EOF'
@@ -69,7 +72,10 @@ set -eu
   if [ -e dirty.txt ]; then echo "dirty: yes"; else echo "dirty: no"; fi
   if [ -d TailcatKit/build/TailcatKit.xcframework ]; then echo "tailcat: present"; else echo "tailcat: missing"; fi
 } > "$STUB_RECORD"
-mkdir -p TailcatKit/build/TailcatKit.xcframework
+if [ ! -d TailcatKit/build/TailcatKit.xcframework ]; then
+  mkdir -p TailcatKit/build/TailcatKit.xcframework
+  [ -n "${STUB_TAILCAT_PARTIAL:-}" ] || echo license > TailcatKit/build/TailcatKit.xcframework/LICENSE.tailcat
+fi
 echo "Building..."
 case "${STUB_OUTCOME:-pass}" in
   pass)
@@ -90,10 +96,12 @@ case "${STUB_OUTCOME:-pass}" in
     cp "$STUB_RETRY_RESULTS" "${RESULT_BUNDLE%.xcresult}-retry.xcresult/tests.json"
     echo "Restarting after unexpected exit, crash, or test timeout" ;;
   sleep)
-    trap 'echo "terminated" >> "$STUB_RECORD"; exit 143' TERM
-    : > "$STUB_STARTED"
-    sleep 30 &
-    wait $! ;;
+    if [ -n "${STUB_IGNORE_TERM:-}" ]; then
+      trap '' TERM
+    else
+      trap 'echo "terminated" >> "$STUB_RECORD"; exit 143' TERM
+    fi
+    ( exec sh -c 'echo $$ > "$STUB_SLEEP_PID"; : > "$STUB_STARTED"; exec sleep 30' ) 2>&1 | cat ;;
 esac
 EOF
 chmod +x "$origin/scripts/xcodebuild.sh"
@@ -167,6 +175,16 @@ make_results "$work/crash.json" \
   "IntentTests/BarTests/testBaz()=Failed=crashed"
 make_results "$work/crash-retry.json" \
   "IntentTests/BarTests/testBaz()=Passed"
+# A parameterized Swift Testing case keeps its failure message under an
+# argument node.
+python3 - "$work/fail.json" "$work/param-fail.json" <<'EOF2'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+case = doc["testNodes"][0]["children"][0]["children"][0]["children"][0]
+case["children"] = [{"name": "width: 320", "nodeType": "Arguments", "result": "Failed",
+                     "children": [{"name": "Expectation failed: width == 375", "nodeType": "Failure Message"}]}]
+json.dump(doc, open(sys.argv[2], "w"))
+EOF2
 
 export INTENT_IOS_TEST_RUN_DIR=$work/runs-main
 export STUB_RECORD=$work/record
@@ -261,6 +279,8 @@ assert_contains "failing run quotes the log's errors" "$(summary)" "error: -[Int
 bundle=$(summary_field "Result bundle")
 if [ -d "$bundle" ]; then pass "a failing run keeps its bundle"; else fail "a failing run keeps its bundle: '$bundle'"; fi
 assert_eq "commit B is checked out" "$(record marker)" "B"
+status=$(run paramfail STUB_OUTCOME=fail STUB_RESULTS="$work/param-fail.json" -- "$sha_b" 'IntentTests/FooTests')
+assert_contains "a parameterized failure shows its nested message" "$(summary)" '- `IntentTests/FooTests/testBar()`: Expectation failed: width == 375'
 
 # A build failure: no results, the compiler error is quoted.
 status=$(run buildfail STUB_OUTCOME=buildfail -- "$sha_b" 'IntentTests')
@@ -293,6 +313,9 @@ status=$(run branch -- feature 'IntentTests/FooTests')
 assert_eq "a branch on origin is fetched" "$status" 0
 assert_eq "the branch tip is checked out" "$(record head)" "$sha_c"
 assert_contains "the summary records the resolved SHA" "$(summary)" "- Commit: $sha_c (commit C)"
+assert_contains "the rerun command pins the resolved SHA" "$(summary_field Rerun)" "'$sha_c'"
+assert_lacks "the rerun command does not name the moving branch" "$(summary_field Rerun)" "'feature'"
+assert_eq "the private fetch ref is deleted" "$(git -C "$src" for-each-ref refs/run-commit-tests)" ""
 status=$(run bysha -- "$sha_d" 'IntentTests/FooTests')
 assert_eq "an unfetched SHA is fetched from origin" "$status" 0
 assert_eq "the fetched SHA is checked out" "$(record head)" "$sha_d"
@@ -312,51 +335,92 @@ assert_contains "a file name selector is explained" "$(cat "$work/filename.out")
 status=$(run badoption -- --frobnicate "$sha_a" 'IntentTests')
 assert_eq "an unknown option exits 2" "$status" 2
 
-# TailcatKit: built by the wrapper and cached, then reused; or copied from a
-# clone whose TailcatKit/ sources match.
+# TailcatKit: a complete build the wrapper made is cached and reused; a
+# partial build is not cached; the clone's own (possibly stale) build is never
+# used.
 export INTENT_IOS_TEST_RUN_DIR=$work/runs-tailcat
+mkdir -p "$src/TailcatKit/build/TailcatKit.xcframework"
+status=$(run tailcat0 STUB_TAILCAT_PARTIAL=1 -- "$sha_a" 'IntentTests')
+assert_eq "partial TailcatKit run exits 0" "$status" 0
+assert_eq "the clone's TailcatKit build is not used" "$(record tailcat)" "missing"
+assert_lacks "a partial TailcatKit build is not cached" "$(summary_field TailcatKit)" "cached for later runs"
+rm -rf "$src/TailcatKit/build"
 status=$(run tailcat1 -- "$sha_a" 'IntentTests')
 assert_eq "first TailcatKit run exits 0" "$status" 0
-assert_eq "a fresh cache leaves TailcatKit to the wrapper" "$(record tailcat)" "missing"
+assert_eq "an empty cache leaves TailcatKit to the wrapper" "$(record tailcat)" "missing"
 assert_contains "the wrapper's TailcatKit build is cached" "$(summary_field TailcatKit)" "cached for later runs"
 status=$(run tailcat2 -- "$sha_b" 'IntentTests')
 assert_eq "second TailcatKit run exits 0" "$status" 0
 assert_eq "the cached TailcatKit build is reused" "$(record tailcat)" "present"
 assert_contains "the reuse is reported" "$(summary_field TailcatKit)" "reused the cached build"
-export INTENT_IOS_TEST_RUN_DIR=$work/runs-tailcat-copy
-mkdir -p "$src/TailcatKit/build/TailcatKit.xcframework"
-status=$(run tailcat3 -- "$sha_b" 'IntentTests')
-assert_eq "TailcatKit copy run exits 0" "$status" 0
-assert_eq "the clone's TailcatKit build is copied" "$(record tailcat)" "present"
-assert_contains "the copy is reported" "$(summary_field TailcatKit)" "copied from $src"
-rm -rf "$src/TailcatKit/build"
+assert_lacks "a reused build is not re-cached" "$(summary_field TailcatKit)" "cached for later runs"
 
 # Interrupted: RUNNING with the PID while in progress, INTERRUPTED after a
-# TERM, the wrapper is stopped, the checkout removed, and the TailcatKit build
-# the wrapper had already made is cached.
+# TERM that reaches the wrapper's foreground pipeline, the checkout removed
+# only once the run's processes are gone, and a finished TailcatKit build
+# cached.
 export INTENT_IOS_TEST_RUN_DIR=$work/runs-interrupt
-rm -f "$STUB_RECORD" "$work/started"
-STUB_OUTCOME=sleep STUB_STARTED=$work/started "$SCRIPT" --repo "$src" "$sha_a" 'IntentTests' > "$work/interrupt.out" 2>&1 &
-pid=$!
-tries=0
-while [ ! -e "$work/started" ] && [ "$tries" -lt 300 ]; do sleep 0.1; tries=$((tries + 1)); done
+# start_sleeping [env...]: starts a run whose wrapper sleeps; sets $pid.
+start_sleeping() {
+  rm -f "$STUB_RECORD" "$work/started" "$work/sleep.pid"
+  env STUB_OUTCOME=sleep STUB_STARTED="$work/started" STUB_SLEEP_PID="$work/sleep.pid" "$@" \
+    "$SCRIPT" --repo "$src" "$sha_a" 'IntentTests' > "$work/interrupt.out" 2>&1 &
+  pid=$!
+  local tries=0
+  while { [ ! -e "$work/started" ] || [ ! -s "$work/sleep.pid" ]; } && [ "$tries" -lt 300 ]; do
+    sleep 0.1
+    tries=$((tries + 1))
+  done
+}
+# finish_sleeping <name>: waits for the run; sets $status and $elapsed and
+# checks that the run's processes and checkout are gone.
+finish_sleeping() {
+  local started
+  started=$(date +%s)
+  status=0
+  wait "$pid" || status=$?
+  elapsed=$(( $(date +%s) - started ))
+  if kill -0 "$(cat "$work/sleep.pid")" 2>/dev/null; then
+    fail "$1: the run's processes are stopped before the runner exits"
+    kill -KILL "$(cat "$work/sleep.pid")" 2>/dev/null || true
+  else
+    pass "$1: the run's processes are stopped before the runner exits"
+  fi
+  if [ -e "$(record pwd)" ]; then fail "$1: the checkout is removed"; else pass "$1: the checkout is removed"; fi
+}
+
+start_sleeping
 assert_contains "an in-progress run says RUNNING" "$(summary)" "# iOS test run: RUNNING"
 assert_contains "an in-progress run records its PID" "$(summary)" "- PID: $pid "
 kill -TERM "$pid"
-status=0
-wait "$pid" || status=$?
+finish_sleeping "TERM"
 assert_eq "an interrupted run exits 143" "$status" 143
 assert_contains "an interrupted run says INTERRUPTED" "$(summary)" "# iOS test run: INTERRUPTED (exit 143)"
 assert_contains "the wrapper was told to stop" "$(cat "$STUB_RECORD")" "terminated"
-checkout=$(record pwd)
-if [ -e "$checkout" ]; then fail "an interrupted run removes its checkout"; else pass "an interrupted run removes its checkout"; fi
+if [ "$elapsed" -lt 10 ]; then pass "TERM stops a foreground pipeline promptly"; else fail "TERM stops a foreground pipeline promptly (took ${elapsed}s)"; fi
 tree=$(git -C "$src" rev-parse "$sha_a:TailcatKit")
-if [ -d "$INTENT_IOS_TEST_RUN_DIR/tailcatkit/$tree/TailcatKit.xcframework" ]; then
-  pass "an interrupted run caches the TailcatKit build"
+if [ -f "$INTENT_IOS_TEST_RUN_DIR/tailcatkit/$tree/TailcatKit.xcframework/LICENSE.tailcat" ]; then
+  pass "an interrupted run caches the finished TailcatKit build"
 else
-  fail "an interrupted run caches the TailcatKit build"
+  fail "an interrupted run caches the finished TailcatKit build"
 fi
 assert_contains "the interrupted summary reports the cached build" "$(summary_field TailcatKit)" "cached for later runs"
+
+# A wrapper that ignores TERM: a second signal escalates to KILL...
+start_sleeping STUB_IGNORE_TERM=1 RUN_KILL_GRACE=600
+kill -TERM "$pid"
+sleep 1
+if kill -0 "$pid" 2>/dev/null; then pass "the runner waits for a wrapper that ignores TERM"; else fail "the runner waits for a wrapper that ignores TERM"; fi
+kill -TERM "$pid"
+finish_sleeping "second TERM"
+assert_eq "a doubly interrupted run exits 143" "$status" 143
+if [ "$elapsed" -lt 10 ]; then pass "a second TERM kills the run promptly"; else fail "a second TERM kills the run promptly (took ${elapsed}s)"; fi
+# ...and so does RUN_KILL_GRACE without a second signal.
+start_sleeping STUB_IGNORE_TERM=1 RUN_KILL_GRACE=2
+kill -TERM "$pid"
+finish_sleeping "kill grace"
+assert_eq "a run killed after the grace period exits 143" "$status" 143
+if [ "$elapsed" -lt 10 ]; then pass "RUN_KILL_GRACE bounds the wait"; else fail "RUN_KILL_GRACE bounds the wait (took ${elapsed}s)"; fi
 
 # Only the newest 10 run directories are kept.
 export INTENT_IOS_TEST_RUN_DIR=$work/runs-main

@@ -42,12 +42,19 @@
 #                        result bundle of a failed run. The newest 10 are kept.
 #   tailcatkit/<tree>/   TailcatKit.xcframework builds keyed by the git tree
 #                        of TailcatKit/, so a new checkout skips the slow Go
-#                        build. The newest 3 are kept.
+#                        build. Only complete builds the wrapper made in a
+#                        clean checkout are cached. The newest 3 are kept.
 #
 # These environment variables are passed to the wrapper and recorded in the
 # rerun command: BUILD_CONFIGURATION, SIM_UDID, SPM_CLONE_DIR,
 # TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR, TAILCATKIT_AUTOBUILD,
-# KEEP_CHECKOUT, INTENT_IOS_TEST_RUN_DIR and every TEST_RUNNER_* variable.
+# KEEP_CHECKOUT, RUN_KILL_GRACE, INTENT_IOS_TEST_RUN_DIR and every TEST_RUNNER_*
+# variable.
+#
+# Interrupts: a TERM, INT or HUP stops the whole test run (xcodebuild
+# included) with TERM; a second signal, or RUN_KILL_GRACE seconds (default
+# 60) without exiting, escalates to KILL. The checkout is deleted only after
+# every process of the run has exited.
 #
 # Exit status: the wrapper's (0 passed, 65 build or test failure, 80-83 see
 # scripts/xcodebuild.sh), 2 for bad arguments, 1 when the commit cannot be
@@ -57,7 +64,7 @@
 # timeout long enough for a build plus the tests.
 set -euo pipefail
 
-RECORDED_ENV="BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR TAILCATKIT_AUTOBUILD KEEP_CHECKOUT INTENT_IOS_TEST_RUN_DIR"
+RECORDED_ENV="BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR TAILCATKIT_AUTOBUILD KEEP_CHECKOUT RUN_KILL_GRACE INTENT_IOS_TEST_RUN_DIR"
 KEEP_RUNS=10
 KEEP_TAILCATKIT=3
 
@@ -136,18 +143,23 @@ mkdir -p "$root/runs" "$root/tailcatkit"
 root=$(cd "$root" && pwd)
 summary=$root/summary.md
 
-# The rerun command: recorded environment, this script, --repo and every
-# argument, each single-quoted.
-rerun=
-for name in $RECORDED_ENV $(env | sed -n 's/^\(TEST_RUNNER_[A-Za-z0-9_]*\)=.*/\1/p' | sort -u); do
-  if value=$(printenv "$name"); then
-    rerun="$rerun$name=$(shell_quote "$value") "
-  fi
-done
-rerun="$rerun$(shell_quote "$script_path") --repo $(shell_quote "$repo") $(shell_quote "$rev")"
-for selector in "${selectors[@]}"; do
-  rerun="$rerun $(shell_quote "$selector")"
-done
+# set_rerun <commit>: the rerun command - recorded environment, this script,
+# --repo, the commit and every selector, each single-quoted. It is set again
+# with the resolved SHA, so replaying it never follows a moved branch.
+set_rerun() {
+  local name value selector
+  rerun=
+  for name in $RECORDED_ENV $(env | sed -n 's/^\(TEST_RUNNER_[A-Za-z0-9_]*\)=.*/\1/p' | sort -u); do
+    if value=$(printenv "$name"); then
+      rerun="$rerun$name=$(shell_quote "$value") "
+    fi
+  done
+  rerun="$rerun$(shell_quote "$script_path") --repo $(shell_quote "$repo") $(shell_quote "$1")"
+  for selector in "${selectors[@]}"; do
+    rerun="$rerun $(shell_quote "$selector")"
+  done
+}
+set_rerun "$rev"
 
 state=RUNNING
 status=
@@ -263,11 +275,12 @@ on_exit() {
 }
 trap on_exit EXIT
 
-# cache_tailcatkit: keeps a TailcatKit build the wrapper made (even in an
-# interrupted run, where the build may have finished) for later checkouts.
+# cache_tailcatkit: keeps a TailcatKit build the wrapper made for later
+# checkouts, also in an interrupted run. build_xcframework.sh copies
+# LICENSE.tailcat in last, so a build without it is incomplete and not kept.
 cache_tailcatkit() {
   local staging
-  if [ -n "${tailcat_cache:-}" ] && [ -d "$tailcat_dest" ] && [ ! -d "$tailcat_cache" ]; then
+  if [ -n "${tailcat_cache:-}" ] && [ -f "$tailcat_dest/LICENSE.tailcat" ] && [ ! -d "$tailcat_cache" ]; then
     staging=$(mktemp -d "$root/tailcatkit/.staging.XXXXXX")
     if cp -R "$tailcat_dest" "$staging/TailcatKit.xcframework" \
         && mv "$staging" "$root/tailcatkit/$tailcat_tree" 2>/dev/null; then
@@ -289,13 +302,34 @@ finish_interrupted() {
   exit "$status"
 }
 
+# on_signal: the first signal sends TERM to the wrapper's whole process group
+# (the wrapper waits on a foreground xcodebuild pipeline, so signalling only
+# the wrapper would not stop the run); a repeated signal sends KILL.
 on_signal() {
-  interrupted=$1
-  if [ -n "$child" ]; then
-    kill -TERM "$child" 2>/dev/null || true
-  else
+  if [ -z "$child" ]; then
+    interrupted=$1
     finish_interrupted "$1"
+  elif [ -z "$interrupted" ]; then
+    interrupted=$1
+    kill -TERM -- "-$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true
+  else
+    kill -KILL -- "-$child" 2>/dev/null || kill -KILL "$child" 2>/dev/null || true
   fi
+}
+
+# wait_for_child_exit: after an interrupt, waits until the wrapper's process
+# group is gone (KILL after RUN_KILL_GRACE seconds, default 60), so the
+# checkout is never deleted under a running xcodebuild.
+wait_for_child_exit() {
+  local waited=0
+  while kill -0 -- "-$child" 2>/dev/null || kill -0 "$child" 2>/dev/null; do
+    if [ "$waited" -ge "${RUN_KILL_GRACE:-60}" ]; then
+      kill -KILL -- "-$child" 2>/dev/null || kill -KILL "$child" 2>/dev/null || true
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  wait "$child" 2>/dev/null || true
 }
 trap 'on_signal 130' INT
 trap 'on_signal 143' TERM
@@ -316,10 +350,13 @@ write_summary
 
 # 1. Resolve the commit.
 fetch_err=$(mktemp "${TMPDIR:-/tmp}/run-commit-tests-fetch.XXXXXX")
+fetch_ref=refs/run-commit-tests/$$
 if printf '%s' "$rev" | grep -Eq '^[0-9a-f]{40}$' && git -C "$repo" cat-file -e "$rev^{commit}" 2>/dev/null; then
   sha=$rev
-elif git -C "$repo" fetch --quiet --no-tags origin "$rev" 2>"$fetch_err"; then
-  sha=$(git -C "$repo" rev-parse --verify --quiet "FETCH_HEAD^{commit}")
+elif git -C "$repo" fetch --quiet --no-tags origin "+$rev:$fetch_ref" 2>"$fetch_err"; then
+  # A private ref, not FETCH_HEAD, so concurrent runs cannot swap commits.
+  sha=$(git -C "$repo" rev-parse --verify --quiet "$fetch_ref^{commit}")
+  git -C "$repo" update-ref -d "$fetch_ref"
 elif sha=$(git -C "$repo" rev-parse --verify --quiet "$rev^{commit}"); then
   echo "warning: could not fetch $rev from origin; using the local $rev" >&2
 else
@@ -328,6 +365,7 @@ else
   fail_early 1 "$message"
 fi
 rm -f "$fetch_err"
+set_rerun "$sha"
 subject=$(git -C "$repo" log -1 --format=%s "$sha")
 git -C "$repo" cat-file -e "$sha:scripts/xcodebuild.sh" 2>/dev/null \
   || fail_early 1 "commit $sha has no scripts/xcodebuild.sh"
@@ -353,28 +391,25 @@ if [ -z "$tailcat_tree" ]; then
   tailcat_note="this commit has no TailcatKit/ directory"
 else
   tailcat_cache=$root/tailcatkit/$tailcat_tree/TailcatKit.xcframework
-  repo_tree=$(git -C "$repo" rev-parse --verify --quiet "HEAD:TailcatKit" || true)
   if [ -d "$tailcat_cache" ]; then
     mkdir -p "$(dirname "$tailcat_dest")"
     cp -R "$tailcat_cache" "$tailcat_dest"
     touch "$root/tailcatkit/$tailcat_tree"
     tailcat_note="reused the cached build for TailcatKit tree $(printf '%s' "$tailcat_tree" | cut -c1-12)"
-  elif [ -d "$repo/TailcatKit/build/TailcatKit.xcframework" ] && [ "$repo_tree" = "$tailcat_tree" ] \
-      && [ -z "$(git -C "$repo" status --porcelain -- TailcatKit)" ]; then
-    mkdir -p "$(dirname "$tailcat_dest")"
-    cp -R "$repo/TailcatKit/build/TailcatKit.xcframework" "$tailcat_dest"
-    tailcat_note="copied from $repo (same TailcatKit sources)"
+    tailcat_cache=
   else
     tailcat_note="no matching build cached; the wrapper builds it (needs Go)"
   fi
 fi
 
-# 3. Run the commit's wrapper.
+# 3. Run the commit's wrapper, in its own process group (set -m) so an
+# interrupt can reach xcodebuild itself.
 echo "Running scripts/xcodebuild.sh $subcommand for $sha ($subject)"
 echo "  ONLY_TESTING='${selectors[*]}'"
 echo "  log: $log"
 echo "  summary: $summary"
 write_summary
+set -m
 (
   cd "$checkout"
   unset RESULT_BUNDLE ONLY_TESTING DERIVED_DATA_DIR UI_TEST_SHARD UI_TEST_SHARD_PLAN_PATH ONLY_TESTING_IDENTITIES_PATH
@@ -384,11 +419,12 @@ write_summary
   exec scripts/xcodebuild.sh "$subcommand"
 ) > "$log" 2>&1 < /dev/null &
 child=$!
+set +m
 status=0
 wait "$child" || status=$?
 if [ -n "$interrupted" ]; then
   # Let the wrapper stop xcodebuild and release the simulator first.
-  wait "$child" 2>/dev/null || true
+  wait_for_child_exit
   child=
   finish_interrupted "$interrupted"
 fi
@@ -426,6 +462,19 @@ def load(path):
         return None
 
 
+def first_failure(node):
+    # Parameterized Swift Testing cases keep the message under an argument node.
+    for child in node.get("children") or []:
+        if not isinstance(child, dict):
+            continue
+        if child.get("nodeType") == "Failure Message":
+            return child.get("name", "")
+        found = first_failure(child)
+        if found:
+            return found
+    return ""
+
+
 def walk(node, target, suites, out):
     if not isinstance(node, dict):
         return
@@ -439,9 +488,7 @@ def walk(node, target, suites, out):
             suite, test = ident.rsplit("/", 1)
         else:
             suite, test = "/".join(suites) or "?", ident
-        messages = [c.get("name", "") for c in node.get("children") or []
-                    if isinstance(c, dict) and c.get("nodeType") == "Failure Message"]
-        out[(target or "?", suite, test)] = (node.get("result", ""), messages[0] if messages else "")
+        out[(target or "?", suite, test)] = (node.get("result", ""), first_failure(node))
         return
     if kind == "Test Suite":
         suites = suites + [name]
