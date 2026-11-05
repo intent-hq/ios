@@ -151,7 +151,7 @@ struct SharedWorkspaceStatusLifetimeTests {
         }
         let reconnect = connection.traffic(since: checkpoint)
         #expect(reconnect.methodCounts == [
-            "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1,
+            "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1, "browser.syncTabs": 1,
             "chat.subscribe": 1, "agent.get": 1, "agent.getQueue": 1, "agent.getSubscriptions": 1
         ])
         print("Shared reconnect: \(reconnect.summary)")
