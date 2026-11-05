@@ -1,10 +1,6 @@
 import Foundation
 
 struct SlashSkillContext: Equatable {
-    private enum MatchRank: Int {
-        case exact, prefix, name, description
-    }
-
     let query: String
     let range: NSRange
 
@@ -20,29 +16,51 @@ struct SlashSkillContext: Equatable {
     }
 
     static func ranked(_ skills: [SkillInfo], query: String) -> [SkillInfo] {
+        SkillSearchIndex(skills).ranked(query: query)
+    }
+}
+
+/// Lowercases every name and description once per catalog so each query only matches and sorts.
+struct SkillSearchIndex {
+    private enum MatchRank: Int {
+        case exact, prefix, name, description
+    }
+
+    private struct Entry {
+        let skill: SkillInfo
+        let name: String
+        let description: String
+    }
+
+    private let entries: [Entry]
+
+    init(_ skills: [SkillInfo]) {
+        entries = skills.map { Entry(skill: $0, name: $0.name.lowercased(), description: $0.description.lowercased()) }
+    }
+
+    func ranked(query: String) -> [SkillInfo] {
         let query = query.lowercased()
-        let ranked = skills.compactMap { skill -> (SkillInfo, MatchRank)? in
-            let name = skill.name.lowercased()
+        let ranked = entries.compactMap { entry -> (Entry, MatchRank)? in
             let rank: MatchRank
-            if query.isEmpty || name == query {
+            if query.isEmpty || entry.name == query {
                 rank = .exact
-            } else if name.hasPrefix(query) {
+            } else if entry.name.hasPrefix(query) {
                 rank = .prefix
-            } else if name.contains(query) {
+            } else if entry.name.contains(query) {
                 rank = .name
-            } else if skill.description.lowercased().contains(query) {
+            } else if entry.description.contains(query) {
                 rank = .description
             } else {
                 return nil
             }
-            return (skill, rank)
+            return (entry, rank)
         }
         return ranked.sorted { left, right in
             if left.1 != right.1 { return left.1.rawValue < right.1.rawValue }
-            if left.0.name.lowercased() != right.0.name.lowercased() { return left.0.name.lowercased() < right.0.name.lowercased() }
             if left.0.name != right.0.name { return left.0.name < right.0.name }
-            return left.0.location < right.0.location
+            if left.0.skill.name != right.0.skill.name { return left.0.skill.name < right.0.skill.name }
+            return left.0.skill.location < right.0.skill.location
         }
-        .map(\.0)
+        .map(\.0.skill)
     }
 }
