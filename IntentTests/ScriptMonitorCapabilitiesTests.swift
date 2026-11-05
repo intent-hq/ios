@@ -59,6 +59,7 @@ struct ScriptMonitorCapabilitiesTests {
         #expect(!manager.capabilities.supportsScriptMonitors)
     }
 
+    #if DEBUG
     @Test @MainActor func demoCapabilitiesRequireExplicitFixtureAndResetOnExit() {
         let manager = ConnectionManager(persistence: .ephemeral())
         defer { manager.disconnect() }
@@ -79,4 +80,5 @@ struct ScriptMonitorCapabilitiesTests {
         #expect(manager.demoScriptMonitorFixtures == nil)
         #expect(manager.capabilities == .unknown)
     }
+    #endif
 }

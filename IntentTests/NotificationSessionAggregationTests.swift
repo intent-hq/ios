@@ -46,7 +46,7 @@ final class NotificationSessionAggregationTests {
         feedback: @escaping () -> Void = {}
     ) -> (NotificationManager, NotificationManagerFakeCenter) {
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center)
+        let service = LocalNotificationService(center: center, playForegroundSound: {}, outputVolume: { 1 })
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { state },

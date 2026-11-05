@@ -66,13 +66,11 @@ final class FileSyntaxHighlighter: NSObject, WKNavigationDelegate {
             }
             try Task.checkCancellation()
             guard let webView else { return }
-            let result = try await webView.callAsyncJavaScript(
+            let result = try await webView.callPageJavaScript(
                 "return JSON.stringify(await window.intentHighlights.highlight(request));",
-                arguments: ["request": ["source": source, "path": path, "dark": dark]],
-                in: nil,
-                contentWorld: .page
+                arguments: ["request": ["source": source, "path": path, "dark": dark]]
             )
-            let runs = (result as? String).map { FileSyntaxRun.decode($0, source: source) } ?? []
+            let runs = result.map { FileSyntaxRun.decode($0, source: source) } ?? []
             finish(id: id, runs: runs)
         } catch {
             finish(id: id, runs: [])

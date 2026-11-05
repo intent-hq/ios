@@ -45,7 +45,11 @@ import os
     }
     @ObservationIgnored private var isDemoConnection = false
     @ObservationIgnored var servesDemoFixtures = false
+
+    #if DEBUG
     @ObservationIgnored var demoScriptMonitorFixtures: DemoScriptMonitorFixtures?
+    #endif
+
     @ObservationIgnored var scriptMonitorsDisabledForConnection = false
     var capabilities: ConnectionCapabilities = .unknown {
         didSet { capabilitiesSubject.send(capabilities) }
@@ -163,7 +167,9 @@ import os
     }
 
     isolated deinit {
+        #if DEBUG
         demoScriptMonitorFixtures?.stop()
+        #endif
         authorityRefreshTask?.cancel()
         stopPathMonitor()
     }
@@ -176,19 +182,10 @@ extension ConnectionManager {
         if !isDemoConnection { disconnect() }
         isDemoConnection = true
         servesDemoFixtures = serveFixtures
+        #if DEBUG
         configureDemoScriptMonitors(serveFixtures: serveFixtures)
+        #endif
         connectionState = .connected
-    }
-
-    func configureDemoScriptMonitors(serveFixtures: Bool, arguments: [String] = ProcessInfo.processInfo.arguments) {
-        demoScriptMonitorFixtures?.stop()
-        demoScriptMonitorFixtures = serveFixtures ? DemoScriptMonitorFixtures.configured(arguments: arguments) : nil
-        capabilities = .unknown
-        if demoScriptMonitorFixtures?.supportsMonitors == true {
-            capabilities = ConnectionCapabilities(hello: [
-                "server": ["protocolVersion": "15.0", "capabilities": ["scriptMonitors": 2, "scriptActiveLists": 1]]
-            ])
-        }
     }
 
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
@@ -433,8 +430,10 @@ extension ConnectionManager {
     /// `connect()` to the same target must keep the accumulated mismatches,
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
+        #if DEBUG
         demoScriptMonitorFixtures?.stop()
         demoScriptMonitorFixtures = nil
+        #endif
         isDemoConnection = false
         servesDemoFixtures = false
         connectionGeneration += 1

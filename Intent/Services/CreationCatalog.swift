@@ -16,6 +16,9 @@ final class CreationCatalog<Element> {
     @ObservationIgnored private var consumers: Set<UUID> = []
     @ObservationIgnored private var callers: [UUID: Interest] = [:]
     @ObservationIgnored private var flight: Flight?
+    /// The most recently started read, kept after its flight retires so
+    /// tests can await a superseded read's real completion. Never read here.
+    @ObservationIgnored private(set) var latestReadTask: Task<Void, Never>?
     private let fetch: @MainActor () async throws -> [Element]
 
     nonisolated private final class Interest: Sendable {
@@ -104,6 +107,7 @@ final class CreationCatalog<Element> {
         let next = Flight()
         flight = next
         next.task = Task { [weak self] in await self?.read(next) }
+        latestReadTask = next.task
         return next
     }
 

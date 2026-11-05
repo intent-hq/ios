@@ -99,6 +99,7 @@ struct ConversationColumnView: View {
 
     @ViewBuilder
     private var columnContent: some View {
+        #if DEBUG
         if DemoMode.isEnabled, DemoFixtures.usesStartupTranscript || DemoFixtures.usesHistoryPages {
             Button("Open conversation cover", action: onDemoCover)
                 .buttonStyle(IntentButtonStyle(variant: .secondary))
@@ -110,6 +111,7 @@ struct ConversationColumnView: View {
                         + "anchor=\(viewModel.newMessagesDividerAnchorId ?? "none") consumer=\(viewModel.conversationConsumer)"
                 )
         }
+        #endif
         ZStack {
             if viewModel.showsLoadingState {
                 ConversationConnectionLoadingView(viewModel: viewModel, usesWorkspaceDesign: usesWorkspaceDesign)
@@ -463,9 +465,10 @@ struct ConversationBackground: View {
     let isLoading: Bool
     let usesWorkspaceDesign: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.conversationBackgroundColor) private var backgroundColor
 
     var body: some View {
-        (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme))
+        (backgroundColor ?? (usesWorkspaceDesign ? Constants.Conversation.Design.Palette.background(for: colorScheme) : Theme.background(for: colorScheme)))
             .ignoresSafeArea()
     }
 }

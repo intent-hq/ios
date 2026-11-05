@@ -17,9 +17,10 @@ extension ConversationTranscriptView {
     /// releases the real hook.list response after the real recovery's page
     /// up has moved the live scroll view; it never changes recovery timing.
     private var demoRecoveryResizeEnabled: Bool {
-        DemoMode.isEnabled && ProcessInfo.processInfo.arguments.contains("--demo-hooks-row-during-recovery")
+        DemoMode.isEnabled && LaunchOptions.current.contains("--demo-hooks-row-during-recovery")
     }
 
+    #if DEBUG
     func releaseHooksRowDuringDemoRecovery(geometry: ConversationTranscriptScrollPolicy.ViewportGeometry) {
         guard demoRecoveryResizeEnabled, scrollState.demoRecoveryResize == nil,
               !isUserInteracting, case .recovery(let token) = lifecycle.owner,
@@ -33,6 +34,7 @@ extension ConversationTranscriptView {
             AppLog.userInterface.debug("[SCROLL] Demo: could not release hooks during recovery")
         }
     }
+    #endif
 
     /// The geometry callback is evidence that the footer actually resized
     /// the container while the same recovery still owned the page-up.

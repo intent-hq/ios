@@ -400,6 +400,9 @@ jobs:
       - name: Check deferred row-provider isolation
         run: scripts/test-row-provider-isolation.sh
 
+      - name: WebKit overlay linkage check tests
+        run: scripts/test-check-webkit-overlay-linkage.sh
+
       - name: Create owned simulator
         env:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
@@ -561,6 +564,12 @@ jobs:
             scripts/xcodebuild.sh build-for-testing
           fi
 
+      # The iOS 18.4-18.5 simulators cannot load the legacy Swift WebKit
+      # overlay, so an app that links it aborts before main (ios#905).
+      - name: Check WebKit overlay linkage
+        if: env.FULL_PRE_PR_GATE != '1'
+        run: scripts/check-webkit-overlay-linkage.sh
+
       # Diagnostics for the intermittent multi-minute stall before the test
       # host launches: show what the background boot printed and whether
       # the device is actually Booted before xcodebuild takes over.
@@ -623,6 +632,10 @@ jobs:
       - name: Build iOS for pre-PR gate
         if: env.FULL_PRE_PR_GATE == '1'
         run: scripts/xcodebuild.sh build-ios
+
+      - name: Check WebKit overlay linkage for pre-PR gate
+        if: env.FULL_PRE_PR_GATE == '1'
+        run: scripts/check-webkit-overlay-linkage.sh
 
       - name: Run full pre-PR gate
         if: env.FULL_PRE_PR_GATE == '1'

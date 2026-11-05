@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 @testable import Intent
 import Testing
@@ -52,3 +53,4 @@ struct DemoInlineImageFixtureTests {
         ) as? [String: Any])
     }
 }
+#endif

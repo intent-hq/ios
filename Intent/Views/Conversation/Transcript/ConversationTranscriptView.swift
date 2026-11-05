@@ -205,11 +205,13 @@ private extension ConversationTranscriptView {
             scrollState.isNearHistoryTop = isNearTop
             loadOlderMessagesIfNeeded(proxy: proxy)
         }
+        #if DEBUG
         .demoEndDerealization(
             triggerFile: DemoFixtures.configuredEndDerealizationTriggerFile,
             onTrigger: withdrawEndRowForDemo,
             onGeometryChange: restoreDerealizedEndIfMoved
         )
+        #endif
         .onChange(of: dynamicTypeSize) { _, _ in
             scrollState.rowHeightCache.invalidateAll()
         }

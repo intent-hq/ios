@@ -1,9 +1,9 @@
+#if DEBUG
 import Foundation
 @testable import Intent
 import Testing
 
 extension DemoFixturesTests {
-    #if DEBUG
     @Test func startupSnapshotDeliveryGateIsOptInAndOpensForTheNextSubscribe() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: file) }
@@ -16,7 +16,6 @@ extension DemoFixturesTests {
         try Data().write(to: file)
         #expect(!DemoFixtures.startupSnapshotIsHeld(for: "chat.subscribe", params: params, arguments: arguments))
     }
-    #endif
 
     @Test func startupBarriersAreExplicitAndOnlyGateTheChosenAgentsReads() {
         let arguments = ["--demo-agent-detail-trigger-file=/tmp/metadata", "--demo-chat-snapshot-trigger-file=/tmp/snapshot"]
@@ -41,3 +40,4 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.startupTranscriptRequested(by: ["--demo-startup-transcript"]))
     }
 }
+#endif

@@ -6,6 +6,19 @@ import Testing
 
 @MainActor
 struct MediaAudioSessionTests {
+    @Test func notificationAudioMixesAndDoesNotDeactivateOtherConsumers() async throws {
+        let client = RecordingAudioSessionClient()
+        let session = MediaAudioSession(client: client)
+        let notification = try await session.acquire(.notification)
+        #expect(client.events == [.category(.ambient, .default, .mixWithOthers), .active(true, [])])
+        let video = try await session.acquire(.playback)
+        try await session.release(notification)
+        #expect(client.events.last == .category(.playback, .moviePlayback, []))
+        #expect(!client.events.contains(.active(false, .notifyOthersOnDeactivation)))
+        try await session.release(video)
+        #expect(client.events.last == .active(false, .notifyOthersOnDeactivation))
+    }
+
     @Test func videoAfterDictationRestoresPlaybackAndNextDictationRestoresRecording() async throws {
         let client = RecordingAudioSessionClient()
         let session = MediaAudioSession(client: client)

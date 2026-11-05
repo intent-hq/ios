@@ -119,6 +119,7 @@ struct WorkspaceQueuePanel<Content: View>: View {
     var horizontalInset = Constants.Conversation.Design.horizontalInset
     @ViewBuilder let content: Content
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.conversationBackgroundColor) private var backgroundColor
     @Environment(\.colorSchemeContrast) private var contrast
 
     private typealias Design = Constants.Conversation.Design
@@ -135,7 +136,7 @@ struct WorkspaceQueuePanel<Content: View>: View {
         }
         .background {
             if isVisible, !viewModel.showsLoadingState {
-                Design.Palette.background(for: colorScheme).ignoresSafeArea(edges: .bottom)
+                (backgroundColor ?? Design.Palette.background(for: colorScheme)).ignoresSafeArea(edges: .bottom)
             }
         }
         .overlay(alignment: .top) {

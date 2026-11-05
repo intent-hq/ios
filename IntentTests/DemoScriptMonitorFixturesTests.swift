@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 @testable import Intent
 import Testing
@@ -113,3 +114,4 @@ struct DemoScriptMonitorFixturesTests {
         ["workspaceId": DemoDesignFixtures.workspaceId, "monitorId": DemoScriptMonitorFixtures.monitorId]
     }
 }
+#endif

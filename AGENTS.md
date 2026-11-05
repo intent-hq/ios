@@ -45,7 +45,7 @@
 - For Release split runs, set `BUILD_CONFIGURATION=Release` on both commands; Debug results and Debug-only fixtures are not Release coverage.
 - After adding, removing, splitting, or moving Swift files, run `scripts/update-source-lists.sh`; it regenerates both Xcode input lists (test sources and SwiftLint) from the working tree.
 - Linux agents cannot compile Swift, so a Mac helper agent runs iOS tests. Give it one command: `scripts/run_commit_tests.sh <full-sha> 'IntentTests/<Suite>' ...` (single-quote each selector). It tests that commit in a clean temporary checkout through the wrapper and writes `~/Library/Caches/intent-ios-test-run/summary.md`: verdict, per-suite counts, failing tests, and the rerun command. Run it in the foreground; a restarted agent reads the summary instead of asking for the steps again.
-- Read the [wrapper header](scripts/xcodebuild.sh) for locks, crash retries, and exit codes; use [prerequisites](README.md#clean-checkout-prerequisites), [wrapper commands](README.md#xcode-wrapper-commands), and [SwiftLint setup](README.md#strict-lint-on-linux) for toolchain details.
+- Read the [wrapper header](scripts/xcodebuild.sh) for locks, crash retries, the launch watchdog (exit 84: the app aborted before `main`; never retried), and exit codes; use [prerequisites](README.md#clean-checkout-prerequisites), [wrapper commands](README.md#xcode-wrapper-commands), and [SwiftLint setup](README.md#strict-lint-on-linux) for toolchain details.
 
 ## CI and UI evidence
 
@@ -77,6 +77,7 @@ Run the matching checks after changing tooling:
 | Capture-lifecycle verifier | `python3 scripts/test_fixture_capture_lifecycle.py` |
 | Protocol fixture versions | `python3 scripts/test_protocol_fixture_version.py`; `python3 scripts/protocol_fixture_version.py lint` |
 | Deferred row-provider boundary | `scripts/test-row-provider-isolation.sh` (macOS) |
+| WebKit overlay linkage check | `scripts/test-check-webkit-overlay-linkage.sh` (macOS) |
 
 ## Transport and bundled content
 

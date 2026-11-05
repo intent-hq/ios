@@ -64,6 +64,7 @@ struct TerminalKeyBar: View {
         .buttonStyle(TerminalControlStyle())
         .modifier(TerminalControlSurface())
         .accessibilityLabel(controls.isKeyboardVisible ? "Hide keyboard" : "Show keyboard")
+        .accessibilityIdentifier("terminal.keyboard.toggle")
         .disabled(!isEnabled && !controls.isKeyboardVisible)
     }
 

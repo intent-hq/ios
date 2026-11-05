@@ -6,8 +6,10 @@ struct IntentApp: App {
     init() {
         ConversationTrace.emit("AppStarted", "")
         LifecycleDiagnostics.sessionStarted()
+        #if DEBUG
         DemoConnectionLoss.seedSavedMachineIfNeeded()
         DemoSettings.seedConnectionsIfNeeded()
+        #endif
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
         // session attaches an observer on creation and detaches on
@@ -33,7 +35,7 @@ struct IntentApp: App {
         WindowGroup(for: BackendID.self) { $backendID in
             BackendWindowRoot(
                 backendID: $backendID,
-                networkAvailability: DemoConnectionLoss.networkAvailability ?? .shared
+                networkAvailability: Self.networkAvailability
             )
                 .buttonStyle(IntentContentButtonStyle())
                 #if os(visionOS)
@@ -49,6 +51,15 @@ struct IntentApp: App {
             height: Constants.Root.visionDefaultWindowHeight
         )
         .windowResizability(.contentMinSize)
+        #endif
+    }
+
+    /// Debug connection-loss demos substitute a scripted network monitor.
+    private static var networkAvailability: NetworkAvailability {
+        #if DEBUG
+        DemoConnectionLoss.networkAvailability ?? .shared
+        #else
+        .shared
         #endif
     }
 }
@@ -104,7 +115,9 @@ struct SessionWindowRoot: View {
         RootView(networkAvailability: networkAvailability)
             .environment(session)
             .environment(coordinator)
+            #if DEBUG
             .environment(\.scriptMonitorPresentationDate, DemoScriptMonitorFixtures.configuredPresentationDate())
+            #endif
             .onAppear {
                 coordinator.retargetWindow = retargetWindow
                 coordinator.returnWindowToSavedMachines = returnToSavedMachines
@@ -119,7 +132,9 @@ struct SessionWindowRoot: View {
                     coordinator.onScenePhaseNotActive()
                     if phase == .background { coordinator.onScenePhaseBackground() }
                 }
+                #if DEBUG
                 DemoConnectionLoss.sceneChanged(phase, connection: session.connection)
+                #endif
             }
     }
 }
@@ -206,12 +221,14 @@ struct BackendWindowRoot: View {
         }
         .onAppear {
             windowSession.updateNetworkObservation(for: scenePhase)
+            #if DEBUG
             if let demoBackendID = DemoSettings.consumeStartupBackendID() {
                 // Settings demos start from this process's fresh fixtures,
                 // not an obsolete native scene value or restored Home state.
                 restoresSavedMachines = false
                 backendID = demoBackendID
             }
+            #endif
             restoresSavedMachines = windowSession.restoreSavedMachines(restoresSavedMachines)
             if backendID == nil, !windowSession.isShowingSavedMachines,
                let lastUsed = PersistenceManager.shared.lastUsedConnection() {

@@ -23,6 +23,8 @@ Intent/
 ├── Models/                    Domain and wire models
 ├── Services/                  JSON-RPC transport, live subscriptions,
 │                              feature stores, and attachment handling
+├── Demo/                      `--demo-data` fixtures, demo mode, and
+│                              parsed launch options
 ├── ViewModels/                UI state and feature orchestration
 ├── Presentation/              View-agnostic presentation logic
 │                              (scroll policy, partitioning, classifiers)
@@ -405,7 +407,7 @@ The Xcode wrapper supports these subcommands:
 | `test-without-building-unit` | Run previously built tests without `IntentUITests`. |
 | `test-ios` | Build and run the complete unit and UI test gate. |
 | `test-ios-unit` | Build and run tests without `IntentUITests`. |
-| `pick-simulator` | Print the automatically selected iPhone simulator UDID. |
+| `pick-simulator` | Print the automatically selected iPhone simulator UDID: an iPhone on the newest iOS runtime the selected Xcode can run (an iPhone 16 there when available). The device name and runtime go to stderr. Set `SIM_UDID` to choose another device or runtime. |
 
 For a focused run, set `ONLY_TESTING` to one or more whitespace-separated
 `Target[/Suite[/test]]` selectors. Selectors are test identifiers, not Swift file
@@ -419,6 +421,17 @@ ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-ios-unit
 A selector whose tests were all skipped at runtime exits 0 with a notice. Inspect
 the per-selector summary and confirm a nonzero executed count before claiming that
 a green focused run executed the intended tests.
+
+Besides xcodebuild's own status (65 for a build or test failure), the wrapper exits
+80 when the test process crashed and its one re-run did not recover, 81 when the
+simulator lock timed out, 82 when a selector matched or ran no test, 83 when the
+selection could not be verified, and 84 when the app could not launch on the
+simulator. For 84, a watchdog spots dyld aborting the app before `main` (for example,
+a library the simulator runtime lacks) within seconds. It stops the run instead of
+letting XCUITest wait until the job times out, prints the missing library and the
+simulator runtime, and does not re-run. Try a simulator on another runtime with
+`SIM_UDID`. The [wrapper header](scripts/xcodebuild.sh) has the details and the
+`LAUNCH_CRASH_WATCH=0` opt-out.
 
 For repeated focused runs, build once and reuse that build:
 
@@ -437,10 +450,7 @@ ONLY_TESTING='IntentUITests/WorkspaceChangesUITests' scripts/xcodebuild.sh test-
 
 Use the regular `build-for-testing` / `test-without-building` pair for mixed unit
 and UI selectors. `SIM_UDID` selects a specific simulator; otherwise the wrapper
-chooses an iPhone and serializes test runs on that device. The automatic pick
-prefers a runtime with the selected Xcode's simulator SDK major version, then an
-iPhone 16 name (custom names such as `CI iPhone 16 (iOS 26.3.1)` count), then
-the newest runtime; an older runtime is a fallback only (ios#905). Keep `SIM_UDID` and
+chooses an iPhone and serializes test runs on that device. Keep `SIM_UDID` and
 `DERIVED_DATA_DIR` consistent between a split build and run, and rebuild after
 source changes. Use separate derived-data directories for concurrent builds.
 
@@ -644,6 +654,10 @@ The Linux job also runs the offline tooling self-tests `scripts/test_xcodebuild.
 `scripts/check-swiftlint-inputs.sh` keeps `scripts/swiftlint-xcode-inputs.xcfilelist`
 in sync with the Swift sources; `scripts/update-source-lists.sh` regenerates it and
 `scripts/test-source-inputs.xcfilelist` after Swift files are added, split, moved, or removed.
+After building, the macOS job runs `scripts/check-webkit-overlay-linkage.sh`, which
+fails if `Intent.app` or a test bundle built next to it links
+`/usr/lib/swift/libswiftWebKit.dylib` (which cannot load on iOS 18.4–18.5 simulators); `scripts/test-check-webkit-overlay-linkage.sh` is
+its macOS self-test.
 
 Two auxiliary workflows run on pushes to `main`: `warm-cache.yml` (also weekly on
 Mondays at 06:17 UTC and on manual dispatch) seeds the Go, TailcatKit, and SPM caches

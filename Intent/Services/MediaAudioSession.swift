@@ -22,6 +22,7 @@ actor MediaAudioSession {
     enum Purpose: Sendable {
         case playback
         case dictation
+        case notification
     }
 
     private let client: any MediaAudioSessionClient
@@ -72,8 +73,10 @@ actor MediaAudioSession {
                 mode: .measurement,
                 options: playing ? [.duckOthers, .defaultToSpeaker] : .duckOthers
             )
-        } else {
+        } else if playing {
             try client.setCategory(.playback, mode: .moviePlayback, options: [])
+        } else {
+            try client.setCategory(.ambient, mode: .default, options: .mixWithOthers)
         }
     }
 }

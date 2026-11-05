@@ -11,6 +11,16 @@ import tempfile
 
 
 CAPTURES = {
+    "IPadToolPlacementUITests": {
+        "testBrowserDragKeepsChatDraftAndRestoresMainChatInBothThemes": tuple(
+            f"ipad-tool-{state}-{appearance}"
+            for state in ("before", "browser-chat", "restored")
+            for appearance in ("light", "dark")
+        ),
+        "testTerminalDragAllowsAgentSelectionAndLeavesShellRunning": tuple(
+            f"ipad-tool-terminal-chat-{appearance}" for appearance in ("light", "dark")
+        ),
+    },
     "IPadWorkspaceSidebarUITests": {
         "testOpenAgentAndNoteMoveTheWorkspaceIntoTheSidebarInBothThemes": tuple(
             f"ipad-workspace-{state}-{appearance}"

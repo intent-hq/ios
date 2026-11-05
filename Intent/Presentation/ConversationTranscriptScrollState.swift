@@ -246,6 +246,8 @@ final class ConversationTranscriptScrollState {
     /// Corrections the in-flight (or, once it ended, the last) episode has
     /// spent, published as each is issued so a cancellation records them.
     var unrealizedEndRecoveryCorrections = 0
+
+    #if DEBUG
     /// Demo-only (`--demo-end-derealization-trigger-file`): while set, the
     /// end row is withdrawn from the lazy stack so its real `onDisappear`
     /// armed the recovery, with the live offset at withdrawal the restore
@@ -255,6 +257,8 @@ final class ConversationTranscriptScrollState {
     /// Set once the trigger has fired so a re-run of the poll does not
     /// withdraw the row again.
     @ObservationIgnored var demoEndDerealizationTriggered = false
+    #endif
+
     /// Content-free receipt for the opt-in footer/recovery overlap control.
     @ObservationIgnored var demoRecoveryResize: DemoRecoveryResize?
 
@@ -352,8 +356,10 @@ final class ConversationTranscriptScrollState {
         goToEndRequested = false
     }
 
+    #if DEBUG
     struct DemoEndDerealization: Equatable {
         let mode: DemoFixtures.EndDerealizationMode
         let withdrawnOffsetY: CGFloat
     }
+    #endif
 }

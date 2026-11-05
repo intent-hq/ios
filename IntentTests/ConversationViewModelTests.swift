@@ -342,6 +342,7 @@ extension ConversationViewModelTests {
         #expect(viewModel.suggestedPrompts.isEmpty)
     }
 
+    #if DEBUG
     @Test func repeatedImagePromptOpenerUpdatesWhenStreamCloses() throws {
         let viewModel = makeVM()
         let partial = "![Preview](workspace-asset://ws/image.png)\n<!-- suggested-prompts\n<!-- suggested-"
@@ -372,4 +373,5 @@ extension ConversationViewModelTests {
         viewModel.store.messages = [message]
         #expect(viewModel.suggestedPrompts == DemoFixtures.inlineImageSuggestedPrompts)
     }
+    #endif
 }

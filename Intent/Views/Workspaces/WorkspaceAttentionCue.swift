@@ -96,6 +96,7 @@ final class WorkspaceAttentionCueCenter {
 
     init(
         playSound: @escaping () -> Void = {
+            guard NotificationChime.outputVolume > 0 else { return }
             AudioServicesPlaySystemSound(WorkspaceAttentionCueCenter.attentionSystemSoundID)
         },
         windowEmitsCueSound: Bool = WorkspaceAttentionCueCenter.platformWindowEmitsCueSound,

@@ -114,6 +114,7 @@ class AppCoordinator {
 
     var selectedWorkspaceId: String? {
         didSet {
+            if selectedWorkspaceId != oldValue { iPadNavigation.closeTool() }
             if selectedWorkspaceId != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
             if let workspaceId = selectedWorkspaceId,
                selectedWorkspaceId != oldValue,
