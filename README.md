@@ -463,8 +463,11 @@ first failure message, the log path, and a command that repeats the run. Any
 scripts/run_commit_tests.sh <full-sha> 'IntentTests/AgentListPagingTests'
 ```
 
-The exit status is the wrapper's. Run it in the foreground. See the script header for
-the files it keeps and the environment it passes through.
+The exit status is the wrapper's. Run it in the foreground. Without
+`DEVELOPER_DIR` it uses the Xcode that commit's CI selects (the newest non-beta
+match of the `Select Xcode` pattern), not the Mac's default Xcode, which can lack
+components such as the Metal toolchain; the summary names the Xcode and why. See
+the script header for the files it keeps and the environment it passes through.
 
 The `build-visionos` command always uses the generic visionOS Simulator destination,
 never `-sdk`: an `-sdk xros...` invocation can silently fall back to `iphoneos` when
