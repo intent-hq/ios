@@ -19,7 +19,7 @@ struct StateFlagBudgetPolicyTests {
         "Intent/Demo/DemoScriptMonitorFixtures.swift#DemoScriptMonitorFixtures": 5,
         "Intent/Presentation/ConversationModelSelection.swift#ConversationModelSelection": 5,
         "Intent/Presentation/ConversationTranscriptScrollState.swift#ConversationTranscriptScrollState": 14,
-        "Intent/Services/ConnectionManager.swift#ConnectionManager": 9,
+        "Intent/Services/ConnectionManager.swift#ConnectionManager": 8,
         "Intent/Services/ConversationLiveTranscript.swift#ConversationLiveTranscript": 11,
         "Intent/Services/ConversationStore.swift#ConversationStore": 7,
         "Intent/Services/CreationOptionsStore.swift#CreationOptionsStore": 8,
