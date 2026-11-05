@@ -543,10 +543,12 @@ assert_eq "CI Xcode run exits 0" "$status" 0
 assert_eq "CI pattern picks the newest non-beta match" "$(record developer)" "$apps/Xcode_26.3.app/Contents/Developer"
 assert_contains "summary names the CI pattern" "$(summary)" "(selected by CI's Select Xcode pattern Xcode_26*.app)"
 assert_lacks "derived DEVELOPER_DIR stays out of the rerun" "$(summary)" "DEVELOPER_DIR="
-status=$(run xcodeenv DEVELOPER_DIR=/custom/Xcode XCODE_APPS_DIR="$apps" -- "$sha_e" 'IntentTests')
-assert_eq "caller's DEVELOPER_DIR wins" "$(record developer)" "/custom/Xcode"
+# On macOS /usr/bin/git follows DEVELOPER_DIR, so the caller's must be real there.
+custom_developer=$(xcode-select -p 2>/dev/null || echo /custom/Xcode)
+status=$(run xcodeenv DEVELOPER_DIR="$custom_developer" XCODE_APPS_DIR="$apps" -- "$sha_e" 'IntentTests')
+assert_eq "caller's DEVELOPER_DIR wins" "$(record developer)" "$custom_developer"
 assert_contains "summary names the caller's Xcode" "$(summary)" "(selected by DEVELOPER_DIR from the environment)"
-assert_contains "rerun keeps the caller's DEVELOPER_DIR" "$(summary)" "DEVELOPER_DIR='/custom/Xcode'"
+assert_contains "rerun keeps the caller's DEVELOPER_DIR" "$(summary)" "DEVELOPER_DIR='$custom_developer'"
 rm -rf "$apps/Xcode_26.1.app" "$apps/Xcode_26.3.app"
 status=$(run xcodenone -u DEVELOPER_DIR XCODE_APPS_DIR="$apps" -- "$sha_e" 'IntentTests')
 assert_eq "no CI match leaves DEVELOPER_DIR unset" "$(record developer)" ""

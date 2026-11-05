@@ -194,8 +194,17 @@ finished_at=
 duration=
 xcode_note="DEVELOPER_DIR from the environment"
 [ -n "${DEVELOPER_DIR:-}" ] || xcode_note="the default Xcode"
+# The chosen Xcode applies to the wrapper only: on macOS /usr/bin/git is an
+# Xcode shim that also follows DEVELOPER_DIR.
+selected_developer_dir=${DEVELOPER_DIR:-}
 read_xcode_version() {
-  xcode_version=$( { xcodebuild -version 2>/dev/null || true; } | sed -n 1p)
+  xcode_version=$( {
+    if [ -n "$selected_developer_dir" ]; then
+      DEVELOPER_DIR=$selected_developer_dir xcodebuild -version 2>/dev/null
+    else
+      xcodebuild -version 2>/dev/null
+    fi || true
+  } | sed -n 1p)
   [ -n "$xcode_version" ] || xcode_version="unknown (xcodebuild -version failed)"
 }
 read_xcode_version
@@ -469,7 +478,7 @@ if [ -z "${DEVELOPER_DIR:-}" ]; then
     ci_xcode=$(find "${XCODE_APPS_DIR:-/Applications}" -maxdepth 1 -type d -name "$xcode_pattern" \
       ! -iname '*beta*' ! -iname '*candidate*' 2>/dev/null | sort -V | tail -n 1)
     if [ -n "$ci_xcode" ]; then
-      export DEVELOPER_DIR=$ci_xcode/Contents/Developer
+      selected_developer_dir=$ci_xcode/Contents/Developer
       xcode_note="CI's Select Xcode pattern $xcode_pattern"
     else
       xcode_note="the default Xcode (nothing matches CI's $xcode_pattern)"
@@ -526,6 +535,7 @@ set -m
   export ONLY_TESTING="${selectors[*]}"
   export RESULT_BUNDLE="$bundle"
   export DERIVED_DATA_DIR="$work/DerivedData"
+  [ -z "$selected_developer_dir" ] || export DEVELOPER_DIR="$selected_developer_dir"
   exec scripts/xcodebuild.sh "$subcommand"
 ) > "$log" 2>&1 < /dev/null &
 child=$!
