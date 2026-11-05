@@ -1129,6 +1129,7 @@ $(SRCROOT)/IntentUITests/IPadProducerVisibilityUITests.swift
 $(SRCROOT)/IntentUITests/IPadPullRequestsUITests.swift
 $(SRCROOT)/IntentUITests/IPadSidebarUITests.swift
 $(SRCROOT)/IntentUITests/IPadToolPlacementUITests.swift
+$(SRCROOT)/IntentUITests/IPadTypingFocusUITests.swift
 $(SRCROOT)/IntentUITests/IPadWorkspaceSidebarUITests.swift
 $(SRCROOT)/IntentUITests/IPhoneAssistantHistoryUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests+PDF.swift

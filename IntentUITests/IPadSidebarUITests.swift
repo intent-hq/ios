@@ -44,29 +44,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    func testSendingRestoresConversationInBothThemes() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad typing focus")
-        XCUIDevice.shared.orientation = .landscapeLeft
-        defer { XCUIDevice.shared.orientation = .portrait }
-        for appearance in ["light", "dark"] {
-            let app = launch(appearance: appearance)
-            openConversation(in: app)
-            let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
-            composer.tap()
-            composer.typeText("Check the iPad chat transition")
-            let close = app.buttons["ipad.focus.close"]
-            XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-            try app.buttons.matching(identifier: "composer.send").singleHittableElement().tap()
-            XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
-            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
-            XCTAssertEqual(composer.value as? String, "")
-            XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
-            capture(app, name: "iPad prompt sent \(appearance)")
-            app.terminate()
-        }
-    }
-
-    @MainActor
     func testScrollingIndicatorStaysOutsideWorkspaceRowsInBothThemes() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar scrolling")
         XCUIDevice.shared.orientation = .landscapeLeft
