@@ -170,10 +170,13 @@ extension NotificationManagerTests {
             actionIdentifier: UNNotificationDefaultActionIdentifier,
             userInfo: request.content.userInfo
         )
-        return await withCheckedContinuation { continuation in
+        let options = await withCheckedContinuation { continuation in
             service.deliverForegroundNotification(response) { options in
                 continuation.resume(returning: options)
             }
         }
+        // The chime runs after the banner is presented; wait for its decision.
+        await service.foregroundSoundTask?.value
+        return options
     }
 }

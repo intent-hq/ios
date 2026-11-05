@@ -13,8 +13,9 @@ private final class FakeLocalNotificationCenter: LocalNotificationCenter {
     var authorizationStatus: UNAuthorizationStatus = .notDetermined
     var authorizationGranted = true
     var completesAuthorizationRequest = true
+    var soundEnabled = false
 
-    func soundIsEnabled() -> Bool { false }
+    func soundIsEnabled() -> Bool { soundEnabled }
 
     func getAuthorizationStatus(
         completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
@@ -130,6 +131,39 @@ struct LocalNotificationServiceTests {
             }
         }
         #expect(options.isEmpty)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func foregroundCompletionDoesNotWaitForTheChime() async {
+        let center = FakeLocalNotificationCenter()
+        center.soundEnabled = true
+        let chimeGate = AsyncStream<Void>.makeStream()
+        var chimeFinished = false
+        let service = LocalNotificationService(
+            center: center,
+            playForegroundSound: {
+                for await _ in chimeGate.stream {}
+                chimeFinished = true
+            },
+            outputVolume: { 1 }
+        )
+        service.onWillPresentNotification = { _ in [.banner, .sound] }
+        let response = LocalNotificationService.response(
+            actionIdentifier: UNNotificationDefaultActionIdentifier,
+            userInfo: [:]
+        )
+
+        let options = await withCheckedContinuation { continuation in
+            service.deliverForegroundNotification(response) { options in
+                continuation.resume(returning: options)
+            }
+        }
+
+        #expect(options == [.banner])
+        #expect(!chimeFinished)
+        chimeGate.continuation.finish()
+        await service.foregroundSoundTask?.value
+        #expect(chimeFinished)
     }
 
     @Test func removesDeliveredNotificationForAgent() throws {
