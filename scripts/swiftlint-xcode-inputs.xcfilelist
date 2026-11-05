@@ -348,6 +348,7 @@ $(SRCROOT)/Intent/Utils/NotificationManager+Aggregation.swift
 $(SRCROOT)/Intent/Utils/NotificationManager+Presentation.swift
 $(SRCROOT)/Intent/Utils/NotificationManager+Routing.swift
 $(SRCROOT)/Intent/Utils/NotificationManager.swift
+$(SRCROOT)/Intent/Utils/NotificationSoundPolicy.swift
 $(SRCROOT)/Intent/Utils/PairingPayload.swift
 $(SRCROOT)/Intent/Utils/TaskStats.swift
 $(SRCROOT)/Intent/Utils/TcAddressDisplay.swift
@@ -902,6 +903,7 @@ $(SRCROOT)/IntentTests/NotificationManagerSoundDeliveryTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerTests.swift
 $(SRCROOT)/IntentTests/NotificationManagerWindowRoutingTests.swift
 $(SRCROOT)/IntentTests/NotificationSessionAggregationTests.swift
+$(SRCROOT)/IntentTests/NotificationSoundPolicyTests.swift
 $(SRCROOT)/IntentTests/ObjCCallbackIsolationTests.swift
 $(SRCROOT)/IntentTests/PagedReadsTests.swift
 $(SRCROOT)/IntentTests/PairingAuthorityRaceTests.swift

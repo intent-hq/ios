@@ -8,8 +8,6 @@ import Foundation
 /// file, and the bundle ships no audio assets. The chime (two decaying
 /// sine tones) is generated once and cached in the temporary directory.
 enum NotificationChime {
-    static var outputVolume: Float { AVAudioSession.sharedInstance().outputVolume }
-
     @MainActor
     static func playForegroundSound() async {
         guard let lease = try? await MediaAudioSession.shared.acquire(.notification) else { return }

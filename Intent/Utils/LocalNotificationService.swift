@@ -81,16 +81,22 @@ final class LocalNotificationService: NSObject {
     var onNotificationResponse: ((Response) -> Void)?
 
     private let center: any LocalNotificationCenter
-    private let outputVolume: () -> Float
+    private let soundPolicy: NotificationSoundPolicy
     private let playForegroundSound: () async -> Void
+    /// The in-app chime for the latest foreground banner. It runs after the
+    /// presentation completion handler so the banner never waits for it;
+    /// exposed so tests can await the sound decision.
+    private(set) var foregroundSoundTask: Task<Void, Never>?
 
     init(
         center: any LocalNotificationCenter = SystemLocalNotificationCenter(),
         playForegroundSound: @escaping () async -> Void = { await NotificationChime.playForegroundSound() },
-        outputVolume: @escaping () -> Float = { NotificationChime.outputVolume }
+        outputVolume: @escaping () -> Float = NotificationSoundPolicy.system.outputVolume
     ) {
         self.center = center
-        self.outputVolume = outputVolume
+        soundPolicy = NotificationSoundPolicy(outputVolume: outputVolume) {
+            await center.soundIsEnabled()
+        }
         self.playForegroundSound = playForegroundSound
         super.init()
         center.delegate = self
@@ -114,7 +120,7 @@ final class LocalNotificationService: NSObject {
         let content = UNMutableNotificationContent()
         content.title = agentName
         content.body = "Finished in \(workspaceName)"
-        content.sound = outputVolume() > 0 ? .default : nil
+        content.sound = soundPolicy.scheduledNotificationPlaysSound() ? .default : nil
         content.interruptionLevel = .active
         content.userInfo = [
             "agentId": agentId,
@@ -174,13 +180,18 @@ final class LocalNotificationService: NSObject {
         Task { @MainActor [weak self] in
             var options = self?.onWillPresentNotification?(response) ?? []
             let requestsSound = options.contains(.sound)
-            // System alert volume is independent of output volume, whose read
-            // can also be stale while our audio session is inactive.
+            // The app plays its own chime instead of the system sound, and the
+            // banner is presented without waiting for it.
             options.remove(.sound)
-            if requestsSound, let self, await center.soundIsEnabled() {
-                await playForegroundSound()
-            }
             completionHandler(options)
+            guard let self else { return }
+            let soundPolicy = soundPolicy
+            let playForegroundSound = playForegroundSound
+            foregroundSoundTask = Task {
+                if await soundPolicy.foregroundBannerPlaysSound(requested: requestsSound) {
+                    await playForegroundSound()
+                }
+            }
         }
     }
 
