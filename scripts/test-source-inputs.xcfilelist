@@ -1239,6 +1239,7 @@ $(SRCROOT)/IntentTests/SlashSkillContextTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
 $(SRCROOT)/IntentTests/SplashAnimationTests.swift
+$(SRCROOT)/IntentTests/StateFlagBudgetPolicyTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsContractTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
