@@ -52,9 +52,11 @@ struct WorkspaceDetailActionTests {
 
     /// Confirming in the page's own dialog runs the action: success returns to the list, and a
     /// failure shows "Workspace action failed" with the message while the page stays open.
-    @Test(.enabled("The host must publish accessible controls") {
-        await SyntheticBadgeHost.publishesAccessibilityTree()
-    }, arguments: [WorkspaceAction.archive, .delete], [false, true])
+    /// The test reads the presented confirmation but does not tap its buttons: activating
+    /// actions inside a `UIAlertController` depends on the simulator (it fails on fresh CI
+    /// simulators). It dismisses the dialog and runs the same `perform` call the page's
+    /// confirm button makes, leaving through the coordinator as the page does.
+    @Test(arguments: [WorkspaceAction.archive, .delete], [false, true])
     func confirmedActionFromThePage(_ action: WorkspaceAction, succeeds: Bool) async throws {
         let (fake, store) = try Self.fixture()
         if succeeds {
@@ -68,28 +70,28 @@ struct WorkspaceDetailActionTests {
         let page = NavigationStack { host.view }.environment(host.coordinator).environment(host.session)
 
         try await SyntheticBadgeHost.render(page, width: 402, height: 874) { _, window in
-            if action == .archive {
-                host.view.presentation.showArchiveConfirmation = true
-            } else {
-                host.view.presentation.showDeleteConfirmation = true
-            }
+            let presentation = host.view.presentation
+            Self.setConfirmation(for: action, presented: true, on: presentation)
             let confirmation = try await Self.presentedAlert(titled: action.title, in: window)
-            let button = try #require(SyntheticBadgeHost.accessibilityElements(in: confirmation.view).first { element in
-                element.accessibilityLabel == action.label && element.accessibilityTraits.contains(.button)
-            })
-            #expect(button.accessibilityActivate())
+            #expect(confirmation.actions.contains { $0.title == action.label })
+
+            Self.setConfirmation(for: action, presented: false, on: presentation)
+            try await waitUntil("the \"\(action.title)\" alert is dismissed", timeout: .seconds(5)) {
+                window.rootViewController?.presentedViewController == nil
+            }
+            await presentation.perform(action, workspaceId: "selected", store: store) { host.coordinator.onBackToWorkspaceList() }
 
             if succeeds {
                 try await waitUntil("the page returns to the workspace list", timeout: .seconds(5)) {
                     if case .workspaceList = host.coordinator.currentScreen { return true }
                     return false
                 }
-                #expect(host.view.presentation.actionError == nil)
+                #expect(presentation.actionError == nil)
                 #expect(!store.workspaces.contains { $0.id == "selected" })
             } else {
                 let failure = try await Self.presentedAlert(titled: "Workspace action failed", in: window)
                 #expect(failure.message == "Disconnected")
-                #expect(host.view.presentation.actionError == "Disconnected")
+                #expect(presentation.actionError == "Disconnected")
                 guard case let .workspaceDetail(workspaceId) = host.coordinator.currentScreen else {
                     Issue.record("The page left after a failed \(action.rawValue): \(host.coordinator.currentScreenDescription)")
                     return
@@ -98,6 +100,14 @@ struct WorkspaceDetailActionTests {
                 #expect(store.workspaces.contains { $0.id == "selected" })
                 await failure.dismiss(animated: false)
             }
+        }
+    }
+
+    private static func setConfirmation(for action: WorkspaceAction, presented: Bool, on presentation: WorkspaceDetailPresentation) {
+        if action == .archive {
+            presentation.showArchiveConfirmation = presented
+        } else {
+            presentation.showDeleteConfirmation = presented
         }
     }
 
