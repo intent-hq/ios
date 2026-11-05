@@ -1,4 +1,5 @@
 @testable import Intent
+import Observation
 import SwiftUI
 import Testing
 import UIKit
@@ -95,6 +96,54 @@ struct ComposerSkillCompletionTests {
         #expect(connection.paramsForMethod("skill.list").count == 1)
     }
 
+    @Test func repeatedReadsReuseRankingUntilQueryChanges() async {
+        let completion = await makeCompletion()
+        let editor = SkillCompletionTextView()
+        editor.text = "/re"
+        editor.selectedRange = NSRange(location: 3, length: 0)
+        completion.update(from: editor)
+        let baseline = completion.rankingCount
+        #expect(completion.matches.map(\.name) == ["release-notes", "code-review"])
+        for _ in 0..<5 {
+            _ = completion.matches
+            _ = completion.selectedSkill
+        }
+        completion.moveSelection(by: 1)
+        #expect(completion.selectedSkill?.name == "code-review")
+        #expect(completion.rankingCount == baseline + 1)
+
+        editor.text = "/rel"
+        editor.selectedRange = NSRange(location: 4, length: 0)
+        completion.update(from: editor)
+        #expect(completion.matches.map(\.name) == ["release-notes"])
+        _ = completion.selectedSkill
+        #expect(completion.rankingCount == baseline + 2)
+    }
+
+    @Test func matchesFollowCatalogChangesAndNotifyObservers() async {
+        let completion = ComposerSkillCompletion()
+        let editor = SkillCompletionTextView()
+        editor.text = "/"
+        editor.selectedRange = NSRange(location: 1, length: 0)
+        completion.update(from: editor)
+        #expect(completion.matches.isEmpty)
+
+        let changed = ObservationFlag()
+        withObservationTracking { _ = completion.matches } onChange: { changed.set() }
+        let connection = FakeConnectionManager()
+        connection.responseMap["skill.list"] = ["zeta", "alpha"].map { name in
+            ["name": name, "description": "", "location": "/\(name)/SKILL.md", "scope": "user"]
+        }
+        await completion.catalog.load(workspaceId: "workspace", agentId: "catalog-change-agent", connection: connection)
+        #expect(changed.value, "Loading the catalog must invalidate views reading matches")
+        #expect(completion.matches.map(\.name) == ["alpha", "zeta"])
+        #expect(completion.selectedSkill?.name == "alpha")
+
+        completion.catalog.reset()
+        #expect(completion.matches.isEmpty)
+        #expect(completion.selectedSkill == nil)
+    }
+
     private func makeCompletion() async -> ComposerSkillCompletion {
         let connection = FakeConnectionManager()
         connection.responseMap["skill.list"] = ["code-review", "release-notes"].map { name in
@@ -104,6 +153,15 @@ struct ComposerSkillCompletionTests {
         await completion.catalog.load(workspaceId: "workspace", agentId: "agent", connection: connection)
         return completion
     }
+}
+
+nonisolated private final class ObservationFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+
+    var value: Bool { lock.withLock { flag } }
+
+    func set() { lock.withLock { flag = true } }
 }
 
 private final class SkillCompletionTextView: KeyCommandTextView {

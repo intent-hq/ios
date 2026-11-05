@@ -8,8 +8,29 @@ import UIKit
     private(set) var selectedIndex = 0
     @ObservationIgnored private weak var editor: UITextView?
     @ObservationIgnored private var dismissedContext: SlashSkillContext?
+    @ObservationIgnored private var ranking: Ranking?
+    /// Number of times the catalog was ranked; reads between query or catalog changes reuse the result.
+    @ObservationIgnored private(set) var rankingCount = 0
 
-    var matches: [SkillInfo] { SlashSkillContext.ranked(catalog.skills, query: context?.query ?? "") }
+    private struct Ranking {
+        let skills: [SkillInfo]
+        let index: SkillSearchIndex
+        let query: String
+        let matches: [SkillInfo]
+    }
+
+    /// Reading `catalog.skills` and `context` keeps observers subscribed to both inputs, while the
+    /// ranked result is memoized so repeated reads within one render do not re-rank the catalog.
+    var matches: [SkillInfo] {
+        let skills = catalog.skills
+        let query = context?.query ?? ""
+        if let ranking, ranking.query == query, ranking.skills == skills { return ranking.matches }
+        let index = ranking.flatMap { $0.skills == skills ? $0.index : nil } ?? SkillSearchIndex(skills)
+        let matches = index.ranked(query: query)
+        rankingCount += 1
+        ranking = Ranking(skills: skills, index: index, query: query, matches: matches)
+        return matches
+    }
     var selectedSkill: SkillInfo? {
         let matches = matches
         return matches.indices.contains(selectedIndex) ? matches[selectedIndex] : matches.first
