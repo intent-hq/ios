@@ -25,13 +25,17 @@ mkdir -p "$stubs"
 # xcrun records its argv as "xcrun: [arg] ..." lines in STUB_ARGS; an
 # xcresulttool test-results query prints $STUB_RESULTS (fixture JSON; a
 # "-retry" bundle path prints $STUB_RESULTS_RETRY when set) or fails under
-# STUB_RESULTS_FAIL=1; every other invocation (simctl) exits 0.
+# STUB_RESULTS_FAIL=1; `simctl list devices available` prints $STUB_DEVICES
+# and `--show-sdk-version` prints $STUB_SDK_VERSION (fails when it is unset);
+# every other invocation (simctl) exits 0.
 cat > "$stubs/xcrun" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
   { printf 'xcrun:'; printf ' [%s]' "$@"; echo; } >> "$STUB_ARGS"
 fi
 case " $* " in
+  *" simctl list devices available "*) cat "${STUB_DEVICES:-/dev/null}"; exit 0 ;;
+  *" --show-sdk-version "*) [ -n "${STUB_SDK_VERSION:-}" ] || exit 1; echo "$STUB_SDK_VERSION"; exit 0 ;;
   *" xcresulttool get test-results tests --path "*)
     if [ -n "${STUB_RESULTS_FAIL:-}" ]; then
       echo "Error: the result bundle could not be opened (stub)" >&2
@@ -1251,6 +1255,41 @@ assert_eq "incomplete full inventory never runs tests" "$(argv_count fullinvento
 status=$(run_filtered fullnativefailure "" test-without-building-ui UI_TEST_SHARD=1 \
   STUB_CATALOG="$work/full-catalog.json" STUB_RESULTS="$work/full-results.json" STUB_MODE=fail)
 assert_eq "full shard preserves native failure exit 65" "$status" 65
+
+# Simulator pick (ios#905): the selected Xcode's SDK major beats an older
+# "iPhone 16"; custom iPhone 16 names count; SIM_UDID still wins.
+cat > "$work/devices.txt" <<'DEVICES'
+== Devices ==
+-- iOS 18.1 --
+    iPhone 16 (01760D05-29E6-4EB6-A99D-A9068DCF046B) (Booted)
+    iPhone SE (3rd generation) (11111111-2222-3333-4444-555555555555) (Shutdown)
+-- iOS 26.3 --
+    iPhone 17 Pro (313C2EE9-DE34-48F3-885F-A9AC8100B8DC) (Shutdown)
+    CI iPhone 16 (iOS 26.3.1) (4CB2FB97-3D69-4EE8-8B04-D80A0CE39688) (Shutdown)
+    iPhone 16 Pro (AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE) (Shutdown)
+    iPad Pro 13-inch (M5) (95AC2E29-BBE0-44A8-B8BC-6DFA1E085711) (Shutdown)
+-- iOS 27.2 --
+    iPhone 16 (99999999-9999-9999-9999-999999999999) (Shutdown)
+-- visionOS 26.2 --
+    Apple Vision Pro (12345678-1234-1234-1234-123456789012) (Shutdown)
+DEVICES
+cat > "$work/devices-ipad-only.txt" <<'DEVICES'
+-- iOS 26.3 --
+    iPad Pro 13-inch (M5) (95AC2E29-BBE0-44A8-B8BC-6DFA1E085711) (Shutdown)
+DEVICES
+pick() { env -u SIM_UDID STUB_DEVICES="$1" ${2:+STUB_SDK_VERSION="$2"} "$SCRIPT" pick-simulator 2>"$work/pick.err"; }
+assert_eq "pick prefers the SDK major over an older iPhone 16" "$(pick "$work/devices.txt" 26.2)" 4CB2FB97-3D69-4EE8-8B04-D80A0CE39688
+assert_contains "pick names the device, runtime and SDK" "$(cat "$work/pick.err")" "Selected simulator: CI iPhone 16 (iOS 26.3.1), iOS 26.3 (4CB2FB97-3D69-4EE8-8B04-D80A0CE39688) for the iOS 26.2 simulator SDK"
+assert_eq "pick takes the newest matching major" "$(pick "$work/devices.txt" 27.2)" 99999999-9999-9999-9999-999999999999
+assert_eq "pick falls back to an older runtime" "$(pick "$work/devices.txt" 18.4)" 01760D05-29E6-4EB6-A99D-A9068DCF046B
+assert_eq "pick without an SDK version takes the newest iPhone 16" "$(pick "$work/devices.txt" "")" 99999999-9999-9999-9999-999999999999
+assert_eq "SIM_UDID overrides the pick" "$(SIM_UDID=explicit-udid STUB_DEVICES="$work/devices.txt" "$SCRIPT" pick-simulator)" explicit-udid
+set +e
+pick "$work/devices-ipad-only.txt" 26.2 >/dev/null
+status=$?
+set -e
+assert_eq "pick without an iPhone fails" "$status" 1
+assert_contains "pick failure names the problem" "$(cat "$work/pick.err")" "no available iPhone simulator"
 
 echo
 if [ "$failures" -eq 0 ]; then

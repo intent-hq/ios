@@ -437,7 +437,10 @@ ONLY_TESTING='IntentUITests/WorkspaceChangesUITests' scripts/xcodebuild.sh test-
 
 Use the regular `build-for-testing` / `test-without-building` pair for mixed unit
 and UI selectors. `SIM_UDID` selects a specific simulator; otherwise the wrapper
-chooses an iPhone and serializes test runs on that device. Keep `SIM_UDID` and
+chooses an iPhone and serializes test runs on that device. The automatic pick
+prefers a runtime with the selected Xcode's simulator SDK major version, then an
+iPhone 16 name (custom names such as `CI iPhone 16 (iOS 26.3.1)` count), then
+the newest runtime; an older runtime is a fallback only (ios#905). Keep `SIM_UDID` and
 `DERIVED_DATA_DIR` consistent between a split build and run, and rebuild after
 source changes. Use separate derived-data directories for concurrent builds.
 

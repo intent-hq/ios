@@ -46,8 +46,9 @@
 #                         build-ios/build-visionos keep production testability.
 #   DEVICE_UDID           Required physical iOS device for build-ios-device;
 #                         preserves project signing and never installs or uploads.
-#   SIM_UDID              Simulator UDID for test destinations; when unset the
-#                         newest available iPhone simulator is picked automatically.
+#   SIM_UDID              Simulator UDID for test destinations; when unset an
+#                         iPhone (iPhone 16 first) on the newest runtime matching
+#                         the selected Xcode's simulator SDK is picked.
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
 #   DERIVED_DATA_DIR      Passed as -derivedDataPath to every build/test call.
 #                         CI uses a fresh directory per job and run attempt.
@@ -264,30 +265,75 @@ EOF
   exit 2
 }
 
-# Prefer the iPhone 16 simulator, else any available iPhone; fail early with a
-# clear message if there is none. Select by UDID: it keeps parenthesized names
-# (e.g. "iPhone SE (3rd generation)") intact, disambiguates duplicate names
-# across runtimes, and pins the destination to one concrete device. tail -n 1
-# prefers the newest installed runtime (simctl groups devices by runtime,
-# oldest first). SIM_UDID overrides the pick (CI selects once, pre-boots, and
-# reuses the same device here).
+# Reads `xcrun simctl list devices available` on stdin and prints the chosen
+# iPhone as "UDID<TAB>name<TAB>iOS version". Arg: the selected Xcode's
+# iphonesimulator SDK version (may be empty). Tiers, best first: a runtime with
+# the SDK's major version (any minor); an older runtime; anything. Within a tier an "iPhone 16" name wins (including
+# custom names such as "CI iPhone 16 (iOS 26.3.1)"), then the newest runtime,
+# then the later line. An older runtime the SDK can build for may still lack
+# libraries the app links (ios#905), so the SDK's own major comes first.
+select_simulator() {
+  awk -v sdk="${1:-}" '
+    function vnum(v,   parts, n) {
+      n = split(v, parts, ".")
+      return (parts[1] + 0) * 10000 + (n > 1 ? parts[2] + 0 : 0) * 100 + (n > 2 ? parts[3] + 0 : 0)
+    }
+    BEGIN {
+      sdk_num = sdk == "" ? -1 : vnum(sdk)
+      split(sdk, sdk_parts, ".")
+      sdk_major = sdk_parts[1] + 0
+      best_tier = 99
+    }
+    /^-- / {
+      runtime = ""
+      if ($0 ~ /^-- iOS [0-9.]+ --$/) { runtime = $3 }
+      next
+    }
+    runtime != "" {
+      line = $0
+      sub(/ \([^()]*\)[[:space:]]*$/, "", line)
+      if (!match(line, /\([0-9A-Fa-f-]+\)$/) || RLENGTH != 38) { next }
+      udid = substr(line, RSTART + 1, 36)
+      name = substr(line, 1, RSTART - 2)
+      sub(/^[[:space:]]+/, "", name)
+      if (name !~ /iPhone/) { next }
+      rank = name ~ /(^|[[:space:]])iPhone 16($|[[:space:]]\()/ ? 0 : 1
+      version = vnum(runtime)
+      split(runtime, runtime_parts, ".")
+      if (sdk_num < 0) { tier = 2 }
+      else if (runtime_parts[1] + 0 == sdk_major) { tier = 0 }
+      else if (version <= sdk_num) { tier = 1 }
+      else { tier = 2 }
+      if (tier < best_tier || (tier == best_tier && (rank < best_rank || (rank == best_rank && version >= best_version)))) {
+        best_tier = tier; best_rank = rank; best_version = version
+        best = udid "\t" name "\t" runtime
+      }
+    }
+    END { if (best != "") print best }
+  '
+}
+
+# Picks a simulator through select_simulator; fails early with a clear message
+# if there is none. Selects by UDID: it keeps parenthesized names intact,
+# disambiguates duplicate names across runtimes, and pins the destination to
+# one concrete device. SIM_UDID overrides the pick (CI selects once,
+# pre-boots, and reuses the same device here).
 pick_simulator() {
   if [ -n "${SIM_UDID:-}" ]; then
     echo "$SIM_UDID"
     return
   fi
-  local devices line udid name
-  devices=$(xcrun simctl list devices available)
-  line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone 16 \(' | tail -n 1 || true)
-  if [ -z "$line" ]; then
-    line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone' | tail -n 1 || true)
-  fi
-  udid=$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -n 1 || true)
-  if [ -z "$udid" ]; then
+  local sdk choice udid name runtime
+  sdk=$(xcrun --sdk iphonesimulator --show-sdk-version 2>/dev/null || true)
+  choice=$(xcrun simctl list devices available | select_simulator "$sdk")
+  if [ -z "$choice" ]; then
     die "no available iPhone simulator on this machine"
   fi
-  name=$(echo "$line" | sed -E "s/^[[:space:]]*(.*) \($udid\).*/\1/")
-  echo "Selected simulator: $name ($udid)" >&2
+  udid=${choice%%$'\t'*}
+  name=${choice#*$'\t'}
+  runtime=${name#*$'\t'}
+  name=${name%%$'\t'*}
+  echo "Selected simulator: $name, iOS $runtime ($udid)${sdk:+ for the iOS $sdk simulator SDK}" >&2
   echo "$udid"
 }
 
