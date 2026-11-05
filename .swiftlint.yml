@@ -183,6 +183,18 @@ custom_rules:
       - identifier
       - typeidentifier
     severity: error
+  state_phase_flag:
+    name: "Model Lifecycle Phases As An Enum"
+    # A Bool named after a step (scheduled, queued, pending, awaiting, performed,
+    # in progress, in flight) is usually one state of an implicit state machine.
+    # The lookahead keeps the match on `var name`; IntentTests/StateFlagBudgetPolicyTests
+    # also ratchets flag counts per type.
+    regex: '\bvar\s+[a-z]\w*(?:Scheduled|Queued|Pending|Awaiting[A-Z]\w*|Performed|InProgress|InFlight)\b(?=\s*(?::\s*Bool\s*)?=\s*(?:true|false)\b)'
+    message: "Lifecycle-phase Bool flag. Model the phases as one enum (see ConversationTranscriptScrollState.EntryScroll) or reuse CoalescedRead for single-flight reads. Suppress with a reason only for an independent one-off guard."
+    match_kinds:
+      - keyword
+      - identifier
+    severity: warning
   geometry_reader_usage:
     name: "GeometryReader Is Banned"
     regex: '\bGeometryReader\b'

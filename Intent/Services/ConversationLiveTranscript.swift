@@ -106,7 +106,7 @@ final class ConversationLiveTranscript {
     /// across rejection, timeout, retry and reconnect (each re-registers for
     /// the same binding), cleared when a snapshot applies or the binding is
     /// torn down.
-    @ObservationIgnored var snapshotPending = false
+    @ObservationIgnored var snapshotPending = false // swiftlint:disable:this state_phase_flag
 
     enum ChatChannel: Equatable {
         /// No registration: before the first subscribe, after a rejection,

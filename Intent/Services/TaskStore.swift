@@ -18,7 +18,7 @@ import Observation
     @ObservationIgnored private var tasksLive = false
     @ObservationIgnored private var taskSubscriptionId: String?
     @ObservationIgnored private var taskReconciler: DeltaReconciler<WorkspaceTask>?
-    @ObservationIgnored private var resnapshotInProgress = false
+    @ObservationIgnored private var resnapshotInProgress = false // swiftlint:disable:this state_phase_flag
 
     init(workspaceId: String, connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.workspaceId = workspaceId

@@ -88,7 +88,7 @@ nonisolated struct DiagnosticReport: Sendable {
 nonisolated final class DiagnosticIntake: Sendable {
     private struct State {
         var records: [DiagnosticRecord] = []
-        var workerScheduled = false
+        var workerScheduled = false // swiftlint:disable:this state_phase_flag
         var nextSequence: UInt64 = 0
         var nextScope: UInt64 = 0
         var overflow: UInt64 = 0

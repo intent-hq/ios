@@ -22,7 +22,7 @@ import Observation
     private var noteLive = false
     @ObservationIgnored private var noteSubscriptionId: String?
     private var noteReconciler: DeltaReconciler<Note>?
-    private var resnapshotInProgress = false
+    private var resnapshotInProgress = false // swiftlint:disable:this state_phase_flag
     private var connectionObserver: AnyCancellable?
     /// Reads the rest of a paged `note.subscribe` snapshot (protocol §6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
