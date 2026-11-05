@@ -15,13 +15,13 @@ extension DemoFixtures {
     /// PNG; the unknown asset returns an empty payload. Neither needs a network.
     /// The linked workspace intentionally differs from the conversation's.
     static var inlineImageConversationMessages: [[String: Any]] {
-        if ProcessInfo.processInfo.arguments.contains("--demo-user-image-block") {
+        if LaunchOptions.current.contains("--demo-user-image-block") {
             return imageBlockConversation(role: "user")
         }
-        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-image-block") {
+        if LaunchOptions.current.contains("--demo-assistant-image-block") {
             return imageBlockConversation(role: "assistant")
         }
-        let response = ProcessInfo.processInfo.arguments.contains("--demo-inline-image-keyboard")
+        let response = LaunchOptions.current.contains("--demo-inline-image-keyboard")
             ? inlineImageSavedPreviewText : inlineImageResponseText
         return [
             [

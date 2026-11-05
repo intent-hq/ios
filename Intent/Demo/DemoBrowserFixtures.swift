@@ -8,7 +8,7 @@ enum DemoBrowserFixtures {
 
     // Nil keeps the ordinary demo transcript when this scenario was not requested.
     static var conversationMessages: [[String: Any]]? { // swiftlint:disable:this discouraged_optional_collection
-        guard ProcessInfo.processInfo.arguments.contains("--demo-browsers") else { return nil }
+        guard LaunchOptions.current.contains("--demo-browsers") else { return nil }
         return [
             [
                 "id": "demo-browser-assistant",
@@ -22,17 +22,17 @@ enum DemoBrowserFixtures {
     }
 
     static func response(for method: String, params: [String: Any]) -> Any? {
-        if ProcessInfo.processInfo.arguments.contains("--demo-repo-scripts"),
+        if LaunchOptions.current.contains("--demo-repo-scripts"),
            let response = DemoRepositoryScriptFixtures.response(for: method, params: params) { return response }
-        if ProcessInfo.processInfo.arguments.contains("--demo-scripts"),
+        if LaunchOptions.current.contains("--demo-scripts"),
            let response = scriptResponse(
                for: method,
                params: params,
-               longList: ProcessInfo.processInfo.arguments.contains("--demo-long-script-list")
+               longList: LaunchOptions.current.contains("--demo-long-script-list")
            ) { return response }
         switch method {
         case "browser.listTabs":
-            if ProcessInfo.processInfo.arguments.contains("--demo-browsers"),
+            if LaunchOptions.current.contains("--demo-browsers"),
                let workspaceId = params["workspaceId"] as? String {
                 let tab: [String: Any] = [
                     "tabId": "demo-agent-browser", "workspaceId": workspaceId, "title": "Agent browser",
@@ -45,7 +45,7 @@ enum DemoBrowserFixtures {
             }
             return ["tabs": [[String: Any]]()]
         case "script.list":
-            if ProcessInfo.processInfo.arguments.contains("--demo-browsers"),
+            if LaunchOptions.current.contains("--demo-browsers"),
                let workspaceId = params["workspaceId"] as? String {
                 let script: [String: Any] = [
                     "id": "preview", "workspaceId": workspaceId, "name": "Web preview",

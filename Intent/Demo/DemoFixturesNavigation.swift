@@ -6,7 +6,7 @@ extension DemoFixtures {
     static func reselectConversationIfRequested(coordinator: AppCoordinator) async {
         guard DemoMode.isEnabled,
               let trigger = triggerFile(
-                from: ProcessInfo.processInfo.arguments,
+                from: LaunchOptions.current.arguments,
                 prefix: "--demo-conversation-reselection-trigger-file="
               ) else { return }
         do {
@@ -32,7 +32,7 @@ struct DemoToastOverlay: ViewModifier {
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .top) {
-            if DemoMode.isEnabled, ProcessInfo.processInfo.arguments.contains("--demo-toast") {
+            if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-toast") {
                 ToastView(toast: toast, onTap: {}, onDismiss: {})
                     .padding(.top, Constants.Root.toastTopPadding)
             }

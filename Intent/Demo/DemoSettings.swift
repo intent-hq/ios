@@ -8,13 +8,13 @@ enum DemoSettings {
     private static var startupBackendID: BackendID?
 
     static func seedConnectionsIfNeeded() {
-        guard DemoMode.isEnabled, ProcessInfo.processInfo.arguments.contains("--demo-settings") else { return }
+        guard DemoMode.isEnabled, LaunchOptions.current.contains("--demo-settings") else { return }
         let persistence = PersistenceManager.shared
         let primary = persistence.upsertConnection(connection(name: "Studio Mac", host: "studio.invalid"))
         persistence.upsertConnection(connection(name: "Travel Mac", host: "travel.invalid"))
         persistence.setActiveConnection(id: primary.id)
         startupBackendID = BackendID(primary.id)
-        if ProcessInfo.processInfo.arguments.contains("--demo-long-agent-history") {
+        if LaunchOptions.current.contains("--demo-long-agent-history") {
             persistence.saveAgentHistory((0..<AgentHistory.maximumEntries).map { index in
                 AgentHistoryEntry(
                     connectionId: primary.id,

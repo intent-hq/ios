@@ -9,7 +9,7 @@ import SwiftUI
 final class NetworkCopyDiagnostics {
     static let launchArgument = "--diagnose-network-copy"
     static let maximumEntries = 12
-    static let current = make(arguments: ProcessInfo.processInfo.arguments)
+    static let current = make(arguments: LaunchOptions.current.arguments)
 
     enum Phase: String {
         case active, background, inactive, stopped, unknown

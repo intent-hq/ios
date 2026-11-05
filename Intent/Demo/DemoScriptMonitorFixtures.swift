@@ -56,7 +56,7 @@ final class DemoScriptMonitorFixtures {
         recordRequests()
     }
 
-    static func configured(arguments: [String] = ProcessInfo.processInfo.arguments) -> DemoScriptMonitorFixtures? {
+    static func configured(arguments: [String] = LaunchOptions.current.arguments) -> DemoScriptMonitorFixtures? {
         guard let scenario = requestedScenario(arguments: arguments) else { return nil }
         return DemoScriptMonitorFixtures(
             scenario: scenario,
@@ -65,7 +65,7 @@ final class DemoScriptMonitorFixtures {
         )
     }
 
-    static func configuredPresentationDate(arguments: [String] = ProcessInfo.processInfo.arguments) -> Date? {
+    static func configuredPresentationDate(arguments: [String] = LaunchOptions.current.arguments) -> Date? {
         requestedScenario(arguments: arguments) == nil ? nil : presentationAnchor
     }
 

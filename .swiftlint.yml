@@ -191,3 +191,18 @@ custom_rules:
       - typeidentifier
       - identifier
     severity: error
+  launch_options_only:
+    name: "Read Launch Options Through LaunchOptions"
+    # Test targets may set up their own launches; only app code is checked.
+    # Excluded by path segment so a checkout under a directory named Intent
+    # still lints IntentTests and IntentUITests as test code.
+    regex: '\bProcessInfo\s*\.\s*processInfo\s*\.\s*(?:arguments|environment)\b'
+    message: "Read launch arguments and environment through LaunchOptions.current instead of ProcessInfo.processInfo."
+    match_kinds:
+      - identifier
+      - typeidentifier
+    excluded:
+      - '/IntentTests/'
+      - '/IntentUITests/'
+      - '/Intent/Utils/LaunchOptions\.swift$'
+    severity: error

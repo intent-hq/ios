@@ -56,7 +56,6 @@ $(SRCROOT)/Intent/Demo/DemoScriptMonitorFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoSettings.swift
 $(SRCROOT)/Intent/Demo/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoWorkspaceActionFixtures.swift
-$(SRCROOT)/Intent/Demo/LaunchOptions.swift
 $(SRCROOT)/Intent/DesignSystem/AgentAvatarDesign.swift
 $(SRCROOT)/Intent/DesignSystem/Colors.swift
 $(SRCROOT)/Intent/DesignSystem/ComponentLayout.swift
@@ -342,6 +341,7 @@ $(SRCROOT)/Intent/Utils/ExternalLink.swift
 $(SRCROOT)/Intent/Utils/HapticManager.swift
 $(SRCROOT)/Intent/Utils/ISO8601+Lenient.swift
 $(SRCROOT)/Intent/Utils/IntentFileLink.swift
+$(SRCROOT)/Intent/Utils/LaunchOptions.swift
 $(SRCROOT)/Intent/Utils/LocalNotificationService.swift
 $(SRCROOT)/Intent/Utils/NotificationChime.swift
 $(SRCROOT)/Intent/Utils/NotificationManager+Aggregation.swift

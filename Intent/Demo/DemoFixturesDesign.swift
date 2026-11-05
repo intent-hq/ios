@@ -2,7 +2,7 @@
 import Foundation
 
 extension DemoFixtures {
-    static let designScenario = DemoDesignScenario.requested(by: ProcessInfo.processInfo.arguments)
+    static let designScenario = DemoDesignScenario.requested(by: LaunchOptions.current.arguments)
         .map { DemoDesignFixtures(scenario: $0) }
 }
 

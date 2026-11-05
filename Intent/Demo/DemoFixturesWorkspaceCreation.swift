@@ -7,7 +7,7 @@ extension DemoFixtures {
     static func workspaceCreationResponse(for method: String, params: [String: Any]) -> Any {
         switch method {
         case "github.authStatus":
-            return ["isConfigured": !ProcessInfo.processInfo.arguments.contains("--demo-github-disconnected")]
+            return ["isConfigured": !LaunchOptions.current.contains("--demo-github-disconnected")]
         case "host.directoryStatus":
             let path = params["path"] as? String ?? ""
             return ["exists": path.hasSuffix("/existing-project") || workspaceCreationKeys[.newRepository(path: path)] != nil, "path": path]
@@ -45,7 +45,7 @@ extension DemoFixtures {
             return ["providers": providers]
         case "models.list":
             let provider = params["providerId"] as? String ?? "auggie"
-            if ProcessInfo.processInfo.arguments.contains("--demo-model-catalog-empty") {
+            if LaunchOptions.current.contains("--demo-model-catalog-empty") {
                 return ["models": [[String: Any]]()]
             }
             return [
@@ -67,7 +67,7 @@ extension DemoFixtures {
             guard let path = params["repositoryPath"] as? String else { return [String: Any]() }
             return workspaceCreationRetryResponse(source: .newRepository(path: path), path: path, params: params)
         }
-        guard ProcessInfo.processInfo.arguments.contains("--demo-github-create-retry"),
+        guard LaunchOptions.current.contains("--demo-github-create-retry"),
               let url = params["githubUrl"] as? String, let branch = params["baseRef"] as? String else { return [String: Any]() }
         return workspaceCreationRetryResponse(source: .github(url: url, baseRef: branch), path: "~/Developer/console", params: params)
     }

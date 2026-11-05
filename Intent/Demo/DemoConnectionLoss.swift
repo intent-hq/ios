@@ -15,7 +15,7 @@ enum DemoConnectionLoss {
 
     private static var backgroundScenario: String? {
         guard directory != nil else { return nil }
-        return ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--demo-background-loss=") }
+        return LaunchOptions.current.arguments.first { $0.hasPrefix("--demo-background-loss=") }
             .map { String($0.dropFirst("--demo-background-loss=".count)) }
     }
 
@@ -46,7 +46,7 @@ enum DemoConnectionLoss {
 
     private static var directory: URL? {
         guard DemoMode.isEnabled,
-              let argument = ProcessInfo.processInfo.arguments.last(where: { $0.hasPrefix(directoryPrefix) }),
+              let argument = LaunchOptions.current.arguments.last(where: { $0.hasPrefix(directoryPrefix) }),
               !argument.dropFirst(directoryPrefix.count).isEmpty else { return nil }
         return URL(fileURLWithPath: String(argument.dropFirst(directoryPrefix.count)))
     }
@@ -54,13 +54,13 @@ enum DemoConnectionLoss {
     /// Hold fixture data independently from the optional startup timeout trigger.
     static var initialDataGate: DemoFixtures.ResponseGate? {
         guard let directory,
-              ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-pending-startup") else { return nil }
+              LaunchOptions.current.contains("--demo-connection-loss-pending-startup") else { return nil }
         return .triggerFile(directory.appendingPathComponent("initial-data"))
     }
 
     static var initialRoutingGate: DemoFixtures.ResponseGate? {
         guard let directory, initialDataGate != nil else { return nil }
-        if ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-startup-timeout") {
+        if LaunchOptions.current.contains("--demo-connection-loss-startup-timeout") {
             return .triggerFile(directory.appendingPathComponent("initial-timeout"))
         }
         return initialDataGate
@@ -92,14 +92,14 @@ enum DemoConnectionLoss {
             }
             try await DemoFixtures.wait(for: .triggerFile(directory.appendingPathComponent("loss")))
             try Task.checkCancellation()
-            if ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-cert-mismatch"),
+            if LaunchOptions.current.contains("--demo-connection-loss-cert-mismatch"),
                let connection = connection as? ConnectionManager {
                 connection.certMismatches = [HostCertMismatch(host: "demo.invalid", fingerprint: "00:11")]
             }
-            connection.connectionState = ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-reconnecting")
+            connection.connectionState = LaunchOptions.current.contains("--demo-connection-loss-reconnecting")
                 ? .reconnecting(attempt: 1) : .disconnected
-            if ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-startup-failure") {
-                let message = ProcessInfo.processInfo.arguments.contains("--demo-connection-loss-startup-unreachable")
+            if LaunchOptions.current.contains("--demo-connection-loss-startup-failure") {
+                let message = LaunchOptions.current.contains("--demo-connection-loss-startup-unreachable")
                     ? "The saved machine could not be reached."
                     : "Server certificate has changed. Re-pair to trust the new certificate."
                 coordinator.onConnectionFailed(error: message)

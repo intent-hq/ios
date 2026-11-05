@@ -28,7 +28,7 @@ extension DemoFixtures {
     }
 
     static func workspaceProposalResponse(for method: String, params: [String: Any]) -> Any? {
-        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-proposal") else { return nil }
+        guard LaunchOptions.current.contains("--demo-assistant-workspace-proposal") else { return nil }
         if method == "workspace.list", !proposedWorkspace.isEmpty { return ["workspaces": workspaces + [proposedWorkspace]] }
         guard method == "workspace.create" else { return nil }
         if let proposedWorkspaceRequest {
@@ -40,7 +40,7 @@ extension DemoFixtures {
             "id": "demo-proposed-workspace", "title": params["title"] as? String ?? "Follow-up workspace",
             "repositoryPath": params["repositoryPath"] ?? "", "status": "active"
         ]
-        if ProcessInfo.processInfo.arguments.contains("--demo-workspace-proposal-retry") { return [String: Any]() }
+        if LaunchOptions.current.contains("--demo-workspace-proposal-retry") { return [String: Any]() }
         return ["workspace": proposedWorkspace]
     }
 }

@@ -8,7 +8,7 @@ extension DemoFixtures {
         arguments.contains("--demo-startup-transcript")
     }
 
-    static var usesStartupTranscript: Bool { startupTranscriptRequested(by: ProcessInfo.processInfo.arguments) }
+    static var usesStartupTranscript: Bool { startupTranscriptRequested(by: LaunchOptions.current.arguments) }
     static let startupSeenMessageId = "startup-row-25"
     private static let startupRowCount = 50
 
