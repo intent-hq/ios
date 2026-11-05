@@ -31,6 +31,17 @@ assert_check_fails() {
   assert_contains "$output" "run scripts/update-source-lists.sh"
 }
 
+assert_check_rejects_empty() {
+  local description=$1 expected=$2
+  set +e
+  output=$("$FIXTURE_CHECK" 2>&1)
+  status=$?
+  set -e
+  [ "$status" -eq 1 ] || fail "$description exited $status instead of 1"
+  assert_contains "$output" "$expected"
+  assert_contains "$output" "staged or committed empty"
+}
+
 assert_check_passes() {
   local description=$1
   output=$("$FIXTURE_CHECK" 2>&1) || fail "$description exited $? instead of 0: $output"
@@ -118,6 +129,27 @@ assert_check_fails "pruned directory entry" '-$(SRCROOT)/Intent/Resources/Ignore
 
 : > "$FIXTURE_LIST"
 assert_check_fails "empty list" '+$(SRCROOT)/Intent/App.swift'
+
+write_list \
+  'Intent/App.swift' \
+  'Intent/Nested Dir/Nested.swift' \
+  'Intent/Pending.swift' \
+  'IntentTests/AppTests.swift' \
+  'IntentUITests/AddedUITests.swift' \
+  'IntentUITests/AppUITests.swift'
+printf 'let pending = 11\n' > "$FIXTURE/Intent/Pending.swift"
+git_fixture add -N Intent/Pending.swift
+assert_check_rejects_empty "intent-to-add source" 'Intent/Pending.swift'
+git_fixture add Intent/Pending.swift
+assert_check_passes "intent-to-add source staged with content"
+
+: > "$FIXTURE/Intent/Pending.swift"
+git_fixture add Intent/Pending.swift
+git_fixture commit -q -m 'empty source'
+printf 'let restored = 12\n' > "$FIXTURE/Intent/Pending.swift"
+assert_check_rejects_empty "source committed empty" 'Intent/Pending.swift'
+git_fixture add Intent/Pending.swift
+assert_check_passes "empty commit repaired"
 
 rm "$FIXTURE_LIST"
 set +e

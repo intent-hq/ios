@@ -25,6 +25,27 @@ source_lists_git_files() {
     done
 }
 
+# Prints NUL-separated repo-relative Swift paths under the given pathspecs
+# whose index entry is the empty blob: an intent-to-add (`git add -N`) file, or
+# a Swift file committed empty. A path-limited commit records intent-to-add
+# entries as empty files, which then fail to compile; no Swift source is
+# legitimately empty.
+source_lists_empty_index_entries() {
+  local repo_root=$1
+  shift
+  local empty_blob
+  empty_blob=$(git -C "$repo_root" hash-object -t blob /dev/null) || return 1
+  git -C "$repo_root" ls-files -z --stage -- "$@" |
+    while IFS= read -r -d '' entry; do
+      local object=${entry#* }
+      object=${object%% *}
+      local relative=${entry#*$'\t'}
+      case "$relative" in
+        *.swift) [ "$object" = "$empty_blob" ] && printf '%s\0' "$relative" ;;
+      esac
+    done
+}
+
 # scripts/test-source-inputs.xcfilelist: every directory holding a file plus
 # every Swift file under Intent/ and IntentTests/ (the sandboxed Copy Test
 # Source Inputs phase may only read declared paths).
