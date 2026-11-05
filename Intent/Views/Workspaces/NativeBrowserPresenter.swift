@@ -39,9 +39,9 @@ struct NativeBrowserPresenter: ViewModifier {
                 get: { navigation.presentation(window: windowID) },
                 set: { if $0 == nil { navigation.dismiss(window: windowID) } }
             )) { browser in
-                WorkspaceBrowserView(browser: browser, connection: session.connection) { url, title in
+                WorkspaceBrowserView(browser: browser, connection: session.connection, onPageChange: { url, title in
                     navigation.pageChanged(browser.id, url: url, title: title)
-                }
+                })
                 .id(browser.id)
                 .onAppear {
                     displayedID = browser.id
