@@ -38,11 +38,7 @@ struct WorkspaceBrowserView: View {
             .toolbar(onClose == nil ? .automatic : .hidden, for: .navigationBar)
             .task(id: attachmentKey) { await attach() }
             .onAppear { addressInput = targetAddress ?? browser.url }
-            .onChange(of: browser.url) { _, url in
-                targetAddress = url
-                addressInput = url
-                retry = UUID()
-            }
+            .onChange(of: browser.url) { _, url in updateRequestedURL(url) }
             .onChange(of: page.title) { _, title in onPageChange(page.address, title) }
             .onChange(of: page.address) { _, address in
                 onPageChange(address, page.title)
@@ -56,6 +52,12 @@ struct WorkspaceBrowserView: View {
             }
             .onDisappear { page.stop() }
         }
+    }
+
+    private func updateRequestedURL(_ url: String) {
+        targetAddress = url
+        addressInput = url
+        retry = UUID()
     }
 
     private var browserContent: some View {
