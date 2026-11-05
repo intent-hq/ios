@@ -994,6 +994,7 @@ $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ConnectionPrincipalTests.swift
 $(SRCROOT)/IntentTests/ContentBlockLinkTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
+$(SRCROOT)/IntentTests/ConversationAttachmentEncodingTests.swift
 $(SRCROOT)/IntentTests/ConversationBudgetEvidence.swift
 $(SRCROOT)/IntentTests/ConversationBudgetFixture.swift
 $(SRCROOT)/IntentTests/ConversationCatalogFailureTests.swift
