@@ -6,7 +6,7 @@ enum DemoChangesFixtures {
     private static let testSource = "import Testing\n\n@Test func recordsUsage() {\n    #expect(Analytics().count == 1)\n}\n"
     private static let testLineCount = testSource.split(separator: "\n", omittingEmptySubsequences: false).count - 1
     private static let longCommitLineCount = 80
-    private static var usesLongCommit: Bool { ProcessInfo.processInfo.arguments.contains("--demo-long-commit") }
+    private static var usesLongCommit: Bool { LaunchOptions.current.contains("--demo-long-commit") }
 
     static func response(for method: String, params: [String: Any]) -> Any? {
         if let response = DemoChangesRootFixtures.response(for: method, params: params) { return response }

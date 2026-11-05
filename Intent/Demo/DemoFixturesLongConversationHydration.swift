@@ -21,7 +21,7 @@ extension DemoFixtures {
         case standalone
     }
 
-    static let longConversationSlimToolRowLayout = slimToolRowLayout(from: ProcessInfo.processInfo.arguments)
+    static let longConversationSlimToolRowLayout = slimToolRowLayout(from: LaunchOptions.current.arguments)
     static let slimToolRowLayoutArgumentPrefix = "--demo-long-slim-tool-rows="
 
     static func slimToolRowLayout(from arguments: [String]) -> LongConversationSlimToolRowLayout {

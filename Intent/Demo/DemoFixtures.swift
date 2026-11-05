@@ -130,7 +130,7 @@ enum DemoFixtures {
     /// UI tests release a trigger file after observing the transcript; a fixed
     /// delay cannot account for a loaded simulator. Screenshot flows use the
     /// default delay. Metadata/snapshot and hydration gates are independent.
-    static let longConversationHookListGate = hookListGate(from: ProcessInfo.processInfo.arguments)
+    static let longConversationHookListGate = hookListGate(from: LaunchOptions.current.arguments)
 
     static let defaultHookListDelay: Duration = .seconds(defaultHookListDelaySeconds)
 
@@ -143,7 +143,7 @@ enum DemoFixtures {
     /// tool rows near the end of the long transcript (#338). Same shape as
     /// the hooks-row gate: a delay by default, or a trigger file for a UI
     /// test that releases the hydration itself.
-    static let longConversationBlockHydrationGate = blockHydrationGate(from: ProcessInfo.processInfo.arguments)
+    static let longConversationBlockHydrationGate = blockHydrationGate(from: LaunchOptions.current.arguments)
 
     static let defaultBlockHydrationDelay: Duration = .seconds(defaultBlockHydrationDelaySeconds)
 
@@ -217,10 +217,10 @@ enum DemoFixtures {
     /// one wins. Trigger-file gated like the fixture gates above, since a
     /// clock cannot be made robust against a loaded CI simulator.
     static let configuredEndDerealizationTriggerFile = endDerealizationTriggerFile(
-        from: ProcessInfo.processInfo.arguments
+        from: LaunchOptions.current.arguments
     )
 
-    static let configuredEndDerealizationMode = endDerealizationMode(from: ProcessInfo.processInfo.arguments)
+    static let configuredEndDerealizationMode = endDerealizationMode(from: LaunchOptions.current.arguments)
 
     static let endDerealizationTriggerArgumentPrefix = "--demo-end-derealization-trigger-file="
 
@@ -296,13 +296,13 @@ enum DemoFixtures {
     /// Gate to wait on before serving `response(for:params:)`, or nil for an immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
         if let gate = historyResponseGate(for: method, params: params) { return gate }
-        if let gate = agentGroupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
-        if let gate = startupResponseGate(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return gate }
+        if let gate = agentGroupResponseGate(for: method, params: params, arguments: LaunchOptions.current.arguments) { return gate }
+        if let gate = startupResponseGate(for: method, params: params, arguments: LaunchOptions.current.arguments) { return gate }
         if let prefix = responseTriggerFilePrefixes[method] {
-            return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: prefix).map(ResponseGate.triggerFile)
+            return triggerFile(from: LaunchOptions.current.arguments, prefix: prefix).map(ResponseGate.triggerFile)
         }
         switch method {
-        case "settings.get" where params["path"] as? String == "providers.enabled": return workspaceProviderGate(from: ProcessInfo.processInfo.arguments)
+        case "settings.get" where params["path"] as? String == "providers.enabled": return workspaceProviderGate(from: LaunchOptions.current.arguments)
         case "workspace.list": return DemoConnectionLoss.initialDataGate
         case "hook.list" where params["workspaceId"] as? String == longConversationWorkspaceId: return longConversationHookListGate
         case "agent.getMessageBlock" where params["agentId"] as? String == longConversationAgentId: return longConversationBlockHydrationGate
@@ -340,7 +340,7 @@ extension DemoFixtures {
     /// Chat snapshots, plus opt-in design scenario updates after commands.
     static func subscriptionPush(for method: String, params: [String: Any]) -> SubscriptionPush? {
         #if DEBUG
-        if startupSnapshotIsHeld(for: method, params: params, arguments: ProcessInfo.processInfo.arguments) { return nil }
+        if startupSnapshotIsHeld(for: method, params: params, arguments: LaunchOptions.current.arguments) { return nil }
         #endif
         if let push = designScenario?.subscriptionPush(for: method, params: params) { return push }
         guard method == "chat.subscribe" else { return nil }
@@ -362,7 +362,7 @@ extension DemoFixtures {
         if usesTranscriptVideo, agentId == "demo-agent-implementor" { return transcriptVideoMessages }
         if usesInlinePDF, agentId == "demo-agent-implementor" { return inlinePDFMessages }
         if usesInlineText, agentId == "demo-agent-implementor" { return inlineTextMessages }
-        if inlineImageConversationRequested(by: ProcessInfo.processInfo.arguments),
+        if inlineImageConversationRequested(by: LaunchOptions.current.arguments),
            agentId == inlineImageAgentId { return inlineImageConversationMessages }
         if agentId == assistantAgentId { return assistantMessages }
         if assistantAgents.contains(where: { ($0["id"] as? String) == agentId }) { return [] }

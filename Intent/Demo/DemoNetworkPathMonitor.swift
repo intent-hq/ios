@@ -16,13 +16,13 @@ final class DemoNetworkPathMonitor: NetworkPathMonitoring {
     func start(onUpdate: @escaping @MainActor @Sendable (NetworkPathSnapshot) -> Void) {
         let directory = directory
         task = Task {
-            if ProcessInfo.processInfo.arguments.contains("--demo-network-requires-connection") {
+            if LaunchOptions.current.contains("--demo-network-requires-connection") {
                 onUpdate(NetworkPathSnapshot(status: .requiresConnection, interfaces: []))
             }
             do {
                 try await DemoFixtures.wait(for: .triggerFile(directory.appendingPathComponent("network-offline")))
                 try Task.checkCancellation()
-                let reason: NWPath.UnsatisfiedReason = ProcessInfo.processInfo.arguments
+                let reason: NWPath.UnsatisfiedReason = LaunchOptions.current.arguments
                     .contains("--demo-network-local-denied") ? .localNetworkDenied : .notAvailable
                 onUpdate(NetworkPathSnapshot(status: .unsatisfied, interfaces: [], unsatisfiedReason: reason))
                 try await DemoFixtures.wait(for: .triggerFile(directory.appendingPathComponent("network-restored")))

@@ -5,7 +5,7 @@ extension DemoFixtures {
     /// Opt-in varied-height pages with deterministic transport gates; ordinary
     /// demo and screenshot fixtures stay intact.
     static var usesHistoryPages: Bool {
-        ProcessInfo.processInfo.arguments.contains("--demo-history-pages")
+        LaunchOptions.current.contains("--demo-history-pages")
     }
 
     private static let historyMessageCount = 30
@@ -31,7 +31,7 @@ extension DemoFixtures {
     private static func historyPage(params: [String: Any]) -> [String: Any] {
         let cursor = params["nextToken"] as? String
         if cursor != nil,
-           let recovery = triggerFile(from: ProcessInfo.processInfo.arguments, prefix: "--demo-history-retry-trigger-file="),
+           let recovery = triggerFile(from: LaunchOptions.current.arguments, prefix: "--demo-history-retry-trigger-file="),
            !FileManager.default.fileExists(atPath: recovery.path) {
             return ["error": "Earlier messages are temporarily unavailable"]
         }
@@ -50,7 +50,7 @@ extension DemoFixtures {
               params["agentId"] as? String == longConversationAgentId,
               params["nextToken"] as? String == historyCursorPrefix + String(historyMessageCount - historyPageSize)
         else { return nil }
-        return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: "--demo-history-page-trigger-file=")
+        return triggerFile(from: LaunchOptions.current.arguments, prefix: "--demo-history-page-trigger-file=")
             .map(ResponseGate.triggerFile)
     }
 

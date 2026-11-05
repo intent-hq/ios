@@ -8,7 +8,7 @@ enum DemoWorkspaceActionFixtures {
     private static var renamedTitles: [String: String] = [:]
 
     static func response(for method: String, params: [String: Any]) -> Any? {
-        let arguments = ProcessInfo.processInfo.arguments
+        let arguments = LaunchOptions.current.arguments
         guard arguments.contains("--demo-workspace-actions") else { return nil }
         if method == "workspace.list" {
             let active = DemoFixtures.workspaces.filter { !removedIDs.contains($0["id"] as? String ?? "") }.map { original in

@@ -30,16 +30,16 @@ extension DemoFixtures {
     static func assistantDetail(_ agent: [String: Any]) -> [String: Any] {
         var detail = agent
         detail["model"] = "default-model"
-        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-reasoning-high") { detail["reasoningEffort"] = "high" }
+        if LaunchOptions.current.contains("--demo-assistant-reasoning-high") { detail["reasoningEffort"] = "high" }
         detail.merge(assistantModelSettings[agent["id"] as? String ?? ""] ?? [:]) { _, updated in updated }
         return detail
     }
 
     static var assistantAgents: [[String: Any]] {
-        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-empty") {
+        if LaunchOptions.current.contains("--demo-assistant-empty") {
             return createdAssistantAgents.filter { !deletedAssistantAgentIDs.contains($0["id"] as? String ?? "") }
         }
-        let history: [[String: Any]] = ProcessInfo.processInfo.arguments.contains("--demo-assistant-history")
+        let history: [[String: Any]] = LaunchOptions.current.contains("--demo-assistant-history")
             ? (0..<assistantHistoryCount).map { index in
                 [
                     "id": "demo-assistant-history-\(index)",
@@ -86,11 +86,11 @@ extension DemoFixtures {
     /// Exercise the Assistant's real loading, retry and first-conversation flow.
     static func assistantListGate(for method: String, params: [String: Any]) -> ResponseGate? {
         guard method == "agent.list", params["workspaceId"] as? String == Workspace.chiefWorkspaceId else { return nil }
-        return triggerFile(from: ProcessInfo.processInfo.arguments, prefix: "--demo-assistant-list-trigger-file=").map(ResponseGate.triggerFile)
+        return triggerFile(from: LaunchOptions.current.arguments, prefix: "--demo-assistant-list-trigger-file=").map(ResponseGate.triggerFile)
     }
 
     static func assistantListResponse() -> [String: Any] {
-        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-list-retry"), !assistantListFailed {
+        if LaunchOptions.current.contains("--demo-assistant-list-retry"), !assistantListFailed {
             assistantListFailed = true
             return [:]
         }
@@ -101,11 +101,11 @@ extension DemoFixtures {
         await streamWorkspaceLinksIfRequested(in: store)
         let prefix = "--demo-assistant-prompts-trigger-file="
         guard DemoMode.isEnabled, store.agentId == assistantAgentId,
-              let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix(prefix) }) else { return }
+              let argument = LaunchOptions.current.arguments.first(where: { $0.hasPrefix(prefix) }) else { return }
         let trigger = URL(fileURLWithPath: String(argument.dropFirst(prefix.count)))
         let opening = "Hey bro — what’s on your mind?\n\n<!-- suggested-prompts\n"
         let prompts = "Show me what needs my attention.\nHelp me start something new."
-        let split = ProcessInfo.processInfo.arguments.contains("--demo-assistant-prompts-split")
+        let split = LaunchOptions.current.contains("--demo-assistant-prompts-split")
         let blocks = split ? [
             ContentBlock(id: "reply", type: .text, text: opening),
             ContentBlock(id: "prompts", type: .text, text: prompts)
@@ -145,7 +145,7 @@ extension DemoFixtures {
     private static func streamWorkspaceLinksIfRequested(in store: ConversationStore) async {
         let prefix = "--demo-workspace-stream-trigger="
         guard DemoMode.isEnabled, store.agentId == assistantAgentId,
-              let argument = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix(prefix) }) else { return }
+              let argument = LaunchOptions.current.arguments.first(where: { $0.hasPrefix(prefix) }) else { return }
         let trigger = URL(fileURLWithPath: String(argument.dropFirst(prefix.count)))
         store.messages = [
             ConversationMessage(
@@ -168,9 +168,9 @@ extension DemoFixtures {
     }
 
     private static var assistantReplyBlocks: [[String: Any]] {
-        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-proposal") { return workspaceProposalReplyBlocks }
-        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal") { return proposalReplyBlocks }
-        if ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-links") {
+        if LaunchOptions.current.contains("--demo-assistant-workspace-proposal") { return workspaceProposalReplyBlocks }
+        if LaunchOptions.current.contains("--demo-assistant-proposal") { return proposalReplyBlocks }
+        if LaunchOptions.current.contains("--demo-assistant-workspace-links") {
             return [
                 ["type": "text", "text": "Open this workspace.\n\n@@@work"],
                 ["type": "text", "text": "space\n\(longConversationWorkspaceId)\nmissing-workspace\n@@@\n\nReady when you are."]
@@ -180,8 +180,8 @@ extension DemoFixtures {
     }
 
     private static var assistantMetadata: [String: Any] {
-        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal")
-            || ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-proposal") else { return ["specialist": "chief-of-staff"] }
+        guard LaunchOptions.current.contains("--demo-assistant-proposal")
+            || LaunchOptions.current.contains("--demo-assistant-workspace-proposal") else { return ["specialist": "chief-of-staff"] }
         if let proposalOutcome { return ["proposalResolutions": ["demo-proposal": proposalOutcome]] }
         return ["pendingProposals": [["proposalId": "demo-proposal", "messageId": "demo-assistant-message"]]]
     }
@@ -204,8 +204,8 @@ extension DemoFixtures {
 
     static func proposalResponse(for method: String, params: [String: Any]) -> Any? {
         if let response = workspaceProposalResponse(for: method, params: params) { return response }
-        guard ProcessInfo.processInfo.arguments.contains("--demo-assistant-proposal")
-            || ProcessInfo.processInfo.arguments.contains("--demo-assistant-workspace-proposal") else { return nil }
+        guard LaunchOptions.current.contains("--demo-assistant-proposal")
+            || LaunchOptions.current.contains("--demo-assistant-workspace-proposal") else { return nil }
         switch method {
         case "workspace.archive": return ["workspace": ["id": params["workspaceId"] ?? ""]]
         case "agent.resolveProposal":

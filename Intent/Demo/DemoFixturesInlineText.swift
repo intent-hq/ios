@@ -4,7 +4,7 @@ import Foundation
 extension DemoFixtures {
     /// Opt-in so existing demo transcripts and screenshots stay unchanged.
     static var usesInlineText: Bool {
-        let arguments = ProcessInfo.processInfo.arguments
+        let arguments = LaunchOptions.current.arguments
         return DemoMode.demoDataRequested(by: arguments) && arguments.contains("--demo-inline-text")
     }
 
