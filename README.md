@@ -679,10 +679,23 @@ The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
 Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.
 
+### State modeling checks
+
+Three checks keep implicit state machines from growing back:
+
+| Check | Runs | What it enforces |
+| --- | --- | --- |
+| `IntentTests/StateFlagBudgetPolicyTests` | unit tests | Stored Bool flags plus optional `Task` handles per type under `Intent/`: four unless baselined in the test; baselines only go down. |
+| `state_phase_flag` (`.swiftlint.yml`) | `scripts/swiftlint.sh` | No Bool named after a step (`…Scheduled`, `…Queued`, `…Pending`, `…Awaiting…`, `…Performed`, `…InProgress`, `…InFlight`) without a same-line suppression. |
+| `scripts/periphery-assign-only.sh` | manual, macOS | New assign-only properties against `scripts/periphery-baseline.json`; needs `brew install periphery` and a wrapper build in `DERIVED_DATA_DIR`. `--write-baseline` refreshes the baseline. |
+
+Prefer one enum per lifecycle, `CoalescedRead` for single-flight reads, and
+`WorkspaceAuthorityGate` for callers that wait on a resolved value.
+
 ### Contributor rules
 
 **Conventional commits** are required (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`); PR titles are validated in CI.
-See [AGENTS.md](AGENTS.md) for layout and platform-guard policies, source-input
+See [AGENTS.md](AGENTS.md) for layout, state-modeling and platform-guard policies, source-input
 packaging, focused validation, and issue-reporting requirements. Keep this README
 and those instructions aligned when changing build scripts, dependencies, or CI.
 

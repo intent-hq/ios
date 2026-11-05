@@ -9,6 +9,14 @@
 - `GeometryReader` is banned in `Intent/`, `IntentTests/`, and `IntentUITests/`; never suppress `geometry_reader_usage`. [LayoutPolicyTests](IntentTests/LayoutPolicyTests.swift) also enforces this.
 - Use `onGeometryChange`, `containerRelativeFrame`, `Shape.path(in:)`, or a custom `Layout`.
 
+## State modeling
+
+- If two flags are always set or cleared together, or one only matters while another is set, model them as one enum (see `EntryScroll` in [ConversationTranscriptScrollState](Intent/Presentation/ConversationTranscriptScrollState.swift), `ChatChannel` in [ConversationLiveTranscript](Intent/Services/ConversationLiveTranscript.swift)).
+- Reuse [CoalescedRead](Intent/Services/CoalescedRead.swift) for single-flight reads with one trailing pass and [WorkspaceAuthorityGate](Intent/Services/WorkspaceAuthorityGate.swift) for parking callers until a value resolves; do not hand-roll task + pending + queued flags.
+- [StateFlagBudgetPolicyTests](IntentTests/StateFlagBudgetPolicyTests.swift) ratchets stored Bool flags and optional `Task` handles per type (four unless baselined; baselines only go down). Lower or delete a baseline entry when a type sheds flags; never raise one to fit new flags.
+- The `state_phase_flag` lint rule rejects Bools named after a step (`…Scheduled`, `…Queued`, `…Pending`, `…Awaiting…`, `…Performed`, `…InProgress`, `…InFlight`); suppress it on the line only for an independent one-off guard.
+- `DERIVED_DATA_DIR=<dir> scripts/periphery-assign-only.sh` (macOS, Periphery) lists new assign-only properties against [scripts/periphery-baseline.json](scripts/periphery-baseline.json); run it after state refactors.
+
 ## Platform guards
 
 - Keep visionOS as a destination of the single `Intent` target; every visionOS branch must preserve existing iOS behavior.
