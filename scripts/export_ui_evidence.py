@@ -142,6 +142,9 @@ CAPTURES = {
         ),
     },
     "IPadSidebarUITests": {
+        "testSendingRestoresConversationInBothThemes": (
+            "iPad prompt sent light", "iPad prompt sent dark",
+        ),
         "testPullRequestsSectionListsAndOpensDetailInBothThemes": tuple(
             f"iPad pull {screen} {appearance}"
             for appearance in ("light", "dark")
