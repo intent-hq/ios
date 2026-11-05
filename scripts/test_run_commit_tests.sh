@@ -12,7 +12,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 SCRIPT=$PWD/scripts/run_commit_tests.sh
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/run-commit-tests-selftest.XXXXXX")
+# No double slash when TMPDIR ends in "/" (it does on macOS); cd normalizes it
+# away, so recorded paths would no longer match.
+tmp_root=${TMPDIR:-/tmp}
+work=$(mktemp -d "${tmp_root%/}/run-commit-tests-selftest.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 export TMPDIR=$work
 unset BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR
