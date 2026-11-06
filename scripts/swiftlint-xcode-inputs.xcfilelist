@@ -107,6 +107,7 @@ $(SRCROOT)/Intent/Models/HookWakeAttribution.swift
 $(SRCROOT)/Intent/Models/MobileTerminal.swift
 $(SRCROOT)/Intent/Models/ModelChangeNotice.swift
 $(SRCROOT)/Intent/Models/MonitoredPr.swift
+$(SRCROOT)/Intent/Models/NativeBrowserTab.swift
 $(SRCROOT)/Intent/Models/NewMessagesDivider.swift
 $(SRCROOT)/Intent/Models/NewRepositoryDraft.swift
 $(SRCROOT)/Intent/Models/Note.swift
@@ -218,6 +219,7 @@ $(SRCROOT)/Intent/Services/ConnectionManagerHostRefresh.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerIdentity.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerRecovery.swift
 $(SRCROOT)/Intent/Services/ConnectionManagerRequests.swift
+$(SRCROOT)/Intent/Services/ConnectionManagerReverseRequests.swift
 $(SRCROOT)/Intent/Services/ConnectionPrincipal.swift
 $(SRCROOT)/Intent/Services/ConnectionRequestTransport.swift
 $(SRCROOT)/Intent/Services/ConnectionSubscriptionRouter.swift
@@ -258,6 +260,7 @@ $(SRCROOT)/Intent/Services/MediaAudioSession.swift
 $(SRCROOT)/Intent/Services/MobileTerminalConnection.swift
 $(SRCROOT)/Intent/Services/MobileTerminalStore.swift
 $(SRCROOT)/Intent/Services/MonitoredPrStore.swift
+$(SRCROOT)/Intent/Services/NativeBrowserNavigation.swift
 $(SRCROOT)/Intent/Services/NetworkAvailability.swift
 $(SRCROOT)/Intent/Services/NetworkCopyDiagnostics.swift
 $(SRCROOT)/Intent/Services/NetworkPathMonitoring.swift
@@ -565,6 +568,7 @@ $(SRCROOT)/Intent/Views/Workspaces/IPadToolPlacement.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/MobileTerminalView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ModelPicker.swift
+$(SRCROOT)/Intent/Views/Workspaces/NativeBrowserPresenter.swift
 $(SRCROOT)/Intent/Views/Workspaces/NewWorkspaceBrowserView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderModelStepView.swift
 $(SRCROOT)/Intent/Views/Workspaces/ProviderPicker.swift
@@ -892,6 +896,7 @@ $(SRCROOT)/IntentTests/ModelsTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrStoreFoldAndIntegrationTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrStoreTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrsRowTests.swift
+$(SRCROOT)/IntentTests/NativeBrowserNavigationTests.swift
 $(SRCROOT)/IntentTests/NavigationPopObserverTests.swift
 $(SRCROOT)/IntentTests/NetworkAvailabilityTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerAnchorTests.swift

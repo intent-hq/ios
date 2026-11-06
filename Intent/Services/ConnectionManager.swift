@@ -33,8 +33,8 @@ import os
         let certMismatchesBeforeAttempt: [HostCertMismatch]
     }
 
+    @ObservationIgnored var browserNavigationHandler: (([String: Any]) async -> [String: Any])?
     static let shared = ConnectionManager()
-
     var connectionState: ConnectionState = .disconnected {
         didSet {
             if isInProcessConnection {

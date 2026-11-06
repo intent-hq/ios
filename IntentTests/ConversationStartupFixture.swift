@@ -47,7 +47,7 @@ final class ConversationStartupFixture {
             attentionCueCenter: WorkspaceAttentionCueCenter {}
         )
         connection.responseMap = [
-            "events.unsubscribe": [:], "chat.unsubscribe": [:],
+            "events.unsubscribe": [:], "chat.unsubscribe": [:], "browser.syncTabs": ["drop": [String]()],
             "agent.getQueue": ["queue": []],
             "hook.list": ["hooks": []], "prMonitor.list": ["monitors": []],
             "specialist.list": ["specialists": []], "models.list": ["models": []]

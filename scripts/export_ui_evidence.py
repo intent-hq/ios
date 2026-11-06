@@ -28,6 +28,9 @@ CAPTURES = {
             for appearance in ("light", "dark")
         ),
     },
+    "WorkspaceBrowserUITests": {
+        "testAgentRequestedNativePreviewPresentsWithoutTappingALink": ("agent-native-preview",),
+    },
     "SkillAutocompleteUITests": {
         "testSkillSuggestionsFilterInsertAndSendInBothThemes": tuple(
             f"skill-{state}-{appearance}"
