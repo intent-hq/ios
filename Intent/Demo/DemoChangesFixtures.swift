@@ -7,6 +7,29 @@ enum DemoChangesFixtures {
     private static let testLineCount = testSource.split(separator: "\n", omittingEmptySubsequences: false).count - 1
     private static let longCommitLineCount = 80
     private static var usesLongCommit: Bool { LaunchOptions.current.contains("--demo-long-commit") }
+    static let largeDiffArgumentPrefix = "--demo-large-diff="
+    private static let largeDiffLongLineInterval = 25
+    private static let largeDiffLongLineEntries = 24
+    /// Each run of six lines is three context lines, one deletion and two additions.
+    private static let largeDiffPatternLength = 6
+    private static let largeDiffContextLines = 3
+    /// Changed lines in every demo file diff, for measuring large diffs (`--demo-large-diff=2000`).
+    static var largeDiffLineCount: Int? { largeDiffLineCount(from: LaunchOptions.current.arguments) }
+
+    static func largeDiffLineCount(from arguments: [String]) -> Int? {
+        guard let argument = arguments.last(where: { $0.hasPrefix(largeDiffArgumentPrefix) }),
+              let count = Int(argument.dropFirst(largeDiffArgumentPrefix.count)), count > 0 else { return nil }
+        return count
+    }
+
+    /// Swift-like source with a long line every 25 lines so horizontal scrolling matters.
+    static func largeDiffSource(lineCount: Int, prefix: String) -> String {
+        (1...max(lineCount, 1)).map { index in
+            index.isMultiple(of: largeDiffLongLineInterval)
+                ? "    let \(prefix)\(index) = [\((0..<largeDiffLongLineEntries).map { "\"entry\(index)_\($0)\"" }.joined(separator: ", "))]"
+                : "    let \(prefix)\(index) = compute(\(index), label: \"\(prefix) line \(index)\")"
+        }.joined(separator: "\n") + "\n"
+    }
 
     static func response(for method: String, params: [String: Any]) -> Any? {
         if let response = DemoChangesRootFixtures.response(for: method, params: params) { return response }
@@ -57,8 +80,9 @@ enum DemoChangesFixtures {
             "commitHash": commitHash,
             "fileDetails": [
                 [
-                    "path": "Sources/Analytics.swift", "additions": usesLongCommit ? longCommitLineCount : 1,
-                    "deletions": usesLongCommit ? 0 : 1
+                    "path": "Sources/Analytics.swift",
+                    "additions": largeDiffLineCount ?? (usesLongCommit ? longCommitLineCount : 1),
+                    "deletions": usesLongCommit || largeDiffLineCount != nil ? 0 : 1
                 ],
                 [
                     "path": "Tests/AnalyticsTests.swift", "additions": usesLongCommit ? longCommitLineCount : testLineCount,
@@ -70,6 +94,9 @@ enum DemoChangesFixtures {
 
     private static func commitDiff(params: [String: Any]) -> [[String: Any]] {
         let path = (params["paths"] as? [String])?.first ?? ""
+        if let largeDiffLineCount, !path.hasPrefix("Tests/") {
+            return [["file": path, "oldContent": "", "newContent": largeDiffSource(lineCount: largeDiffLineCount, prefix: "value")]]
+        }
         if usesLongCommit {
             let name = path.hasPrefix("Tests/") ? "testValue" : "value"
             let source = (1...longCommitLineCount).map { "let \(name)\($0) = \($0)" }.joined(separator: "\n") + "\n"
@@ -85,6 +112,9 @@ enum DemoChangesFixtures {
 
     private static func workingDiff(params: [String: Any]) -> [[String: Any]] {
         let staged = params["staged"] as? Bool ?? false
+        if let largeDiffLineCount {
+            return [["path": params["path"] as? String ?? "", "hunks": [largeHunk(lineCount: largeDiffLineCount)]]]
+        }
         return [
             [
                 "path": params["path"] as? String ?? "",
@@ -98,6 +128,32 @@ enum DemoChangesFixtures {
                     ]
                 ]
             ]
+        ]
+    }
+
+    /// Repeating runs of context, deletion and additions totalling `lineCount` lines.
+    private static func largeHunk(lineCount: Int) -> [String: Any] {
+        let source = largeDiffSource(lineCount: lineCount, prefix: "value").split(separator: "\n").map(String.init)
+        var oldNumber = 1
+        var newNumber = 1
+        var lines: [[String: Any]] = []
+        for (index, content) in source.enumerated() {
+            let position = index % largeDiffPatternLength
+            if position < largeDiffContextLines {
+                lines.append(["type": "Context", "content": content, "oldNumber": oldNumber, "newNumber": newNumber])
+                oldNumber += 1
+                newNumber += 1
+            } else if position == largeDiffContextLines {
+                lines.append(["type": "Deletion", "content": content, "oldNumber": oldNumber])
+                oldNumber += 1
+            } else {
+                lines.append(["type": "Addition", "content": content, "newNumber": newNumber])
+                newNumber += 1
+            }
+        }
+        return [
+            "oldStart": 1, "oldLines": oldNumber - 1, "newStart": 1, "newLines": newNumber - 1,
+            "lines": lines
         ]
     }
 
