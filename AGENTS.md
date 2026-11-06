@@ -112,3 +112,4 @@ Run the matching checks after changing tooling:
 - Use conventional commits and PR titles; merging requires explicit human permission under the linked monorepo workflow.
 - UI PRs require screenshots in the description. Use **GitHub CLI 2.99.0+** for [`--attach` support](https://github.blog/changelog/2026-09-01-github-cli-media-in-issues-pull-requests-and-comments/); check `gh --version` before uploading.
 - Example: `gh pr create --repo intent-hq/ios --title "fix: describe the UI change" --body-file /tmp/intent-pr.md --attach /tmp/intent-screenshot.png`. Never commit screenshot files.
+- Use Markdown tables to format screenshots in pull request descriptions. Do not put screenshots inline without context or captions.
