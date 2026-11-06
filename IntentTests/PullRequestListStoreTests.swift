@@ -168,4 +168,85 @@ struct PullRequestListStoreTests {
         #expect(store.phase == .disconnected)
         #expect(!connection.requestLog.contains { $0.method == "github.pulls.search" })
     }
+    @Test func loadMoreFailureKeepsItemsAndExposesErrorUntilRetrySucceeds() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["github.authStatus"] = ["isConfigured": true]
+        connection.responseQueueMap["github.pulls.search"] = [
+            ["pulls": [pull(1)], "nextToken": "page-2"],
+            ["pulls": [pull(2, updatedAt: "2026-09-01T00:00:00Z")]]
+        ]
+        let store = PullRequestListStore(connection: connection)
+        await store.load(PullRequestListStore.Query(repositories: repos(1)))
+
+        connection.errorQueueMap["github.pulls.search"] = [URLError(.timedOut)]
+        await store.loadMore()
+
+        #expect(store.items.map(\.number) == [1])
+        #expect(store.loadMoreError != nil)
+        #expect(store.phase == .ready)
+        #expect(store.hasMore)
+
+        await store.loadMore()
+
+        #expect(store.items.map(\.number) == [1, 2])
+        #expect(store.loadMoreError == nil)
+        #expect(!store.hasMore)
+    }
+
+    @Test func malformedLoadMoreReplyIsAnError() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["github.authStatus"] = ["isConfigured": true]
+        connection.responseQueueMap["github.pulls.search"] = [
+            ["pulls": [pull(1)], "nextToken": "page-2"],
+            ["unexpected": true]
+        ]
+        let store = PullRequestListStore(connection: connection)
+        await store.load(PullRequestListStore.Query(repositories: repos(1)))
+        await store.loadMore()
+
+        #expect(store.items.map(\.number) == [1])
+        #expect(store.loadMoreError == PullRequestListStore.ResponseError.malformed.localizedDescription)
+    }
+
+    @Test func malformedFirstPageIsAnErrorNotAnEmptyList() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["github.authStatus"] = ["isConfigured": true]
+        connection.responseMap["github.pulls.search"] = "not a reply"
+        let store = PullRequestListStore(connection: connection)
+
+        await store.load(PullRequestListStore.Query(repositories: repos(1)))
+
+        #expect(store.phase == .failed(PullRequestListStore.ResponseError.malformed.localizedDescription))
+        #expect(store.items.isEmpty)
+    }
+
+    @Test func validEmptyPageStaysEmpty() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["github.authStatus"] = ["isConfigured": true]
+        connection.responseMap["github.pulls.search"] = ["pulls": [[String: Any]]()]
+        let store = PullRequestListStore(connection: connection)
+
+        await store.load(PullRequestListStore.Query(repositories: repos(1)))
+
+        #expect(store.phase == .ready)
+        #expect(store.items.isEmpty)
+        #expect(store.loadMoreError == nil)
+    }
+
+    @Test func failedQueryChangeDropsTheOtherQuerysRows() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["github.authStatus"] = ["isConfigured": true]
+        connection.responseQueueMap["github.pulls.search"] = [["pulls": [pull(1)]]]
+        let store = PullRequestListStore(connection: connection)
+        let mine = PullRequestListStore.Query(repositories: repos(1))
+        await store.load(mine)
+
+        connection.errorQueueMap["github.pulls.search"] = [URLError(.timedOut), URLError(.timedOut)]
+        await store.load(mine)
+        #expect(store.items.map(\.number) == [1])
+
+        await store.load(PullRequestListStore.Query(repositories: repos(1), filter: .all))
+        #expect(store.items.isEmpty)
+        if case .failed = store.phase {} else { Issue.record("Expected a failed phase, got \(store.phase)") }
+    }
 }

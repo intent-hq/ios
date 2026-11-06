@@ -47,4 +47,33 @@ struct PullRequestDetailTests {
         #expect(rows.map(\.login) == ["mona", "hubot", "octocat"])
         #expect(rows.map(\.verdict) == ["Approved", "Commented", "Requested"])
     }
+    @Test func malformedDetailReplyIsAnErrorNotAnEmptyDetail() async {
+        let connection = FakeConnectionManager()
+        connection.responseQueueMap["github.pulls.get"] = [
+            ["pull": "unexpected"],
+            ["pull": ["number": 7, "title": "Fix", "state": "open", "body": "Done"]]
+        ]
+        let store = PullRequestDetailStore(item: PullRequestListItem(owner: "acme", repo: "app", number: 7, title: ""), connection: connection)
+
+        await store.load(.detail)
+
+        #expect(store.detail == nil)
+        #expect(store.errors[.detail] == PullRequestDetailStore.ResponseError.malformed.localizedDescription)
+
+        await store.load(.detail)
+
+        #expect(store.detail?.body == "Done")
+        #expect(store.errors[.detail] == nil)
+    }
+
+    @Test func failedDetailRequestIsAnError() async {
+        let connection = FakeConnectionManager()
+        connection.errorMap["github.pulls.get"] = URLError(.notConnectedToInternet)
+        let store = PullRequestDetailStore(item: PullRequestListItem(owner: "acme", repo: "app", number: 7, title: ""), connection: connection)
+
+        await store.load(.detail)
+
+        #expect(store.detail == nil)
+        #expect(store.errors[.detail] != nil)
+    }
 }

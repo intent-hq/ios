@@ -283,6 +283,7 @@ $(SRCROOT)/Intent/Demo/DemoChangesRootFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoConnectionLoss.swift
 $(SRCROOT)/Intent/Demo/DemoConnectionTransport.swift
 $(SRCROOT)/Intent/Demo/DemoDesignAttachments.swift
+$(SRCROOT)/Intent/Demo/DemoFailureFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoFilesFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesAssistant.swift
@@ -1343,6 +1344,7 @@ $(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileEntryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift
+$(SRCROOT)/IntentTests/WorkspaceFilePreviewFailureTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFilesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFilesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceLinksTests.swift

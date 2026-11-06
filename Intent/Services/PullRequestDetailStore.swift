@@ -20,6 +20,15 @@ import Observation
     private(set) var loading: Set<Section> = []
     private(set) var errors: [Section: String] = [:]
 
+    /// A `github.pulls.get` reply without a readable pull request.
+    enum ResponseError: LocalizedError, Equatable {
+        case malformed
+
+        var errorDescription: String? {
+            "Could not read this pull request from the computer running Intent. Try again."
+        }
+    }
+
     static let filesLimit = 50
     static let reviewsLimit = 50
 
@@ -52,9 +61,10 @@ import Observation
             switch section {
             case .detail:
                 let result = try await connection.request("github.pulls.get", params: address) as? [String: Any]
-                let pull = result?["pull"] as? [String: Any]
-                detail = pull.flatMap(PullRequestDetail.init(wire:)) ?? PullRequestDetail()
-                if let pull, let loaded = PullRequestListItem(wire: pull, owner: item.owner, repo: item.repo) {
+                guard let pull = result?["pull"] as? [String: Any],
+                      let loadedDetail = PullRequestDetail(wire: pull) else { throw ResponseError.malformed }
+                detail = loadedDetail
+                if let loaded = PullRequestListItem(wire: pull, owner: item.owner, repo: item.repo) {
                     item = loaded.filling(from: item)
                 }
             case .checks:
