@@ -76,6 +76,8 @@ class AppCoordinator {
     }
     var usesIPadShell = false
     var iPadNavigation = IPadNavigationState()
+    /// The window's workspace list settings, reported by its iPad sidebar.
+    var workspaceListPresentation = WorkspaceListPresentation()
     var workspaceChange: WorkspaceChangeDestination?
     /// The pull request in the iPad main pane.
     var iPadPullRequest: PullRequestListItem?
@@ -223,6 +225,7 @@ class AppCoordinator {
         self.backendID = backendID
         connectingStartedByLaunch = !sessionRegistry.consumeConnectionSelection(for: backendID)
         self.connectionLossPresentation = connectionLossPresentation
+        workspaceListPresentation = WorkspaceListPresentation(persistence: persistence)
         lifecycleState.entry = .routing(dataStamp: workspaceStore.lastUpdated)
         savedConnectionsObserver = persistence.connectionsDidChange.sink { [weak self] _ in
             self?.refreshSavedConnectionsPresentation()
@@ -233,6 +236,7 @@ class AppCoordinator {
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
+        startObservingIPadAutoSelection()
     }
 
     /// Restarts the keyed ConnectingView task while preserving its transition order.
@@ -450,7 +454,6 @@ extension AppCoordinator {
                 // Only validate after workspaces have been fetched at least once
                 guard dependencies.workspaceStore.lastUpdated != nil else { return }
                 validateCurrentWorkspaceExists(in: dependencies.workspaceStore.workspaces)
-                ensureIPadWorkspaceSelection()
             }
         }
     }

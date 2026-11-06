@@ -32,7 +32,6 @@ extension AppCoordinator {
         } else if iPadNavigation.section == .assistant {
             iPadNavigation.showWorkspaceDetail()
         }
-        ensureIPadWorkspaceSelection()
     }
 
     /// Embedded pairing dials a temporary session, so the window's connection
@@ -66,7 +65,6 @@ extension AppCoordinator {
             selectedSection = .workspaces
         }
         iPadNavigation.selectSection(section)
-        ensureIPadWorkspaceSelection()
     }
 
     /// Reselecting Workspaces while the sidebar shows the open workspace leaves it, like the main view's Back.
@@ -77,14 +75,35 @@ extension AppCoordinator {
         return WorkspaceSidebarContent.resolve(screen: currentScreen, isPersistent: isPersistent) != .workspaceList
     }
 
-    /// Wide windows keep a detail selected; compact windows start with the list.
-    func ensureIPadWorkspaceSelection() {
-        guard usesIPadShell, iPadNavigation.hasMeasuredLayout, !iPadNavigation.usesCompactNavigation,
-              iPadNavigation.section == .workspaces, iPadNavigation.pairing == nil,
-              case .workspaceList = currentScreen else { return }
-        let candidates = WorkspaceListViewModel(workspaceStore: dependencies.workspaceStore).filteredWorkspaces
-        guard let workspace = candidates.first(where: { $0.id != Workspace.chiefWorkspaceId }) else { return }
-        onSelectWorkspace(workspace.id)
+    /// The workspace a wide window opens now: the top visible row of the user's list.
+    var iPadAutoSelectedWorkspaceId: String? {
+        let store = dependencies.workspaceStore
+        return IPadWorkspaceAutoSelection(
+            usesIPadShell: usesIPadShell,
+            navigation: iPadNavigation,
+            screen: currentScreen,
+            includeArchived: store.showArchived,
+            presentation: workspaceListPresentation
+        ).workspaceId(in: store.workspaces)
+    }
+
+    /// The only auto-selection trigger: reruns whenever an input of the decision changes.
+    func startObservingIPadAutoSelection() {
+        withObservationTracking {
+            _ = iPadAutoSelectedWorkspaceId
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                startObservingIPadAutoSelection()
+                applyIPadAutoSelection()
+            }
+        }
+    }
+
+    /// Opens the decided workspace. Production calls arrive only from the observer above.
+    func applyIPadAutoSelection() {
+        guard !lifecycleState.hasReturnedToSavedMachines, let workspaceId = iPadAutoSelectedWorkspaceId else { return }
+        onSelectWorkspace(workspaceId)
     }
 
     /// Only explicit workspace selections move the shell. Background redirects

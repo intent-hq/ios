@@ -182,24 +182,25 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
         coordinator.usesIPadShell = true
         coordinator.currentScreen = .workspaceList
-        coordinator.ensureIPadWorkspaceSelection()
+        coordinator.applyIPadAutoSelection()
         #expect(coordinator.selectedWorkspaceId == nil)
         coordinator.iPadNavigation.updateLayout(usesOverlay: false)
-        coordinator.ensureIPadWorkspaceSelection()
+        coordinator.applyIPadAutoSelection()
         #expect(coordinator.selectedWorkspaceId == nil)
         store.workspaces = [
             Self.makeWorkspace(id: "archived", status: "archived"), Self.makeWorkspace(id: "deleted", status: "deleted"),
             Self.makeWorkspace(id: Workspace.chiefWorkspaceId), Self.makeWorkspace(id: "available")
         ]
-        coordinator.ensureIPadWorkspaceSelection()
+        coordinator.applyIPadAutoSelection()
         #expect(coordinator.selectedWorkspaceId == "available")
         #expect(coordinator.currentScreenDescription == String(describing: AppScreen.workspaceDetail(workspaceId: "available")))
         coordinator.onSelectAgent("agent", workspaceId: "available", agentName: "Agent")
         let conversation = coordinator.currentScreenDescription
-        coordinator.ensureIPadWorkspaceSelection()
+        coordinator.applyIPadAutoSelection()
         #expect(coordinator.currentScreenDescription == conversation)
         store.workspaces = [Self.makeWorkspace(id: "replacement")]
         coordinator.handleMissingWorkspace()
+        coordinator.applyIPadAutoSelection()
         #expect(coordinator.selectedWorkspaceId == "replacement")
         store.workspaces = []
         coordinator.handleMissingWorkspace()
@@ -213,10 +214,10 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
         coordinator.usesIPadShell = true
         coordinator.currentScreen = .workspaceList
-        coordinator.ensureIPadWorkspaceSelection()
+        coordinator.applyIPadAutoSelection()
         #expect(coordinator.selectedWorkspaceId == nil, "A window's initial width must be known before selecting")
         coordinator.iPadNavigation.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true)
-        coordinator.ensureIPadWorkspaceSelection()
+        coordinator.applyIPadAutoSelection()
         #expect(coordinator.selectedWorkspaceId == nil)
         coordinator.onSelectWorkspace("available")
         let detail = coordinator.currentScreenDescription
@@ -226,7 +227,7 @@ extension AppCoordinatorTests {
         #expect(coordinator.selectedWorkspaceId == "available")
         #expect(coordinator.currentScreenDescription == detail)
         coordinator.iPadNavigation.updateLayout(usesOverlay: false)
-        coordinator.ensureIPadWorkspaceSelection()
+        coordinator.applyIPadAutoSelection()
         #expect(coordinator.currentScreenDescription == detail)
     }
 }

@@ -223,9 +223,14 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         derivedWorkspaces.byRepo
     }
 
+    /// The list settings that decide which rows are visible, in what order.
+    var presentation: WorkspaceListPresentation {
+        WorkspaceListPresentation(viewMode: viewMode, collapsedGroups: collapsedGroups, searchText: searchText)
+    }
+
     /// Searching always shows every group expanded so matches are never hidden.
     func isGroupExpanded(_ key: String, in mode: ViewMode) -> Bool {
-        hasSearchQuery || collapsedGroups[mode]?.contains(key) != true
+        presentation.isGroupExpanded(key, in: mode)
     }
 
     /// Toggles a Repo or Status group; a no-op while searching, where groups are forced open.
@@ -252,20 +257,14 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
             return derivedCache
         }
         let sorted = sortedWorkspaces(revision: revision, includeArchived: includeArchived)
-        let filtered = query.isEmpty ? sorted : sorted.filter { workspace in
-            workspace.title.localizedCaseInsensitiveContains(query) ||
-            (workspace.branch?.localizedCaseInsensitiveContains(query) ?? false) ||
-            (workspace.repositoryName?.localizedCaseInsensitiveContains(query) ?? false)
-        }
-        let statuses = Dictionary(grouping: filtered) { resolveDisplayStatus(for: $0) }
+        let filtered = WorkspaceListRows.filter(sorted, query: query)
         let result = DerivedWorkspaces(
             revision: revision,
             query: query,
             includeArchived: includeArchived,
             filtered: filtered,
-            byRepo: repoGroups(filtered),
-            byStatus: statuses.sorted { $0.key.sortOrder < $1.key.sortOrder }
-                .map { ($0.key.label, $0.value) }
+            byRepo: WorkspaceListRows.byRepo(filtered),
+            byStatus: WorkspaceListRows.byStatus(filtered)
         )
         derivedCache = result
         return result
@@ -276,8 +275,7 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
            sortedCache.includeArchived == includeArchived { return sortedCache.workspaces }
         var nextTimes: [String: ActivityTime] = [:]
         let timed = workspaces.compactMap { workspace -> (workspace: Workspace, time: TimeInterval)? in
-            let status = workspace.status?.lowercased() ?? ""
-            guard status != "deleted", includeArchived || status != "archived" else { return nil }
+            guard WorkspaceListRows.isListed(workspace, includeArchived: includeArchived) else { return nil }
             let inputs = ActivityTimeInputs(workspace)
             let entry: ActivityTime
             if let cached = activityTimes[workspace.id], cached.inputs == inputs {
@@ -293,24 +291,6 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         let sorted = timed.sorted { $0.time > $1.time }.map(\.workspace)
         sortedCache = SortedWorkspaces(revision: revision, includeArchived: includeArchived, workspaces: sorted)
         return sorted
-    }
-
-    private func repoGroups(_ workspaces: [Workspace]) -> [(String, [Workspace])] {
-        var keys: [String] = []
-        var groups: [String: [Workspace]] = [:]
-        for workspace in workspaces {
-            let key: String
-            if let owner = workspace.repositoryOwner, let name = workspace.repositoryName {
-                key = "\(owner)/\(name)"
-            } else {
-                key = workspace.repositoryName ?? "Unknown"
-            }
-            if groups[key] == nil { keys.append(key) }
-            groups[key, default: []].append(workspace)
-        }
-        // First-seen order already follows each group's most recent member,
-        // including stable ties; no second sort or timestamp parse is needed.
-        return keys.map { ($0, groups[$0] ?? []) }
     }
 
     private struct ActivityTimeInputs: Equatable {
@@ -346,6 +326,6 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     }
 
     private var normalizedSearchText: String {
-        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        presentation.normalizedSearchText
     }
 }
