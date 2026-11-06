@@ -175,7 +175,6 @@ struct IPadShellView: View {
                     usesCompactNavigation: measuredLayout.usesCompactNavigation,
                     showsWorkspaceList: showsWorkspaceList
                 )
-                coordinator.ensureIPadWorkspaceSelection()
             }
         }
         .onChange(of: sidebarPresentation) { old, new in

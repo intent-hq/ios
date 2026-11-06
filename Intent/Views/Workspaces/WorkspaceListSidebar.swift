@@ -109,6 +109,9 @@ struct WorkspaceListSidebar: View {
         .onChange(of: viewModel.viewMode) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: viewModel.searchText) { _, _ in revealedSwipeTarget = nil }
         .onChange(of: viewModel.showArchived) { _, _ in revealedSwipeTarget = nil }
+        .onChange(of: viewModel.presentation, initial: true) { _, presentation in
+            if isEmbedded { coordinator.workspaceListPresentation = presentation }
+        }
         .onChange(of: isPaneVisible) { _, visible in
             if !visible { searchFocused = false }
         }

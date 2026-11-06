@@ -186,9 +186,9 @@ extension AppCoordinator {
         }
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
-        ensureIPadWorkspaceSelection()
-        if usesIPadShell, iPadNavigation.section == .workspaces,
-           case .workspaceList = currentScreen {
+        // The next workspace opens from the auto-selection observer; only an
+        // empty list reveals the sidebar.
+        if usesIPadShell, iPadNavigation.section == .workspaces, iPadAutoSelectedWorkspaceId == nil {
             iPadNavigation.revealSidebar()
         }
     }
