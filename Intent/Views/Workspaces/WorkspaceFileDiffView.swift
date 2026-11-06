@@ -14,6 +14,8 @@ struct WorkspaceFileDiffView: View {
     /// Off when the page's own header already names the file.
     var showsPath = true
     @State private var presentation: WorkspaceDiffPresentation?
+    @State private var diffRows: WorkspaceDiffRows?
+    @State private var showsFullDiff = false
     @State private var syntax: [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] = [:]
     @State private var syntaxIsDark = false
     @State private var retry = 0
@@ -23,6 +25,7 @@ struct WorkspaceFileDiffView: View {
     @State private var diffContentHeight: CGFloat?
     @Environment(\.workspaceViewerUsesPanel) private var usesPanel
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private struct LoadID: Hashable {
         let workspace: String
@@ -115,8 +118,18 @@ struct WorkspaceFileDiffView: View {
             }
         } else {
             if embedded {
-                diffScrollView
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 0) {
+                    diffScrollView
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let diffRows, diffRows.lineCount > WorkspaceDiffRows.embeddedLineLimit {
+                        // Expanding inline would rebuild every row; the full-page diff builds rows lazily.
+                        Button("Show All \(diffRows.lineCount.formatted()) Lines") { showsFullDiff = true }
+                            .buttonStyle(IntentButtonStyle(variant: .secondary))
+                            .padding([.horizontal, .bottom])
+                            .accessibilityIdentifier("changes.diff.showAll")
+                    }
+                }
+                .sheet(isPresented: $showsFullDiff) { fullDiff }
             } else {
                 diffScrollView
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -153,34 +166,70 @@ struct WorkspaceFileDiffView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
+    private var visibleRows: ArraySlice<WorkspaceDiffRow> {
+        diffRows?.rows(limit: embedded ? WorkspaceDiffRows.embeddedLineLimit : nil) ?? []
+    }
+
+    @ViewBuilder
     private var diffScrollView: some View {
-        ScrollView(embedded ? .horizontal : [.horizontal, .vertical]) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(hunks.indices, id: \.self) { index in
-                    let hunk = hunks[index]
-                    Text(hunk.heading)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, WorkspaceChangesLayout.sectionSpacing)
-                        .padding(.horizontal)
-                    ForEach(Array(hunk.lines.enumerated()), id: \.offset) { lineIndex, line in
-                        diffLine(line, row: .init(hunk: index, line: lineIndex))
-                    }
-                }
+        if embedded {
+            // The commit view's outer scroll view drives vertical scrolling, so rows cannot be lazy here.
+            ScrollView(.horizontal) {
+                VStack(alignment: .leading, spacing: 0) { diffRowViews }
+                    .frame(minWidth: viewportSize.width, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: true)
+                    .modifier(DiffTextStyle())
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { diffContentHeight = $0 }
             }
-            .frame(minWidth: viewportSize.width, alignment: .leading)
-            .fixedSize(horizontal: true, vertical: true)
-            .font(.system(.caption, design: .monospaced))
-            .textSelection(.enabled)
-            .padding(.bottom)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { diffContentHeight = $0 }
-            .frame(minHeight: embedded ? nil : viewportSize.height, alignment: .topLeading)
+            .defaultScrollAnchor(.topLeading)
+            // Keep lazy section measurements stable when the horizontal scroller moves offscreen.
+            .frame(height: diffContentHeight)
+            .modifier(DiffViewport(viewportSize: $viewportSize))
+        } else {
+            ScrollView([.horizontal, .vertical]) {
+                LazyVStack(alignment: .leading, spacing: 0) { diffRowViews }
+                    // A fixed width from the widest line keeps horizontal scrolling stable as rows load.
+                    .frame(width: max(contentWidth, viewportSize.width), alignment: .leading)
+                    .modifier(DiffTextStyle())
+                    .frame(minHeight: viewportSize.height, alignment: .topLeading)
+            }
+            .defaultScrollAnchor(.topLeading)
+            .modifier(DiffViewport(viewportSize: $viewportSize))
         }
-        .defaultScrollAnchor(.topLeading)
-        // Keep lazy section measurements stable when the horizontal scroller moves offscreen.
-        .frame(height: embedded ? diffContentHeight : nil)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { viewportSize = $0 }
-        .accessibilityIdentifier("changes.diff.scroll")
+    }
+
+    private var diffRowViews: some View {
+        ForEach(visibleRows) { row in
+            switch row {
+            case let .heading(_, text):
+                Text(text)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, WorkspaceChangesLayout.sectionSpacing)
+                    .padding(.horizontal, WorkspaceDiffRows.horizontalPadding)
+            case let .line(id, line):
+                diffLine(line, row: id)
+            }
+        }
+    }
+
+    private var fullDiff: some View {
+        NavigationStack {
+            Self(
+                loader: loader, path: path, staged: staged, isBinary: isBinary, commitHash: commitHash, patch: patch
+            )
+            .navigationTitle("All Changes")
+            .toolbarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    IntentIconButton(icon: .close, label: "Done") { showsFullDiff = false }
+                }
+                .intentToolbarSurface()
+            }
+        }
+    }
+
+    private var contentWidth: CGFloat {
+        diffRows?.contentWidth(font: WorkspaceDiffRows.font(for: dynamicTypeSize)) ?? 0
     }
 
     private func diffLine(_ line: WorkspaceDiffLine, row: WorkspaceDiffPresentation.RowID) -> some View {
@@ -195,7 +244,7 @@ struct WorkspaceFileDiffView: View {
             ))
                 .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, WorkspaceDiffRows.horizontalPadding)
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(lineBackground(line.type))
@@ -215,11 +264,12 @@ struct WorkspaceFileDiffView: View {
         isLoading = true
         errorMessage = nil
         presentation = nil
+        diffRows = nil
         syntax = [:]
         defer { if !Task.isCancelled { isLoading = false } }
         if isBinary { return }
         if let patch {
-            presentation = WorkspaceDiffPresentation(hunks: WorkspaceDiffBuilder.hunks(patch: patch))
+            await show(WorkspaceDiffPresentation(hunks: WorkspaceDiffBuilder.hunks(patch: patch)))
             return
         }
         guard let loader else { return }
@@ -232,11 +282,18 @@ struct WorkspaceFileDiffView: View {
                 loaded = WorkspaceDiffPresentation(hunks: hunks)
             }
             try Task.checkCancellation()
-            presentation = loaded
+            await show(loaded)
         } catch is CancellationError {
         } catch {
             if !Task.isCancelled { errorMessage = error.localizedDescription }
         }
+    }
+
+    private func show(_ loaded: WorkspaceDiffPresentation) async {
+        let rows = await Task.detached(priority: .userInitiated) { WorkspaceDiffRows(hunks: loaded.hunks) }.value
+        guard !Task.isCancelled else { return }
+        diffRows = rows
+        presentation = loaded
     }
 
     private func highlight() async {
@@ -247,5 +304,25 @@ struct WorkspaceFileDiffView: View {
         guard !Task.isCancelled, self.presentation?.id == presentation.id, dark == (colorScheme == .dark) else { return }
         syntaxIsDark = dark
         syntax = runs
+    }
+}
+
+private struct DiffTextStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .padding(.bottom)
+    }
+}
+
+private struct DiffViewport: ViewModifier {
+    @Binding var viewportSize: CGSize
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { viewportSize = $0 }
+            .accessibilityIdentifier("changes.diff.scroll")
     }
 }
