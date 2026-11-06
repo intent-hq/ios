@@ -126,14 +126,18 @@ enum WorkspaceDiffSyntax {
         }
     ) async -> [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] {
         guard !Task.isCancelled else { return [:] }
-        let sources = presentation.sources()
+        // Building sources and mapping runs to rows scale with the file; keep both off the main thread.
+        let sources = await Task.detached(priority: .userInitiated) { presentation.sources() }.value
         guard sources.reduce(0, { $0 + $1.text.utf8.count }) <= FileSyntaxHighlighter.maxBytes else { return [:] }
         var result: [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] = [:]
         for source in sources where !source.mappings.isEmpty {
             guard !Task.isCancelled else { return [:] }
             let runs = await tokenize(source.text, path, dark)
             guard !Task.isCancelled else { return [:] }
-            result.merge(WorkspaceDiffPresentation.map(runs, from: source)) { _, new in new }
+            let mapped = await Task.detached(priority: .userInitiated) {
+                WorkspaceDiffPresentation.map(runs, from: source)
+            }.value
+            result.merge(mapped) { _, new in new }
         }
         return result
     }

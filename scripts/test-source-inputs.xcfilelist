@@ -440,6 +440,7 @@ $(SRCROOT)/Intent/Presentation/TranscriptDisclosureState.swift
 $(SRCROOT)/Intent/Presentation/WatcherMessagePresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceAgentSelection.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceDiffPresentation.swift
+$(SRCROOT)/Intent/Presentation/WorkspaceDiffRows.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
 $(SRCROOT)/Intent/Presentation/WorkspacePrPillDerivation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceSidebarContent.swift
@@ -1344,6 +1345,7 @@ $(SRCROOT)/IntentTests/WorkspaceCreationVideosTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailActionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
+$(SRCROOT)/IntentTests/WorkspaceDiffRowsTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffSyntaxTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
