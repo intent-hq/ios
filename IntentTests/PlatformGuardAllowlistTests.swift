@@ -40,8 +40,9 @@ struct PlatformGuardAllowlistTests {
         "Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift",
         "Intent/Views/Workspaces/WorkspaceActionMenuDepth.swift",
         "Intent/Views/Workspaces/WorkspaceAttentionCue.swift",
+        "Intent/Views/Workspaces/WorkspaceDetailPresentations.swift",
         "Intent/Views/Workspaces/WorkspaceDetailSupport.swift",
-        "Intent/Views/Workspaces/WorkspaceDetailView.swift",
+        "Intent/Views/Workspaces/WorkspaceDetailView+PageChrome.swift",
         "Intent/Views/Workspaces/WorkspaceListSidebar.swift",
         "Intent/Views/Workspaces/WorkspaceListView.swift",
         "IntentTests/PairingOptionTests.swift"

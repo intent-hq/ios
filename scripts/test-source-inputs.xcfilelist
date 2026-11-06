@@ -871,10 +871,15 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCommitDiffView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceConnectionSwitcher.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceContextView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceCreationVideoPreview.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailPresentation.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailPresentations.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSidebar.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailStores.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailSupport.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+AgentGroups.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+PageChrome.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+Placement.swift
+$(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+TabContent.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView+WorkspaceActions.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceDetailView.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceFileDiffView.swift
@@ -1330,6 +1335,7 @@ $(SRCROOT)/IntentTests/WorkspaceCreationDraftTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationImagesTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationProposalTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationVideosTests.swift
+$(SRCROOT)/IntentTests/WorkspaceDetailActionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDetailViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffSyntaxTests.swift

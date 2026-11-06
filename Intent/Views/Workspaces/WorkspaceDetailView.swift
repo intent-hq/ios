@@ -1,32 +1,19 @@
 import SwiftUI
 
 struct WorkspaceDetailView: View {
-    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
+    @ScaledMetric(relativeTo: .title) var emptyStateIconSize: CGFloat = 48
     let workspaceId: String
     private let persistence: PersistenceManager
-    private let isSidebarVisible: Bool
+    let isSidebarVisible: Bool
     let sidebar: WorkspaceDetailSidebar?
     @Environment(AppCoordinator.self) var coordinator
-    @State private var storedAgentStore: AgentStore
-    @State private var storedViewModel: AgentListViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.workspaceUsesVerticalBar) var usesVerticalBar
-    @State private var showDeleteConfirmation = false
-    @State private var showArchiveConfirmation = false
-    @State private var showSpecialistPicker = false
-    @State private var selectedTerminal: MobileTerminal?
-    @State private var selectedBrowser: WorkspaceBrowser?
-    @State private var createdBrowser: WorkspaceBrowser?
-    @State private var showNewBrowser = false
-    @State private var showTransferWorkspace = false
-    @State private var terminalCreationRequest: UUID?
+    @State private var stores: WorkspaceDetailStores
+    @State private var storedPresentation: WorkspaceDetailPresentation
     @State private var selectedTab: WorkspaceTab
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
-    @State private var noteStore: NoteStore
-    @State private var scriptStore: WorkspaceScriptStore
-    @State private var changesStore: WorkspaceChangesStore
-    @State private var filesStore: WorkspaceFilesStore
     @State private var notesExpanded = true
     @State private var filesExpanded = true
     @State private var titleEditor = WorkspaceTitleEditor()
@@ -42,33 +29,37 @@ struct WorkspaceDetailView: View {
             persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
             fallback: .agents
         ))
-        let store = AgentStore(connectionManager: session.connection, summaries: session.agentSummaries, scopedLoading: true)
-        _storedAgentStore = State(initialValue: store)
-        _storedViewModel = State(initialValue: AgentListViewModel(list: store.list))
-        _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
-        _scriptStore = State(initialValue: WorkspaceScriptStore(connection: session.connection))
-        _changesStore = State(initialValue: WorkspaceChangesStore(connectionManager: session.connection))
-        _filesStore = State(initialValue: .init(connection: session.connection))
+        _stores = State(initialValue: WorkspaceDetailStores(session: session))
+        _storedPresentation = State(initialValue: WorkspaceDetailPresentation())
     }
 
-    var agentStore: AgentStore { storedAgentStore }
-    var viewModel: AgentListViewModel { storedViewModel }
+    var agentStore: AgentStore { stores.agentStore }
+    var viewModel: AgentListViewModel { stores.viewModel }
+    var noteStore: NoteStore { stores.noteStore }
+    var scriptStore: WorkspaceScriptStore { stores.scriptStore }
+    var changesStore: WorkspaceChangesStore { stores.changesStore }
+    var filesStore: WorkspaceFilesStore { stores.filesStore }
+    var presentation: WorkspaceDetailPresentation { storedPresentation }
     var currentTab: WorkspaceTab { get { selectedTab } nonmutating set { selectedTab = newValue } }
+    var tabSelection: Binding<WorkspaceTab> { $selectedTab }
+    var swipeTarget: Binding<WorkspaceSwipeTarget?> { $revealedSwipeTarget }
+    var notesExpansion: Binding<Bool> { $notesExpanded }
+    var filesExpansion: Binding<Bool> { $filesExpanded }
     var agentStoreConnectionID: ObjectIdentifier { ObjectIdentifier(agentStore.connectionManager) }
     var noteStoreConnectionID: ObjectIdentifier { ObjectIdentifier(noteStore.connectionManager) }
     var changesStoreConnectionID: ObjectIdentifier { ObjectIdentifier(changesStore.connectionManager) }
 
     var workspaceStore: WorkspaceStore { session.workspaceStore }
-    private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
-    private var browserStore: WorkspaceBrowserStore { session.browserStore }
-    private var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
-    private var workspaceTitle: String {
+    var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
+    var browserStore: WorkspaceBrowserStore { session.browserStore }
+    var workspace: Workspace? { workspaceStore.workspaces.first { $0.id == workspaceId } }
+    var workspaceTitle: String {
         guard let title = workspace?.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "" }
         return title
     }
-    private var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
-    private var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
-    private var showsNavigationTitle: Bool { !coordinator.usesIPadShell && !usesVerticalBar }
+    var workspaceName: String { workspaceTitle.isEmpty ? "New Workspace" : workspaceTitle }
+    var showsBackButton: Bool { !coordinator.usesIPadShell || coordinator.iPadNavigation.usesCompactNavigation }
+    var showsNavigationTitle: Bool { !coordinator.usesIPadShell && !usesVerticalBar }
     private var lifecycleContent: some View {
         ZStack {
             surface.ignoresSafeArea()
@@ -119,12 +110,7 @@ struct WorkspaceDetailView: View {
         .onChange(of: workspaceId) { oldId, newId in
             titleEditor.cancel()
             scriptStore.cancelPendingLaunch(workspaceId: oldId)
-            terminalCreationRequest = nil
-            selectedTerminal = nil
-            selectedBrowser = nil
-            createdBrowser = nil
-            showNewBrowser = false
-            showTransferWorkspace = false
+            presentation.resetForWorkspaceChange()
             revealedSwipeTarget = nil
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
@@ -158,7 +144,7 @@ struct WorkspaceDetailView: View {
         }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
-            if !showTransferWorkspace, workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
+            if !presentation.showTransferWorkspace, workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
                 coordinator.handleMissingWorkspace()
             }
         }
@@ -186,153 +172,19 @@ struct WorkspaceDetailView: View {
                 WorkspaceTitleEditingControls(editor: titleEditor, onSave: saveTitle)
             }
         }
-        #if os(visionOS)
-        // Deliberate confirmation sheets (HIG): destructive/irreversible
-        // workspace actions get a focused sheet with one primary action.
-        .sheet(isPresented: $showDeleteConfirmation) {
-            WorkspaceActionConfirmationSheet(
-                title: "Delete Workspace",
-                message: "Are you sure you want to delete this workspace? This cannot be undone.",
-                actionLabel: "Delete",
-                isDestructive: true,
-                onConfirm: deleteWorkspace
-            )
-        }
-        .sheet(isPresented: $showArchiveConfirmation) {
-            WorkspaceActionConfirmationSheet(
-                title: "Archive Workspace",
-                message: "Archive this workspace? You can unarchive it later.",
-                actionLabel: "Archive",
-                isDestructive: false,
-                onConfirm: archiveWorkspace
-            )
-        }
-        #else
-        .alert("Delete Workspace", isPresented: $showDeleteConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive, action: deleteWorkspace)
-        } message: {
-            Text("Are you sure you want to delete this workspace? This cannot be undone.")
-        }
-        .alert("Archive Workspace", isPresented: $showArchiveConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Archive", action: archiveWorkspace)
-        } message: {
-            Text("Archive this workspace? You can unarchive it later.")
-        }
-        #endif
-        .sheet(isPresented: $showSpecialistPicker) {
-            SpecialistPickerView(
-                workspaceId: workspaceId,
-                agentStore: agentStore,
-                optionsStore: session.creationOptionsStore
-            )
-                .environment(coordinator)
-        }
-        .sheet(
-            isPresented: $showTransferWorkspace,
-            onDismiss: {
-                if workspaceStore.lastUpdated != nil, workspace == nil { coordinator.handleMissingWorkspace() }
-            },
-            content: {
-                WorkspaceTransferSheet(workspaceId: workspaceId, workspaceTitle: workspaceName, session: session)
-                    .environment(coordinator)
-                    .id(workspaceId)
-            }
-        )
-        .sheet(
-            isPresented: $showNewBrowser,
-            onDismiss: {
-                selectedBrowser = createdBrowser
-                createdBrowser = nil
-            },
-            content: {
-                NewWorkspaceBrowserView(workspaceId: workspaceId, store: browserStore) { browser in
-                    selectedTab = .agents
-                    createdBrowser = browser
-                }
-            }
-        )
-        .fullScreenCover(item: $selectedBrowser) { browser in
-            WorkspaceBrowserView(browser: browser, connection: session.connection)
-        }
-        .fullScreenCover(
-            item: $selectedTerminal,
-            onDismiss: {
-                // The terminal already showed any error inline; don't replay it as an alert.
-                terminalStore.clearError(workspaceId: workspaceId)
-            },
-            content: { terminal in
-                MobileTerminalView(terminal: terminal, workspaceName: workspaceName, store: terminalStore)
-            }
-        )
-        .alert("Terminal unavailable", isPresented: Binding(
-            get: { terminalStore.errorMessage(workspaceId: workspaceId) != nil && selectedTerminal == nil },
-            set: { if !$0 { terminalStore.clearError(workspaceId: workspaceId) } }
-        )) {
-            Button("OK") { terminalStore.clearError(workspaceId: workspaceId) }
-        } message: {
-            Text(terminalStore.errorMessage(workspaceId: workspaceId) ?? "")
-        }
+        .modifier(WorkspaceDetailPresentations(
+            presentation: presentation,
+            workspaceId: workspaceId,
+            workspaceName: workspaceName,
+            onArchive: archiveWorkspace,
+            onDelete: deleteWorkspace,
+            onBrowserCreated: { selectedTab = .agents },
+            agentStore: agentStore
+        ))
     }
 }
 
 private extension WorkspaceDetailView {
-    var pageContent: some View {
-        presentedContent
-        .preference(key: WorkspaceFirstAgentPreference.self, value: firstAgent)
-        .navigationTitle(showsNavigationTitle ? workspaceName : "")
-        .toolbar(removing: usesVerticalBar ? .title : nil)
-        .toolbarTitleDisplayMode(.inline)
-        #if !os(visionOS)
-        .navigationBarBackButtonHidden()
-        .nativeNavigationBackGesture()
-        .toolbarBackground(WorkspaceDetailStyle.background(for: colorScheme), for: .navigationBar)
-        #endif
-        .toolbar {
-            // In the Duo shell the rail carries these actions, as for conversations; a system
-            // vertical toolbar would add an opaque navigation bar over the top of the pane.
-            if usesVerticalBar, !coordinator.usesIPadShell {
-                WorkspaceVerticalNavigationToolbar(
-                    isEnabled: true,
-                    showsBackButton: showsBackButton && !isSidebarVisible,
-                    backLabel: "Back to workspaces",
-                    backIdentifier: "workspaceDetail.back",
-                    onBack: coordinator.onBackToWorkspaceList
-                ) { workspaceActions }
-            } else if !usesVerticalBar {
-                #if os(visionOS)
-                // The workspace picker lives in the top toolbar on visionOS.
-                ToolbarItem(placement: .topBarTrailing) { WorkspaceDetailToolbarPicker(selection: $selectedTab) }
-                #else
-                if showsBackButton {
-                    ToolbarItem(placement: .topBarLeading) {
-                        IntentIconButton(icon: .arrowLeft, label: "Back to workspaces", showsBackground: false, action: coordinator.onBackToWorkspaceList)
-                            .accessibilityIdentifier("workspaceDetail.back")
-                    }
-                    .intentToolbarSurface()
-                }
-                #endif
-                if showsNavigationTitle {
-                    ToolbarItem(placement: .principal) {
-                        WorkspaceDetailToolbarTitle(title: workspaceTitle, createdAt: workspace?.createdAt)
-                    }
-                }
-                ToolbarItem(placement: .primaryAction) { workspaceActions }
-                .intentToolbarSurface()
-            }
-        }
-        #if !os(visionOS)
-        .workspacePhoneNavigation(
-            title: workspaceTitle,
-            createdAt: workspace?.createdAt,
-            showsBackButton: showsBackButton,
-            showsTitle: !isBesideIPadSidebar,
-            onBack: coordinator.onBackToWorkspaceList
-        ) { workspaceActions }
-        #endif
-    }
-
     func saveTitle() {
         Task { await titleEditor.save(connection: session.connection, store: workspaceStore) }
     }
@@ -348,45 +200,15 @@ private extension WorkspaceDetailView {
         }
     }
 
-    var workspaceActions: some View {
-        WorkspaceResourceActions(workspaceId: workspaceId) {
-            workspaceActionsMenu
-        }
-    }
-    var workspaceActionsMenu: some View {
-        WorkspaceActionsMenu(
-            workspaceId: workspaceId,
-            scriptStore: scriptStore,
-            isTerminalDisabled: !terminalStore.isConnected || terminalStore.creatingWorkspaces.contains(workspaceId),
-            onCreateAgent: { showSpecialistPicker = true },
-            onCreateTerminal: createTerminal,
-            onCreateBrowser: { showNewBrowser = true },
-            onTransfer: session.connection.currentPrincipal?.isOwner == true
-                && session.connection.connectionState == .connected ? { showTransferWorkspace = true } : nil,
-            onCollapseSidebar: usesVerticalBar ? nil : sidebar?.onCollapse,
-            onArchive: { showArchiveConfirmation = true },
-            onDelete: { showDeleteConfirmation = true }
-        )
-    }
-
-    func createTerminal() {
-        let requestedWorkspace = workspaceId
-        let request = UUID()
-        terminalCreationRequest = request
-        Task {
-            let terminal = await terminalStore.create(workspaceId: requestedWorkspace)
-            if terminalCreationRequest == request { selectedTerminal = terminal }
-        }
-    }
-
     func presentScriptBrowser() {
-        guard scenePhase == .active, selectedBrowser == nil, selectedTerminal == nil, !showNewBrowser, !showTransferWorkspace else {
+        guard scenePhase == .active, presentation.selectedBrowser == nil, presentation.selectedTerminal == nil,
+              !presentation.showNewBrowser, !presentation.showTransferWorkspace else {
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
             return
         }
         guard let browser = scriptStore.takeBrowserToOpen(workspaceId: workspaceId) else { return }
         selectedTab = .agents
-        selectedBrowser = try? browserStore.open(workspaceId: workspaceId, url: browser.url)
+        presentation.selectedBrowser = try? browserStore.open(workspaceId: workspaceId, url: browser.url)
     }
 
     var detailContent: some View {
@@ -426,7 +248,7 @@ private extension WorkspaceDetailView {
         }
     }
 
-    private var detailHeader: some View {
+    var detailHeader: some View {
         WorkspaceDetailHeader(
             workspaceId: workspaceId,
             workspace: workspace,
@@ -439,62 +261,5 @@ private extension WorkspaceDetailView {
             showsTitle: sidebar == nil,
             onSaveTitle: saveTitle
         )
-    }
-
-    private var showsAgentLoading: Bool {
-        (agentStore.isLoading || !agentStore.hasLoaded) && viewModel.agents.isEmpty && !hasWorkspaceResources
-    }
-    private var showsAgentList: Bool { !showsAgentLoading && (viewModel.hasAgentSections || hasWorkspaceResources) }
-    var hasWorkspaceResources: Bool {
-        !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty
-            || !browserStore.browsers(workspaceId: workspaceId).isEmpty
-            || browserStore.errorMessage(workspaceId: workspaceId) != nil
-            || !scriptStore.scriptsWithRuns(workspaceId: workspaceId).isEmpty
-            || scriptStore.errorMessage(workspaceId: workspaceId) != nil
-    }
-
-    @ViewBuilder
-    var tabContent: some View {
-        if selectedTab == .agents {
-            if showsAgentLoading {
-                ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
-            } else if !viewModel.hasAgentSections, !hasWorkspaceResources {
-                ContentUnavailableView {
-                    Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: {
-                        Image(.agents).resizable().scaledToFit().frame(width: emptyStateIconSize, height: emptyStateIconSize)
-                    }
-                } description: { Text("Agents will appear here when active.").interFont(Constants.Typography.bodyS) }
-                .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
-            } else {
-                agentListContent
-            }
-        } else if selectedTab == .changes {
-            WorkspaceChangesView(workspaceId: workspaceId, store: changesStore)
-        } else {
-            WorkspaceContextView(workspaceId: workspaceId, noteStore: noteStore, filesStore: filesStore, notesExpanded: $notesExpanded, filesExpanded: $filesExpanded)
-        }
-    }
-
-    @ViewBuilder
-    var agentListContent: some View {
-        let rows = agentListRows
-        let entries = rows.enumerated().map { index, row in
-            (id: row.id, content: WorkspaceAgentListEntry(row: row, isFirst: index == 0))
-        }
-        ForEach(snapshots: entries, id: \.id) { entry in entry.content }
-        if hasWorkspaceResources {
-            WorkspaceDetailResources(
-                workspaceId: workspaceId,
-                terminalStore: terminalStore,
-                browserStore: browserStore,
-                scriptStore: scriptStore,
-                revealedTarget: $revealedSwipeTarget,
-                followsAgents: !rows.isEmpty,
-                onSelectTerminal: { selectedTerminal = $0 },
-                onSelectBrowser: { selectedBrowser = $0 }
-            )
-        }
     }
 }
