@@ -1,4 +1,5 @@
 import SwiftUI
+
 struct WorkspaceDetailView: View {
     @ScaledMetric(relativeTo: .title) var emptyStateIconSize: CGFloat = 48
     let workspaceId: String
