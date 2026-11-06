@@ -5,7 +5,7 @@ import UIKit
 extension DemoFixtures {
     /// Opt-in so existing demo transcripts and screenshots stay unchanged.
     static var usesInlinePDF: Bool {
-        let arguments = ProcessInfo.processInfo.arguments
+        let arguments = LaunchOptions.current.arguments
         return DemoMode.demoDataRequested(by: arguments) && arguments.contains("--demo-inline-pdfs")
     }
 

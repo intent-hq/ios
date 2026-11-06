@@ -4,8 +4,8 @@ import OSLog
 /// Explicitly enabled diagnostics in both Debug and Release. Details must contain
 /// only identifiers, counts, timings and fixed reasons, never transcript content.
 nonisolated enum ConversationTrace {
-    static let enabled = ProcessInfo.processInfo.environment["INTENT_CONVERSATION_TRACE"] == "1"
-        || ProcessInfo.processInfo.arguments.contains("--trace-conversation")
+    static let enabled = LaunchOptions.current.environment["INTENT_CONVERSATION_TRACE"] == "1"
+        || LaunchOptions.current.contains("--trace-conversation")
 
     private static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "Intent",
@@ -15,7 +15,7 @@ nonisolated enum ConversationTrace {
     private static let session = UUID().uuidString
     private static let metadataLengthLimit = 64
     private static let activation: Void = {
-        let environment = ProcessInfo.processInfo.environment
+        let environment = LaunchOptions.current.environment
         let bundle = Bundle.main
         #if DEBUG
         let configuration = "Debug"

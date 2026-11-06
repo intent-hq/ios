@@ -113,7 +113,7 @@ extension DemoDesignFixtures {
     }
 
     var monitor: [String: Any] {
-        let repo = ProcessInfo.processInfo.arguments.contains("--demo-long-pr-label") ? "intent-hq/intentd" : "intent-ha/ios"
+        let repo = LaunchOptions.current.contains("--demo-long-pr-label") ? "intent-hq/intentd" : "intent-ha/ios"
         return [
             "monitorId": Self.monitorId, "workspaceId": Self.workspaceId, "agentId": Self.agentId,
             "repo": repo, "prNumber": 56, "state": monitorCancelled ? "cancelled" : "active",

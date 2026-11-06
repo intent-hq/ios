@@ -141,6 +141,11 @@ CAPTURES = {
             "ipad-narrow-workspace-draft", "ipad-narrow-assistant-draft",
         ),
     },
+    "IPadTypingFocusUITests": {
+        "testSendingRestoresConversationInBothThemes": (
+            "iPad prompt sent light", "iPad prompt sent dark",
+        ),
+    },
     "IPadSidebarUITests": {
         "testPullRequestsSectionListsAndOpensDetailInBothThemes": tuple(
             f"iPad pull {screen} {appearance}"

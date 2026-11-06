@@ -3,7 +3,7 @@ import Foundation
 
 extension DemoFixtures {
     static var usesTranscriptVideo: Bool {
-        let arguments = ProcessInfo.processInfo.arguments
+        let arguments = LaunchOptions.current.arguments
         return DemoMode.demoDataRequested(by: arguments) && arguments.contains("--demo-transcript-video")
     }
 

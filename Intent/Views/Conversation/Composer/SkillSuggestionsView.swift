@@ -61,25 +61,25 @@ struct SkillSuggestionsView: View {
     }
 
     private var chips: some View {
-        ScrollViewReader { proxy in
+        let selectedId = completion.selectedSkill?.id
+        return ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Layout.chipSpacing) {
                     ForEach(completion.matches) { skill in
-                        chip(skill)
+                        chip(skill, selected: skill.id == selectedId)
                     }
                 }
             }
             .scrollClipDisabled()
-            .onChange(of: completion.selectedSkill?.id) { _, id in
+            .onChange(of: selectedId) { _, id in
                 guard let id else { return }
                 withAnimation(.easeOut) { proxy.scrollTo(id, anchor: .center) }
             }
         }
     }
 
-    private func chip(_ skill: SkillInfo) -> some View {
-        let selected = completion.selectedSkill?.id == skill.id
-        return Button { completion.insert(skill) } label: {
+    private func chip(_ skill: SkillInfo, selected: Bool) -> some View {
+        Button { completion.insert(skill) } label: {
             chipLabel(Text(verbatim: "/\(skill.name)"), selected: selected)
         }
         .buttonStyle(IntentContentButtonStyle())

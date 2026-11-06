@@ -65,6 +65,7 @@ actor MediaAudioSession {
     private func configure() throws {
         let recording = leases.values.contains(.dictation)
         let playing = leases.values.contains(.playback)
+        let notifying = leases.values.contains(.notification)
         if recording {
             // A recording in another window must not silence video or lose
             // microphone access. Return to dictation's own category afterwards.
@@ -75,8 +76,12 @@ actor MediaAudioSession {
             )
         } else if playing {
             try client.setCategory(.playback, mode: .moviePlayback, options: [])
-        } else {
+        } else if notifying {
+            // A short chime mixes with other apps' audio and respects the
+            // silent switch.
             try client.setCategory(.ambient, mode: .default, options: .mixWithOthers)
         }
+        // Callers configure only while at least one lease is held, so one of
+        // the purposes above always applies.
     }
 }

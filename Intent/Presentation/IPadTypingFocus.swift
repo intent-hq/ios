@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Input focus controls the retained iPad pane independently of keyboard visibility.
+/// Input focus controls the retained iPad conversation pane.
 struct IPadTypingFocus: ViewModifier {
     @Binding var isFocused: Bool
     let composerVisible: Bool
@@ -11,8 +11,11 @@ struct IPadTypingFocus: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: isFocused) { _, focused in
-                if focused, isIPadPaneVisible {
+                guard isIPadPaneVisible else { return }
+                if focused {
                     iPadFocusPresentation?.wrappedValue = .conversationEditing
+                } else if iPadFocusPresentation?.wrappedValue == .conversationEditing {
+                    iPadFocusPresentation?.wrappedValue = .normal
                 }
             }
             .onChange(of: iPadFocusPresentation?.wrappedValue) { _, focus in

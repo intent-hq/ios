@@ -26,12 +26,12 @@ enum ComposerImageRecovery {
     static let maxImageReferenceBytes = 30 * 1024 * 1024
     // Conservative client budgets leave room for base64 and provider context;
     // they are not a guarantee against any provider's total request limit.
-    private static let maxOutgoingImageBytes = 1024 * 1024
+    nonisolated private static let maxOutgoingImageBytes = 1024 * 1024
     // Scale the aggregate with the selection limit so every allowed image keeps its 1 MiB share.
     private static let maxOutgoingImagesBytes = Constants.Conversation.Composer.maximumImageSelectionCount * maxOutgoingImageBytes
-    private static let maxOutgoingPixelSize: CGFloat = 2048
-    private static let maximumResizePasses = 3
-    private static let compressionQualities: [CGFloat] = [Constants.Conversation.Composer.imageCompressionQuality, 0.6, 0.4]
+    nonisolated private static let maxOutgoingPixelSize: CGFloat = 2048
+    nonisolated private static let maximumResizePasses = 3
+    nonisolated private static let compressionQualities: [CGFloat] = [Constants.Conversation.Composer.imageCompressionQuality, 0.6, 0.4]
     // swiftlint:enable no_magic_numbers
     // Date.timeIntervalSince1970 is expressed in seconds.
     private static let millisecondsPerSecond: TimeInterval = 1000
@@ -85,6 +85,9 @@ enum ComposerImageRecovery {
     @ObservationIgnored var loadPhotoData: (PhotosPickerItem) async -> Data? = { try? await $0.loadTransferable(type: Data.self) }
     /// A seam so tests can pick library videos, which import as files.
     @ObservationIgnored var photoVideos = PhotoLibraryVideos.live
+    /// Encodes one outgoing photo. A seam so tests can observe where encoding
+    /// runs; production always uses the bounded resize/JPEG ladder.
+    @ObservationIgnored var encodeOutgoingJPEG: @Sendable (UIImage) -> Data? = ConversationAttachmentPipeline.outgoingJPEGData(for:)
     var pendingFiles: [PendingFile] = []
     var fileUploadProgress: [UUID: Double] = [:]
     var imagePlacementError: String?
@@ -221,8 +224,11 @@ enum ComposerImageRecovery {
         guard !images.isEmpty else { return .none }
         var payloads: [Data] = []
         var totalBytes = 0
+        let encoder = encodeOutgoingJPEG
         for (index, image) in images.enumerated() {
-            guard let data = Self.outgoingJPEGData(for: image) else {
+            // Stop before encoding the next photo once the send is cancelled.
+            try Task.checkCancellation()
+            guard let data = await Self.encodeOffMainActor(image, using: encoder) else {
                 throw ImagePlacementError.encodingFailed(index: index + 1)
             }
             guard data.count <= Self.maxOutgoingImageBytes else {
@@ -261,42 +267,6 @@ enum ComposerImageRecovery {
             ])
         }
         return .attachments(blocks)
-    }
-
-    /// Bake orientation into bounded pixel dimensions before JPEG encoding.
-    /// Never modify the original image retained by the draft/send attempt.
-    private static func outgoingJPEGData(for image: UIImage) -> Data? {
-        let pixels = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
-        guard pixels.width.isFinite, pixels.height.isFinite, pixels.width > 0, pixels.height > 0 else { return nil }
-        let ratio = min(1, maxOutgoingPixelSize / max(pixels.width, pixels.height))
-        if ratio == 1, image.imageOrientation == .up,
-           let data = image.jpegData(compressionQuality: Constants.Conversation.Composer.imageCompressionQuality),
-           data.count <= maxOutgoingImageBytes { return data }
-
-        var size = CGSize(width: max(1, floor(pixels.width * ratio)), height: max(1, floor(pixels.height * ratio)))
-        var lastData: Data?
-        for _ in 0..<maximumResizePasses {
-            let data: Data? = autoreleasepool {
-                let format = UIGraphicsImageRendererFormat()
-                format.scale = 1
-                let upright = UIGraphicsImageRenderer(size: size, format: format).image { _ in
-                    image.draw(in: CGRect(origin: .zero, size: size))
-                }
-                var encoded: Data?
-                for quality in compressionQualities {
-                    guard let candidate = upright.jpegData(compressionQuality: quality) else { return nil }
-                    encoded = candidate
-                    if candidate.count <= maxOutgoingImageBytes { return candidate }
-                }
-                return encoded
-            }
-            guard let data else { return nil }
-            if data.count <= maxOutgoingImageBytes { return data }
-            lastData = data
-            size = CGSize(width: max(1, floor(size.width / 2)), height: max(1, floor(size.height / 2)))
-        }
-        // The caller rejects any remaining over-budget data before any RPC.
-        return lastData
     }
 
     func buildFileBlocks(from files: [PendingFile], workspaceId: String) async throws
@@ -370,5 +340,54 @@ enum ComposerImageRecovery {
         filePlacementError = error.localizedDescription
         if messageText.isEmpty { messageText = content }
         imageRecovery.apply(to: &pendingImages)
+    }
+}
+
+// Send-time photo encoding, kept nonisolated so it never runs on the main actor.
+extension ConversationAttachmentPipeline {
+    /// Resizing and JPEG encoding can take hundreds of milliseconds per large
+    /// photo, so run it on the concurrent pool instead of the main actor.
+    @concurrent
+    nonisolated private static func encodeOffMainActor(
+        _ image: UIImage,
+        using encoder: @Sendable (UIImage) -> Data?
+    ) async -> Data? {
+        encoder(image)
+    }
+
+    /// Bake orientation into bounded pixel dimensions before JPEG encoding.
+    /// Never modify the original image retained by the draft/send attempt.
+    nonisolated static func outgoingJPEGData(for image: UIImage) -> Data? {
+        let pixels = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
+        guard pixels.width.isFinite, pixels.height.isFinite, pixels.width > 0, pixels.height > 0 else { return nil }
+        let ratio = min(1, maxOutgoingPixelSize / max(pixels.width, pixels.height))
+        if ratio == 1, image.imageOrientation == .up,
+           let data = image.jpegData(compressionQuality: Constants.Conversation.Composer.imageCompressionQuality),
+           data.count <= maxOutgoingImageBytes { return data }
+
+        var size = CGSize(width: max(1, floor(pixels.width * ratio)), height: max(1, floor(pixels.height * ratio)))
+        var lastData: Data?
+        for _ in 0..<maximumResizePasses {
+            let data: Data? = autoreleasepool {
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1
+                let upright = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                    image.draw(in: CGRect(origin: .zero, size: size))
+                }
+                var encoded: Data?
+                for quality in compressionQualities {
+                    guard let candidate = upright.jpegData(compressionQuality: quality) else { return nil }
+                    encoded = candidate
+                    if candidate.count <= maxOutgoingImageBytes { return candidate }
+                }
+                return encoded
+            }
+            guard let data else { return nil }
+            if data.count <= maxOutgoingImageBytes { return data }
+            lastData = data
+            size = CGSize(width: max(1, floor(size.width / 2)), height: max(1, floor(size.height / 2)))
+        }
+        // The caller rejects any remaining over-budget data before any RPC.
+        return lastData
     }
 }

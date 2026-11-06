@@ -170,9 +170,11 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let transcript = try app.scrollViews.matching(identifier: "transcript.scrollView").singleHittableElement()
         transcript.coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
         XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(close.isHittable, "Hiding the keyboard must not close the focused pane")
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout), "Hiding the keyboard must restore the normal pane")
         XCTAssertEqual(composer.value as? String, Self.draft)
         capture(app, name: "iPad focused typing keyboard hidden \(appearance)")
+        try composerTap.activate(in: app)
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCUIDevice.shared.orientation = .portrait
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, Self.draft)
