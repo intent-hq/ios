@@ -370,13 +370,13 @@ extension ConversationTranscriptScrollUITests {
     var startupSnapshotGate: URL { hooksRowTriggerFile.appendingPathExtension("snapshot") }
 
     @MainActor
-    func launchStartupConversation(metadataReady: Bool = false, holdSnapshot: Bool = false, appearance: String? = nil) throws -> XCUIApplication {
+    func launchStartupConversation(metadataReady: Bool = false, holdSnapshot: Bool = false, appearance: String? = nil, extraArguments: [String] = []) throws -> XCUIApplication {
         try? FileManager.default.removeItem(at: startupMetadataGate)
         try? FileManager.default.removeItem(at: startupSnapshotGate)
         if metadataReady { try Data().write(to: startupMetadataGate) }
         var arguments = ["--demo-startup-transcript", "--demo-agent-detail-trigger-file=" + startupMetadataGate.path]
         if holdSnapshot { arguments.append("--demo-chat-snapshot-trigger-file=" + startupSnapshotGate.path) }
-        return launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile, extraArguments: arguments + (appearance.map { ["-appThemePreference", $0] } ?? []))
+        return launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile, extraArguments: arguments + (appearance.map { ["-appThemePreference", $0] } ?? []) + extraArguments)
     }
 
     @MainActor

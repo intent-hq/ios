@@ -771,6 +771,7 @@ $(SRCROOT)/IntentTests/ConversationStoreTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTurnBoundaryTests.swift
 $(SRCROOT)/IntentTests/ConversationStreamingFixture.swift
 $(SRCROOT)/IntentTests/ConversationStreamingFixtureTests.swift
+$(SRCROOT)/IntentTests/ConversationSubscribeFailureTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptGestureTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptHistoryPolicyTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptRestorationApplicationTests.swift

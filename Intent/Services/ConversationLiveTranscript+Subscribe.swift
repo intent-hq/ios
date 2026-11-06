@@ -7,6 +7,9 @@ extension ConversationLiveTranscript {
         case requesting
         case receiving
         case retrying(attempt: Int)
+        /// Every attempt of the bounded retry cycle failed; nothing retries
+        /// until the user does (or the transport reconnects).
+        case failed
     }
 
     var loadingStage: LoadingStage {
@@ -15,11 +18,12 @@ extension ConversationLiveTranscript {
         return subscriptionLoadingStage
     }
 
-    /// Bypasses snapshot/backoff waits. Supersede the old registration before
-    /// releasing it so late replies and already-running recovery cannot win.
+    /// Bypasses snapshot/backoff waits and starts a fresh bounded retry cycle.
+    /// Supersede the old registration before releasing it so late replies and
+    /// already-running recovery cannot win.
     func retryNow() async {
         guard agentId != nil, !Task.isCancelled else { return }
-        cancelSnapshotRecovery()
+        resetBackoff()
         registrationGeneration &+= 1
         guard connectionManager.connectionState == .connected else {
             prepareForReconnect()
@@ -40,7 +44,10 @@ extension ConversationLiveTranscript {
         bind(agentId: agentId, workspaceId: workspaceId)
         let generation = openRegistration()
         subscriptionAttempt += 1
-        subscriptionLoadingStage = .requesting
+        // A retry keeps reporting its attempt while its own request is in
+        // flight; otherwise the stage would show "requesting" for the whole
+        // request timeout and never visibly advance (#765).
+        subscriptionLoadingStage = subscriptionAttempt > 1 ? .retrying(attempt: subscriptionAttempt) : .requesting
         chatChannelActive = true
         chatSeeded = false
         snapshotPending = true
@@ -295,6 +302,10 @@ extension ConversationLiveTranscript {
     }
 
     private func scheduleRetry(generation: Int) {
+        guard subscriptionAttempt < maxSubscriptionAttempts else {
+            failSubscription(generation: generation)
+            return
+        }
         // Include the initial registration: the first retry is attempt 2.
         subscriptionLoadingStage = .retrying(attempt: subscriptionAttempt + 1)
         retryTask?.cancel()
@@ -314,6 +325,20 @@ extension ConversationLiveTranscript {
             retryTask = nil
             await subscribe(agentId: agentId, workspaceId: workspaceId)
         }
+    }
+
+    /// Ends the bounded cycle (#765): stop retrying and let the user decide.
+    /// An acked registration stays registered, so a late snapshot still
+    /// applies and settles the load.
+    private func failSubscription(generation: Int) {
+        retryTask?.cancel()
+        retryTask = nil
+        traceEvent("ChatSubscribeFailed", "requestRegistration=\(generation) attempts=\(subscriptionAttempt)")
+        AppLog.conversation.error(
+            "[ConversationStore] chat.subscribe gave up after \(subscriptionAttempt) attempts"
+        )
+        subscriptionLoadingStage = .failed
+        resumeSnapshotWaiters()
     }
 
     func cancelSnapshotRecovery() {

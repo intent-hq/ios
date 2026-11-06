@@ -11,7 +11,7 @@ enum ConversationConnectionStep: Int, CaseIterable {
     init(stage: ConversationLiveTranscript.LoadingStage) {
         switch stage {
         case .idle, .connecting: self = .connecting
-        case .requesting, .retrying: self = .requesting
+        case .requesting, .retrying, .failed: self = .requesting
         case .receiving: self = .receiving
         }
     }
