@@ -34,8 +34,8 @@ struct StateFlagBudgetPolicyTests {
         "Intent/Views/Onboarding/ManualTokenEntryView.swift#ManualTokenEntryView": 5,
         "Intent/Views/Onboarding/QRScannerView.swift#QRScannerView": 5,
         "Intent/Views/Workspaces/SpecialistPickerView.swift#SpecialistPickerView": 5,
+        "Intent/Views/Workspaces/WorkspaceDetailPresentation.swift#WorkspaceDetailPresentation": 5,
         "Intent/Views/Workspaces/WorkspaceDetailSupport.swift#WorkspaceDetailHeading": 5,
-        "Intent/Views/Workspaces/WorkspaceDetailView.swift#WorkspaceDetailView": 8,
         "Intent/Views/Workspaces/WorkspaceFileDiffView.swift#WorkspaceFileDiffView": 6,
         "Intent/Views/Workspaces/WorkspaceListView.swift#WorkspaceListView": 8,
         "Intent/Views/Workspaces/WorkspaceSwipeRow.swift#WorkspaceSwipeRow": 5
