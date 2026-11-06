@@ -22,9 +22,10 @@ struct WorkspaceFilePreviewFailureTests {
         #expect(Failure(LoadError.fileTooLarge, isImage: false, path: "docs/big.mov") == .tooLarge(limit: ImportedPhotoVideo.maxBytes))
     }
 
-    @Test func webMVideoIsUnsupported() {
+    @Test func webMVideoIsUnsupportedWithoutRetry() {
         let failure = Failure(LoadError.notAVideo, isImage: false, path: "docs/clip.webm")
         #expect(failure == .unsupported)
+        #expect(!failure.canRetry)
         #expect(failure.message.contains("cannot be previewed"))
         #expect(!failure.message.contains("connection"))
     }

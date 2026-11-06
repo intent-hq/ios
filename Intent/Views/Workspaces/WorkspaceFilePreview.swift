@@ -160,8 +160,8 @@ extension WorkspaceFilePreview {
 
         var canRetry: Bool {
             switch self {
-            case .tooLarge, .damaged: false
-            case .unsupported, .unexpectedResponse, .unavailable: true
+            case .tooLarge, .unsupported, .damaged: false
+            case .unexpectedResponse, .unavailable: true
             }
         }
     }
