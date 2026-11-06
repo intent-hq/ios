@@ -29,9 +29,7 @@ import os
     }
 
     @ObservationIgnored var browserNavigationHandler: (([String: Any]) async -> [String: Any])?
-
     static let shared = ConnectionManager()
-
     var connectionState: ConnectionState = .disconnected {
         didSet {
             if connectionState == .connected { reconnectStopReason = nil }
