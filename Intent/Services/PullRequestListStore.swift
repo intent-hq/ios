@@ -41,12 +41,24 @@ import Observation
         var text = ""
     }
 
+    /// A `github.pulls.search` reply without a `pulls` list: an error, never
+    /// an empty result.
+    enum ResponseError: LocalizedError, Equatable {
+        case malformed
+
+        var errorDescription: String? {
+            "Could not read the pull requests from the computer running Intent. Try again."
+        }
+    }
+
     static let batchSize = 6
     static let pageLimit = 30
 
     private(set) var items: [PullRequestListItem] = []
     private(set) var phase: Phase = .idle
     private(set) var isLoadingMore = false
+    /// A failed "load more"; the rows already loaded stay visible.
+    private(set) var loadMoreError: String?
     private(set) var loadedQuery: Query?
     var hasMore: Bool { cursors.contains { $0 != nil } }
 
@@ -65,6 +77,7 @@ import Observation
         let current = generation
         phase = .loading
         isLoadingMore = false
+        loadMoreError = nil
         guard !query.repositories.isEmpty else {
             finish(query, items: [], cursors: [], generation: current)
             return
@@ -86,6 +99,12 @@ import Observation
         } catch {
             guard current == generation else { return }
             AppLog.github.error("[PullRequestListStore] load failed: \(error)")
+            // Rows of another query must not pass for this query's results;
+            // a failed refresh of the same query keeps them under an error row.
+            if loadedQuery != query {
+                items = []
+                cursors = []
+            }
             phase = .failed(error.localizedDescription)
         }
     }
@@ -94,6 +113,7 @@ import Observation
         guard let query = loadedQuery, hasMore, !isLoadingMore, phase == .ready else { return }
         let current = generation
         isLoadingMore = true
+        loadMoreError = nil
         defer { if current == generation { isLoadingMore = false } }
         do {
             let pages = try await fetch(query, batches: Self.batches(query.repositories), cursors: cursors, more: true)
@@ -102,7 +122,9 @@ import Observation
             items += pages.items.filter { !known.contains($0.id) }
             cursors = pages.cursors
         } catch {
+            guard current == generation, !(error is CancellationError) else { return }
             AppLog.github.error("[PullRequestListStore] loadMore failed: \(error)")
+            loadMoreError = error.localizedDescription
         }
     }
 
@@ -112,6 +134,7 @@ import Observation
         cursors = []
         loadedQuery = nil
         isLoadingMore = false
+        loadMoreError = nil
         phase = .idle
     }
 
@@ -157,10 +180,10 @@ import Observation
             if !text.isEmpty { params["query"] = text }
             if more, let cursor { params["nextToken"] = cursor }
             let result = try await connection.request("github.pulls.search", params: params)
-            let response = result as? [String: Any]
-            let pulls = response?["pulls"] as? [[String: Any]] ?? []
+            guard let response = result as? [String: Any],
+                  let pulls = response["pulls"] as? [[String: Any]] else { throw ResponseError.malformed }
             items += pulls.compactMap { PullRequestListItem(wire: $0, owner: first.owner, repo: first.name) }
-            nextCursors.append(response?["nextToken"] as? String)
+            nextCursors.append(response["nextToken"] as? String)
         }
         let sorted = items.sorted { ($0.updatedAt ?? "") > ($1.updatedAt ?? "") }
         return (sorted, nextCursors)

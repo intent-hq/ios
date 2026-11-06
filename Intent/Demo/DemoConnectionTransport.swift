@@ -38,6 +38,7 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
             for handler in Array(connection.eventHandlers.values) { handler("event", event) }
         }
         if let response = try await scriptMonitors?.response(for: method, params: params) { return response }
+        if let response = try DemoFailureFixtures.response(for: method, params: params) { return response }
         if let gate = DemoFixtures.responseGate(for: method, params: params) {
             try await DemoFixtures.wait(for: gate)
         }

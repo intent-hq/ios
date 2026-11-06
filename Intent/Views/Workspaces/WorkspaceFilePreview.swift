@@ -6,7 +6,7 @@ struct WorkspaceFilePreview: View {
     @State private var loader: WorkspaceFileImageLoader
     @State private var image: UIImage?
     @State private var video: WorkspaceVideo?
-    @State private var hasFailed = false
+    @State private var failure: Failure?
     @State private var attempt = 0
     @Environment(\.dismiss) private var dismiss
 
@@ -42,20 +42,8 @@ struct WorkspaceFilePreview: View {
         } else {
             NavigationStack {
                 Group {
-                    if hasFailed {
-                        ContentUnavailableView {
-                            Label { Text("File unavailable") } icon: {
-                                Image(.file).resizable().scaledToFit().frame(width: emptyStateIconSize, height: emptyStateIconSize)
-                            }
-                        } description: {
-                            Text("Could not preview this file. Check your connection and try again.")
-                        } actions: {
-                            Button("Retry") {
-                                loader.forgetFailure(workspaceId: link.workspaceId, path: link.path)
-                                attempt += 1
-                            }
-                            .buttonStyle(IntentContentButtonStyle())
-                        }
+                    if let failure {
+                        failureView(failure)
                     } else {
                         ProgressView("Loading file…")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -74,8 +62,27 @@ struct WorkspaceFilePreview: View {
         }
     }
 
+    private func failureView(_ failure: Failure) -> some View {
+        ContentUnavailableView {
+            Label { Text(failure.title) } icon: {
+                Image(.file).resizable().scaledToFit().frame(width: emptyStateIconSize, height: emptyStateIconSize)
+            }
+        } description: {
+            Text(failure.message)
+        } actions: {
+            if failure.canRetry {
+                Button("Retry") {
+                    loader.forgetFailure(workspaceId: link.workspaceId, path: link.path)
+                    attempt += 1
+                }
+                .buttonStyle(IntentContentButtonStyle())
+            }
+        }
+        .accessibilityIdentifier("workspaceFilePreview.failure")
+    }
+
     private func loadMedia() async {
-        hasFailed = false
+        failure = nil
         do {
             if isImage {
                 let loaded = try await loader.image(workspaceId: link.workspaceId, path: link.path)
@@ -88,7 +95,74 @@ struct WorkspaceFilePreview: View {
             }
         } catch {
             guard !Task.isCancelled else { return }
-            hasFailed = true
+            failure = Failure(error, isImage: isImage, path: link.path)
+        }
+    }
+}
+
+extension WorkspaceFilePreview {
+    /// Why a media preview failed, so the message names the real cause
+    /// instead of always blaming the connection.
+    enum Failure: Equatable {
+        /// Over the loader's size cap (in bytes); retrying cannot help.
+        case tooLarge(limit: Int)
+        /// A type this device cannot show at all (WebM video).
+        case unsupported
+        /// A supported type whose bytes did not decode; refetching returns
+        /// the same bytes, so retrying cannot help.
+        case damaged
+        /// The reply arrived but was not the shape the app expects.
+        case unexpectedResponse
+        /// The request itself failed (timeout, disconnect, server error).
+        case unavailable
+
+        init(_ error: any Error, isImage: Bool, path: String) {
+            switch error as? WorkspaceFileImageLoader.LoadError {
+            case .fileTooLarge:
+                self = .tooLarge(limit: isImage ? WorkspaceFileImageLoader.maxFileBytes : ImportedPhotoVideo.maxBytes)
+            case .notAVideo where WorkspaceVideo.isWebM(path: path):
+                self = .unsupported
+            case .notAnImage, .notAVideo:
+                // Every extension routed to the media preview is one this
+                // device decodes, so a decode failure means bad bytes.
+                self = .damaged
+            case .malformedResponse:
+                self = .unexpectedResponse
+            default:
+                self = .unavailable
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .tooLarge: "File too large"
+            case .unsupported: "Preview not supported"
+            case .damaged: "Can't display file"
+            case .unexpectedResponse, .unavailable: "File unavailable"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .tooLarge(let limit):
+                let size = ByteCountFormatter.string(fromByteCount: Int64(limit), countStyle: .memory)
+                return "This file is too large to preview on this device (over \(size)). Open it on the computer running Intent."
+            case .unsupported:
+                return "This file type cannot be previewed on this device."
+            case .damaged:
+                return "This file couldn't be displayed. It may be damaged."
+            case .unexpectedResponse:
+                return "The file couldn't be loaded. The server sent an unexpected response."
+            case .unavailable:
+                return "Could not preview this file. Check your connection and try again."
+            }
+        }
+
+        var canRetry: Bool {
+            switch self {
+            case .tooLarge, .damaged: false
+            case .unsupported, .unexpectedResponse, .unavailable: true
+            }
         }
     }
 }

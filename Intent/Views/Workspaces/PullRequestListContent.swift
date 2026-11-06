@@ -43,6 +43,10 @@ struct PullRequestListContent: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Constants.WorkspaceRow.spaciousPadding)
+                } else if case .failed(let error) = store.phase {
+                    failureRow(error) { await store.load(query) }
+                } else if let error = store.loadMoreError {
+                    failureRow(error) { await store.loadMore() }
                 }
             }
         }
@@ -83,7 +87,8 @@ struct PullRequestListContent: View {
         }
         .visionListRowHitTarget()
         .onAppear {
-            if item.id == store.items.last?.id { Task { await store.loadMore() } }
+            // After a failed page, only Retry asks again.
+            if item.id == store.items.last?.id, store.loadMoreError == nil { Task { await store.loadMore() } }
         }
     }
 
@@ -120,6 +125,20 @@ struct PullRequestListContent: View {
         .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
         .padding(.horizontal, Constants.WorkspaceList.pageInset)
         .accessibilityIdentifier("pullRequests.placeholder")
+    }
+
+    /// Inline error under rows that stay visible, with its own Retry.
+    private func failureRow(_ error: String, retry: @escaping @MainActor () async -> Void) -> some View {
+        VStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
+            message(error)
+            Button("Retry") { Task { await retry() } }
+                .buttonStyle(IntentButtonStyle(variant: .muted))
+                .accessibilityIdentifier("pullRequests.loadMore.retry")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Constants.WorkspaceRow.spaciousPadding)
+        .padding(.horizontal, Constants.WorkspaceList.pageInset)
+        .accessibilityIdentifier("pullRequests.loadMore.failure")
     }
 
     private func groupHeading(_ title: String) -> some View {
