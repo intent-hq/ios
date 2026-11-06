@@ -12,6 +12,7 @@ enum DemoFailureFixtures {
     private static let corruptFile = "docs/Corrupt photo.png"
     private static let offlineFile = "docs/Offline photo.png"
     private static let garbledFile = "docs/Garbled reply.png"
+    private static let webMFile = "docs/Screen recording.webm"
     private static var fired: Set<String> = []
     /// Matches the wording of the live connection's request timeout.
     private static let requestTimedOut = NSError(
@@ -39,7 +40,7 @@ enum DemoFailureFixtures {
         case "github.pulls.get":
             return firesOnce("pr-detail") ? ["pull": "unexpected"] : nil
         case "file.list" where enabled.contains("file-preview") && params["path"] as? String == "docs":
-            return [largeFile, corruptFile, offlineFile, garbledFile].map { ["name": URL(fileURLWithPath: $0).lastPathComponent, "type": "file"] }
+            return [largeFile, corruptFile, offlineFile, garbledFile, webMFile].map { ["name": URL(fileURLWithPath: $0).lastPathComponent, "type": "file"] }
         case "file.readChunk" where enabled.contains("file-preview"):
             return try fileResponse(path: params["path"] as? String, params: params)
         default:
@@ -74,6 +75,8 @@ enum DemoFailureFixtures {
         case garbledFile:
             if fired.insert(garbledFile).inserted { return ["unexpected": true] }
             bytes = DemoFixtures.statusImagePNG
+        case webMFile:
+            bytes = Data("WebM video bytes.".utf8)
         default:
             return nil
         }
