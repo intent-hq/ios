@@ -95,7 +95,7 @@ struct WorkspaceFilePreview: View {
             }
         } catch {
             guard !Task.isCancelled else { return }
-            failure = Failure(error, isImage: isImage)
+            failure = Failure(error, isImage: isImage, path: link.path)
         }
     }
 }
@@ -106,17 +106,28 @@ extension WorkspaceFilePreview {
     enum Failure: Equatable {
         /// Over the loader's size cap (in bytes); retrying cannot help.
         case tooLarge(limit: Int)
-        /// The bytes arrived but are not an image or video this device can show.
+        /// A type this device cannot show at all (WebM video).
         case unsupported
-        /// The request failed or the reply was unreadable.
+        /// A supported type whose bytes did not decode; refetching returns
+        /// the same bytes, so retrying cannot help.
+        case damaged
+        /// The reply arrived but was not the shape the app expects.
+        case unexpectedResponse
+        /// The request itself failed (timeout, disconnect, server error).
         case unavailable
 
-        init(_ error: any Error, isImage: Bool) {
+        init(_ error: any Error, isImage: Bool, path: String) {
             switch error as? WorkspaceFileImageLoader.LoadError {
             case .fileTooLarge:
                 self = .tooLarge(limit: isImage ? WorkspaceFileImageLoader.maxFileBytes : ImportedPhotoVideo.maxBytes)
-            case .notAnImage, .notAVideo:
+            case .notAVideo where WorkspaceVideo.isWebM(path: path):
                 self = .unsupported
+            case .notAnImage, .notAVideo:
+                // Every extension routed to the media preview is one this
+                // device decodes, so a decode failure means bad bytes.
+                self = .damaged
+            case .malformedResponse:
+                self = .unexpectedResponse
             default:
                 self = .unavailable
             }
@@ -126,7 +137,8 @@ extension WorkspaceFilePreview {
             switch self {
             case .tooLarge: "File too large"
             case .unsupported: "Preview not supported"
-            case .unavailable: "File unavailable"
+            case .damaged: "Can't display file"
+            case .unexpectedResponse, .unavailable: "File unavailable"
             }
         }
 
@@ -137,14 +149,20 @@ extension WorkspaceFilePreview {
                 return "This file is too large to preview on this device (over \(size)). Open it on the computer running Intent."
             case .unsupported:
                 return "This file type cannot be previewed on this device."
+            case .damaged:
+                return "This file couldn't be displayed. It may be damaged."
+            case .unexpectedResponse:
+                return "The file couldn't be loaded. The server sent an unexpected response."
             case .unavailable:
                 return "Could not preview this file. Check your connection and try again."
             }
         }
 
         var canRetry: Bool {
-            if case .tooLarge = self { return false }
-            return true
+            switch self {
+            case .tooLarge, .damaged: false
+            case .unsupported, .unexpectedResponse, .unavailable: true
+            }
         }
     }
 }
