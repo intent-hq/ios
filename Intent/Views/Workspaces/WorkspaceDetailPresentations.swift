@@ -52,10 +52,7 @@ struct WorkspaceDetailPresentations: ViewModifier {
                     }
                 }
             )
-            .onChange(of: presentation.selectedBrowser) { _, browser in
-                if let browser { session.browserNavigation.presentUserBrowser(browser) }
-                presentation.selectedBrowser = nil
-            }
+            .onChange(of: presentation.selectedBrowser) { _, _ in presentSelectedBrowser() }
             .fullScreenCover(
                 item: $presentation.selectedTerminal,
                 onDismiss: {
@@ -67,6 +64,11 @@ struct WorkspaceDetailPresentations: ViewModifier {
                 }
             )
             .modifier(WorkspaceDetailAlerts(presentation: presentation, workspaceId: workspaceId))
+    }
+
+    private func presentSelectedBrowser() {
+        if let browser = presentation.selectedBrowser { session.browserNavigation.presentUserBrowser(browser) }
+        presentation.selectedBrowser = nil
     }
 }
 
