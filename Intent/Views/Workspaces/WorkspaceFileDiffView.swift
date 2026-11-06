@@ -19,13 +19,18 @@ struct WorkspaceFileDiffView: View {
     @State private var syntax: [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] = [:]
     @State private var syntaxIsDark = false
     @State private var retry = 0
-    @State private var isLoading = true
-    @State private var errorMessage: String?
+    @State private var phase = LoadPhase.loading
     @State private var viewportSize = CGSize.zero
     @State private var diffContentHeight: CGFloat?
     @Environment(\.workspaceViewerUsesPanel) private var usesPanel
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private enum LoadPhase: Equatable {
+        case loading
+        case failed(String)
+        case loaded
+    }
 
     private struct LoadID: Hashable {
         let workspace: String
@@ -72,7 +77,7 @@ struct WorkspaceFileDiffView: View {
 
     @ViewBuilder
     private var content: some View {
-        if isLoading {
+        if phase == .loading {
             if embedded {
                 ProgressView("Loading diff…")
                     .padding()
@@ -80,7 +85,7 @@ struct WorkspaceFileDiffView: View {
             } else {
                 ProgressView("Loading diff…").frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        } else if let errorMessage {
+        } else if case let .failed(errorMessage) = phase {
             if embedded {
                 compactStatus("Diff Unavailable", message: errorMessage) {
                     Image(systemName: "doc.text.magnifyingglass")
@@ -159,7 +164,7 @@ struct WorkspaceFileDiffView: View {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if errorMessage != nil { retryButton }
+            if case .failed = phase { retryButton }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -261,12 +266,11 @@ struct WorkspaceFileDiffView: View {
     }
 
     private func load() async {
-        isLoading = true
-        errorMessage = nil
+        phase = .loading
         presentation = nil
         diffRows = nil
         syntax = [:]
-        defer { if !Task.isCancelled { isLoading = false } }
+        defer { if !Task.isCancelled, phase == .loading { phase = .loaded } }
         if isBinary { return }
         if let patch {
             await show(WorkspaceDiffPresentation(hunks: WorkspaceDiffBuilder.hunks(patch: patch)))
@@ -285,7 +289,7 @@ struct WorkspaceFileDiffView: View {
             await show(loaded)
         } catch is CancellationError {
         } catch {
-            if !Task.isCancelled { errorMessage = error.localizedDescription }
+            if !Task.isCancelled { phase = .failed(error.localizedDescription) }
         }
     }
 
