@@ -473,8 +473,11 @@ first failure message, the log path, and a command that repeats the run. Any
 scripts/run_commit_tests.sh <full-sha> 'IntentTests/AgentListPagingTests'
 ```
 
-The exit status is the wrapper's. Run it in the foreground. See the script header for
-the files it keeps and the environment it passes through.
+The exit status is the wrapper's. Run it in the foreground. Without
+`DEVELOPER_DIR` it uses the Xcode that commit's CI selects (the newest non-beta
+match of the `Select Xcode` pattern), not the Mac's default Xcode, which can lack
+components such as the Metal toolchain; the summary names the Xcode and why. See
+the script header for the files it keeps and the environment it passes through.
 
 The `build-visionos` command always uses the generic visionOS Simulator destination,
 never `-sdk`: an `-sdk xros...` invocation can silently fall back to `iphoneos` when
@@ -690,10 +693,23 @@ The selected image needs Xcode 26;
 runtime and Metal provisioning run as needed. Go and Swift package caches and
 Xcode Cloud distribution remain unchanged. Swift builds do not use sccache.
 
+### State modeling checks
+
+Three checks keep implicit state machines from growing back:
+
+| Check | Runs | What it enforces |
+| --- | --- | --- |
+| `IntentTests/StateFlagBudgetPolicyTests` | unit tests | Stored Bool flags plus optional `Task` handles per type under `Intent/`: four unless baselined in the test; baselines only go down. |
+| `state_phase_flag` (`.swiftlint.yml`) | `scripts/swiftlint.sh` | No Bool named after a step (`…Scheduled`, `…Queued`, `…Pending`, `…Awaiting…`, `…Performed`, `…InProgress`, `…InFlight`) without a same-line suppression. |
+| `scripts/periphery-assign-only.sh` | manual, macOS | New assign-only properties against `scripts/periphery-baseline.json`; needs `brew install periphery` and a wrapper build in `DERIVED_DATA_DIR`. `--write-baseline` refreshes the baseline. |
+
+Prefer one enum per lifecycle, `CoalescedRead` for single-flight reads, and
+`WorkspaceAuthorityGate` for callers that wait on a resolved value.
+
 ### Contributor rules
 
 **Conventional commits** are required (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`); PR titles are validated in CI.
-See [AGENTS.md](AGENTS.md) for layout and platform-guard policies, source-input
+See [AGENTS.md](AGENTS.md) for layout, state-modeling and platform-guard policies, source-input
 packaging, focused validation, and issue-reporting requirements. Keep this README
 and those instructions aligned when changing build scripts, dependencies, or CI.
 

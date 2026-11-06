@@ -58,7 +58,7 @@ extension ConversationStore {
                 applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: issuedLiveVersion)
                 applyFetchedMarkers(state, revisions: revisions)
                 resolveWorkspaceFromDetail()
-                metadataReadyForEntry = !workspaceAuthorityFailed && connectionManager.globalSubscriptionState == .subscribed
+                metadataReadyForEntry = !workspaceAuthority.hasFailed && connectionManager.globalSubscriptionState == .subscribed
                 notifyEntryStateChanged()
                 reconcilePendingQuestionRecovery()
             }

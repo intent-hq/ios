@@ -320,7 +320,7 @@ extension AppCoordinator {
 
     func onConnectionSuccess() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
-        lifecycleState.hasCompletedInitialRouting = true
+        lifecycleState.completeInitialRouting()
         defer { establishConnectionLossEligibility() }
         if routePendingNotificationSelection() { return }
         if restoreLastScreenIfAvailable() { return }

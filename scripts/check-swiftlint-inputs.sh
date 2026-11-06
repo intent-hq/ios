@@ -27,6 +27,15 @@ source "$script_dir/source-lists.sh"
 expected="$(mktemp "${TMPDIR:-/tmp}/swiftlint-inputs-expected.XXXXXX")"
 trap 'rm -f -- "$expected"' EXIT
 
+empty_entries=()
+while IFS= read -r -d '' relative; do
+  empty_entries+=("$relative")
+done < <(source_lists_empty_index_entries "$repo_root" Intent IntentTests IntentUITests)
+if [ "${#empty_entries[@]}" -gt 0 ]; then
+  printf '  %s\n' "${empty_entries[@]}" >&2
+  fail "these Swift sources are staged or committed empty (often \`git add -N\`); run \`git add\` on them before committing, or delete them"
+fi
+
 list_swiftlint_sources "$repo_root" > "$expected"
 
 [ -s "$expected" ] || fail "no Swift sources found under $repo_root"

@@ -26,7 +26,7 @@ import Observation
     @ObservationIgnored private var isObserving = false
     @ObservationIgnored private var subscriptionId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
-    @ObservationIgnored private var refreshQueued = false
+    @ObservationIgnored private var refreshQueued = false // swiftlint:disable:this state_phase_flag
     @ObservationIgnored private var eventRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
     let connectionManager: ConnectionManagerRouting

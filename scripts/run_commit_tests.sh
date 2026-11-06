@@ -47,8 +47,15 @@
 #   stale-checkouts      Temporary checkouts a run could not delete; the next
 #                        run deletes them.
 #
+# Xcode: an unset DEVELOPER_DIR is set to the Xcode the commit's CI selects
+# (the newest non-beta /Applications match of its "Select Xcode" find
+# pattern; XCODE_APPS_DIR replaces /Applications), because the Mac's default
+# Xcode can differ and lack components the build needs. A DEVELOPER_DIR from
+# the environment is used as given. The summary says which applied.
+#
 # These environment variables are passed to the wrapper and recorded in the
-# rerun command: BUILD_CONFIGURATION, SIM_UDID, SPM_CLONE_DIR,
+# rerun command: DEVELOPER_DIR (when the caller sets it), BUILD_CONFIGURATION,
+# SIM_UDID, SPM_CLONE_DIR,
 # TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR, TAILCATKIT_AUTOBUILD,
 # KEEP_CHECKOUT, RUN_KILL_GRACE, INTENT_IOS_TEST_RUN_DIR and every TEST_RUNNER_*
 # variable.
@@ -68,7 +75,7 @@
 # timeout long enough for a build plus the tests.
 set -euo pipefail
 
-RECORDED_ENV="BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR TAILCATKIT_AUTOBUILD KEEP_CHECKOUT RUN_KILL_GRACE INTENT_IOS_TEST_RUN_DIR"
+RECORDED_ENV="DEVELOPER_DIR BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR TAILCATKIT_AUTOBUILD KEEP_CHECKOUT RUN_KILL_GRACE INTENT_IOS_TEST_RUN_DIR"
 KEEP_RUNS=10
 KEEP_TAILCATKIT=3
 
@@ -185,8 +192,22 @@ started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 started_epoch=$(date +%s)
 finished_at=
 duration=
-xcode_version=$( { xcodebuild -version 2>/dev/null || true; } | sed -n 1p)
-[ -n "$xcode_version" ] || xcode_version="unknown (xcodebuild -version failed)"
+xcode_note="DEVELOPER_DIR from the environment"
+[ -n "${DEVELOPER_DIR:-}" ] || xcode_note="the default Xcode"
+# The chosen Xcode applies to the wrapper only: on macOS /usr/bin/git is an
+# Xcode shim that also follows DEVELOPER_DIR.
+selected_developer_dir=${DEVELOPER_DIR:-}
+read_xcode_version() {
+  xcode_version=$( {
+    if [ -n "$selected_developer_dir" ]; then
+      DEVELOPER_DIR=$selected_developer_dir xcodebuild -version 2>/dev/null
+    else
+      xcodebuild -version 2>/dev/null
+    fi || true
+  } | sed -n 1p)
+  [ -n "$xcode_version" ] || xcode_version="unknown (xcodebuild -version failed)"
+}
+read_xcode_version
 host=$(hostname 2>/dev/null || echo unknown)
 
 exit_meaning() {
@@ -229,7 +250,7 @@ write_summary() {
     else
       echo "- Started: $started_at"
     fi
-    echo "- Host: $host, $xcode_version"
+    echo "- Host: $host, $xcode_version (selected by $xcode_note)"
     echo "- TailcatKit: $tailcat_note"
     [ -z "$log" ] || echo "- Log: $log"
     if [ -n "$bundle" ] && [ -e "$bundle" ]; then
@@ -448,6 +469,25 @@ subject=$(git -C "$repo" log -1 --format=%s "$sha")
 git -C "$repo" cat-file -e "$sha:scripts/xcodebuild.sh" 2>/dev/null \
   || fail_early 1 "commit $sha has no scripts/xcodebuild.sh"
 
+# Use the Xcode this commit's CI selects unless the caller chose one.
+if [ -z "${DEVELOPER_DIR:-}" ]; then
+  xcode_pattern=$( { git -C "$repo" show "$sha:.github/workflows/ci.yml" 2>/dev/null || true; } |
+    sed -n "s/.*find \/Applications .*-name '\(Xcode[^']*\.app\)'.*/\1/p" | sed -n 1p)
+  if [ -z "$xcode_pattern" ]; then
+    xcode_note="the default Xcode (this commit's CI has no Select Xcode pattern)"
+  else
+    ci_xcode=$(find "${XCODE_APPS_DIR:-/Applications}" -maxdepth 1 -type d -name "$xcode_pattern" \
+      ! -iname '*beta*' ! -iname '*candidate*' 2>/dev/null | sort -V | tail -n 1)
+    if [ -n "$ci_xcode" ]; then
+      selected_developer_dir=$ci_xcode/Contents/Developer
+      xcode_note="CI's Select Xcode pattern $xcode_pattern"
+    else
+      xcode_note="the default Xcode (nothing matches CI's $xcode_pattern)"
+    fi
+  fi
+  read_xcode_version
+fi
+
 run_dir=$(mktemp -d "$root/runs/$(date -u +%Y%m%dT%H%M%SZ)-$(printf '%s' "$sha" | cut -c1-12).XXXXXX")
 log=$run_dir/xcodebuild.log
 bundle=$run_dir/Results.xcresult
@@ -496,6 +536,7 @@ set -m
   export ONLY_TESTING="${selectors[*]}"
   export RESULT_BUNDLE="$bundle"
   export DERIVED_DATA_DIR="$work/DerivedData"
+  [ -z "$selected_developer_dir" ] || export DEVELOPER_DIR="$selected_developer_dir"
   exec scripts/xcodebuild.sh "$subcommand"
 ) > "$log" 2>&1 < /dev/null &
 child=$!

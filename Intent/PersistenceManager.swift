@@ -39,7 +39,7 @@ class PersistenceManager {
     /// production writer. Only `shared` installs it outside the test host.
     let backendPublisher: SyncedBackendPublisher?
     let invitedRegistry: InvitedSessionRegistry?
-    var invitedRefreshInProgress = false
+    var invitedRefreshInProgress = false // swiftlint:disable:this state_phase_flag
 
     /// Published only after a saved connection mutation succeeds. Window
     /// labels observe their own record, independently of the last-used pointer.

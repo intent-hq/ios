@@ -37,7 +37,7 @@ import Observation
     /// Read-only outside this file so local patches can reseed it.
     @ObservationIgnored private(set) var workspaceReconciler: DeltaReconciler<Workspace>?
     @ObservationIgnored private var workspaceLive = false
-    @ObservationIgnored private var resnapshotInProgress = false
+    @ObservationIgnored private var resnapshotInProgress = false // swiftlint:disable:this state_phase_flag
     /// Reads the rest of a paged `workspace.subscribe` snapshot (protocol §6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
 

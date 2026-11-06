@@ -17,7 +17,7 @@ import Observation
     @ObservationIgnored private var commentSubscriptionId: String?
     @ObservationIgnored private var commentReconciler: DeltaReconciler<CommentThread>?
     @ObservationIgnored private var commentLive = false
-    @ObservationIgnored private var resnapshotInProgress = false
+    @ObservationIgnored private var resnapshotInProgress = false // swiftlint:disable:this state_phase_flag
     /// Reads the rest of a paged `comment.subscribe` snapshot (protocol §6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
 

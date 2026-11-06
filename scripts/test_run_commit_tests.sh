@@ -12,7 +12,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 SCRIPT=$PWD/scripts/run_commit_tests.sh
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/run-commit-tests-selftest.XXXXXX")
+# No double slash when TMPDIR ends in "/" (it does on macOS); cd normalizes it
+# away, so recorded paths would no longer match.
+tmp_root=${TMPDIR:-/tmp}
+work=$(mktemp -d "${tmp_root%/}/run-commit-tests-selftest.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 export TMPDIR=$work
 unset BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR
@@ -69,6 +72,7 @@ set -eu
   echo "derived: ${DERIVED_DATA_DIR:-}"
   echo "config: ${BUILD_CONFIGURATION:-}"
   echo "runner: ${TEST_RUNNER_FOO:-}"
+  echo "developer: ${DEVELOPER_DIR:-}"
   echo "pwd: $PWD"
   echo "head: $(git rev-parse HEAD)"
   echo "marker: $(cat marker.txt)"
@@ -158,6 +162,16 @@ git -C "$origin" checkout --quiet -b other main
 echo D > "$origin/marker.txt"
 git -C "$origin" commit --quiet -am "commit D"
 sha_d=$(git -C "$origin" rev-parse HEAD)
+git -C "$origin" checkout --quiet -b ci main
+mkdir -p "$origin/.github/workflows"
+cat > "$origin/.github/workflows/ci.yml" <<'YAML'
+      - name: Select Xcode
+        run: |
+          xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' ! -iname '*beta*' | sort -V | tail -n 1)
+YAML
+git -C "$origin" add -A
+git -C "$origin" commit --quiet -m "commit E"
+sha_e=$(git -C "$origin" rev-parse HEAD)
 git -C "$origin" checkout --quiet main
 
 # make_results <file> <Target/Suite/test=Result[=failure message]>...
@@ -523,6 +537,28 @@ for i in 1 2 3 4 5 6 7 8 9 10 11; do
   run "prune$i" -- "$sha_a" 'IntentTests' > /dev/null
 done
 assert_eq "old run directories are pruned" "$(ls -1 "$INTENT_IOS_TEST_RUN_DIR/runs" | wc -l | tr -d ' ')" 10
+
+# Xcode selection: the commit's CI pattern, unless DEVELOPER_DIR is given.
+apps=$work/apps
+mkdir -p "$apps/Xcode.app" "$apps/Xcode_26.1.app" "$apps/Xcode_26.3.app" "$apps/Xcode_26.10-beta.app"
+status=$(run xcodeci -u DEVELOPER_DIR XCODE_APPS_DIR="$apps" -- "$sha_e" 'IntentTests')
+assert_eq "CI Xcode run exits 0" "$status" 0
+assert_eq "CI pattern picks the newest non-beta match" "$(record developer)" "$apps/Xcode_26.3.app/Contents/Developer"
+assert_contains "summary names the CI pattern" "$(summary)" "(selected by CI's Select Xcode pattern Xcode_26*.app)"
+assert_lacks "derived DEVELOPER_DIR stays out of the rerun" "$(summary)" "DEVELOPER_DIR="
+# On macOS /usr/bin/git follows DEVELOPER_DIR, so the caller's must be real there.
+custom_developer=$(xcode-select -p 2>/dev/null || echo /custom/Xcode)
+status=$(run xcodeenv DEVELOPER_DIR="$custom_developer" XCODE_APPS_DIR="$apps" -- "$sha_e" 'IntentTests')
+assert_eq "caller's DEVELOPER_DIR wins" "$(record developer)" "$custom_developer"
+assert_contains "summary names the caller's Xcode" "$(summary)" "(selected by DEVELOPER_DIR from the environment)"
+assert_contains "rerun keeps the caller's DEVELOPER_DIR" "$(summary)" "DEVELOPER_DIR='$custom_developer'"
+rm -rf "$apps/Xcode_26.1.app" "$apps/Xcode_26.3.app"
+status=$(run xcodenone -u DEVELOPER_DIR XCODE_APPS_DIR="$apps" -- "$sha_e" 'IntentTests')
+assert_eq "no CI match leaves DEVELOPER_DIR unset" "$(record developer)" ""
+assert_contains "summary says nothing matched" "$(summary)" "(selected by the default Xcode (nothing matches CI's Xcode_26*.app))"
+status=$(run xcodenopattern -u DEVELOPER_DIR XCODE_APPS_DIR="$apps" -- "$sha_a" 'IntentTests')
+assert_eq "commit without a CI pattern keeps the default Xcode" "$(record developer)" ""
+assert_contains "summary says there is no pattern" "$(summary)" "this commit's CI has no Select Xcode pattern"
 
 echo
 if [ "$failures" -eq 0 ]; then

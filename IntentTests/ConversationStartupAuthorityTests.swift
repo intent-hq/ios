@@ -14,7 +14,7 @@ struct ConversationStartupAuthorityTests {
         defer { load.cancel(); fixture.stop() }
         try await connection.waitForPendingRequests("agent.get")
         try await waitUntil("snapshot and queue before metadata") {
-            model.store.liveTranscript.chatSeeded && model.store.queueReadTask == nil
+            model.store.liveTranscript.chatSeeded && !model.store.queueReads.isRunning
         }
         for (scoped, value) in [(scopedFirst, "older"), (!scopedFirst, "newer")] {
             event("agent:updated", fixture: fixture, scoped: scoped, fields: ["lastSeenMessageId": value])
@@ -208,15 +208,15 @@ struct ConversationStartupAuthorityTests {
         let secondLoad = Task { await second.load() }
         defer { secondLoad.cancel() }
         try await waitUntil("shared authority wait") {
-            second.store.consumers.count == 2 && !second.store.workspaceAuthorityWaiters.isEmpty
+            second.store.consumers.count == 2 && second.store.workspaceAuthority.hasWaiters
         }
         let registration = try #require(second.store.liveTranscript.chatSubscriptionId)
         firstLoad.cancel()
         first.teardownLiveStores()
         #expect(connection.hasSubscriptionHandler(id: registration))
-        #expect(!second.store.workspaceAuthorityWaiters.isEmpty)
+        #expect(second.store.workspaceAuthority.hasWaiters)
         second.teardownLiveStores()
-        #expect(second.store.workspaceAuthorityWaiters.isEmpty)
+        #expect(!second.store.workspaceAuthority.hasWaiters)
         connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
         await firstLoad.value
         await secondLoad.value

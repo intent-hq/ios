@@ -106,7 +106,7 @@ struct ConversationStartupReadBoundaryTests {
         }
         connection.resolvePending("agent.getQueue", with: ["queue": [row("removed"), row("remaining")]])
         if !detailFirst {
-            try await waitUntil("queue reply before authority") { model.store.queueReadTask == nil }
+            try await waitUntil("queue reply before authority") { !model.store.queueReads.isRunning }
             connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
         }
         await load.value
@@ -138,7 +138,7 @@ struct ConversationStartupReadBoundaryTests {
         } else {
             connection.resolvePending("agent.getQueue", with: ["queue": NSNull()])
         }
-        try await waitUntil("unsuccessful queue settled") { model.store.queueReadTask == nil }
+        try await waitUntil("unsuccessful queue settled") { !model.store.queueReads.isRunning }
         if !detailFirst { connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)]) }
         await load.value
         #expect(model.store.queuedMessages.map(\.id) == ["preserved"])
