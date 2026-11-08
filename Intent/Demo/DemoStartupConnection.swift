@@ -15,7 +15,7 @@ enum DemoStartupConnection {
     static var isEnabled: Bool { configuration != nil }
 
     private static var configuration: (port: Int, pin: String)? {
-        let environment = ProcessInfo.processInfo.environment
+        let environment = LaunchOptions.current.environment
         guard DemoMode.isEnabled,
               let rawPort = environment["INTENT_STARTUP_TEST_PORT"], let port = Int(rawPort),
               (1...Int(UInt16.max)).contains(port),

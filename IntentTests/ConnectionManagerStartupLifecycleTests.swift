@@ -7,12 +7,12 @@ extension ConnectionManagerTests {
     nonisolated private struct StartupTunnel: TunnelSession {
         let localPort: Int
 
-        func close() async {}
+        func close() {}
     }
     nonisolated private struct StartupDialer: TunnelDialing {
         let port: Int
 
-        func open(tcAddress _: String, remotePort _: Int) async -> any TunnelSession { StartupTunnel(localPort: port) }
+        func open(tcAddress _: String, remotePort _: Int) -> any TunnelSession { StartupTunnel(localPort: port) }
     }
 
     @Test(arguments: [false, true], [false, true]) @MainActor
