@@ -14,7 +14,7 @@ final class AgentLiveActivityController {
     static let enabledKey = "liveActivitiesEnabled"
 
     private static let publishDelay: Duration = .seconds(1)
-    private static let staleAfter: TimeInterval = 30 * 60
+    private static let staleAfter: TimeInterval = 1800 // 30 minutes
 
     private var stores: [BackendID: WorkspaceStore] = [:]
     private var tracker = AgentActivityTracker()
