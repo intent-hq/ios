@@ -449,8 +449,6 @@ extension Constants.Toast {
     static let shadowOpacity: Double = 0.15
     static let shadowRadius: CGFloat = 12
     static let shadowYOffset: CGFloat = 4
-    /// Light mode: matches the system notification banner platter.
-    static let glassCornerRadius: CGFloat = 24
     static let glassShadowOpacity: Double = 0.18
     static let glassShadowRadius: CGFloat = 24
     static let glassShadowYOffset: CGFloat = 10

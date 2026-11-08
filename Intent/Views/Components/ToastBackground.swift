@@ -10,12 +10,13 @@ extension View {
 
 private struct ToastBackground: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
+    private let shape = RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous)
 
     func body(content: Content) -> some View {
         if colorScheme == .dark {
             content
                 .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
+                .clipShape(shape)
                 .shadow(
                     color: .black.opacity(Constants.Toast.shadowOpacity),
                     radius: Constants.Toast.shadowRadius,
@@ -33,7 +34,6 @@ private struct ToastBackground: ViewModifier {
 
     @ViewBuilder
     private func frostedGlass(_ content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Constants.Toast.glassCornerRadius, style: .continuous)
         #if os(visionOS)
         content.glassBackgroundEffect(in: shape)
         #else
