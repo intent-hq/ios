@@ -13,6 +13,7 @@ final class ReadOnlyPillClearance {
     }
 
     private var entries: [UUID: Entry] = [:]
+    private var anchorEntry: Entry?
 
     func report(_ id: UUID, frame: CGRect, depth: Int) {
         entries[id] = Entry(frame: frame, depth: depth)
@@ -20,6 +21,16 @@ final class ReadOnlyPillClearance {
 
     func withdraw(_ id: UUID) {
         entries[id] = nil
+    }
+
+    func reportAnchor(_ frame: CGRect?, depth: Int) {
+        anchorEntry = frame.map { Entry(frame: $0, depth: depth) }
+    }
+
+    /// The content panel to centre on, unless a sheet or cover sits above it.
+    func anchor(coverage: ComposerCoverage?) -> CGRect? {
+        guard let anchorEntry, coverage?.isForemost(depth: anchorEntry.depth) ?? true else { return nil }
+        return anchorEntry.frame
     }
 
     /// The top of the highest chrome under `span` within the window's lower
@@ -56,7 +67,25 @@ private struct ReadOnlyPillClearanceReporter: ViewModifier {
     }
 }
 
+private struct ReadOnlyPillAnchorReporter: ViewModifier {
+    @Environment(ReadOnlyPillClearance.self) private var clearance: ReadOnlyPillClearance?
+    @Environment(\.composerLayerDepth) private var depth
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                clearance?.reportAnchor(frame, depth: depth)
+            }
+            .onDisappear { clearance?.reportAnchor(nil, depth: depth) }
+    }
+}
+
 extension View {
+    /// Centres the read-only pill on this content panel instead of the whole window.
+    func centersReadOnlyPill() -> some View {
+        modifier(ReadOnlyPillAnchorReporter())
+    }
+
     /// Keeps the read-only pill above this bottom chrome while `isActive`.
     func keepsReadOnlyPillAbove(isActive: Bool = true) -> some View {
         modifier(ReadOnlyPillClearanceReporter(isActive: isActive))

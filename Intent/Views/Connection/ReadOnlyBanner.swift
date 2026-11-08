@@ -102,7 +102,8 @@ struct ReadOnlyBanner: View {
     @Environment(ReadOnlyPillClearance.self) private var clearance: ReadOnlyPillClearance?
     @Environment(ComposerCoverage.self) private var coverage: ComposerCoverage?
     @State private var isExpanded = false
-    @State private var safeBottom: CGFloat = 0
+    /// The safe area in window coordinates: it ends above the home indicator and keyboard.
+    @State private var safeArea = CGRect.zero
     @State private var span: ClosedRange<CGFloat> = 0...0
     let message: ReadOnlyBannerMessage
     let mismatches: [HostCertMismatch]
@@ -121,16 +122,22 @@ struct ReadOnlyBanner: View {
                 onInteractiveFrameChange(frame)
             }
             .padding(.horizontal, Layout.outerPadding)
+            .padding(.leading, max(0, (anchor?.minX ?? safeArea.minX) - safeArea.minX))
+            .padding(.trailing, max(0, safeArea.maxX - (anchor?.maxX ?? safeArea.maxX)))
             .padding(.bottom, bottomPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            // The safe area ends above the home indicator and the keyboard.
-            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { safeBottom = $0 }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { safeArea = $0 }
     }
 
     /// Distance from the safe area's bottom to the pill's bottom edge.
     private var bottomPadding: CGFloat {
-        let chromeTop = clearance?.top(under: span, windowBottom: safeBottom, coverage: coverage) ?? safeBottom
-        return max(0, safeBottom - chromeTop) + Layout.bottomGap
+        let chromeTop = clearance?.top(under: span, windowBottom: safeArea.maxY, coverage: coverage) ?? safeArea.maxY
+        return max(0, safeArea.maxY - chromeTop) + Layout.bottomGap
+    }
+
+    /// The content panel the pill centres on, when the layout has one (the iPad shell).
+    private var anchor: CGRect? {
+        clearance?.anchor(coverage: coverage)
     }
 
     private var content: some View {
