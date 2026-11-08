@@ -23,8 +23,6 @@ enum ConnectionLossUITestFixture {
     static let sheetDismissPoint = CGVector(dx: horizontalCenter, dy: bottomEdge)
     static let backNavigationAttempts = 3
     static let scrollAttempts = 6
-    /// Padding between the banner's text row and the edge of its pill.
-    static let bannerPadding: CGFloat = 8
     static let backNavigationTimeout: TimeInterval = 2
     static let stoppedReason = "This connection belongs to a different person. Pair again to choose that person."
     static let workspaceTitle = "Deflake payment integration tests"
@@ -212,8 +210,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(detailsTitle.exists, "A drop must not dismiss or hide the open sheet")
         XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
         XCTAssertLessThan(banner.frame.minY, detailsTitle.frame.minY, "The banner stays on top of the sheet")
-        // The partial-height sheet starts below the banner, so it gets no empty band.
-        XCTAssertEqual(detailsTitle.frame.minY, titleBeforeLoss, accuracy: Fixture.layoutTolerance, "The sheet must not move down under the banner")
+        XCTAssertEqual(detailsTitle.frame.minY, titleBeforeLoss, accuracy: Fixture.layoutTolerance, "The floating pill must not move the sheet")
         capture(app, named: "sheet-offline-banner")
         banner.tap()
         XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].waitForExistence(timeout: Fixture.timeout))

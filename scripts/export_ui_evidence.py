@@ -357,7 +357,7 @@ CAPTURES = {
             "connection-loss-read-only-send-hint", "connection-loss-read-only-agent-menu",
             "connection-loss-read-only-workspace-menu", "connection-loss-read-only-settings",
         ),
-        "testCoversAndSheetsStayBelowTheBannerDuringDrop": ("connection-loss-read-only-cover-close", "connection-loss-read-only-sheet-close"),
+        "testBannerLeavesCoverAndSheetControlsUncoveredDuringDrop": ("connection-loss-read-only-cover-close", "connection-loss-read-only-sheet-close"),
         "testNeverViewedConversationShowsPlaceholderAndLoadsAfterRecovery": ("connection-loss-read-only-placeholder-conversation",),
         "testNeverLoadedNotesTabShowsPlaceholderAndLoadsAfterRecovery": ("connection-loss-read-only-placeholder-notes",),
         "testRecentlyViewedItemsReopenFromMemoryDuringDrop": ("connection-loss-read-only-from-memory-conversation",),
