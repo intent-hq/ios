@@ -14,7 +14,7 @@ struct AgentActivityTracker {
     }
 
     static let maxRows = 3
-    static let settledRetention: TimeInterval = 15 * 60
+    static let settledRetention: TimeInterval = 900 // 15 minutes
 
     private struct Seen {
         var agentId: String?
