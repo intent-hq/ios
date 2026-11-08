@@ -4,6 +4,7 @@ struct WorkspaceTitleEditingControls: View {
     let editor: WorkspaceTitleEditor
     let onSave: () -> Void
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
 
     var body: some View {
         HStack(spacing: WorkspaceDetailStyle.headingSpacing) {
@@ -24,7 +25,7 @@ struct WorkspaceTitleEditingControls: View {
             }
             .buttonStyle(IntentButtonStyle())
             .fixedSize(horizontal: true, vertical: false)
-            .disabled(editor.isSaving)
+            .disabled(editor.isSaving || isRemoteReadOnly)
             .accessibilityIdentifier("workspace.title.done")
         }
         .padding(.horizontal, WorkspaceDetailStyle.pageInset)

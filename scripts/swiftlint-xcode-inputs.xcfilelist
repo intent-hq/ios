@@ -967,11 +967,13 @@ $(SRCROOT)/IntentTests/QueuedMessageImageDecodingTests.swift
 $(SRCROOT)/IntentTests/RPCRecordingConnection.swift
 $(SRCROOT)/IntentTests/RPCRecordingConnectionTests.swift
 $(SRCROOT)/IntentTests/RPCTraffic.swift
+$(SRCROOT)/IntentTests/ReadOnlyBannerMessageTests.swift
 $(SRCROOT)/IntentTests/RecentRetentionTests.swift
 $(SRCROOT)/IntentTests/ReleaseConfigurationTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
+$(SRCROOT)/IntentTests/RetainedTranscriptMemoryTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
 $(SRCROOT)/IntentTests/ScriptListPagingTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift
@@ -1139,6 +1141,7 @@ $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
 $(SRCROOT)/IntentUITests/AssistantStateUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionFailureRecoveryUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
+$(SRCROOT)/IntentUITests/ConnectionLossReadOnlyPresentationUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossReadOnlyUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionSwitcherUITests.swift

@@ -26,6 +26,33 @@ extension AppCoordinatorTests {
         #expect(!fixture.coordinator.showsReadOnlyBanner)
     }
 
+    @Test @MainActor func failedDesktopStartupStaysANonBlockingBannerWithRetry() async {
+        let fixture = await readOnlyFixture()
+        fixture.connection.connectionState = .reconnecting(attempt: 1)
+        fixture.connection.startupState = .failed
+        fixture.connection.connectionState = .disconnected
+        await Self.drainReadOnlyEvents()
+        #expect(fixture.coordinator.remotePhase == .readOnly, "Reconnection stopped without a reason the user must act on")
+        #expect(fixture.coordinator.showsReadOnlyBanner)
+        #expect(!fixture.coordinator.showsConnectionLossOverlay)
+    }
+
+    @Test @MainActor func plainDisconnectWithoutReasonOrMismatchDoesNotClaimItCannotReconnect() async {
+        let fixture = await readOnlyFixture()
+        fixture.connection.connectionState = .disconnected
+        await Self.drainReadOnlyEvents()
+        #expect(fixture.coordinator.remotePhase == .readOnly)
+        #expect(!fixture.coordinator.showsConnectionLossOverlay)
+    }
+
+    @Test @MainActor func certificateMismatchStillStops() async {
+        let fixture = await readOnlyFixture()
+        fixture.connection.certMismatches = [HostCertMismatch(host: "demo.invalid", fingerprint: "00:11")]
+        fixture.connection.connectionState = .disconnected
+        await Self.drainReadOnlyEvents()
+        #expect(fixture.coordinator.remotePhase == .stopped)
+    }
+
     @Test @MainActor func recoveryClearsReadOnlyAfterWorkspaceReload() async {
         let fixture = await readOnlyFixture()
         fixture.connection.connectionState = .reconnecting(attempt: 1)
@@ -63,7 +90,39 @@ extension AppCoordinatorTests {
         let fixture = await readOnlyFixture()
         fixture.connection.connectionState = .reconnecting(attempt: 1)
         await Self.drainReadOnlyEvents()
+        #expect(fixture.connection.currentPrincipal == nil, "A real drop clears the live principal")
         #expect(fixture.coordinator.canUseAssistant, "Reading recent Assistant chats is navigation, not a change")
+        #expect(!fixture.coordinator.canCreateWorkspace)
+    }
+
+    @Test @MainActor func assistantStaysUnavailableToNonOwnersAndAfterStopOrHome() async {
+        let memberPrincipal = ConnectionPrincipal(id: "member", hostRole: .member, revision: nil, login: nil, displayName: nil)
+        let member = await readOnlyFixture(principal: memberPrincipal)
+        member.connection.connectionState = .reconnecting(attempt: 1)
+        await Self.drainReadOnlyEvents()
+        #expect(!member.coordinator.canUseAssistant, "The remembered person must still be an owner")
+
+        let stopped = await readOnlyFixture()
+        stopped.connection.connectionState = .reconnecting(attempt: 1)
+        stopped.connection.reconnectStopReason = "This connection belongs to a different person."
+        stopped.connection.connectionState = .disconnected
+        await Self.drainReadOnlyEvents()
+        #expect(!stopped.coordinator.canUseAssistant, "A stopped reconnection keeps nothing")
+
+        let home = await readOnlyFixture()
+        home.connection.connectionState = .reconnecting(attempt: 1)
+        await Self.drainReadOnlyEvents()
+        home.coordinator.onReturnToSavedMachines()
+        home.connection.disconnect()
+        #expect(home.connection.lastConnectedPrincipal == nil)
+        #expect(!home.coordinator.canUseAssistant)
+    }
+
+    @Test @MainActor func liveMutationAuthorityStaysStrictWhileReadOnly() async {
+        let fixture = await readOnlyFixture()
+        fixture.connection.connectionState = .reconnecting(attempt: 1)
+        await Self.drainReadOnlyEvents()
+        #expect(fixture.connection.currentPrincipal?.canManageWorkspaces != true)
         #expect(!fixture.coordinator.canCreateWorkspace)
     }
 
@@ -76,8 +135,9 @@ extension AppCoordinatorTests {
         #expect(!fixture.coordinator.showsReadOnlyBanner)
     }
 
-    @MainActor private func readOnlyFixture() async -> ReadOnlyFixture {
+    @MainActor private func readOnlyFixture(principal: ConnectionPrincipal? = nil) async -> ReadOnlyFixture {
         let fixture = ReadOnlyFixture(persistence: persistence)
+        if let principal { fixture.connection.currentPrincipal = principal }
         fixture.connection.simulateConnect()
         await Self.drainReadOnlyEvents()
         fixture.store.publishFetchedWorkspaces([])

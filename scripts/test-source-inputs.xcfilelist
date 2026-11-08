@@ -1254,11 +1254,13 @@ $(SRCROOT)/IntentTests/QueuedMessageImageDecodingTests.swift
 $(SRCROOT)/IntentTests/RPCRecordingConnection.swift
 $(SRCROOT)/IntentTests/RPCRecordingConnectionTests.swift
 $(SRCROOT)/IntentTests/RPCTraffic.swift
+$(SRCROOT)/IntentTests/ReadOnlyBannerMessageTests.swift
 $(SRCROOT)/IntentTests/RecentRetentionTests.swift
 $(SRCROOT)/IntentTests/ReleaseConfigurationTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
+$(SRCROOT)/IntentTests/RetainedTranscriptMemoryTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
 $(SRCROOT)/IntentTests/ScriptListPagingTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift

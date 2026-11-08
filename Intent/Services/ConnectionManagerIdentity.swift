@@ -5,6 +5,7 @@ extension ConnectionManager {
         let principal = handshake.principal
         scriptMonitorsDisabledForConnection = false
         currentPrincipal = principal
+        lastConnectedPrincipal = principal
         admission = ConnectionAdmission(id: UUID(), token: token, fingerprint: fingerprint, principal: principal)
         capabilities = handshake.capabilities
         bindSavedIdentity(principal)
@@ -82,6 +83,7 @@ extension ConnectionManager {
 
     private func refreshPrincipal(after revision: Double, previous: ConnectionPrincipal?) {
         currentPrincipal = nil
+        lastConnectedPrincipal = nil
         capabilities = .unknown
         authorityRefreshTask?.cancel()
         let generation = connectionGeneration
@@ -97,6 +99,7 @@ extension ConnectionManager {
                 if let previous, !ConnectionPrincipal.samePerson(principal.id, previous.id) { throw ConnectionPrincipal.AdmissionError.personChanged }
                 guard (principal.revision ?? -1) >= revision else { throw ConnectionPrincipal.AdmissionError.incompatible }
                 currentPrincipal = principal
+                lastConnectedPrincipal = principal
                 if let previous = admission {
                     admission = ConnectionAdmission(id: previous.id, token: previous.token, fingerprint: previous.fingerprint, principal: principal)
                 }

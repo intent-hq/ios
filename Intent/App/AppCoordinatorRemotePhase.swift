@@ -9,11 +9,15 @@ enum RemoteConnectionPhase: Equatable {
 }
 
 extension AppCoordinator {
-    /// `isDisconnected` records a loss after entry; the transport state says
-    /// whether reconnection is still trying (read-only) or has stopped.
+    /// `isDisconnected` records a loss after entry; the transport says whether
+    /// reconnection is still trying (read-only) or has stopped for a reason.
+    /// A plain `.disconnected` (a failed desktop startup, or a session shared
+    /// during a repair) stays a banner: nothing says the user must act on Home.
     var remotePhase: RemoteConnectionPhase {
         guard isDisconnected else { return .live }
-        return dependencies.connection.connectionState == .disconnected ? .stopped : .readOnly
+        let connection = dependencies.connection
+        guard connection.connectionState == .disconnected else { return .readOnly }
+        return connection.reconnectStopReason != nil || !connection.certMismatches.isEmpty ? .stopped : .readOnly
     }
     /// Change controls are disabled for every phase except live, including the
     /// background grace when no banner is shown yet.

@@ -28,6 +28,9 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     var reconnectStopReason: String? { get }
 
     var currentPrincipal: ConnectionPrincipal? { get }
+    /// The person last confirmed on a live connection, kept through a drop that
+    /// keeps reconnecting. For read-only navigation only, never for authority.
+    var lastConnectedPrincipal: ConnectionPrincipal? { get }
     var admission: ConnectionAdmission? { get }
     var pairingAttemptID: UUID? { get }
 
@@ -57,6 +60,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
 
 extension SessionConnectionManaging {
     var startupState: DaemonStartupState? { nil }
+    var lastConnectedPrincipal: ConnectionPrincipal? { nil }
     var reconnectStopReason: String? { nil }
 
     func makeBrowserProxy() throws -> any BrowserProxySession {

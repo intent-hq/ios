@@ -22,6 +22,9 @@ enum ConnectionLossUITestFixture {
     static let menuDismissPoint = CGVector(dx: leadingEdge, dy: lowerMiddle)
     static let sheetDismissPoint = CGVector(dx: horizontalCenter, dy: bottomEdge)
     static let backNavigationAttempts = 3
+    static let scrollAttempts = 6
+    /// Padding between the banner's text row and the edge of its pill.
+    static let bannerPadding: CGFloat = 8
     static let backNavigationTimeout: TimeInterval = 2
     static let stoppedReason = "This connection belongs to a different person. Pair again to choose that person."
     static let workspaceTitle = "Deflake payment integration tests"
@@ -251,7 +254,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     func testHomeRetainsSavedMachineAndAllowsReselection() throws {
         let directory = try makeTriggerDirectory()
         try trigger("network-offline", in: directory)
-        let app = launch(directory: directory)
+        let app = launch(directory: directory, arguments: ["--demo-connection-loss-stopped"])
         XCTAssertFalse(app.staticTexts["connection-network.status"].exists, "Healthy remote UI stays unobstructed")
         openCreateWorkspace(in: app)
         try trigger("loss", in: directory)

@@ -21,10 +21,12 @@ struct ConnectionLossLayers: View {
                 isPresented: coordinator.showsReadOnlyBanner,
                 message: ReadOnlyBannerMessage(
                     networkStatus: networkStatus,
-                    machineName: coordinator.showsReadOnlyBanner ? coordinator.connectionDisplayName : nil
+                    machineName: coordinator.showsReadOnlyBanner ? coordinator.connectionDisplayName : nil,
+                    startupState: connection.startupState
                 ),
                 mismatches: connection.certMismatches,
-                onHome: coordinator.onReturnToSavedMachines
+                onHome: coordinator.onReturnToSavedMachines,
+                onRetry: connection.retryConnection
             )
         }
     }

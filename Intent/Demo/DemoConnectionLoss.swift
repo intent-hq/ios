@@ -111,6 +111,10 @@ enum DemoConnectionLoss {
                let connection = connection as? ConnectionManager {
                 connection.reconnectStopReason = ConnectionPrincipal.AdmissionError.personChanged.localizedDescription
             }
+            if let manager = connection as? ConnectionManager {
+                manager.lastConnectedPrincipal = manager.currentPrincipal
+            }
+            DemoConnectionTransport.isDropped = true
             connection.connectionState = LaunchOptions.current.contains("--demo-connection-loss-reconnecting")
                 ? .reconnecting(attempt: 1) : .disconnected
             if LaunchOptions.current.contains("--demo-connection-loss-startup-failure") {
@@ -122,6 +126,7 @@ enum DemoConnectionLoss {
             }
             try await DemoFixtures.wait(for: .triggerFile(directory.appendingPathComponent("recover")))
             try Task.checkCancellation()
+            DemoConnectionTransport.isDropped = false
             connection.connectionState = .connected
         } catch {
             // Root teardown cancels the scenario; it must not revive Home.

@@ -5,12 +5,16 @@ import UIKit
 /// `ConnectionLossPresenter`, so it stays above sheets and full-screen covers.
 /// Unlike the blocking overlay it never snapshots, disables, or hides the app:
 /// only touches on the banner itself are taken; all others pass through. The
-/// window never becomes key, so a focused composer keeps its keyboard.
+/// window never becomes key, so a focused composer keeps its keyboard. While
+/// shown, it adds the collapsed banner's height to the top safe area of the
+/// source window's root controller and everything it presents, so navigation
+/// bars, sheets and full-screen covers sit below the banner instead of under it.
 struct ReadOnlyBannerPresenter: UIViewRepresentable {
     let isPresented: Bool
     let message: ReadOnlyBannerMessage
     let mismatches: [HostCertMismatch]
     let onHome: () -> Void
+    var onRetry: (() -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -28,7 +32,8 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
         let content = ReadOnlyBanner(
             message: message,
             mismatches: mismatches,
-            onHome: coordinator.homeAction(onHome)
+            onHome: coordinator.homeAction(onHome),
+            onRetry: onRetry
         ) { [weak coordinator] frame in coordinator?.interactiveFrame = frame }
         coordinator.update(
             isPresented: isPresented,
@@ -47,6 +52,10 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
     final class PassthroughWindow: UIWindow {
         var interactiveFrame: () -> CGRect = { .null }
 
+        /// Stays non-key even when touched, so the app's first responder (a
+        /// focused composer) and its keyboard are never taken away.
+        override var canBecomeKey: Bool { false }
+
         override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
             interactiveFrame().contains(point) && super.point(inside: point, with: event)
         }
@@ -61,6 +70,9 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
         private var content = AnyView(EmptyView())
         private var announcement = ""
         var interactiveFrame = CGRect.null
+        /// Controllers carrying our extra top inset, with the value they had before.
+        private var insetOwners: [ObjectIdentifier: InsetOwner] = [:]
+        private var insetTimer: Timer?
 
         func attach(to window: UIWindow?) {
             guard let window, sourceWindow !== window else { return }
@@ -99,6 +111,7 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
             }
             if let host {
                 host.rootView = content
+                applyReservedInsets()
                 return
             }
             let host = UIHostingController(rootView: content)
@@ -113,13 +126,64 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
             self.host = host
             bannerWindow = window
             window.isHidden = false
+            applyReservedInsets()
+            startInsetTimer()
             #if DEBUG
             DemoConnectionLoss.record("banner-presented")
             #endif
             UIAccessibility.post(notification: .announcement, argument: announcement)
         }
 
+        /// Sheets and covers appear without any SwiftUI update to this view, so
+        /// the presented chain is re-checked on a short timer while shown.
+        private func startInsetTimer() {
+            insetTimer?.invalidate()
+            let timer = Timer(timeInterval: Self.insetRefreshInterval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.applyReservedInsets() }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            insetTimer = timer
+        }
+
+        private static let insetRefreshInterval: TimeInterval = 0.1
+
+        private func reservedHeight(for window: UIWindow) -> CGFloat {
+            UIFontMetrics(forTextStyle: .subheadline)
+                .scaledValue(for: ReadOnlyBannerMetrics.collapsedHeight, compatibleWith: window.traitCollection)
+        }
+
+        private func applyReservedInsets() {
+            guard let sourceWindow, let root = sourceWindow.rootViewController else { return }
+            let height = reservedHeight(for: sourceWindow)
+            var controller: UIViewController? = root
+            while let current = controller {
+                if !(current is UIAlertController), !(current.presentationController is UIPopoverPresentationController) {
+                    let previous = insetOwners[ObjectIdentifier(current)]?.previousTop ?? current.additionalSafeAreaInsets.top
+                    insetOwners[ObjectIdentifier(current)] = InsetOwner(controller: current, previousTop: previous)
+                    var insets = current.additionalSafeAreaInsets
+                    if insets.top != previous + height {
+                        insets.top = previous + height
+                        current.additionalSafeAreaInsets = insets
+                    }
+                }
+                controller = current.presentedViewController
+            }
+        }
+
+        private func restoreReservedInsets() {
+            insetTimer?.invalidate()
+            insetTimer = nil
+            for owner in insetOwners.values {
+                guard let controller = owner.controller else { continue }
+                var insets = controller.additionalSafeAreaInsets
+                insets.top = owner.previousTop
+                controller.additionalSafeAreaInsets = insets
+            }
+            insetOwners.removeAll()
+        }
+
         private func hide() {
+            restoreReservedInsets()
             guard let bannerWindow else { return }
             bannerWindow.isHidden = true
             bannerWindow.rootViewController = nil
@@ -132,4 +196,10 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
             #endif
         }
     }
+}
+
+/// A controller carrying the banner's extra top inset, with the inset it had before.
+private struct InsetOwner {
+    weak var controller: UIViewController?
+    let previousTop: CGFloat
 }

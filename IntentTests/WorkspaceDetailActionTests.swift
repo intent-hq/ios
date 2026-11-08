@@ -167,7 +167,7 @@ struct WorkspaceDetailActionTests {
                 persistence: PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
             )
             coordinator.currentScreen = .workspaceDetail(workspaceId: "selected")
-            view = WorkspaceDetailView(workspaceId: "selected", session: session)
+            view = WorkspaceDetailView(workspaceId: "selected", session: session, storesCache: WorkspaceDetailStoresCache())
         }
 
         func tearDown() {

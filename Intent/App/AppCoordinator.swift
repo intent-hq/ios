@@ -173,9 +173,11 @@ class AppCoordinator {
     }
 
     var canUseAssistant: Bool {
-        // Read-only keeps recent Assistant chats readable during a drop.
-        (dependencies.connection.connectionState == .connected || isRemoteReadOnly)
-            && dependencies.connection.currentPrincipal?.isOwner == true
+        // A drop clears the live principal, so read-only navigation falls back to
+        // the person last confirmed. Mutation checks keep using the live one.
+        let connection = dependencies.connection
+        if connection.connectionState == .connected { return connection.currentPrincipal?.isOwner == true }
+        return remotePhase == .readOnly && (connection.currentPrincipal ?? connection.lastConnectedPrincipal)?.isOwner == true
     }
 
     /// The backend this coordinator's window is bound to; nil only for a

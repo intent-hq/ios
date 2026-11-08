@@ -15,7 +15,6 @@ extension RootView {
                     .navigationDestination(isPresented: $showingConversation) {
                         conversationDestination
                             .pullRequestLinkRouting()
-                            .readOnlyBannerInset(coordinator.showsReadOnlyBanner)
                     }
                     .navigationDestination(for: NoteDestination.self) { dest in
                         NoteDetailView(
@@ -26,7 +25,6 @@ extension RootView {
                         ) { noteId, workspaceId, title in
                             noteStack.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
                         }
-                        .readOnlyBannerInset(coordinator.showsReadOnlyBanner)
                     }
             }
             .onAppear {

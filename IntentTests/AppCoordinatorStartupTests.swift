@@ -41,7 +41,7 @@ extension AppCoordinatorTests {
         #expect(coordinator.currentScreenDescription == "connecting")
         fake.simulateConnect()
         await Self.drainStartupCallbacks()
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(!coordinator.isDisconnected)
         // The real data wait can finish through either data arrival or its timeout.
@@ -50,7 +50,7 @@ extension AppCoordinatorTests {
         #expect(!coordinator.lifecycleState.hasEnteredRemoteUI)
         fake.simulateConnect()
         await Self.drainStartupCallbacks()
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(!coordinator.showsConnectionLossOverlay)
     }
@@ -73,7 +73,7 @@ extension AppCoordinatorTests {
         coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
         #expect(coordinator.currentScreenDescription == "workspaceList")
         #expect(!coordinator.isDisconnected, "No loss state from startup may leak into the remote UI")
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(coordinator.showsConnectionLossOverlay)
     }
@@ -92,7 +92,7 @@ extension AppCoordinatorTests {
             store.publishFetchedWorkspaces([])
             coordinator.onConnectionSuccess()
             store.lastUpdated = nil // Exercise a recovery that must await a fresh snapshot.
-            fake.simulateDisconnect()
+            fake.simulateStoppedReconnection()
             await Self.drainStartupCallbacks()
             #expect(coordinator.showsConnectionLossOverlay)
             fake.simulateConnect()
@@ -106,7 +106,7 @@ extension AppCoordinatorTests {
             #expect(callbacks.withLock { $0 } == baseline)
             #expect(!coordinator.isDisconnected)
             #expect(!coordinator.lifecycleState.hasEnteredRemoteUI)
-            fake.simulateDisconnect()
+            fake.simulateStoppedReconnection()
             await Self.drainStartupCallbacks()
             #expect(!coordinator.showsConnectionLossOverlay)
         }
@@ -144,14 +144,14 @@ extension AppCoordinatorTests {
             coordinator.onSwitchConnection(id: target.id)
             fake.simulateConnect()
             await Self.drainStartupCallbacks()
-            fake.simulateDisconnect()
+            fake.simulateStoppedReconnection()
             await Self.drainStartupCallbacks()
             #expect(!coordinator.showsConnectionLossOverlay)
             fake.simulateConnect()
             await Self.drainStartupCallbacks()
             coordinator.dependencies.workspaceStore.publishFetchedWorkspaces([])
             coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
-            fake.simulateDisconnect()
+            fake.simulateStoppedReconnection()
             await Self.drainStartupCallbacks()
             #expect(coordinator.showsConnectionLossOverlay)
         }
@@ -172,7 +172,7 @@ extension AppCoordinatorTests {
         await Self.drainStartupCallbacks()
         coordinator.dependencies.workspaceStore.publishFetchedWorkspaces([Self.makeWorkspace(id: "workspace")])
         coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(coordinator.showsConnectionLossOverlay)
         coordinator.onRetryConnection()
@@ -185,7 +185,7 @@ extension AppCoordinatorTests {
         coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
         if case .agentConversation = coordinator.currentScreen {} else { Issue.record("Expected notification route") }
         coordinator.onOpenSettings()
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(coordinator.showsConnectionLossOverlay)
     }
@@ -197,14 +197,14 @@ extension AppCoordinatorTests {
         )
         coordinator.onRetryConnection()
         fake.simulateConnect()
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         fake.simulateConnect()
         coordinator.dependencies.workspaceStore.publishFetchedWorkspaces([])
         coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
         await Self.drainStartupCallbacks()
         #expect(coordinator.currentScreenDescription == "workspaceList")
         #expect(!coordinator.isDisconnected, "Queued startup states must not create a recovery wait after entry")
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(coordinator.showsConnectionLossOverlay, "A fresh established-session loss must still present")
     }
@@ -302,7 +302,7 @@ extension AppCoordinatorTests {
         await Self.drainStartupCallbacks()
         #expect(coordinator.currentScreenDescription == "workspaceList")
         #expect(!coordinator.lifecycleState.hasEnteredRemoteUI)
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(!coordinator.showsConnectionLossOverlay)
 
@@ -311,7 +311,7 @@ extension AppCoordinatorTests {
         try await waitUntil("fresh data after pairing/retry arms subsequent loss") {
             coordinator.lifecycleState.hasEnteredRemoteUI
         }
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(coordinator.showsConnectionLossOverlay)
     }
@@ -327,13 +327,13 @@ extension AppCoordinatorTests {
         coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
         await Self.drainStartupCallbacks()
         #expect(!coordinator.lifecycleState.hasEnteredRemoteUI)
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(!coordinator.showsConnectionLossOverlay)
         fake.simulateConnect()
         store.publishFetchedWorkspaces([])
         try await waitUntil("replacement attempt receives fresh data") { coordinator.lifecycleState.hasEnteredRemoteUI }
-        fake.simulateDisconnect()
+        fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(coordinator.showsConnectionLossOverlay)
     }

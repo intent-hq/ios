@@ -150,8 +150,19 @@ class FakeConnectionManager: SessionConnectionManaging {
     private let _connectionState = CurrentValueSubject<ConnectionState, Never>(.disconnected)
     var connectionState: ConnectionState {
         get { _connectionState.value }
-        set { _connectionState.send(newValue) }
+        set {
+            // Like production: a drop clears the live principal but remembers it.
+            if newValue == .connected {
+                currentPrincipal = currentPrincipal ?? lastConnectedPrincipal
+            } else if let principal = currentPrincipal {
+                lastConnectedPrincipal = principal
+                currentPrincipal = nil
+            }
+            _connectionState.send(newValue)
+        }
     }
+    var lastConnectedPrincipal: ConnectionPrincipal?
+    var startupState: DaemonStartupState?
 
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
         _connectionState.eraseToAnyPublisher()
@@ -275,6 +286,7 @@ class FakeConnectionManager: SessionConnectionManaging {
     func disconnect() {
         disconnectCallCount += 1
         simulateDisconnect()
+        lastConnectedPrincipal = nil
     }
 
     // MARK: - Request/Response Mocking
@@ -464,18 +476,6 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     // MARK: - Test Helpers
 
-    /// Simulate a connection event (transition to .connected).
-    func simulateConnect() {
-        connectionState = .connected
-    }
-
-    /// Simulate a disconnection event (transition to .disconnected).
-    func simulateDisconnect() {
-        pairingAttemptID = nil
-        admission = nil
-        connectionState = .disconnected
-    }
-
     /// Clear all request logs.
     func clearRequestLog() {
         requestLog.removeAll()
@@ -546,5 +546,26 @@ extension FakeConnectionManager {
     /// Check if a specific request method was called.
     func didCallMethod(_ method: String) -> Bool {
         requestLog.contains { $0.method == method }
+    }
+}
+
+extension FakeConnectionManager {
+    /// Simulate a connection event (transition to .connected).
+    func simulateConnect() {
+        connectionState = .connected
+    }
+
+    /// A reconnection that stopped for a reason the user must act on (revoked
+    /// access, a different person), as the real manager records it.
+    func simulateStoppedReconnection() {
+        reconnectStopReason = "Reconnection stopped."
+        simulateDisconnect()
+    }
+
+    /// Simulate a disconnection event (transition to .disconnected).
+    func simulateDisconnect() {
+        pairingAttemptID = nil
+        admission = nil
+        connectionState = .disconnected
     }
 }

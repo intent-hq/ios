@@ -23,6 +23,22 @@ struct WorkspaceTitleEditorTests {
         #expect(!editor.isSaving)
     }
 
+    @Test func readOnlySaveKeepsTheDraftAndSendsNothing() async throws {
+        let fixture = try makeFixture()
+        fixture.editor.draft = "Renamed while offline"
+
+        await fixture.editor.save(connection: fixture.connection, store: fixture.store, isReadOnly: true)
+
+        #expect(fixture.editor.isEditing)
+        #expect(fixture.editor.draft == "Renamed while offline")
+        #expect(!fixture.editor.isSaving)
+        #expect(!fixture.connection.didCallMethod("workspace.update"))
+        #expect(fixture.store.workspaces.first?.title == "Original")
+
+        await fixture.editor.save(connection: fixture.connection, store: fixture.store)
+        #expect(fixture.connection.didCallMethod("workspace.update"), "The kept draft saves once the Mac is back")
+    }
+
     @Test func unchangedTitleClosesWithoutARequest() async throws {
         let fixture = try makeFixture()
         let connection = fixture.connection

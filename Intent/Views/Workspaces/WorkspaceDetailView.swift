@@ -20,12 +20,13 @@ struct WorkspaceDetailView: View {
     @State private var filesExpanded = true
     @State private var titleEditor = WorkspaceTitleEditor()
     @FocusState private var titleFocused: Bool
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
     @Environment(BackendSession.self) var session
 
     init(
         workspaceId: String,
         session: BackendSession,
-        storesCache: WorkspaceDetailStoresCache = WorkspaceDetailStoresCache(),
+        storesCache: WorkspaceDetailStoresCache,
         persistence: PersistenceManager = .shared,
         isSidebarVisible: Bool = false,
         sidebar: WorkspaceDetailSidebar? = nil
@@ -201,7 +202,7 @@ struct WorkspaceDetailView: View {
 
 private extension WorkspaceDetailView {
     func saveTitle() {
-        Task { await titleEditor.save(connection: session.connection, store: workspaceStore) }
+        Task { await titleEditor.save(connection: session.connection, store: workspaceStore, isReadOnly: isRemoteReadOnly) }
     }
 
     func restoreSelectedTab(workspaceId: String) {

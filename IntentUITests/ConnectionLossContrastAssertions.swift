@@ -7,7 +7,7 @@ extension ConnectionLossUITests {
     func testDemoRelaunchAfterReturningHomeStartsAtWorkspaces() throws {
         let timeout: TimeInterval = 15
         let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory)
+        let app = launch(directory: directory, arguments: ["--demo-connection-loss-stopped"])
         try trigger("loss", in: directory)
         let home = app.buttons["connection-loss.home"]
         XCTAssertTrue(home.waitForExistence(timeout: timeout))

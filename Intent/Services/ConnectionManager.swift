@@ -60,6 +60,7 @@ import os
         get { requestTransport?.principal ?? admittedPrincipal }
         set { admittedPrincipal = newValue }
     }
+    @ObservationIgnored var lastConnectedPrincipal: ConnectionPrincipal?
     @ObservationIgnored var authorityRefreshTask: Task<Void, Never>?
     @ObservationIgnored var pendingAuthorityRevision: Double = -1
     @ObservationIgnored var authorityBeforeRefresh: ConnectionPrincipal?
@@ -440,6 +441,7 @@ extension ConnectionManager {
         connectionGeneration += 1
         pairingAttemptID = nil
         clearPrincipal()
+        lastConnectedPrincipal = nil
         stopHeartbeat()
         stopPathMonitor()
         stopGlobalSubscription()

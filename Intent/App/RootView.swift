@@ -312,7 +312,6 @@ struct RootView: View {
                 networkStatus: networkAvailability.status
             )
         }
-        .readOnlyBannerInset(coordinator.showsReadOnlyBanner && !(usesIPadShell && isWorkspaceFlow))
         .safeAreaInset(edge: .bottom) {
             if isWorkspaceFlow, !coordinator.lifecycleState.hasEnteredRemoteUI,
                session.workspaceStore.lastUpdated == nil,

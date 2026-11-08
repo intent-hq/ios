@@ -313,7 +313,7 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    private func tap(_ element: XCUIElement, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+    func tap(_ element: XCUIElement, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(element.waitForExistence(timeout: LossFixture.timeout), app.debugDescription, file: file, line: line)
         element.tap()
     }
@@ -326,7 +326,7 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    private func returnToWorkspaceList(in app: XCUIApplication) {
+    func returnToWorkspaceList(in app: XCUIApplication) {
         let search = app.buttons["workspaces.search.open"]
         for _ in 0..<LossFixture.backNavigationAttempts where !search.waitForExistence(timeout: LossFixture.backNavigationTimeout) {
             let back = app.buttons["workspaceDetail.back"].exists
