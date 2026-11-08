@@ -34,9 +34,11 @@ struct WorkspaceComposerRow: View {
             if hasDraft {
                 WorkspaceComposerAction(isStop: false, action: onSend)
                     .disabled(!canSend)
+                    .requiresLiveConnection("Reconnect to send")
             }
             if isStreaming {
                 WorkspaceComposerAction(isStop: true, action: onStop)
+                    .requiresLiveConnection()
             }
         }
         .padding(.leading, Layout.leadingPadding - editorInset)

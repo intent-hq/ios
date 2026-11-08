@@ -261,6 +261,7 @@ extension AppCoordinatorTests {
             return false
         }
         await Self.drainStartupCallbacks()
+        #expect(!coordinator.showsReadOnlyBanner, "First-data timeout must not expose the loss banner")
         #expect(!coordinator.showsConnectionLossOverlay, "First-data timeout must not expose the loss overlay")
         #expect(coordinator.currentScreenDescription == "workspaceList", "Keep the bounded navigation fallback")
         try await waitUntil("automatic reconnect and its failed first-data request finish") {
@@ -273,9 +274,10 @@ extension AppCoordinatorTests {
             coordinator.lifecycleState.hasEnteredRemoteUI
         }
         server.dropClients()
-        try await waitUntil("a later established-session loss presents") { coordinator.showsConnectionLossOverlay }
-        try await waitUntil("established reconnect clears the overlay", timeout: .seconds(5)) {
-            manager.connectionState == .connected && !coordinator.showsConnectionLossOverlay
+        try await waitUntil("a later established-session loss presents") { coordinator.showsReadOnlyBanner }
+        #expect(!coordinator.showsConnectionLossOverlay, "Automatic reconnect is read-only, not blocking")
+        try await waitUntil("established reconnect clears the banner", timeout: .seconds(5)) {
+            manager.connectionState == .connected && !coordinator.showsReadOnlyBanner
         }
     }
 

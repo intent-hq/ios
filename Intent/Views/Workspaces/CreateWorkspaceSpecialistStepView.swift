@@ -91,6 +91,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             ) {
                 promptFocus.dismissKeyboard { onCreate() }
             }
+            .requiresLiveConnection()
         }
         .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
         .padding(.top, CreateWorkspaceFormStyle.rowSpacing)

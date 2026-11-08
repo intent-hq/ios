@@ -17,6 +17,7 @@ struct IPadShellView: View {
     @State private var width: CGFloat?
     @State private var windowShortSide: CGFloat = .infinity
     @State private var topSafeArea: CGFloat = 0
+    @ScaledMetric(relativeTo: .subheadline) private var bannerHeight = ReadOnlyBannerMetrics.collapsedHeight
     @State private var trailingSafeArea: CGFloat = 0
     @State private var leadingSafeArea: CGFloat = 0
     @State private var showingCreateWorkspace = false
@@ -37,8 +38,10 @@ struct IPadShellView: View {
     private var railSafeArea: CGFloat { verticalBarEdge == .leading ? leadingSafeArea : trailingSafeArea }
     private var railAlignment: Alignment { verticalBarEdge == .leading ? .topLeading : .topTrailing }
     private var measuredLayout: IPadShellLayout? { width.map { _ in layout } }
+    /// The shell ignores vertical safe areas, so it reserves the read-only banner's space itself.
+    private var bannerInset: CGFloat { coordinator.showsReadOnlyBanner ? bannerHeight : 0 }
     private var paneInsets: EdgeInsets {
-        EdgeInsets(top: max(layout.inset, topSafeArea), leading: layout.leadingInset, bottom: layout.inset, trailing: layout.trailingInset)
+        EdgeInsets(top: max(layout.inset, topSafeArea) + bannerInset, leading: layout.leadingInset, bottom: layout.inset, trailing: layout.trailingInset)
     }
     private var sidebarPresentation: SidebarPresentation {
         SidebarPresentation(isVisible: navigation.isSidebarVisible, usesOverlay: navigation.usesSidebarOverlay)
@@ -146,7 +149,7 @@ struct IPadShellView: View {
             if usesVerticalBar, !isFocused {
                 rail
                     .frame(width: max(IPadShellLayout.railWidth, railSafeArea + IPadShellLayout.contextualRailOuterInset))
-                    .padding(.top, IPadShellLayout.contextualRailTopPadding(for: verticalBarEdge))
+                    .padding(.top, IPadShellLayout.contextualRailTopPadding(for: verticalBarEdge) + bannerInset)
                     .offset(x: verticalBarEdge == .leading ? -railSafeArea : railSafeArea)
             }
         }
@@ -423,6 +426,7 @@ extension IPadShellView {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
                     session: session,
+                    storesCache: coordinator.workspaceDetailStores,
                     sidebar: WorkspaceDetailSidebar(onCollapse: collapseSidebar)
                 )
                 .id(workspaceId)

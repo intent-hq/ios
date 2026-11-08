@@ -91,6 +91,7 @@ private struct PlainTaskRow: View {
                     ) / 2))
             }
             .buttonStyle(IntentContentButtonStyle())
+            .requiresLiveConnection()
             .accessibilityLabel("Change status for \(line.text)")
             .accessibilityValue(line.markerStatus.label)
             MarkdownTextView(text: line.text, workspaceId: workspaceId)
@@ -166,6 +167,7 @@ private struct LinkedTaskCardRow: View {
                 )
         }
         .buttonStyle(IntentContentButtonStyle())
+        .requiresLiveConnection()
         .accessibilityLabel("Change status for \(title)")
         .accessibilityValue(status.label)
     }

@@ -16,6 +16,7 @@ struct NoteDetailView: View {
     @State private var agentStore: AgentStore
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
     @State private var note: Note?
     @State private var isLoading = true
 
@@ -58,6 +59,11 @@ struct NoteDetailView: View {
         .toolbarTitleDisplayMode(.inline)
         .intentNavigationBackButton(showsBackButton, usesWorkspaceVerticalBar: true, showsBackground: false)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
+        .onChange(of: isRemoteReadOnly) { _, readOnly in
+            // A note that could not load during a drop loads by itself on reconnect.
+            guard !readOnly, displayNote?.content.isEmpty ?? true else { return }
+            Task { await loadNote() }
+        }
         .task {
             await loadNote()
             // Also fetch all notes so we can resolve titles for intent:// links
@@ -105,13 +111,15 @@ struct NoteDetailView: View {
 
     @ViewBuilder
     private var noteContentState: some View {
-        if isLoading {
+        if let note = displayNote, !note.content.isEmpty || showsTaskHeader(note), !isLoading || isRemoteReadOnly {
+            ScrollView { noteStack(note) }
+        } else if isRemoteReadOnly {
+            AvailableWhenReconnectedView()
+        } else if isLoading {
             ProgressView {
                 Text("Loading note...").interFont(Constants.Typography.bodyS)
             }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        } else if let note = displayNote, !note.content.isEmpty || showsTaskHeader(note) {
-            ScrollView { noteStack(note) }
         } else {
             VStack(spacing: Constants.Notes.Detail.contentSpacing) {
                 Image(.note)

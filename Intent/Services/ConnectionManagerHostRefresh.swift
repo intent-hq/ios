@@ -7,6 +7,11 @@ extension ConnectionManager {
         let credentialsRevision: Int
     }
 
+    enum LocalIPsResult: Equatable {
+        case unavailable
+        case value([String])
+    }
+
     enum HostRouteRefreshDecision: Equatable {
         case failed
         case stale

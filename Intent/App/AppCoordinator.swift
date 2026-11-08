@@ -90,9 +90,6 @@ class AppCoordinator {
             if oldValue, !isDisconnected { connectionLossPresentation.recovered() }
         }
     }
-    var showsConnectionLossOverlay: Bool {
-        currentScreen.supportsConnectionLossOverlay && isDisconnected && !connectionLossPresentation.isDeferred
-    }
     /// True when the pairing surface should also offer the remaining saved
     /// connections (e.g. after logging off the active connection while others
     /// are still saved). The Connect to… screen reads this flag.
@@ -146,8 +143,11 @@ class AppCoordinator {
     @ObservationIgnored let routingState = AppCoordinatorRoutingState()
     @ObservationIgnored let navigationState = AppCoordinatorNavigationState()
     @ObservationIgnored let connectionLossPresentation: ConnectionLossPresentation
+    /// This window's recently viewed workspace pages, readable during a drop.
+    @ObservationIgnored let workspaceDetailStores = WorkspaceDetailStoresCache()
     var canCreateWorkspace: Bool {
-        dependencies.connection.connectionState == .connected && dependencies.connection.currentPrincipal?.canManageWorkspaces == true
+        dependencies.connection.connectionState == .connected && !isRemoteReadOnly
+            && dependencies.connection.currentPrincipal?.canManageWorkspaces == true
     }
 
     func makeWorkspaceCreationDraft() -> WorkspaceCreationDraft {
@@ -173,7 +173,9 @@ class AppCoordinator {
     }
 
     var canUseAssistant: Bool {
-        dependencies.connection.connectionState == .connected && dependencies.connection.currentPrincipal?.isOwner == true
+        // Read-only keeps recent Assistant chats readable during a drop.
+        (dependencies.connection.connectionState == .connected || isRemoteReadOnly)
+            && dependencies.connection.currentPrincipal?.isOwner == true
     }
 
     /// The backend this coordinator's window is bound to; nil only for a
@@ -277,6 +279,8 @@ extension AppCoordinator {
 
     /// A new initial flow must not inherit a previous session's loss or delayed recovery work.
     func resetConnectionLossEligibility() {
+        // Leaving the remote UI (Home, Log Off, switching Mac) drops retained pages.
+        workspaceDetailStores.removeAll()
         connectionLossPresentation.reset()
         lifecycleState.entry = .routing(dataStamp: dependencies.workspaceStore.lastUpdated)
         isDisconnected = false

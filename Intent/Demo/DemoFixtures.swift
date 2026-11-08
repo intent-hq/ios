@@ -296,6 +296,7 @@ enum DemoFixtures {
     /// Gate to wait on before serving `response(for:params:)`, or nil for an immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
         if let gate = historyResponseGate(for: method, params: params) { return gate }
+        if let gate = DemoConnectionLoss.conversationLoadGate(for: method) { return gate }
         if let gate = agentGroupResponseGate(for: method, params: params, arguments: LaunchOptions.current.arguments) { return gate }
         if let gate = startupResponseGate(for: method, params: params, arguments: LaunchOptions.current.arguments) { return gate }
         if let prefix = responseTriggerFilePrefixes[method] {

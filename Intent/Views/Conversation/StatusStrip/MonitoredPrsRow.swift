@@ -129,6 +129,7 @@ struct MonitoredPrsRow: View {
             } label: {
                 Label("Check and flush", image: "ClockwiseArrow")
             }
+            .disabledWhileReadOnly()
             Button {
                 if let url = ExternalLink.url(from: Self.prUrl(monitor)) {
                     openURL(url)
@@ -141,6 +142,7 @@ struct MonitoredPrsRow: View {
             } label: {
                 Label("Cancel monitor", image: "Close")
             }
+            .disabledWhileReadOnly()
         } label: {
             if usesWorkspaceDesign {
                 workspacePill(monitor)

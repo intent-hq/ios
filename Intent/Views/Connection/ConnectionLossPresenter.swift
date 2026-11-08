@@ -9,6 +9,8 @@ struct ConnectionLossPresenter: UIViewRepresentable {
     var startupState: DaemonStartupState?
     var onRetry: (() -> Void)?
     let mismatches: [HostCertMismatch]
+    var machineName: String?
+    var reason: String?
     var networkStatus: NetworkAvailability.Status = .unknown
     let onHome: () -> Void
 
@@ -34,6 +36,8 @@ struct ConnectionLossPresenter: UIViewRepresentable {
             startupState: startupState,
             onRetry: onRetry,
             mismatches: mismatches,
+            machineName: machineName,
+            reason: reason,
             networkStatus: networkStatus,
             sourceColorScheme: context.environment.colorScheme,
             onHome: coordinator.homeAction(onHome)

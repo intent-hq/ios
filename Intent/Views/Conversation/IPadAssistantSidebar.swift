@@ -8,6 +8,7 @@ struct IPadAssistantSidebar: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
     @ScaledMetric(relativeTo: .body) private var scaledActionSize = Constants.WorkspaceList.swipeButtonSize
     @ScaledMetric(relativeTo: .body) private var actionIconSize = Constants.WorkspaceList.swipeButtonIconSize
     @State private var revealedTarget: WorkspaceSwipeTarget?
@@ -25,6 +26,7 @@ struct IPadAssistantSidebar: View {
             } actions: {
                 IntentIconButton(icon: .addIcon, label: "New conversation", showsBackground: false, action: createThread)
                     .disabled(store.isCreating || !store.hasLoaded)
+                    .disabledWhileReadOnly()
                     .accessibilityIdentifier("assistant.sidebar.newConversation")
             }
             ScrollView {
@@ -48,6 +50,7 @@ struct IPadAssistantSidebar: View {
         .onChange(of: selectedID) { _, _ in revealedTarget = nil }
         .alert("Delete Conversation?", isPresented: $showDeleteConfirmation, presenting: pendingDeletion) { thread in
             Button("Delete", role: .destructive) { deleteThread(thread.id) }
+                .disabledWhileReadOnly()
             Button("Cancel", role: .cancel) {}
         } message: { thread in
             Text("This will permanently delete “\(thread.name)” and its conversation history.")
@@ -68,7 +71,7 @@ struct IPadAssistantSidebar: View {
     private var emptyState: some View {
         AssistantStateContent(
             isLoading: store.isLoading || (!store.hasLoaded && store.errorMessage == nil),
-            canCreateConversation: !store.isCreating && store.hasLoaded,
+            canCreateConversation: !store.isCreating && store.hasLoaded && !isRemoteReadOnly,
             onCreateConversation: createThread
         )
     }
@@ -95,6 +98,7 @@ struct IPadAssistantSidebar: View {
             }
             .buttonStyle(WorkspaceSwipeIconButtonStyle(size: actionSize))
             .disabled(store.deletingThreadIDs.contains(thread.id))
+            .disabledWhileReadOnly()
             .accessibilityLabel("Delete conversation")
             .accessibilityIdentifier("assistant.thread.delete.\(thread.id)")
         }
@@ -155,6 +159,7 @@ struct IPadAssistantSidebar: View {
 
     private func confirmDeletion(_ thread: AgentSession) {
         revealedTarget = nil
+        guard !isRemoteReadOnly else { return }
         pendingDeletion = thread
         showDeleteConfirmation = true
     }
@@ -170,6 +175,7 @@ struct IPadAssistantSidebar: View {
 
     private func createThread() {
         revealedTarget = nil
+        guard !isRemoteReadOnly else { return }
         Task {
             if let id = await store.createThread() {
                 onSelectThread(id)

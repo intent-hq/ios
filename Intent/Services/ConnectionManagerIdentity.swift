@@ -132,6 +132,9 @@ extension ConnectionManager {
         guard !Task.isCancelled, connectionGeneration == generation else { return true }
         if error is ConnectionPrincipal.AdmissionError || ConnectionPrincipal.isRevocation(error) {
             if case ConnectionPrincipal.AdmissionError.timedOut = error { return false }
+            reconnectStopReason = ConnectionPrincipal.isRevocation(error)
+                ? String(localized: "Your access to this Mac was removed.")
+                : error.localizedDescription
             disconnect()
             return true
         }

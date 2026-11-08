@@ -22,6 +22,7 @@ struct WorkspaceDetailHeading: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.usesDuoContextualRail) private var usesDuoContextualRail
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
 
     private var focusBinding: FocusState<Bool>.Binding { titleFocus ?? $titleFocused }
     private var titleStyle: Constants.Typography.Style {
@@ -103,7 +104,10 @@ struct WorkspaceDetailHeading: View {
                 .onChange(of: titleEditor.isSaving) { _, saving in
                     if !saving { focusBinding.wrappedValue = true }
                 }
-                .onSubmit(onSaveTitle)
+                .onSubmit {
+                    // The draft stays in the field until the Mac is back.
+                    if !isRemoteReadOnly { onSaveTitle() }
+                }
                 .accessibilityLabel("Workspace name")
                 .accessibilityIdentifier("workspace.title.field")
             if let error = titleEditor.errorMessage {
@@ -129,6 +133,7 @@ struct WorkspaceDetailHeading: View {
     }
 
     private func beginEditing() {
+        guard !isRemoteReadOnly else { return }
         titleEditor.begin(workspaceId: workspaceId, title: title)
     }
 }
@@ -200,6 +205,7 @@ struct WorkspaceRailShortcuts: View {
     var body: some View {
         VStack(spacing: IPadShellLayout.contextualRailSpacing) {
             IntentIconButton(icon: .addCircle, label: "Create New Agent", showsBackground: false, action: onCreateAgent)
+                .disabledWhileReadOnly()
                 .accessibilityIdentifier("workspace.shortcut.createAgent")
             IntentIconButton(icon: .terminal, label: "Open terminal", showsBackground: false, action: onTerminal)
                 .disabled(isTerminalDisabled)
@@ -228,6 +234,7 @@ struct WorkspaceActionsMenu: View {
             Button(action: onCreateAgent) {
                 Label { Text("Create New Agent").interFont(Constants.Typography.bodyS) } icon: { Image(.addCircle) }
             }
+            .disabledWhileReadOnly()
             Button(action: onCreateTerminal) {
                 Label { Text("New terminal").interFont(Constants.Typography.bodyS) } icon: { Image(.terminal) }
             }
@@ -248,9 +255,11 @@ struct WorkspaceActionsMenu: View {
             Button(action: onArchive) {
                 Label { Text("Archive").interFont(Constants.Typography.bodyS) } icon: { Image(.archive) }
             }
+            .disabledWhileReadOnly()
             Button(role: .destructive, action: onDelete) {
                 Label { Text("Delete").interFont(Constants.Typography.bodyS) } icon: { Image(.delete) }
             }
+            .disabledWhileReadOnly()
         } label: {
             ToolbarOverflowLabel()
         }
@@ -384,6 +393,7 @@ struct WorkspaceActionConfirmationSheet: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(IntentButtonStyle())
+            .requiresLiveConnection()
             Button {
                 dismiss()
             } label: {

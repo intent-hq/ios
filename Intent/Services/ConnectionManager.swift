@@ -12,11 +12,6 @@ import os
         case failed(attempts: Int, lastError: String)
     }
 
-    enum LocalIPsResult: Equatable {
-        case unavailable
-        case value([String])
-    }
-
     private struct ConnectTarget {
         let hosts: [String]
         let port: Int
@@ -37,12 +32,15 @@ import os
 
     var connectionState: ConnectionState = .disconnected {
         didSet {
+            if connectionState == .connected { reconnectStopReason = nil }
             if isInProcessConnection {
                 globalSubscriptionState = connectionState == .connected ? .subscribed : .idle
             }
             connectionStateSubject.send(connectionState)
         }
     }
+    /// Why reconnection stopped for good (e.g. revoked access); cleared on connect.
+    var reconnectStopReason: String?
     /// Set while connected without a daemon socket (pretend-paired launches);
     /// readiness then follows the connection state directly.
     @ObservationIgnored private var isInProcessConnection = false

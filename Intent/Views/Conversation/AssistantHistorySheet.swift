@@ -6,6 +6,7 @@ struct AssistantHistorySheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
     @State private var pendingDeletion: AgentSession?
     @State private var showsDeleteConfirmation = false
 
@@ -20,7 +21,7 @@ struct AssistantHistorySheet: View {
                 if store.threads.isEmpty {
                     AssistantStateContent(
                         isLoading: store.isLoading || (!store.hasLoaded && store.errorMessage == nil),
-                        canCreateConversation: !store.isCreating && store.hasLoaded,
+                        canCreateConversation: !store.isCreating && store.hasLoaded && !isRemoteReadOnly,
                         onCreateConversation: createThread
                     )
                 } else {
@@ -33,6 +34,7 @@ struct AssistantHistorySheet: View {
             .toolbar { historyToolbar }
             .alert("Delete Conversation?", isPresented: $showsDeleteConfirmation, presenting: pendingDeletion) { thread in
                 Button("Delete", role: .destructive) { deleteThread(thread.id) }
+                    .disabledWhileReadOnly()
                 Button("Cancel", role: .cancel) {}
             } message: { thread in
                 Text("This will permanently delete “\(thread.name)” and its conversation history.")
@@ -50,6 +52,7 @@ struct AssistantHistorySheet: View {
         ToolbarItem(placement: .primaryAction) {
             IntentIconButton(icon: .addIcon, label: "New conversation", action: createThread)
                 .disabled(store.isCreating || !store.hasLoaded)
+                .disabledWhileReadOnly()
                 .accessibilityIdentifier("assistant.history.newConversation")
         }
         .intentToolbarSurface()
@@ -87,6 +90,7 @@ struct AssistantHistorySheet: View {
             }
             .tint(Theme.destructive(for: colorScheme))
             .disabled(store.deletingThreadIDs.contains(thread.id))
+            .disabledWhileReadOnly()
             .accessibilityIdentifier("assistant.history.delete.\(thread.id)")
         }
         .accessibilityAction(named: "Delete conversation") { confirmDeletion(thread) }
@@ -113,6 +117,7 @@ struct AssistantHistorySheet: View {
     }
 
     private func confirmDeletion(_ thread: AgentSession) {
+        guard !isRemoteReadOnly else { return }
         pendingDeletion = thread
         showsDeleteConfirmation = true
     }
@@ -127,6 +132,7 @@ struct AssistantHistorySheet: View {
     }
 
     private func createThread() {
+        guard !isRemoteReadOnly else { return }
         Task {
             if let id = await store.createThread() { selectThread(id) }
         }

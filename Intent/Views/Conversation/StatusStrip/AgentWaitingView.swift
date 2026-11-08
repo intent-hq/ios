@@ -226,12 +226,14 @@ struct AgentWaitingView: View {
         } label: {
             Label("Stop Agent", image: "StopFill")
         }
+        .disabledWhileReadOnly()
 
         Button {
             Task { await viewModel.cancelWait() }
         } label: {
             Label("Cancel Wait", image: "Close")
         }
+        .disabledWhileReadOnly()
     }
 
     private var headerText: String {

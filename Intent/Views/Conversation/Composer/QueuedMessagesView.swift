@@ -3,6 +3,7 @@ import SwiftUI
 struct QueuedMessagesView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
 
     @ScaledMetric(relativeTo: .body) private var actionIconSide: CGFloat = 17
 
@@ -53,6 +54,7 @@ struct QueuedMessagesView: View {
             .interFont(Constants.Typography.bodyXS)
             .onSubmit { saveEdit(messageId: message.id) }
         saveEditButton(message)
+            .requiresLiveConnection()
         cancelEditButton
     }
 
@@ -63,9 +65,12 @@ struct QueuedMessagesView: View {
             .foregroundStyle(Theme.foreground(for: colorScheme))
             .lineLimit(Layout.contentLineLimit)
             .frame(maxWidth: .infinity, alignment: .leading)
-        sendNowButton(message)
-        editButton(message)
-        removeButton(message)
+        Group {
+            sendNowButton(message)
+            editButton(message)
+            removeButton(message)
+        }
+        .requiresLiveConnection()
     }
 
     private func saveEditButton(_ message: QueuedMessage) -> some View {
@@ -166,7 +171,7 @@ struct QueuedMessagesView: View {
 
     private func saveEdit(messageId: String) {
         let text = editText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, !isRemoteReadOnly else { return }
         Task { await viewModel.editQueuedMessage(messageId: messageId, content: text) }
         editingId = nil
     }

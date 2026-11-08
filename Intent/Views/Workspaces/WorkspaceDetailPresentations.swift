@@ -102,12 +102,14 @@ private struct WorkspaceActionConfirmations: ViewModifier {
         .alert("Delete Workspace", isPresented: $presentation.showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive, action: onDelete)
+                .disabledWhileReadOnly()
         } message: {
             Text("Are you sure you want to delete this workspace? This cannot be undone.")
         }
         .alert("Archive Workspace", isPresented: $presentation.showArchiveConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Archive", action: onArchive)
+                .disabledWhileReadOnly()
         } message: {
             Text("Archive this workspace? You can unarchive it later.")
         }

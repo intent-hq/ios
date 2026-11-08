@@ -4,13 +4,15 @@ struct WorkspaceDetailView: View {
     @ScaledMetric(relativeTo: .title) var emptyStateIconSize: CGFloat = 48
     let workspaceId: String
     private let persistence: PersistenceManager
+    /// The window's retained workspace stores; a fresh cache when the caller has none.
+    private let storesCache: WorkspaceDetailStoresCache
+    private let storesSession: BackendSession
     let isSidebarVisible: Bool
     let sidebar: WorkspaceDetailSidebar?
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.workspaceUsesVerticalBar) var usesVerticalBar
-    @State private var stores: WorkspaceDetailStores
     @State private var storedPresentation: WorkspaceDetailPresentation
     @State private var selectedTab: WorkspaceTab
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
@@ -20,8 +22,17 @@ struct WorkspaceDetailView: View {
     @FocusState private var titleFocused: Bool
     @Environment(BackendSession.self) var session
 
-    init(workspaceId: String, session: BackendSession, persistence: PersistenceManager = .shared, isSidebarVisible: Bool = false, sidebar: WorkspaceDetailSidebar? = nil) {
+    init(
+        workspaceId: String,
+        session: BackendSession,
+        storesCache: WorkspaceDetailStoresCache = WorkspaceDetailStoresCache(),
+        persistence: PersistenceManager = .shared,
+        isSidebarVisible: Bool = false,
+        sidebar: WorkspaceDetailSidebar? = nil
+    ) {
         self.workspaceId = workspaceId
+        self.storesCache = storesCache
+        storesSession = session
         self.persistence = persistence
         self.isSidebarVisible = isSidebarVisible
         self.sidebar = sidebar
@@ -29,10 +40,14 @@ struct WorkspaceDetailView: View {
             persistedValue: persistence.loadWorkspaceTab(workspaceId: workspaceId),
             fallback: .agents
         ))
-        _stores = State(initialValue: WorkspaceDetailStores(session: session))
         _storedPresentation = State(initialValue: WorkspaceDetailPresentation())
     }
 
+    /// Stores of the shown workspace, kept per window for the last few
+    /// workspaces so a switch back (or a drop) shows them from memory.
+    var stores: WorkspaceDetailStores {
+        storesCache.stores(for: workspaceId) { WorkspaceDetailStores(session: storesSession) }
+    }
     var agentStore: AgentStore { stores.agentStore }
     var viewModel: AgentListViewModel { stores.viewModel }
     var noteStore: NoteStore { stores.noteStore }

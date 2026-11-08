@@ -118,6 +118,7 @@ struct WorkspaceListView: View {
             Button(pending.action.label, role: pending.action == .delete ? .destructive : nil) {
                 perform(pending)
             }
+            .disabledWhileReadOnly()
         } message: { pending in
             Text(pending.action.message(workspaceTitle: pending.workspace.title))
         }
@@ -280,7 +281,7 @@ struct WorkspaceListView: View {
             do {
                 try await workspaceStore.perform(pending.action, workspaceId: pending.workspace.id)
             } catch {
-                actionError = error.localizedDescription
+                actionError = DiagnosticErrorOwnership.alertMessage(for: error)
             }
         }
     }

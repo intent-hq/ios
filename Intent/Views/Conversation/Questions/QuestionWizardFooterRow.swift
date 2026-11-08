@@ -16,6 +16,7 @@ struct QuestionWizardFooterRow: View {
     var backVisible = true
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .caption) private var actionIconSide: CGFloat = 12
@@ -48,17 +49,21 @@ struct QuestionWizardFooterRow: View {
             }
             Button("Skip", action: onSkip)
                 .buttonStyle(WorkspaceQuestionButtonStyle())
+                .disabled(sendsAnswers && isRemoteReadOnly)
                 .accessibilityIdentifier("question.skip")
             if showNext {
                 Button(isLast ? "Send" : "Next", action: onNext)
                     .buttonStyle(WorkspaceQuestionButtonStyle(primary: true))
-                    .disabled(nextDisabled)
+                    .disabled(nextDisabled || sendsAnswers && isRemoteReadOnly)
                     .accessibilityIdentifier("question.next")
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
         .disabled(submitted || dismissed)
     }
+
+    /// Skip and Send on the last step send the answers to the Mac.
+    private var sendsAnswers: Bool { isLast }
 
     private var legacyFooter: some View {
         HStack(spacing: Layout.contentSpacing) {
@@ -71,10 +76,13 @@ struct QuestionWizardFooterRow: View {
                 selectionInstruction
             }
             Spacer(minLength: Layout.minimumContentSpacing)
-            skipButton
-            if showNext {
-                nextButton
+            Group {
+                skipButton
+                if showNext {
+                    nextButton
+                }
             }
+            .disabled(sendsAnswers && isRemoteReadOnly)
         }
         .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
         .padding(.top, Layout.topPadding)

@@ -59,6 +59,11 @@ struct WorkspaceFilePreview: View {
                 }
             }
             .task(id: attempt) { await loadMedia() }
+            .onReconnect {
+                guard let failure, failure.canRetry else { return }
+                loader.forgetFailure(workspaceId: link.workspaceId, path: link.path)
+                attempt += 1
+            }
         }
     }
 
@@ -76,6 +81,7 @@ struct WorkspaceFilePreview: View {
                     attempt += 1
                 }
                 .buttonStyle(IntentContentButtonStyle())
+                .disabledWhileReadOnly()
             }
         }
         .accessibilityIdentifier("workspaceFilePreview.failure")

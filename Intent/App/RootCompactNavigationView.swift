@@ -7,9 +7,11 @@ extension RootView {
             WorkspaceListView(workspaceStore: session.workspaceStore)
                 .navigationDestination(isPresented: $showingWorkspaceDetail) {
                     if let workspaceId = coordinator.selectedWorkspaceId {
-                        WorkspaceDetailView(workspaceId: workspaceId, session: session)
+                        WorkspaceDetailView(workspaceId: workspaceId, session: session, storesCache: coordinator.workspaceDetailStores)
                             .pullRequestLinkRouting()
                             .modifier(WorkspaceActionLauncherToolbar())
+                            // Pushed pages do not inherit the root's banner inset.
+                            .readOnlyBannerInset(coordinator.showsReadOnlyBanner)
                             #if os(iOS)
                             .toolbar(sizeClass == .compact && !usesVerticalBar ? .hidden : .visible, for: .navigationBar)
                             #else
@@ -19,6 +21,7 @@ extension RootView {
                                 conversationDestination
                                     .pullRequestLinkRouting()
                                     .modifier(WorkspaceActionLauncherToolbar())
+                                    .readOnlyBannerInset(coordinator.showsReadOnlyBanner)
                             }
                             .navigationDestination(isPresented: $showingNoteDetail) {
                                 compactNoteDetail
@@ -86,6 +89,7 @@ extension RootView {
         .id(noteDetailNoteId)
         .pullRequestLinkRouting()
         .modifier(WorkspaceActionLauncherToolbar())
+        .readOnlyBannerInset(coordinator.showsReadOnlyBanner)
     }
 
     func syncNavigationState() {

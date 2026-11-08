@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Shown only when reconnection stopped for good (revoked access, a different
+/// person, an incompatible host); ordinary drops use `ReadOnlyBanner`.
 /// Only the backdrop ignores safe areas. Content and the action scroll together
 /// when large text or certificate warnings need more than the available height.
 struct ConnectionLossOverlay: View {
@@ -24,6 +26,8 @@ struct ConnectionLossOverlay: View {
     var startupState: DaemonStartupState?
     var onRetry: (() -> Void)?
     let mismatches: [HostCertMismatch]
+    var machineName: String?
+    var reason: String?
     var networkStatus: NetworkAvailability.Status = .unknown
     // The source page can be light even though this overlay always renders dark.
     var sourceColorScheme: ColorScheme = .dark
@@ -83,17 +87,22 @@ struct ConnectionLossOverlay: View {
 
     private var messages: some View {
         let message = ConnectionNetworkMessage(status: networkStatus)
+        let title: LocalizedStringResource = if let machineName {
+            "Can't reconnect to \(machineName)"
+        } else {
+            "Can't reconnect"
+        }
         return VStack(spacing: Constants.Root.reconnectPanelSpacing) {
             VStack(spacing: Layout.copySpacing) {
                 ConnectionSheetText(
-                    "\(Text(message.isUnavailable ? message.title : "Reconnecting"))",
+                    "\(Text(title))",
                     style: Constants.Typography.bodyM,
                     tracking: Layout.titleTracking
                 )
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("connection-loss.status")
                 ConnectionSheetText(
-                    "Connection to desktop was lost.",
+                    "\(reason ?? String(localized: "Reconnection to desktop stopped."))",
                     style: Constants.Typography.bodyS,
                     tracking: Layout.bodyTracking
                 )

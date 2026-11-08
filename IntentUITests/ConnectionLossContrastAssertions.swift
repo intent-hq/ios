@@ -69,11 +69,11 @@ extension ConnectionLossUITests {
         try trigger("initial-data", in: directory)
         saved.tap()
         XCTAssertTrue(machine.waitForExistence(timeout: timeout))
-        XCTAssertFalse(app.buttons["intent.menu.open"].exists, "A late startup completion must not leave Home")
+        XCTAssertFalse(app.buttons[ConnectionLossUITestFixture.navigationIdentifier].exists, "A late startup completion must not leave Home")
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)
         capture(app, named: "connecting-returned-home")
         machine.tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons[ConnectionLossUITestFixture.navigationIdentifier].waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
         capture(app, named: "connecting-machine-reselected")
     }

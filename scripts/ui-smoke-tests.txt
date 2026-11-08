@@ -12,7 +12,7 @@
 # Pairing and connections
 IntentUITests/PairingDesignUITests/testSavedConnectionActionsRemainAvailableWhenEmpty # shard: 2
 IntentUITests/ManualConnectionDesignUITests/testEmptyAndFilledReferencePlacement # shard: 2
-IntentUITests/ConnectionLossUITests/testSustainedBackgroundLossPresentsOverlayAndHomeStillWorks # shard: 1
+IntentUITests/ConnectionLossUITests/testSustainedBackgroundLossShowsBannerAndHomeStillWorks # shard: 1
 IntentUITests/ConnectionLossUITests/testPermissionAndCertificateFailureRemainInline # shard: 1
 IntentUITests/ConnectionLossUITests/testDifferentServerAllowsSameMachineReselection # shard: 1
 

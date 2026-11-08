@@ -88,11 +88,13 @@ struct BackgroundHooksRow: View {
                 Label("Run now", image: "Play")
             }
             .disabled(hook.state == .running)
+            .disabledWhileReadOnly()
             Button(role: .destructive) {
                 Task { await hookStore.cancel(hookId: hook.hookId) }
             } label: {
                 Label("Cancel hook", image: "Close")
             }
+            .disabledWhileReadOnly()
         } label: {
             chipLabel(hook)
         }

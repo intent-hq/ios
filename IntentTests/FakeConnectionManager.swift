@@ -158,6 +158,7 @@ class FakeConnectionManager: SessionConnectionManaging {
     }
 
     var currentPrincipal: ConnectionPrincipal? = .demoOwner
+    var reconnectStopReason: String?
     var admission: ConnectionAdmission?
     var pairingAttemptID: UUID?
 

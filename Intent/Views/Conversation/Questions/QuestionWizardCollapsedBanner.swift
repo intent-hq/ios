@@ -38,6 +38,7 @@ struct QuestionWizardCollapsedBanner: View {
                 if showsDismiss {
                     Button("Dismiss", action: onDismiss)
                         .buttonStyle(WorkspaceQuestionButtonStyle(fillsWidth: true))
+                        .requiresLiveConnection()
                         .accessibilityIdentifier("question.dismiss")
                 }
                 Button("Answer", action: onExpand)
@@ -129,6 +130,7 @@ struct QuestionWizardDismissButton: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(dismissed)
+        .disabledWhileReadOnly()
         .opacity(dismissed ? Layout.disabledOpacity : 1)
     }
 }

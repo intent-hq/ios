@@ -24,6 +24,8 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     /// once its bounded retries are exhausted, which the window surfaces
     /// with a retry action routed to `retryGlobalSubscription()` (ios#254).
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
+    /// Why automatic reconnection stopped for good; nil while it may recover.
+    var reconnectStopReason: String? { get }
 
     var currentPrincipal: ConnectionPrincipal? { get }
     var admission: ConnectionAdmission? { get }
@@ -55,6 +57,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
 
 extension SessionConnectionManaging {
     var startupState: DaemonStartupState? { nil }
+    var reconnectStopReason: String? { nil }
 
     func makeBrowserProxy() throws -> any BrowserProxySession {
         throw BrowserTunnelError.unavailable

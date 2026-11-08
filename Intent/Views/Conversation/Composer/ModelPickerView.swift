@@ -74,6 +74,7 @@ struct ModelPickerView: View {
             ) {
                 Task { if await selection.save() { dismiss() } }
             }
+            .requiresLiveConnection()
         }
         .padding(.horizontal, CreateWorkspaceFormStyle.pagePadding)
         .padding(.top, CreateWorkspaceFormStyle.rowSpacing)

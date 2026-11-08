@@ -150,7 +150,7 @@ extension ConversationViewModel {
             discardQuestionAttachments(for: answeredQuestionsMessageId)
         } catch let error as OutgoingImagePayload.RequestError {
             attachments.imagePlacementError = error.localizedDescription
-            imagePlacementError = error.localizedDescription
+            imagePlacementError = DiagnosticErrorOwnership.alertMessage(for: error)
             sendingStore.rollbackFailedSend()
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Submit question answers failed: \(error)")
@@ -189,7 +189,7 @@ extension ConversationViewModel {
             imagePayload = try await attachments.buildImageBlocks(from: images, workspaceId: workspaceId)
         } catch {
             attachments.imagePlacementError = error.localizedDescription
-            imagePlacementError = error.localizedDescription
+            imagePlacementError = DiagnosticErrorOwnership.alertMessage(for: error)
             return nil
         }
         do {
@@ -197,7 +197,7 @@ extension ConversationViewModel {
             return (imagePayload, filePayload)
         } catch {
             attachments.filePlacementError = error.localizedDescription
-            filePlacementError = error.localizedDescription
+            filePlacementError = DiagnosticErrorOwnership.alertMessage(for: error)
             return nil
         }
     }
@@ -221,7 +221,7 @@ extension ConversationViewModel {
             discardQuestionAttachments(for: messageId)
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Dismiss questions failed: \(error)")
-            dismissQuestionsError = error.localizedDescription
+            dismissQuestionsError = DiagnosticErrorOwnership.alertMessage(for: error)
         }
     }
 

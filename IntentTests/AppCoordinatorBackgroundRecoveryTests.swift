@@ -68,11 +68,13 @@ extension AppCoordinatorTests {
         fixture.connection.connectionState = .reconnecting(attempt: 2)
         coordinator.onScenePhaseActive() // Duplicate active must not extend the deadline.
         await Self.drainBackgroundEvents()
-        #expect(!coordinator.showsConnectionLossOverlay)
+        #expect(!coordinator.showsReadOnlyBanner)
+        #expect(coordinator.isRemoteReadOnly, "Change controls stay off during the grace")
         #expect(fixture.clock.deadlines.count == 1)
         fixture.clock.advance(by: .milliseconds(1))
         await Self.drainBackgroundEvents()
-        #expect(coordinator.showsConnectionLossOverlay)
+        #expect(coordinator.showsReadOnlyBanner, "A drop that keeps reconnecting is read-only, not blocking")
+        #expect(!coordinator.showsConnectionLossOverlay)
         #expect(fixture.connection.connectionState == .reconnecting(attempt: 2))
     }
 
@@ -151,10 +153,11 @@ extension AppCoordinatorTests {
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
         #expect(coordinator.isDisconnected)
-        #expect(!coordinator.showsConnectionLossOverlay)
+        #expect(!coordinator.showsReadOnlyBanner)
         fixture.clock.advance(by: .seconds(1))
         await Self.drainBackgroundEvents()
-        #expect(coordinator.showsConnectionLossOverlay, "The existing data-readiness rule still applies")
+        #expect(coordinator.showsReadOnlyBanner, "The existing data-readiness rule still applies")
+        #expect(!coordinator.showsConnectionLossOverlay)
         fixture.store.publishFetchedWorkspaces([])
         fixture.store.isLoading = false
         await Self.drainBackgroundEvents()

@@ -74,6 +74,7 @@ struct WorkspaceCommitDiffView: View {
         .toolbarBackground(usesPanel ? IPadShellStyle.panel(for: colorScheme) : WorkspaceCommitLayout.chromeBackground(for: colorScheme), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .task(id: retry) { await load() }
+        .onReconnect { if errorMessage != nil { retry += 1 } }
         .onChange(of: dynamicTypeSize) { diffHeights = [:] }
     }
 
@@ -137,6 +138,7 @@ struct WorkspaceCommitDiffView: View {
             } actions: {
                 Button("Retry") { retry += 1 }
                     .buttonStyle(IntentButtonStyle(variant: .secondary))
+                    .disabledWhileReadOnly()
             }
         } else if files.isEmpty {
             ContentUnavailableView {

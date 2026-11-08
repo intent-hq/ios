@@ -162,6 +162,7 @@ struct WorkspaceSwipeRow: View {
         }
         .buttonStyle(WorkspaceSwipeIconButtonStyle(size: actionSize))
         .disabled(isUpdating)
+        .disabledWhileReadOnly()
         .accessibilityLabel("\(action.label) workspace")
         .accessibilityIdentifier("workspace.\(action.rawValue).\(workspace.id)")
     }
@@ -180,11 +181,13 @@ struct WorkspaceSwipeRow: View {
                 } label: {
                     menuLabel("Archive workspace", icon: .archive)
                 }
+                .disabledWhileReadOnly()
                 Button(role: .destructive) {
                     select(.delete)
                 } label: {
                     menuLabel("Delete workspace", icon: .delete)
                 }
+                .disabledWhileReadOnly()
             }
         }
         .disabled(isUpdating)

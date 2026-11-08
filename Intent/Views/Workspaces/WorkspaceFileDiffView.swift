@@ -70,6 +70,7 @@ struct WorkspaceFileDiffView: View {
             commit: commitHash,
             retry: retry
         )) { await load() }
+        .onReconnect { if case .failed = phase { retry += 1 } }
         .task(id: SyntaxID(presentation: presentation?.id, dark: colorScheme == .dark)) {
             await highlight()
         }
@@ -151,6 +152,7 @@ struct WorkspaceFileDiffView: View {
     private var retryButton: some View {
         Button("Retry") { retry += 1 }
             .buttonStyle(IntentButtonStyle(variant: .secondary))
+            .disabledWhileReadOnly()
     }
 
     private func compactStatus<Icon: View>(_ title: String, message: String, @ViewBuilder icon: () -> Icon) -> some View {

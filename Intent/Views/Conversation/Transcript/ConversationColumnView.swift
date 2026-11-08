@@ -115,6 +115,7 @@ struct ConversationColumnView: View {
         ZStack {
             if viewModel.showsLoadingState {
                 ConversationConnectionLoadingView(viewModel: viewModel, usesWorkspaceDesign: usesWorkspaceDesign)
+                    .availableWhenReconnected(isMissing: true)
                     .zIndex(1)
             } else if viewModel.filteredMessages.isEmpty {
                 ConversationEmptyView(viewModel: viewModel)

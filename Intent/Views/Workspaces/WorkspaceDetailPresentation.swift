@@ -39,7 +39,7 @@ final class WorkspaceDetailPresentation {
             try await store.perform(action, workspaceId: workspaceId)
         } catch {
             AppLog.workspace.error("[WorkspaceDetail] \(action.method) failed: \(error)")
-            actionError = error.localizedDescription
+            actionError = DiagnosticErrorOwnership.alertMessage(for: error)
         }
     }
 }
