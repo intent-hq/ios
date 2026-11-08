@@ -1,15 +1,48 @@
 #if os(iOS)
 import SwiftUI
 
-/// Live Activity views, shared by the widget extension and the app's demo
-/// preview. Colors mirror the workspace status palette.
+/// Live Activity metrics and colors, shared by the widget extension and the
+/// app. Colors mirror the workspace status palette.
+enum AgentActivityStyle {
+    static let markSize: CGFloat = 16
+    static let minimalMarkSize: CGFloat = 14
+    static let headerSpacing: CGFloat = 8
+    static let sectionSpacing: CGFloat = 10
+    static let rowSpacing: CGFloat = 8
+    static let compactRowSpacing: CGFloat = 6
+    static let rowTextSpacing: CGFloat = 1
+    static let dotSize: CGFloat = 8
+    static let dotBaselineOffset: CGFloat = 1
+    static let contentPadding: CGFloat = 16
+    static let islandInset: CGFloat = 4
+    static let staleOpacity = 0.6
+
+    private static let needsYouRGB: UInt32 = 0xFAA755
+    private static let runningRGB: UInt32 = 0xDDEC61
+    private static let failedRGB: UInt32 = 0xE87F39
+    private static let doneRGB: UInt32 = 0x6FA356
+    private static let byteMask: UInt32 = 0xFF
+    private static let redShift: UInt32 = 16
+    private static let greenShift: UInt32 = 8
+
+    static let needsYou = color(needsYouRGB)
+    static let running = color(runningRGB)
+    static let failed = color(failedRGB)
+    static let done = color(doneRGB)
+
+    private static func color(_ rgb: UInt32) -> Color {
+        let channel = { (shift: UInt32) in Double((rgb >> shift) & byteMask) / Double(byteMask) }
+        return Color(red: channel(redShift), green: channel(greenShift), blue: channel(0))
+    }
+}
+
 extension AgentActivityRow.Phase {
     var color: Color {
         switch self {
-        case .needsYou: Color(red: 0xFA / 255, green: 0xA7 / 255, blue: 0x55 / 255)
-        case .running: Color(red: 0xDD / 255, green: 0xEC / 255, blue: 0x61 / 255)
-        case .failed: Color(red: 0xE8 / 255, green: 0x7F / 255, blue: 0x39 / 255)
-        case .done: Color(red: 0x6F / 255, green: 0xA3 / 255, blue: 0x56 / 255)
+        case .needsYou: AgentActivityStyle.needsYou
+        case .running: AgentActivityStyle.running
+        case .failed: AgentActivityStyle.failed
+        case .done: AgentActivityStyle.done
         }
     }
 
@@ -27,9 +60,9 @@ extension AgentActivityAttributes.ContentState {
     var headline: String {
         switch (runningCount, needsYouCount) {
         case (0, 0): "All done"
-        case (let running, 0): "\(running) running"
-        case (0, let needsYou): "\(needsYou) needs you"
-        case (let running, let needsYou): "\(running) running · \(needsYou) needs you"
+        case let (running, 0): "\(running) running"
+        case let (0, needsYou): "\(needsYou) needs you"
+        case let (running, needsYou): "\(running) running · \(needsYou) needs you"
         }
     }
 
@@ -49,7 +82,7 @@ struct AgentActivityMark: View {
     var tint: Color?
 
     var body: some View {
-        Image("IntentDandelion")
+        Image(.intentDandelion)
             .renderingMode(.template)
             .resizable()
             .scaledToFit()
@@ -63,20 +96,20 @@ struct AgentActivityLockScreenView: View {
     let isStale: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: AgentActivityStyle.sectionSpacing) {
+            HStack(spacing: AgentActivityStyle.headerSpacing) {
                 AgentActivityMark()
-                    .frame(width: 16, height: 16)
+                    .frame(width: AgentActivityStyle.markSize, height: AgentActivityStyle.markSize)
                 Text(state.headline)
                     .font(.subheadline.weight(.semibold))
-                Spacer(minLength: 8)
+                Spacer(minLength: AgentActivityStyle.headerSpacing)
                 if isStale {
                     Text("Updated \(state.updatedAt, style: .time)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: AgentActivityStyle.rowSpacing) {
                 ForEach(state.rows) { row in
                     AgentActivityRowLink(row: row) {
                         AgentActivityRowView(row: row, showsDetail: true)
@@ -84,8 +117,8 @@ struct AgentActivityLockScreenView: View {
                 }
             }
         }
-        .padding(16)
-        .opacity(isStale ? 0.6 : 1)
+        .padding(AgentActivityStyle.contentPadding)
+        .opacity(isStale ? AgentActivityStyle.staleOpacity : 1)
     }
 }
 
@@ -94,12 +127,12 @@ struct AgentActivityRowView: View {
     let showsDetail: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: AgentActivityStyle.rowSpacing) {
             Circle()
                 .fill(row.phase.color)
-                .frame(width: 8, height: 8)
-                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-            VStack(alignment: .leading, spacing: 1) {
+                .frame(width: AgentActivityStyle.dotSize, height: AgentActivityStyle.dotSize)
+                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - AgentActivityStyle.dotBaselineOffset }
+            VStack(alignment: .leading, spacing: AgentActivityStyle.rowTextSpacing) {
                 Text(row.title)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
@@ -110,7 +143,7 @@ struct AgentActivityRowView: View {
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: AgentActivityStyle.rowSpacing)
             Text(row.phase.label)
                 .font(.caption.weight(row.phase == .needsYou ? .semibold : .regular))
                 .foregroundStyle(row.phase == .needsYou ? .primary : .secondary)
@@ -147,7 +180,41 @@ struct AgentActivityCompactCount: View {
             Image(systemName: "checkmark")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(AgentActivityRow.Phase.done.color)
+                .accessibilityLabel("All done")
         }
+    }
+}
+
+/// Expanded Dynamic Island: the headline on the leading edge, rows below.
+struct AgentActivityExpandedHeadline: View {
+    let state: AgentActivityAttributes.ContentState
+
+    var body: some View {
+        HStack(spacing: AgentActivityStyle.compactRowSpacing) {
+            AgentActivityMark(tint: state.leadingPhase.color)
+                .frame(width: AgentActivityStyle.markSize, height: AgentActivityStyle.markSize)
+            Text(state.headline)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .padding(.leading, AgentActivityStyle.islandInset)
+    }
+}
+
+struct AgentActivityExpandedRows: View {
+    let state: AgentActivityAttributes.ContentState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AgentActivityStyle.compactRowSpacing) {
+            ForEach(state.rows) { row in
+                AgentActivityRowLink(row: row) {
+                    AgentActivityRowView(row: row, showsDetail: false)
+                }
+            }
+        }
+        .padding(.horizontal, AgentActivityStyle.islandInset)
+        .padding(.top, AgentActivityStyle.islandInset)
     }
 }
 #endif
