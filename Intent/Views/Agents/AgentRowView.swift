@@ -62,6 +62,7 @@ struct AgentNotificationsMuteButton: View {
                 }
             }
         }
+        .disabledWhileReadOnly()
     }
 }
 

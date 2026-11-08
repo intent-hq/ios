@@ -311,6 +311,7 @@ extension ConversationTranscriptView {
         VStack(spacing: Layout.suggestedPromptSpacing) {
             ForEach(Array(viewModel.suggestedPrompts.enumerated()), id: \.element) { index, prompt in
                 suggestedPromptButton(prompt)
+                    .requiresLiveConnection("Reconnect to send")
                     .accessibilityIdentifier("transcript.suggestedPrompt.\(index)")
             }
         }

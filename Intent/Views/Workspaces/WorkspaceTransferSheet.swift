@@ -72,6 +72,9 @@ struct WorkspaceTransferSheet: View {
             .foregroundStyle(CreateWorkspaceFormStyle.foreground(for: colorScheme))
             .frame(maxWidth: SettingsStyle.maximumContentWidth)
         }
+        .onReconnect {
+            if store.plan == nil, !isLoadingPreview, !store.isBusy { Task { await loadPreview() } }
+        }
         .task {
             coordinator.refreshSavedConnectionsPresentation()
             await loadPreview()
@@ -190,6 +193,7 @@ struct WorkspaceTransferSheet: View {
                 if store.plan == nil {
                     Button("Retry") { Task { await loadPreview() } }
                         .buttonStyle(IntentButtonStyle(variant: .secondary))
+                        .disabledWhileReadOnly()
                 }
                 Button {
                     guard let destination = selectedDestination else { return }

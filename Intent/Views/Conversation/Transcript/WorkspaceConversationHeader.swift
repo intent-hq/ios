@@ -81,6 +81,7 @@ struct WorkspaceConversationHeader<Actions: View>: View {
     let onBack: () -> Void
     @ViewBuilder let actions: () -> Actions
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
 
     var body: some View {
         if let assistantStore {
@@ -88,7 +89,7 @@ struct WorkspaceConversationHeader<Actions: View>: View {
                 title: title,
                 showsBackground: showsBackground,
                 bottomPadding: bottomPadding,
-                canCreateConversation: !assistantStore.isCreating && assistantStore.hasLoaded,
+                canCreateConversation: !assistantStore.isCreating && assistantStore.hasLoaded && !isRemoteReadOnly,
                 onNewConversation: {
                     Task {
                         if let id = await assistantStore.createThread() {

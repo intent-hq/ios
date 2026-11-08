@@ -21,6 +21,7 @@ struct QuestionWizardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
 
     private typealias Layout = Constants.Conversation.QuestionWizard.Surface
     private typealias Design = Constants.Conversation.Design
@@ -177,7 +178,7 @@ struct QuestionWizardView: View {
             titleVisibility: .visible
         ) {
             Button("Dismiss questions", role: .destructive) {
-                guard !dismissed, !submitted else { return }
+                guard !dismissed, !submitted, !isRemoteReadOnly else { return }
                 dismissed = true
                 onDismiss?()
             }
@@ -279,7 +280,8 @@ struct QuestionWizardView: View {
 
     private func advance() {
         if idx >= questions.count - 1 {
-            guard !submitted, !dismissed else { return }
+            // Answers wait in the drafts until the Mac is back.
+            guard !submitted, !dismissed, !isRemoteReadOnly else { return }
             onComplete(buildAnswers())
             return
         }

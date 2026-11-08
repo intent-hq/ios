@@ -79,3 +79,17 @@ nonisolated enum DiagnosticRequestContext {
 
     @TaskLocal static var owner: Owner?
 }
+
+extension DiagnosticErrorOwnership {
+    /// A request that failed only because the Mac connection dropped (or was
+    /// not up). Read-only mode covers these, so they never raise an alert.
+    static func isConnectionLoss(_ error: any Error) -> Bool {
+        let classification = failure(for: error).classification
+        return classification == .connectionClosed || classification == .notConnected
+    }
+
+    /// The text for an error alert, or nil when the drop itself is the cause.
+    static func alertMessage(for error: any Error) -> String? {
+        isConnectionLoss(error) ? nil : error.localizedDescription
+    }
+}

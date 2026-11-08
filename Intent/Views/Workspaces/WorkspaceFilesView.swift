@@ -18,6 +18,9 @@ struct WorkspaceFilesView: View {
             tree
         }
         .accessibilityIdentifier("files.tree")
+        .onReconnect {
+            for path in store.errorsByPath.keys { Task { await store.retry(path: path) } }
+        }
         .fullScreenCover(item: $selectedFile) { file in
             WorkspaceFilePreview(link: .init(workspaceId: workspaceId, path: file.path), connection: session.connection)
         }
@@ -75,6 +78,7 @@ struct WorkspaceFilesView: View {
                     .foregroundStyle(secondary)
                 Button("Retry") { Task { await store.retry(path: path) } }
                     .buttonStyle(IntentButtonStyle(variant: .secondary))
+                    .disabledWhileReadOnly()
                     .accessibilityIdentifier("files.retry.\(path)")
             }
         } else if store.loadingPaths.contains(path) || (path == "." && !store.hasLoaded) {

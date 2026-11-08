@@ -20,6 +20,7 @@ extension WorkspaceDetailView {
             if showsAgentLoading {
                 ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .availableWhenReconnected(isMissing: true)
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
             } else if !viewModel.hasAgentSections, !hasWorkspaceResources {
                 ContentUnavailableView {

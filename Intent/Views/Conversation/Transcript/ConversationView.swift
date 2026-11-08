@@ -159,6 +159,7 @@ private struct ConversationViewContent: View {
             .alert("Rename Agent", isPresented: $showRenameAlert) {
                 TextField("Agent name", text: $renameText)
                 Button("Rename", action: renameAgent)
+                    .disabledWhileReadOnly()
                 Button("Cancel", role: .cancel) {}
             }
             // Keep the failure detail stable while the wizard restores its pending marker
@@ -357,6 +358,7 @@ private extension ConversationViewContent {
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive, action: deleteAgent)
+                    .disabledWhileReadOnly()
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will permanently delete this agent and its conversation history.")
@@ -393,11 +395,13 @@ private extension ConversationViewContent {
             Button { handleAgentAction(.changeModel) } label: {
                 Label { Text(viewModel.currentModelDisplayName ?? "Select Model") } icon: { Image(.settings2) }
             }
+            .disabledWhileReadOnly()
             .accessibilityIdentifier("conversation.actions.model")
             .accessibilityHint("Change model")
             Button { handleAgentAction(.rename) } label: {
                 Label { Text("Rename") } icon: { Image(.edit) }
             }
+            .disabledWhileReadOnly()
             .accessibilityIdentifier("conversation.actions.rename")
             Divider()
             Button(role: .destructive) {
@@ -405,6 +409,7 @@ private extension ConversationViewContent {
             } label: {
                 Label { Text("Delete Agent") } icon: { Image(.delete) }
             }
+            .disabledWhileReadOnly()
             .accessibilityIdentifier("conversation.actions.delete")
         } label: {
             ToolbarOverflowLabel()
@@ -484,12 +489,7 @@ private extension ConversationViewContent {
     }
 
     private func navigateToAgent(agentId: String, workspaceId: String, name: String) {
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder),
-            to: nil,
-            from: nil,
-            for: nil
-        )
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         childAgent = AgentDestination(
             agentId: agentId,
             workspaceId: workspaceId,

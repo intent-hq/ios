@@ -61,6 +61,7 @@ struct WorkspaceAgentLoadingTests {
         try await expectNever("unopened background, orphan or retired read") { fake.paramsForMethod("agent.list").count > 3 }
 
         fake.clearRequestLog()
+        let firstWorkspaceStore = host.view.agentStore
         host.switchWorkspace(to: "ws-2")
         try await waitUntil("workspace switch resets the real view") {
             fake.paramsForMethod("agent.list").contains { $0["workspaceId"] as? String == "ws-2" }
@@ -71,6 +72,10 @@ struct WorkspaceAgentLoadingTests {
         #expect(fake.paramsForMethod("agent.list").first?["scope"] as? String == "topLevel")
         #expect(host.view.agentStore.list.loadedGroups == [.delegated(parentId: "groups-parent")])
         #expect(host.view.agentStore.list.retiredAgents.isEmpty)
+        #expect(host.view.agentStore !== firstWorkspaceStore, "Each workspace gets its own stores")
+
+        host.switchWorkspace(to: "ws-1")
+        #expect(host.view.agentStore === firstWorkspaceStore, "A recent workspace reopens from memory")
     }
 
     @Test func actualViewExpansionKeepsLoadingAndFailureRetryLocalToItsGroup() async throws {
@@ -171,7 +176,8 @@ struct WorkspaceAgentLoadingTests {
     }
 
     private final class Host {
-        let view: WorkspaceDetailView
+        /// The page currently hosted; a workspace switch replaces it.
+        private(set) var view: WorkspaceDetailView
         private let session: BackendSession
         private let coordinator: AppCoordinator
         private var controller: UIHostingController<AnyView>?
@@ -187,7 +193,7 @@ struct WorkspaceAgentLoadingTests {
                 connection: connection,
                 persistence: PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
             )
-            view = WorkspaceDetailView(workspaceId: "ws-1", session: session)
+            view = WorkspaceDetailView(workspaceId: "ws-1", session: session, storesCache: coordinator.workspaceDetailStores)
             let controller = UIHostingController(rootView: AnyView(
                 NavigationStack { view }.environment(coordinator).environment(session)
             ))
@@ -203,8 +209,9 @@ struct WorkspaceAgentLoadingTests {
         }
 
         func switchWorkspace(to id: String) {
+            view = WorkspaceDetailView(workspaceId: id, session: session, storesCache: coordinator.workspaceDetailStores)
             controller?.rootView = AnyView(
-                NavigationStack { WorkspaceDetailView(workspaceId: id, session: session) }
+                NavigationStack { view }
                     .environment(coordinator).environment(session)
             )
             controller?.view.layoutIfNeeded()

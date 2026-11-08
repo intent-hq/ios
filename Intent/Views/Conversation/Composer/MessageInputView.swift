@@ -199,12 +199,10 @@ private extension MessageInputView {
                 .scaledToFit()
                 .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
-                .frame(
-                    minWidth: Constants.Conversation.Composer.controlTarget,
-                    minHeight: Constants.Conversation.Composer.controlTarget
-                )
+                .frame(minWidth: Constants.Conversation.Composer.controlTarget, minHeight: Constants.Conversation.Composer.controlTarget)
         }
         .buttonStyle(IntentContentButtonStyle())
+        .requiresLiveConnection()
         .accessibilityLabel("Stop response")
     }
 
@@ -312,6 +310,7 @@ private extension MessageInputView {
                 }
                 .buttonStyle(IntentContentButtonStyle())
                 .disabled(!hasSendableContent)
+                .requiresLiveConnection("Reconnect to send")
                 .accessibilityLabel("Send message")
             }
         }
@@ -449,6 +448,7 @@ private extension MessageInputView {
             .padding(.top, Constants.Conversation.Composer.suggestedPromptsTopPadding)
         }
         .scrollIndicators(.hidden)
+        .requiresLiveConnection("Reconnect to send")
     }
     #endif
 }

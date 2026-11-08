@@ -248,7 +248,8 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     @MainActor
     private func launchAtHome() throws -> XCUIApplication {
         let directory = try makeDemoDirectory()
-        let app = try launchConnected(directory: directory)
+        // A stopped reconnection is the remaining blocking route to Home.
+        let app = try launchConnected(arguments: ["--demo-connection-loss-stopped"], directory: directory)
         try Data().write(to: directory.appendingPathComponent("loss"))
         let home = app.buttons["connection-loss.home"]
         XCTAssertTrue(home.waitForExistence(timeout: Self.timeout))

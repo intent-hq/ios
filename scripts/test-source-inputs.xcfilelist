@@ -5,6 +5,7 @@ $(SRCROOT)/Intent/App/AppCoordinatorAgentHistory.swift
 $(SRCROOT)/Intent/App/AppCoordinatorIPadNavigation.swift
 $(SRCROOT)/Intent/App/AppCoordinatorLifecycleState.swift
 $(SRCROOT)/Intent/App/AppCoordinatorNavigation.swift
+$(SRCROOT)/Intent/App/AppCoordinatorRemotePhase.swift
 $(SRCROOT)/Intent/App/AppCoordinatorRouting.swift
 $(SRCROOT)/Intent/App/BackendID.swift
 $(SRCROOT)/Intent/App/BackendSession.swift
@@ -543,6 +544,7 @@ $(SRCROOT)/Intent/Services/PerMessageDeflate.swift
 $(SRCROOT)/Intent/Services/ProposalActionStore.swift
 $(SRCROOT)/Intent/Services/PullRequestDetailStore.swift
 $(SRCROOT)/Intent/Services/PullRequestListStore.swift
+$(SRCROOT)/Intent/Services/RecentRetention.swift
 $(SRCROOT)/Intent/Services/RemoteImageLoader.swift
 $(SRCROOT)/Intent/Services/SkillCatalogStore.swift
 $(SRCROOT)/Intent/Services/SocketPathObservation.swift
@@ -664,10 +666,12 @@ $(SRCROOT)/Intent/Views/Components/TaskStatusIconView.swift
 $(SRCROOT)/Intent/Views/Components/ToastView.swift
 $(SRCROOT)/Intent/Views/Components/WindowFeedbackSoundEmitter.swift
 $(SRCROOT)/Intent/Views/Connection
+$(SRCROOT)/Intent/Views/Connection/AvailableWhenReconnectedView.swift
 $(SRCROOT)/Intent/Views/Connection/CertMismatchListView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectingView.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionBackButton.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionFailureView.swift
+$(SRCROOT)/Intent/Views/Connection/ConnectionLossLayers.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossOverlay.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionLossPresenter.swift
 $(SRCROOT)/Intent/Views/Connection/ConnectionNetworkMessage.swift
@@ -681,6 +685,9 @@ $(SRCROOT)/Intent/Views/Connection/ConnectionsView.swift
 $(SRCROOT)/Intent/Views/Connection/DaemonStartupProgressView.swift
 $(SRCROOT)/Intent/Views/Connection/DisconnectedView.swift
 $(SRCROOT)/Intent/Views/Connection/LoadingView.swift
+$(SRCROOT)/Intent/Views/Connection/ReadOnlyBanner.swift
+$(SRCROOT)/Intent/Views/Connection/ReadOnlyBannerPresenter.swift
+$(SRCROOT)/Intent/Views/Connection/RemoteReadOnly.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionCard.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionDetails.swift
 $(SRCROOT)/Intent/Views/Conversation
@@ -946,6 +953,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorConnectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorIPadReselectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorInvitedSyncTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorMissingEntityTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorReadOnlyTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRecentAgentTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorRegistryCorruptionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorReturnHomeTests.swift
@@ -1246,10 +1254,13 @@ $(SRCROOT)/IntentTests/QueuedMessageImageDecodingTests.swift
 $(SRCROOT)/IntentTests/RPCRecordingConnection.swift
 $(SRCROOT)/IntentTests/RPCRecordingConnectionTests.swift
 $(SRCROOT)/IntentTests/RPCTraffic.swift
+$(SRCROOT)/IntentTests/ReadOnlyBannerMessageTests.swift
+$(SRCROOT)/IntentTests/RecentRetentionTests.swift
 $(SRCROOT)/IntentTests/ReleaseConfigurationTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
+$(SRCROOT)/IntentTests/RetainedTranscriptMemoryTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
 $(SRCROOT)/IntentTests/ScriptListPagingTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift

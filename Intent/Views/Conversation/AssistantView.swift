@@ -5,6 +5,7 @@ struct AssistantView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.conversationPresentation) private var presentation
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
     @State private var showsHistory = false
 
     private var store: AssistantStore { session.assistantStore }
@@ -32,6 +33,9 @@ struct AssistantView: View {
     var body: some View {
         NavigationStack {
             content
+            .onChange(of: isRemoteReadOnly) { _, readOnly in
+                if !readOnly, !store.hasLoaded || store.errorMessage != nil { Task { await store.refresh() } }
+            }
             .navigationTitle("Assistant")
             .toolbar {
                 if !usesWorkspaceDesign { assistantToolbar }
@@ -86,7 +90,8 @@ struct AssistantView: View {
     }
 
     @ViewBuilder private var errorBanner: some View {
-        if let error = store.errorMessage {
+        // A drop is not an error; the read-only banner covers it.
+        if let error = store.errorMessage, !isRemoteReadOnly {
             if usesWorkspaceDesign {
                 AssistantErrorBanner(error: error) { Task { await store.refresh() } }
             } else {
@@ -137,6 +142,8 @@ struct AssistantView: View {
                 coordinator.assistantAgentId = store.threads.first?.id
             }
             .id(thread.id)
+        } else if isRemoteReadOnly, !store.hasLoaded || store.errorMessage != nil {
+            AvailableWhenReconnectedView()
         } else if usesWorkspaceDesign {
             AssistantStateContent(
                 isLoading: store.isLoading || (!store.hasLoaded && store.errorMessage == nil),
@@ -154,6 +161,7 @@ struct AssistantView: View {
                 Button("Start a Conversation", action: createThread)
                     .buttonStyle(IntentButtonStyle())
                     .disabled(store.isCreating || !store.hasLoaded)
+                    .requiresLiveConnection()
             }
         }
     }
@@ -161,6 +169,7 @@ struct AssistantView: View {
     private var newConversationButton: some View {
         IntentIconButton(icon: .displayEdit, label: "New Conversation", action: createThread)
             .disabled(store.isCreating || !store.hasLoaded)
+            .disabledWhileReadOnly()
     }
 
     private func createThread() {
@@ -210,6 +219,7 @@ struct AssistantHistoryMenu: View {
                 Label("New Conversation", image: "DisplayEdit")
             }
             .disabled(store.isCreating || !store.hasLoaded)
+            .disabledWhileReadOnly()
             .accessibilityIdentifier("assistant.history.newConversation")
             Divider()
             // SwiftUI may request menu rows off-main; return only prepared values.

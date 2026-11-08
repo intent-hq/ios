@@ -5,6 +5,7 @@ nonisolated final class DaemonStartupUITests: XCTestCase {
         static let timeout: TimeInterval = 20
         static let estimateMilliseconds = 12_000
         static let unchangedMilliseconds = 40_000
+        static let poll: TimeInterval = 0.25
     }
 
     @MainActor func testStartupWithoutCountsInitiallyAndOnReconnect() throws {
@@ -19,6 +20,7 @@ nonisolated final class DaemonStartupUITests: XCTestCase {
                 try peer.setPhase("preparing", includeProgress: false)
                 peer.dropConnections()
             }
+            if reconnecting { assertBannerTitle("Desktop is starting… · Read-only", app: app) }
             assertTitle("Starting Desktop", app: app)
             assertNoIndexingDetails(app)
             capture(app, "startup-no-count-\(context)-preparing")
@@ -34,6 +36,12 @@ nonisolated final class DaemonStartupUITests: XCTestCase {
             XCTAssertEqual(peer.methods.filter { $0 == "client.hello" }.count, peer.acceptedCount)
             XCTAssertEqual(peer.methods.filter { $0 == "principal.me" }.count, priorAdmissions + 1)
         }
+    }
+
+    @MainActor private func assertBannerTitle(_ expected: String, app: XCUIApplication) {
+        let banner = app.buttons["read-only-banner"]
+        let matches = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", expected), object: banner)
+        XCTAssertEqual(XCTWaiter.wait(for: [matches], timeout: Fixture.timeout), .completed)
     }
 
     @MainActor private func assertNoIndexingDetails(_ app: XCUIApplication) {
@@ -82,12 +90,12 @@ nonisolated final class DaemonStartupUITests: XCTestCase {
         try peer.setPhase("preparing")
         peer.dropConnections()
         assertTitle("Starting Desktop", app: app)
-        XCTAssertTrue(app.buttons["connection-loss.home"].exists)
+        XCTAssertTrue(app.buttons["read-only-banner.home"].exists)
         capture(app, "startup-reconnect-preparing")
         try peer.setPhase("indexing", estimate: Fixture.estimateMilliseconds)
         assertTitle("Indexing Notes", app: app)
         capture(app, "startup-reconnect-indexing-large-text")
-        let home = app.buttons["connection-loss.home"]
+        let home = app.buttons["read-only-banner.home"]
         if !home.isHittable {
             app.swipeUp()
             XCTAssertTrue(home.isHittable)
@@ -99,9 +107,11 @@ nonisolated final class DaemonStartupUITests: XCTestCase {
         capture(app, "startup-reconnect-unavailable")
         try peer.setPhase("failed")
         assertTitle("Startup Failed", app: app)
+        assertBannerTitle("Startup failed · Read-only", app: app)
+        XCTAssertFalse(app.buttons["connection-loss.home"].exists, "A failed startup never blocks the app")
         capture(app, "startup-reconnect-failed")
         try peer.setPhase(nil)
-        app.buttons["daemon-startup.retry"].tap()
+        app.buttons["read-only-banner.retry"].tap()
         waitForHydration(app)
         capture(app, "startup-reconnect-recovered")
     }
@@ -121,10 +131,21 @@ nonisolated final class DaemonStartupUITests: XCTestCase {
         return app
     }
 
-    @MainActor private func assertTitle(_ expected: String, app: XCUIApplication) {
+    /// A reconnect after entry is a read-only banner: expand it once to reach the progress details.
+    @MainActor private func assertTitle(_ expected: String, app: XCUIApplication, line: UInt = #line) {
         let title = app.staticTexts["daemon-startup.title"]
-        let matches = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label == %@", expected), object: title)
-        XCTAssertEqual(XCTWaiter.wait(for: [matches], timeout: Fixture.timeout), .completed)
+        let banner = app.buttons["read-only-banner"]
+        let deadline = Date().addingTimeInterval(Fixture.timeout)
+        var expanded = false
+        while Date() < deadline {
+            if title.exists, title.label == expected { return }
+            if !expanded, !title.exists, banner.exists {
+                banner.tap()
+                expanded = true
+            }
+            _ = title.waitForExistence(timeout: Fixture.poll)
+        }
+        XCTFail("Title: \(expected)", line: line)
     }
 
     @MainActor private func waitForHydration(_ app: XCUIApplication) {

@@ -51,6 +51,7 @@ struct WorkspaceCreationProposalView: View {
             Button("Dismiss proposal", role: .destructive) {
                 Task { await store.dismiss(proposal, messageId: messageId) }
             }
+            .disabledWhileReadOnly()
         } message: {
             Text("The agent will be told that you dismissed it.")
         }
@@ -116,6 +117,7 @@ struct WorkspaceCreationProposalView: View {
                     Text("Not now").copyContextMenuPassthrough()
                 }
                 .buttonStyle(IntentButtonStyle(variant: .secondary))
+                .requiresLiveConnection()
                 .accessibilityIdentifier("proposal.dismiss")
             }
             Button {
@@ -135,6 +137,7 @@ struct WorkspaceCreationProposalView: View {
             }
             .buttonStyle(IntentButtonStyle())
             .disabled(!store.canCreateWorkspace)
+            .requiresLiveConnection()
             .accessibilityLabel(activeCreationAction != nil ? "Creating workspace" : actionTitle)
             .accessibilityIdentifier("proposal.apply")
         }

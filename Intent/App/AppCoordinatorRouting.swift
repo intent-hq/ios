@@ -190,7 +190,8 @@ extension AppCoordinator {
     func onScenePhaseBackground() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
         connectionLossPresentation.enteredBackground(
-            eligible: lifecycleState.hasEnteredRemoteUI && !showsConnectionLossOverlay
+            // A loss already on screen (blocking or banner) stays put.
+            eligible: lifecycleState.hasEnteredRemoteUI && !showsConnectionLossOverlay && !showsReadOnlyBanner
         )
     }
 

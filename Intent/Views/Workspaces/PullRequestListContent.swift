@@ -16,6 +16,7 @@ struct PullRequestListContent: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.openURL) private var openURL
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
 
     var body: some View {
         let links = PullRequestListItem.linkedWorkspaces(workspaces)
@@ -43,11 +44,21 @@ struct PullRequestListContent: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Constants.WorkspaceRow.spaciousPadding)
+                } else if isRemoteReadOnly {
+                    // A drop is not an error; the list reloads on reconnect.
                 } else if case .failed(let error) = store.phase {
                     failureRow(error) { await store.load(query) }
                 } else if let error = store.loadMoreError {
                     failureRow(error) { await store.loadMore() }
                 }
+            }
+        }
+        .onChange(of: isRemoteReadOnly) { _, readOnly in
+            guard !readOnly else { return }
+            if case .failed = store.phase {
+                Task { await store.load(query) }
+            } else if store.loadMoreError != nil {
+                Task { await store.loadMore() }
             }
         }
     }
@@ -83,12 +94,13 @@ struct PullRequestListContent: View {
                 Button { onOpenAgent(linkedWorkspace.id) } label: { Label("Open agent", image: "Agents") }
             } else {
                 Button { onCreateWorkspace(item) } label: { Label("New workspace", image: "AddIcon") }
+                    .disabledWhileReadOnly()
             }
         }
         .visionListRowHitTarget()
         .onAppear {
             // After a failed page, only Retry asks again.
-            if item.id == store.items.last?.id, store.loadMoreError == nil { Task { await store.loadMore() } }
+            if item.id == store.items.last?.id, store.loadMoreError == nil, !isRemoteReadOnly { Task { await store.loadMore() } }
         }
     }
 
@@ -103,9 +115,13 @@ struct PullRequestListContent: View {
     @ViewBuilder private var placeholder: some View {
         Group {
             switch store.phase {
-            case .idle, .loading:
-                ProgressView {
-                    Text("Loading pull requests...").interFont(Constants.Typography.bodyS)
+            case .idle, .loading, .failed where isRemoteReadOnly:
+                if isRemoteReadOnly {
+                    AvailableWhenReconnectedView()
+                } else {
+                    ProgressView {
+                        Text("Loading pull requests...").interFont(Constants.Typography.bodyS)
+                    }
                 }
             case .disconnected:
                 message("Connect GitHub on the computer running Intent to see pull requests.")

@@ -43,8 +43,8 @@ struct WorkspaceDetailViewTests {
         persistence.saveWorkspaceTab(workspaceId: "saved-workspace", tab: tab.persistedValue)
         let session = makePinnedSession(connection: FakeConnectionManager())
 
-        let saved = WorkspaceDetailView(workspaceId: "saved-workspace", session: session, persistence: persistence)
-        let unsaved = WorkspaceDetailView(workspaceId: "new-workspace", session: session, persistence: persistence)
+        let saved = WorkspaceDetailView(workspaceId: "saved-workspace", session: session, storesCache: WorkspaceDetailStoresCache(), persistence: persistence)
+        let unsaved = WorkspaceDetailView(workspaceId: "new-workspace", session: session, storesCache: WorkspaceDetailStoresCache(), persistence: persistence)
 
         #expect(saved.currentTab == tab)
         #expect(unsaved.currentTab == .agents)
@@ -89,7 +89,8 @@ struct WorkspaceDetailViewTests {
         let fake = FakeConnectionManager()
         let view = WorkspaceDetailView(
             workspaceId: "ws-1",
-            session: makePinnedSession(connection: fake)
+            session: makePinnedSession(connection: fake),
+            storesCache: WorkspaceDetailStoresCache()
         )
 
         #expect(view.agentStoreConnectionID == ObjectIdentifier(fake))

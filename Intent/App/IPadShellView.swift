@@ -423,6 +423,7 @@ extension IPadShellView {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
                     session: session,
+                    storesCache: coordinator.workspaceDetailStores,
                     sidebar: WorkspaceDetailSidebar(onCollapse: collapseSidebar)
                 )
                 .id(workspaceId)

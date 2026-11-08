@@ -39,6 +39,7 @@ private struct WorkspaceQueuedMessageRow: View {
     @Binding var editText: String
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
 
     private typealias Design = Constants.Conversation.Design
     private typealias Layout = Design.Queue
@@ -54,6 +55,7 @@ private struct WorkspaceQueuedMessageRow: View {
                     .accessibilityIdentifier("queue.editor.\(message.id)")
                 HStack(spacing: Layout.actionSpacing) {
                     action(.checkCircle, label: "Save queued message edit", perform: saveEdit)
+                        .requiresLiveConnection()
                     action(.closeCircle, label: "Cancel queued message edit") { editingId = nil }
                 }
             } else {
@@ -80,13 +82,16 @@ private struct WorkspaceQueuedMessageRow: View {
             action(.arrowUp, label: "Send queued message now") {
                 Task { await viewModel.sendQueuedMessageNow(messageId: message.id) }
             }
+            .requiresLiveConnection()
             action(.edit, label: "Edit queued message") {
                 editingId = message.id
                 editText = message.content
             }
+            .requiresLiveConnection()
             action(.close, label: "Remove queued message") {
                 Task { await viewModel.removeQueuedMessage(messageId: message.id) }
             }
+            .requiresLiveConnection()
         }
     }
 
@@ -106,7 +111,7 @@ private struct WorkspaceQueuedMessageRow: View {
 
     private func saveEdit() {
         let text = editText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, !isRemoteReadOnly else { return }
         Task { await viewModel.editQueuedMessage(messageId: message.id, content: text) }
         editingId = nil
     }

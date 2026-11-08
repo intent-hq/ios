@@ -2,7 +2,8 @@ import SwiftUI
 
 extension WorkspaceDetailView {
     func resetAgentWorkspace(to workspaceId: String) {
-        viewModel.reset()
+        // A retained workspace keeps its expanded groups; only fresh stores reset.
+        if agentStore.workspaceId != workspaceId { viewModel.reset() }
         agentStore.prepareForWorkspaceChange(to: workspaceId)
     }
 

@@ -326,7 +326,8 @@ enum ComposerImageRecovery {
         imageRecovery: ComposerImageRecovery,
         messageText: inout String
     ) {
-        imagePlacementError = error.localizedDescription
+        // A drop restores the draft silently; read-only mode explains it.
+        imagePlacementError = DiagnosticErrorOwnership.alertMessage(for: error)
         if messageText.isEmpty { messageText = content }
         imageRecovery.apply(to: &pendingImages)
     }
@@ -337,7 +338,7 @@ enum ComposerImageRecovery {
         imageRecovery: ComposerImageRecovery,
         messageText: inout String
     ) {
-        filePlacementError = error.localizedDescription
+        filePlacementError = DiagnosticErrorOwnership.alertMessage(for: error)
         if messageText.isEmpty { messageText = content }
         imageRecovery.apply(to: &pendingImages)
     }

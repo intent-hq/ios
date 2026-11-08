@@ -253,7 +253,9 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock { try FileManager.default.removeItem(at: directory) }
         let app = XCUIApplication()
-        app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
+        // A stopped reconnection is the remaining blocking route to Home.
+        app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path, "--demo-connection-loss-stopped"]
+            + arguments
         app.launch()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         try Data().write(to: directory.appendingPathComponent("loss"))

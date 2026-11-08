@@ -227,6 +227,8 @@ struct RootView: View {
     var body: some View {
         @Bindable var coordinator = coordinator
         rootContent
+        // Per window, so a drop on one Mac never disables another window.
+        .environment(\.isRemoteReadOnly, coordinator.isRemoteReadOnly)
         .modifier(ConnectionSceneBackdrop())
         .animation(
             .easeInOut(duration: Constants.Root.screenAnimationDuration),
@@ -304,13 +306,10 @@ struct RootView: View {
             windowFeedbackEmitter
         }
         .background {
-            ConnectionLossPresenter(
-                isPresented: coordinator.showsConnectionLossOverlay,
-                startupState: session.connection.startupState,
-                onRetry: session.connection.retryConnection,
-                mismatches: session.connection.certMismatches,
-                networkStatus: networkAvailability.status,
-                onHome: coordinator.onReturnToSavedMachines
+            ConnectionLossLayers(
+                coordinator: coordinator,
+                connection: session.connection,
+                networkStatus: networkAvailability.status
             )
         }
         .safeAreaInset(edge: .bottom) {

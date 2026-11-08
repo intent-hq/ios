@@ -63,6 +63,7 @@ struct ProposalCardView: View {
             Button("Dismiss proposal", role: .destructive) {
                 Task { await store?.dismiss(proposal, messageId: messageId) }
             }
+            .disabledWhileReadOnly()
         } message: {
             Text("The Assistant will be told that you dismissed it.")
         }
@@ -165,6 +166,7 @@ struct ProposalCardView: View {
                 .copyContextMenuPassthrough()
         }
         .buttonStyle(IntentButtonStyle(variant: .secondary))
+        .requiresLiveConnection()
         .accessibilityIdentifier("proposal.dismiss")
         if !usesWorkspaceDesign || !dynamicTypeSize.isAccessibilitySize { Spacer() }
         if proposal.method != nil {
@@ -176,6 +178,7 @@ struct ProposalCardView: View {
             }
             .buttonStyle(IntentButtonStyle())
             .disabled(selection.isEmpty)
+            .requiresLiveConnection()
             .accessibilityIdentifier("proposal.apply")
         }
         if store.isBusy { ProgressView() }

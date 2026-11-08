@@ -52,6 +52,7 @@ struct SkillSuggestionsView: View {
                     chipLabel(Text("Retry"), selected: true)
                 }
                 .buttonStyle(IntentContentButtonStyle())
+                .disabledWhileReadOnly()
             }
         } else if completion.matches.isEmpty {
             status(completion.catalog.skills.isEmpty ? "No skills available" : "No matching skills")

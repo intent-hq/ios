@@ -20,7 +20,11 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
     }
 
     /// Startup UI tests admit the real loopback daemon's principal instead.
-    var principal: ConnectionPrincipal? { DemoMode.isEnabled && !DemoStartupConnection.isEnabled ? .demoOwner : nil }
+    /// Like production, a scripted drop clears the live principal until recovery.
+    nonisolated(unsafe) static var isDropped = false
+    var principal: ConnectionPrincipal? {
+        DemoMode.isEnabled && !DemoStartupConnection.isEnabled && !Self.isDropped ? .demoOwner : nil
+    }
 
     var capabilities: ConnectionCapabilities {
         guard scriptMonitors?.supportsMonitors == true else { return .unknown }

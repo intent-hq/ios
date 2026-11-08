@@ -29,6 +29,7 @@ struct WorkspaceChangesView: View {
                     Text(error).interFont(Constants.Typography.bodyS).foregroundStyle(secondary)
                     Button("Retry") { Task { await store.refresh(workspaceId: workspaceId) } }
                         .buttonStyle(IntentButtonStyle(variant: .secondary))
+                        .disabledWhileReadOnly()
                 }
             }
             if store.isLoading, !store.hasLoaded {
@@ -51,6 +52,9 @@ struct WorkspaceChangesView: View {
         .padding(.bottom, WorkspaceDetailStyle.pageInset)
         .task(id: workspaceId) {
             await store.startObserving(workspaceId: workspaceId)
+        }
+        .onReconnect {
+            if store.errorMessage != nil { Task { await store.refresh(workspaceId: workspaceId) } }
         }
         .onDisappear {
             store.stopObserving(preservingSnapshot: coordinator.workspaceChange?.workspaceId == workspaceId)

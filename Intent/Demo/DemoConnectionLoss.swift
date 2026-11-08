@@ -30,7 +30,8 @@ enum DemoConnectionLoss {
         guard let scenario = backgroundScenario else { return }
         if phase == .background, !backgroundLossStarted {
             backgroundLossStarted = true
-            if scenario != "activation-quick" { connection.connectionState = .disconnected }
+            // A real background drop keeps reconnecting; it never stops by itself.
+            if scenario != "activation-quick" { connection.connectionState = .reconnecting(attempt: 1) }
             record("did-background")
         } else if phase == .active, backgroundLossStarted {
             if scenario == "activation-quick" { connection.connectionState = .reconnecting(attempt: 1) }
@@ -66,6 +67,16 @@ enum DemoConnectionLoss {
         return initialDataGate
     }
 
+    /// With `--demo-connection-loss-hold-conversations`, conversation and note loads that
+    /// start after the drop wait for the `conversation-data` trigger, so content
+    /// never viewed before the drop stays unloaded until the test says so.
+    static func conversationLoadGate(for method: String) -> DemoFixtures.ResponseGate? {
+        guard let directory, ["agent.get", "chat.subscribe", "note.list", "note.get"].contains(method),
+              LaunchOptions.current.contains("--demo-connection-loss-hold-conversations"),
+              FileManager.default.fileExists(atPath: directory.appendingPathComponent("loss").path) else { return nil }
+        return .triggerFile(directory.appendingPathComponent("conversation-data"))
+    }
+
     static func seedSavedMachineIfNeeded() {
         guard directory != nil else { return }
         let connection = PersistenceManager.shared.upsertConnection(StoredConnection(
@@ -96,6 +107,14 @@ enum DemoConnectionLoss {
                let connection = connection as? ConnectionManager {
                 connection.certMismatches = [HostCertMismatch(host: "demo.invalid", fingerprint: "00:11")]
             }
+            if LaunchOptions.current.contains("--demo-connection-loss-stopped"),
+               let connection = connection as? ConnectionManager {
+                connection.reconnectStopReason = ConnectionPrincipal.AdmissionError.personChanged.localizedDescription
+            }
+            if let manager = connection as? ConnectionManager {
+                manager.lastConnectedPrincipal = manager.currentPrincipal
+            }
+            DemoConnectionTransport.isDropped = true
             connection.connectionState = LaunchOptions.current.contains("--demo-connection-loss-reconnecting")
                 ? .reconnecting(attempt: 1) : .disconnected
             if LaunchOptions.current.contains("--demo-connection-loss-startup-failure") {
@@ -107,6 +126,7 @@ enum DemoConnectionLoss {
             }
             try await DemoFixtures.wait(for: .triggerFile(directory.appendingPathComponent("recover")))
             try Task.checkCancellation()
+            DemoConnectionTransport.isDropped = false
             connection.connectionState = .connected
         } catch {
             // Root teardown cancels the scenario; it must not revive Home.

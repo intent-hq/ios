@@ -34,7 +34,7 @@ extension AppCoordinatorTests {
         let fixture = await backgroundRecoveryFixture()
         let coordinator = fixture.coordinator
         coordinator.onScenePhaseBackground()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         #expect(coordinator.isDisconnected, "Presentation grace must not pretend the transport recovered")
         #expect(!coordinator.showsConnectionLossOverlay)
@@ -58,7 +58,7 @@ extension AppCoordinatorTests {
         let fixture = await backgroundRecoveryFixture()
         let coordinator = fixture.coordinator
         coordinator.onScenePhaseBackground()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         let returnTime = fixture.clock.now
         coordinator.onScenePhaseActive()
@@ -68,11 +68,13 @@ extension AppCoordinatorTests {
         fixture.connection.connectionState = .reconnecting(attempt: 2)
         coordinator.onScenePhaseActive() // Duplicate active must not extend the deadline.
         await Self.drainBackgroundEvents()
-        #expect(!coordinator.showsConnectionLossOverlay)
+        #expect(!coordinator.showsReadOnlyBanner)
+        #expect(coordinator.isRemoteReadOnly, "Change controls stay off during the grace")
         #expect(fixture.clock.deadlines.count == 1)
         fixture.clock.advance(by: .milliseconds(1))
         await Self.drainBackgroundEvents()
-        #expect(coordinator.showsConnectionLossOverlay)
+        #expect(coordinator.showsReadOnlyBanner, "A drop that keeps reconnecting is read-only, not blocking")
+        #expect(!coordinator.showsConnectionLossOverlay)
         #expect(fixture.connection.connectionState == .reconnecting(attempt: 2))
     }
 
@@ -81,9 +83,9 @@ extension AppCoordinatorTests {
             let fixture = await backgroundRecoveryFixture()
             let coordinator = fixture.coordinator
             coordinator.onScenePhaseBackground()
-            if lossBeforeActivation { fixture.connection.simulateDisconnect() }
+            if lossBeforeActivation { fixture.connection.simulateStoppedReconnection() }
             coordinator.onScenePhaseActive()
-            if !lossBeforeActivation { fixture.connection.simulateDisconnect() }
+            if !lossBeforeActivation { fixture.connection.simulateStoppedReconnection() }
             await Self.drainBackgroundEvents()
             #expect(coordinator.isDisconnected)
             #expect(!coordinator.showsConnectionLossOverlay)
@@ -99,13 +101,13 @@ extension AppCoordinatorTests {
         let fixture = await backgroundRecoveryFixture()
         let coordinator = fixture.coordinator
         coordinator.onScenePhaseBackground()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
         #expect(!coordinator.isDisconnected)
         coordinator.onScenePhaseActive()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         #expect(!coordinator.showsConnectionLossOverlay)
         fixture.clock.advance(by: .seconds(1))
@@ -120,7 +122,7 @@ extension AppCoordinatorTests {
         await Self.drainBackgroundEvents()
         fixture.clock.advance(by: .seconds(1))
         await Self.drainBackgroundEvents()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         #expect(fixture.coordinator.showsConnectionLossOverlay)
     }
@@ -132,7 +134,7 @@ extension AppCoordinatorTests {
         fixture.clock.advance(by: .seconds(1))
         await Self.drainBackgroundEvents()
         // Both deliveries are queued; the loss is obsolete before it is read.
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
         #expect(!fixture.coordinator.isDisconnected)
@@ -143,7 +145,7 @@ extension AppCoordinatorTests {
         let fixture = await backgroundRecoveryFixture()
         let coordinator = fixture.coordinator
         coordinator.onScenePhaseBackground()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         fixture.store.isLoading = true
         fixture.store.lastUpdated = nil
@@ -151,10 +153,11 @@ extension AppCoordinatorTests {
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
         #expect(coordinator.isDisconnected)
-        #expect(!coordinator.showsConnectionLossOverlay)
+        #expect(!coordinator.showsReadOnlyBanner)
         fixture.clock.advance(by: .seconds(1))
         await Self.drainBackgroundEvents()
-        #expect(coordinator.showsConnectionLossOverlay, "The existing data-readiness rule still applies")
+        #expect(coordinator.showsReadOnlyBanner, "The existing data-readiness rule still applies")
+        #expect(!coordinator.showsConnectionLossOverlay)
         fixture.store.publishFetchedWorkspaces([])
         fixture.store.isLoading = false
         await Self.drainBackgroundEvents()
@@ -166,7 +169,7 @@ extension AppCoordinatorTests {
         let coordinator = fixture.coordinator
         coordinator.onScenePhaseNotActive()
         coordinator.onScenePhaseActive()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         #expect(coordinator.showsConnectionLossOverlay)
         coordinator.onScenePhaseBackground()
@@ -183,7 +186,7 @@ extension AppCoordinatorTests {
         let fixture = await backgroundRecoveryFixture()
         let coordinator = fixture.coordinator
         coordinator.onScenePhaseBackground()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         coordinator.onScenePhaseActive()
         await Self.drainBackgroundEvents()
         fixture.store.lastUpdated = nil
@@ -193,7 +196,7 @@ extension AppCoordinatorTests {
         // Queue data completion ahead of a new loss delivery. The current
         // transport state must win even when the old observation runs first.
         fixture.store.isLoading = false
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         #expect(coordinator.isDisconnected)
         #expect(!coordinator.showsConnectionLossOverlay)
@@ -219,7 +222,7 @@ extension AppCoordinatorTests {
         let fixture = await backgroundRecoveryFixture()
         let coordinator = fixture.coordinator
         coordinator.onScenePhaseBackground()
-        fixture.connection.simulateDisconnect()
+        fixture.connection.simulateStoppedReconnection()
         coordinator.onScenePhaseActive()
         await Self.drainBackgroundEvents()
         fixture.clock.advance(by: .milliseconds(500))
@@ -243,7 +246,7 @@ extension AppCoordinatorTests {
             let fixture = await backgroundRecoveryFixture()
             let coordinator = fixture.coordinator
             coordinator.onScenePhaseBackground()
-            fixture.connection.simulateDisconnect()
+            fixture.connection.simulateStoppedReconnection()
             coordinator.onScenePhaseActive()
             await Self.drainBackgroundEvents()
             switch action {

@@ -8,6 +8,7 @@ extension RootView {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
                     session: session,
+                    storesCache: coordinator.workspaceDetailStores,
                     isSidebarVisible: usesVerticalBar
                 )
                     .pullRequestLinkRouting()

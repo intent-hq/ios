@@ -107,7 +107,7 @@ struct IPadWorkspaceDetailView: View {
                     .intentToolbarSurface()
                 }
         case let .workspaceDetail(workspaceId):
-            WorkspaceDetailView(workspaceId: workspaceId, session: session)
+            WorkspaceDetailView(workspaceId: workspaceId, session: session, storesCache: coordinator.workspaceDetailStores)
                 .transition(pageTransition(isOverview: true))
         default:
             WorkspaceDetailPlaceholder()

@@ -7,7 +7,7 @@ extension RootView {
             WorkspaceListView(workspaceStore: session.workspaceStore)
                 .navigationDestination(isPresented: $showingWorkspaceDetail) {
                     if let workspaceId = coordinator.selectedWorkspaceId {
-                        WorkspaceDetailView(workspaceId: workspaceId, session: session)
+                        WorkspaceDetailView(workspaceId: workspaceId, session: session, storesCache: coordinator.workspaceDetailStores)
                             .pullRequestLinkRouting()
                             .modifier(WorkspaceActionLauncherToolbar())
                             #if os(iOS)

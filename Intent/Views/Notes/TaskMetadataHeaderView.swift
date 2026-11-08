@@ -136,6 +136,7 @@ struct TaskMetadataHeaderView: View {
             .frame(minHeight: Constants.Accessibility.minimumTapTarget)
         }
         .buttonStyle(IntentContentButtonStyle())
+        .requiresLiveConnection()
         .accessibilityLabel("Change task status")
         .accessibilityValue((note.taskDisplayStatus ?? .unknown).label)
     }

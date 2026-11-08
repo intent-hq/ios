@@ -15,6 +15,7 @@ struct SpecialistPickerView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
 
     @State private var navigationPath: [Route] = []
     @State private var catalogConsumer = UUID()
@@ -163,7 +164,7 @@ struct SpecialistPickerView: View {
             selectedModel: $selectedModel,
             selectedSpecialist: selectedSpecialist,
             isCreating: isCreating,
-            isCreateDisabled: isCreating || !canSubmitSelection,
+            isCreateDisabled: isCreating || !canSubmitSelection || isRemoteReadOnly,
             colorScheme: colorScheme,
             onRetryProviders: { Task { await loadProviderOptions() } },
             onCreate: createSelectedAgent
@@ -273,7 +274,7 @@ struct SpecialistPickerView: View {
     }
 
     private func createAgentWithSpecialist(_ specialist: SpecialistInfo) {
-        guard !isCreating, canSubmitSelection else { return }
+        guard !isCreating, canSubmitSelection, !isRemoteReadOnly else { return }
         isCreating = true
 
         Task { @MainActor in

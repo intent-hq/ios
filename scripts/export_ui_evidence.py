@@ -343,6 +343,28 @@ CAPTURES = {
         ),
     },
     "ConnectionLossUITests": {
+        "testBannerKeepsRecentScreensReadableWhileReconnecting": tuple(
+            f"connection-loss-banner-{screen}"
+            for screen in ("list", "conversation", "workspace", "note", "assistant")
+        ),
+        "testBannerExpandsWithGuidanceAndBackToHome": tuple(
+            f"connection-loss-banner-{state}-{appearance}"
+            for state in ("collapsed", "expanded")
+            for appearance in ("light", "dark")
+        ),
+        "testIPadControlInventoryDuringDrop": ("connection-loss-ipad-read-only-assistant",),
+        "testControlInventoryDuringDrop": (
+            "connection-loss-read-only-send-hint", "connection-loss-read-only-agent-menu",
+            "connection-loss-read-only-workspace-menu", "connection-loss-read-only-settings",
+        ),
+        "testCoversAndSheetsStayBelowTheBannerDuringDrop": ("connection-loss-read-only-cover-close", "connection-loss-read-only-sheet-close"),
+        "testNeverViewedConversationShowsPlaceholderAndLoadsAfterRecovery": ("connection-loss-read-only-placeholder-conversation",),
+        "testNeverLoadedNotesTabShowsPlaceholderAndLoadsAfterRecovery": ("connection-loss-read-only-placeholder-notes",),
+        "testRecentlyViewedItemsReopenFromMemoryDuringDrop": ("connection-loss-read-only-from-memory-conversation",),
+        "testStoppedReconnectionBlocksWithReasonAndHomeWorks": ("connection-loss-stopped-reconnection",),
+        "testSheetOpenDuringDropStaysUsableUnderTheBanner": (
+            "connection-loss-sheet-offline-banner", "connection-loss-sheet-offline-banner-expanded",
+        ),
         "testDemoRelaunchAfterReturningHomeStartsAtWorkspaces": (
             "connection-loss-demo-home-before-relaunch", "connection-loss-demo-workspaces-after-relaunch",
         ),

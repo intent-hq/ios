@@ -16,6 +16,7 @@ struct NoteListView: View {
                 Text("Loading notes...").interFont(Constants.Typography.bodyS)
             }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .availableWhenReconnected(isMissing: true, isCompact: isEmbedded)
                 .frame(maxWidth: .infinity, minHeight: isEmbedded ? 0 : Constants.WorkspaceList.emptyStateHeight)
         } else if noteStore.sortedNotes.isEmpty {
             if isEmbedded {
