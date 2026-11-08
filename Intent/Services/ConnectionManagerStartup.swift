@@ -114,7 +114,8 @@ extension ConnectionManager {
     func setStartupSuspended(_ suspended: Bool) {
         startupSuspended = suspended
         if suspended {
-            guard startupState != nil else { return }
+            // A failure has no admission left to resume; keep it so Retry stays.
+            guard startupState != nil, startupState != .failed else { return }
             startupState = .unavailable
             let candidate = startupCandidate
             Task { await candidate?.disconnect() }

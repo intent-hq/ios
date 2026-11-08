@@ -110,6 +110,28 @@ extension ConnectionManagerTests {
         #expect(manager.connectionState == .connected)
     }
 
+    @Test @MainActor func startupFailureSurvivesBackgroundingAndRetryAdmitsFreshly() async throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
+        let server = try await LoopbackWebSocketServer.start()
+        let manager = ConnectionManager(persistence: .ephemeral())
+        defer { manager.disconnect(); server.stop() }
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "owner")
+        try server.setStartup(Self.startupSnapshot(phase: "failed"))
+        server.dropConnections()
+        try await waitUntil("reconnect reports failure", timeout: .seconds(10)) { manager.startupState == .failed }
+        manager.setStartupSuspended(true)
+        #expect(manager.startupState == .failed)
+        manager.setStartupSuspended(false)
+        #expect(manager.startupState == .failed)
+        let accepted = server.acceptedCount
+        server.clearStartup()
+        manager.retryConnection()
+        try await waitUntil("retry reconnects", timeout: .seconds(10)) { manager.connectionState == .connected }
+        #expect(manager.startupState == nil)
+        #expect(server.acceptedCount == accepted + 1)
+    }
+
     @Test @MainActor func startupLateReplyCannotReplaceDifferentBackendOrReviveDisconnect() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
