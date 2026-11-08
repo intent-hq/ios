@@ -20,6 +20,7 @@ nonisolated final class SettingsUITests: XCTestCase {
             for choice in ["Light", "Dark", "System"] {
                 XCTAssertFalse(settings.buttons[choice].exists, "Theme controls belong only in the Home menu")
             }
+            XCTAssertTrue(settings.switches["settings.liveActivities"].exists)
             capture(app, named: "Settings-" + appearance)
             assertScrollingLogOffAndRevealActions(app)
             capture(app, named: "Settings-" + appearance + "-Actions")
@@ -58,6 +59,21 @@ nonisolated final class SettingsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         openConnections(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
+    }
+
+    @MainActor
+    func testLiveActivitiesToggleSwitchesOffAndOn() {
+        let app = launch()
+        openSettings(app)
+        let toggle = app.scrollViews["settings.scroll"].switches["settings.liveActivities"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(toggle.value as? String, "1")
+        let control = toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
+        control.tap()
+        XCTAssertEqual(toggle.value as? String, "0")
+        capture(app, named: "Settings-LiveActivities-Off")
+        control.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
     }
 
     @MainActor
