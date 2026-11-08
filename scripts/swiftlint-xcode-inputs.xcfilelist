@@ -59,7 +59,6 @@ $(SRCROOT)/Intent/Demo/DemoScriptMonitorFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoSettings.swift
 $(SRCROOT)/Intent/Demo/DemoStartupConnection.swift
 $(SRCROOT)/Intent/Demo/DemoTerminalFixtures.swift
-$(SRCROOT)/Intent/Demo/DemoToastSandbox.swift
 $(SRCROOT)/Intent/Demo/DemoWorkspaceActionFixtures.swift
 $(SRCROOT)/Intent/DesignSystem/AgentAvatarDesign.swift
 $(SRCROOT)/Intent/DesignSystem/Colors.swift
@@ -396,7 +395,7 @@ $(SRCROOT)/Intent/Views/Components/PaneSwipeGesture.swift
 $(SRCROOT)/Intent/Views/Components/RepoOwnerAvatarView.swift
 $(SRCROOT)/Intent/Views/Components/TaskProgressRingView.swift
 $(SRCROOT)/Intent/Views/Components/TaskStatusIconView.swift
-$(SRCROOT)/Intent/Views/Components/ToastSurface.swift
+$(SRCROOT)/Intent/Views/Components/ToastBackground.swift
 $(SRCROOT)/Intent/Views/Components/ToastView.swift
 $(SRCROOT)/Intent/Views/Components/WindowFeedbackSoundEmitter.swift
 $(SRCROOT)/Intent/Views/Connection/AvailableWhenReconnectedView.swift

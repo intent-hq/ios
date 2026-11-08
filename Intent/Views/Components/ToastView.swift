@@ -4,7 +4,6 @@ struct ToastView: View {
     let toast: ToastInfo
     var onTap: () -> Void
     var onDismiss: () -> Void
-    var surface: ToastSurface = .material
 
     @State private var dragOffset: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -31,13 +30,12 @@ struct ToastView: View {
 
                 Spacer(minLength: 0)
             }
-            .padding(.leading, surface == .glassCapsule ? Constants.Toast.capsuleLeadingPadding : Constants.Toast.horizontalPadding)
-            .padding(.trailing, Constants.Toast.horizontalPadding)
-            .padding(.vertical, surface == .glassCapsule ? Constants.Toast.capsuleVerticalPadding : Constants.Toast.verticalPadding)
+            .padding(.horizontal, Constants.Toast.horizontalPadding)
+            .padding(.vertical, Constants.Toast.verticalPadding)
             .contentShape(Rectangle())
         }
-        .buttonStyle(ToastButtonStyle(dimsOnPress: !surface.usesGlass))
-        .toastSurface(surface)
+        .buttonStyle(ToastButtonStyle(dimsOnPress: colorScheme == .dark))
+        .toastBackground()
         .frame(maxWidth: Constants.Toast.maximumWidth)
         .padding(.horizontal, Constants.Toast.outerHorizontalPadding)
         .offset(y: min(dragOffset, 0)) // Only allow upward drag
@@ -67,7 +65,7 @@ struct ToastView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
-    /// Light material washes out the lime outline, so light mode uses the completed-task fill.
+    /// Light glass washes out the lime outline, so light mode uses the completed-task fill.
     @ViewBuilder private var completionIcon: some View {
         if colorScheme == .light {
             Circle()

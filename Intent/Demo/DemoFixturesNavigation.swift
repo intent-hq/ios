@@ -32,9 +32,7 @@ struct DemoToastOverlay: ViewModifier {
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .top) {
-            if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-toast-sandbox") {
-                DemoToastSandbox(toast: toast)
-            } else if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-toast") {
+            if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-toast") {
                 ToastView(toast: toast, onTap: {}, onDismiss: {})
                     .padding(.top, Constants.Root.toastTopPadding)
             }
