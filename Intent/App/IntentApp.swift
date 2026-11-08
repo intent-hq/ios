@@ -18,10 +18,16 @@ struct IntentApp: App {
         // session; transient pairing sessions carry no backend to observe).
         BackendSessionRegistry.shared.onSessionCreated = { session in
             NotificationManager.shared.attachSessionObserver(for: session)
+            #if os(iOS)
+            AgentLiveActivityController.shared.attach(session)
+            #endif
         }
         BackendSessionRegistry.shared.onSessionTeardown = { session in
             if let backendID = session.backendID {
                 NotificationManager.shared.detachSessionObserver(for: backendID)
+                #if os(iOS)
+                AgentLiveActivityController.shared.detach(backendID)
+                #endif
             }
         }
     }
@@ -124,7 +130,16 @@ struct SessionWindowRoot: View {
                 coordinator.returnWindowToSavedMachines = returnToSavedMachines
             }
             .onOpenURL { url in
-                coordinator.handleIncomingURL(url)
+                if let link = AgentActivityLink(url: url) {
+                    NotificationManager.shared.routeAgentSelection(
+                        agentId: link.agentId,
+                        workspaceId: link.workspaceId,
+                        agentName: link.agentName,
+                        connectionId: link.connectionId
+                    )
+                } else {
+                    coordinator.handleIncomingURL(url)
+                }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
