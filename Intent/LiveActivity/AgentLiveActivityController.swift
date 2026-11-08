@@ -16,7 +16,7 @@ final class AgentLiveActivityController {
 
     private var stores: [BackendID: WorkspaceStore] = [:]
     private var tracker = AgentActivityTracker()
-    private var activity: Activity<AgentActivityAttributes>?
+    private var activityID: String?
     private var publishTask: Task<Void, Never>?
     /// Running workspaces when the user dismissed the activity; a new one
     /// starts only when another workspace begins running.
@@ -25,9 +25,10 @@ final class AgentLiveActivityController {
 
     private init() {
         let existing = Activity<AgentActivityAttributes>.activities
-        activity = existing.first
-        for stale in existing.dropFirst() {
-            Task { await stale.end(nil, dismissalPolicy: .immediate) }
+        activityID = existing.first?.id
+        for extra in existing.dropFirst() {
+            let id = extra.id
+            Task { await Self.end(id: id, content: nil, policy: .immediate) }
         }
         activeObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
@@ -81,27 +82,48 @@ final class AgentLiveActivityController {
         let state = tracker.content(for: entries, now: .now)
         let content = ActivityContent(state: state, staleDate: .now.addingTimeInterval(Self.staleAfter))
 
-        if let activity, activity.activityState == .dismissed {
+        let activityState = activityID.flatMap(Self.state(id:))
+        if activityState == .dismissed {
             dismissedRunningKeys = tracker.runningKeys
-            self.activity = nil
         }
-
-        guard let activity, [.active, .stale].contains(activity.activityState) else {
-            self.activity = nil
+        guard let id = activityID, activityState == .active || activityState == .stale else {
+            activityID = nil
             start(content)
             return
         }
         if state.runningCount == 0 && state.needsYouCount == 0 {
             guard isSettled else { return }
-            self.activity = nil
+            activityID = nil
             tracker.reset()
             let policy: ActivityUIDismissalPolicy = state.rows.isEmpty
                 ? .immediate
                 : .after(.now.addingTimeInterval(AgentActivityTracker.settledRetention))
-            await activity.end(content, dismissalPolicy: policy)
+            await Self.end(id: id, content: content, policy: policy)
             return
         }
-        await activity.update(content)
+        await Self.update(id: id, content: content)
+    }
+
+    // Activities are not Sendable: each helper looks one up and uses it
+    // without leaving its own isolation domain.
+    private nonisolated static func state(id: String) -> ActivityState? {
+        Activity<AgentActivityAttributes>.activities.first { $0.id == id }?.activityState
+    }
+
+    private nonisolated static func update(
+        id: String,
+        content: ActivityContent<AgentActivityAttributes.ContentState>
+    ) async {
+        await Activity<AgentActivityAttributes>.activities.first { $0.id == id }?.update(content)
+    }
+
+    private nonisolated static func end(
+        id: String,
+        content: ActivityContent<AgentActivityAttributes.ContentState>?,
+        policy: ActivityUIDismissalPolicy
+    ) async {
+        await Activity<AgentActivityAttributes>.activities.first { $0.id == id }?
+            .end(content, dismissalPolicy: policy)
     }
 
     private func start(_ content: ActivityContent<AgentActivityAttributes.ContentState>) {
@@ -112,7 +134,7 @@ final class AgentLiveActivityController {
               ActivityAuthorizationInfo().areActivitiesEnabled
         else { return }
         do {
-            activity = try Activity.request(attributes: AgentActivityAttributes(), content: content)
+            activityID = try Activity.request(attributes: AgentActivityAttributes(), content: content).id
             dismissedRunningKeys = []
         } catch {
             AppLog.notifications.warning("[AgentLiveActivity] Could not start: \(error)")
