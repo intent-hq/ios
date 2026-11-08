@@ -4,6 +4,7 @@ struct ToastView: View {
     let toast: ToastInfo
     var onTap: () -> Void
     var onDismiss: () -> Void
+    var surface: ToastSurface = .material
 
     @State private var dragOffset: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -28,25 +29,15 @@ struct ToastView: View {
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
 
-                Spacer()
-
-                Text("Done")
-                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, Constants.Toast.horizontalPadding)
-            .padding(.vertical, Constants.Toast.verticalPadding)
+            .padding(.leading, surface == .glassCapsule ? Constants.Toast.capsuleLeadingPadding : Constants.Toast.horizontalPadding)
+            .padding(.trailing, Constants.Toast.horizontalPadding)
+            .padding(.vertical, surface == .glassCapsule ? Constants.Toast.capsuleVerticalPadding : Constants.Toast.verticalPadding)
             .contentShape(Rectangle())
         }
-        .buttonStyle(IntentContentButtonStyle())
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
-        .shadow(
-            color: .black.opacity(Constants.Toast.shadowOpacity),
-            radius: Constants.Toast.shadowRadius,
-            x: 0,
-            y: Constants.Toast.shadowYOffset
-        )
+        .buttonStyle(ToastButtonStyle(dimsOnPress: !surface.usesGlass))
+        .toastSurface(surface)
         .frame(maxWidth: Constants.Toast.maximumWidth)
         .padding(.horizontal, Constants.Toast.outerHorizontalPadding)
         .offset(y: min(dragOffset, 0)) // Only allow upward drag

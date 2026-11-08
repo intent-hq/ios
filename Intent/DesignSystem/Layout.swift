@@ -449,6 +449,16 @@ extension Constants.Toast {
     static let shadowOpacity: Double = 0.15
     static let shadowRadius: CGFloat = 12
     static let shadowYOffset: CGFloat = 4
+    /// Matches the system notification banner platter.
+    static let nativeCornerRadius: CGFloat = 24
+    static let edgeOpacity: Double = 0.08
+    static let liftShadowOpacity: Double = 0.18
+    static let liftShadowRadius: CGFloat = 24
+    static let liftShadowYOffset: CGFloat = 10
+    /// Background tint that keeps text behind the glass from competing with the banner.
+    static let frostOpacity: Double = 0.6
+    static let capsuleLeadingPadding: CGFloat = 12
+    static let capsuleVerticalPadding: CGFloat = 10
     static let outerHorizontalPadding: CGFloat = 12
     /// Wide windows keep the toast to the conversation's readable width instead of the full screen.
     static let maximumWidth = Constants.Conversation.Design.IPad.readableWidth
