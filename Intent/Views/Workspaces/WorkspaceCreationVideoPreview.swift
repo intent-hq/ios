@@ -17,8 +17,12 @@ struct WorkspaceCreationVideoPreview: View {
                 } else {
                     Rectangle().fill(.secondary.opacity(placeholderOpacity))
                 }
-                Image(systemName: "play.circle.fill")
-                    .foregroundStyle(.white, .black.opacity(playBackgroundOpacity))
+                Image(.play)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: removeIconSize, height: removeIconSize)
+                    .foregroundStyle(.white)
+                    .background(.black.opacity(playBackgroundOpacity), in: Circle())
             }
             .frame(width: previewSide, height: previewSide)
             .clipShape(.rect(cornerRadius: CreateWorkspaceFormStyle.rowSpacing))

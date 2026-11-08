@@ -231,7 +231,7 @@ struct IntentFileVideoTests {
         #expect(poster.height == 480)
     }
 
-    private func forbiddenFallback() async -> AnyAttachment {
+    private func forbiddenFallback() -> AnyAttachment {
         Issue.record("Workspace video must not reach the network fallback")
         return AnyAttachment(IntentFileFailureAttachment(altText: "unexpected fallback"))
     }

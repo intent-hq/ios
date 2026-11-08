@@ -18,7 +18,7 @@ struct ProviderModelStepView: View {
 
     var body: some View {
         ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
+            WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
             providerContent
             creatingOverlay
         }
@@ -38,6 +38,7 @@ struct ProviderModelStepView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Create", action: onCreate)
                     .buttonStyle(IntentButtonStyle())
+                    .fixedSize(horizontal: true, vertical: false)
                     .disabled(isCreateDisabled)
             }
             .intentToolbarSurface()

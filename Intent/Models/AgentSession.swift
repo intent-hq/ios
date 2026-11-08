@@ -297,10 +297,10 @@ enum AgentAttentionKind: Equatable {
         }
     }
 
-    var systemImage: String {
+    var iconName: String {
         switch self {
-        case .discussion: return "bubble.left.and.bubble.right.fill"
-        case .blocker: return "exclamationmark.octagon.fill"
+        case .discussion: return "Message"
+        case .blocker: return "AttentionCircleFill"
         }
     }
 }

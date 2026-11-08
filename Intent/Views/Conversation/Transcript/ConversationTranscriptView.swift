@@ -12,11 +12,15 @@ struct ConversationTranscriptView: View {
     let scrollState: ConversationTranscriptScrollState
     let onNavigateToNote: (String, String, String) -> Void
     let onNavigateToAgent: (String, String, String) -> Void
+    /// Room kept below the last row for a floating Intent launcher (visionOS
+    /// floating composer only; 0 elsewhere, leaving iPhone/iPad unchanged).
+    var bottomClearance: CGFloat = 0
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.workspaceTranscriptDesign) var usesWorkspaceDesign
     @Environment(\.conversationPresentation) var presentation
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @ScaledMetric(relativeTo: .caption) var actionIconSide: CGFloat = 12
 
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
@@ -185,6 +189,7 @@ private extension ConversationTranscriptView {
         .defaultScrollAnchor(.bottom)
         .coordinateSpace(name: Self.viewportCoordinateSpace)
         .scrollIndicators(.hidden)
+        .modifier(ConversationScrollEdgeEffect())
         .scrollBounceBehavior(.always)
         .accessibilityIdentifier("transcript.scrollView")
         .demoAccessibilityValue(transcriptDemoReport)
@@ -200,11 +205,13 @@ private extension ConversationTranscriptView {
             scrollState.isNearHistoryTop = isNearTop
             loadOlderMessagesIfNeeded(proxy: proxy)
         }
+        #if DEBUG
         .demoEndDerealization(
             triggerFile: DemoFixtures.configuredEndDerealizationTriggerFile,
             onTrigger: withdrawEndRowForDemo,
             onGeometryChange: restoreDerealizedEndIfMoved
         )
+        #endif
         .onChange(of: dynamicTypeSize) { _, _ in
             scrollState.rowHeightCache.invalidateAll()
         }

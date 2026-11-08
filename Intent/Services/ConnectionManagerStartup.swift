@@ -5,7 +5,7 @@ import UIKit
 extension ConnectionManager {
     struct AdmittedHostRace {
         let winner: RacedConnection
-        let principal: ConnectionPrincipal
+        let handshake: ConnectionHandshake
         let drain: Task<[HostCertMismatch], Never>?
     }
 
@@ -39,12 +39,12 @@ extension ConnectionManager {
                 do {
                     try checkStartupAttempt(attemptID, generation: generation)
                     startupCandidate = winner
-                    let principal = try await admit(winner, token: token, fingerprint: fingerprint)
+                    let handshake = try await admit(winner, token: token, fingerprint: fingerprint)
                     try checkStartupAttempt(attemptID, generation: generation)
                     guard reconnectCredentialsRevision == credentialsRevision else { throw CancellationError() }
                     startupCandidate = nil
                     startupState = nil
-                    return AdmittedHostRace(winner: winner, principal: principal, drain: raced.drain)
+                    return AdmittedHostRace(winner: winner, handshake: handshake, drain: raced.drain)
                 } catch {
                     recordLateCertMismatches(from: raced.drain, generation: generation)
                     await winner.disconnect()

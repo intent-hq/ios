@@ -1,12 +1,7 @@
 import XCTest
 
-/// Guards the "Go to End" affordance of the conversation transcript against
-/// `--demo-data` fixtures: hidden while resting at the bottom, shown once the
-/// user scrolls up, hidden again after tapping it or scrolling back down,
-/// still hidden — with the last message still on screen — when a footer row
-/// (the background-hooks chip row) appears under the settled transcript,
-/// still hidden after tapping a suggested prompt under the last message,
-/// hidden on every one of several consecutive entries into the conversation,
+/// Guards "Go to End" visibility in demo transcripts across scrolling, tapping,
+/// footer hooks, suggested prompts, and repeated conversation entry;
 /// hidden — with the last message on screen, no blank band, and the prompt
 /// rows under it on screen — once a cold entry has settled
 /// (intent-hq/ios#304), hidden when the hooks row lands after a cold entry or
@@ -289,14 +284,16 @@ extension ConversationTranscriptScrollUITests {
     @MainActor
     func testReadyMetadataPositionsLongUnreadEntryAtTheAuthoritativeDivider() throws {
         let app = try launchStartupConversation(metadataReady: true, holdSnapshot: true)
-        defer { finishStartup(app) }
+        addTeardownBlock { @MainActor [self] () async in finishStartup(app) }
         let opened = enterLongConversation(in: app, context: "ready metadata", waitForTranscript: false)
         XCTAssertTrue(startupControl(app).waitForExistence(timeout: Fixture.settleTimeout))
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { self.startupReport(app).contains("metadata=ready") })
         XCTAssertFalse(opened.transcript.exists, "the chat snapshot is still held")
         try Data().write(to: startupSnapshotGate)
         let divider = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch
-        defer { attachStartupViewport(app, opened: opened, report: startupReport(app), row: divider, context: "ready entry divider") }
+        addTeardownBlock { @MainActor [self] () async in
+            attachStartupViewport(app, opened: opened, report: startupReport(app), row: divider, context: "ready entry divider")
+        }
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
             guard self.startupReport(app).contains("positioned=true"), let rect = frame(of: divider) else { return false }
             return isInside(rect, opened.transcript)
@@ -340,7 +337,7 @@ extension ConversationTranscriptScrollUITests {
     @MainActor
     func testRetainedConversationReappearsWithoutRepeatingEntryPositioning() throws {
         let app = try launchStartupConversation()
-        defer { finishStartup(app) }
+        addTeardownBlock { @MainActor [self] () async in finishStartup(app) }
         let opened = enterLongConversation(in: app, context: "retained binding")
         let last = message(in: app, containing: "Startup row 49.")
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { isInside(last, opened.transcript) })
@@ -353,7 +350,9 @@ extension ConversationTranscriptScrollUITests {
         })
         try FileManager.default.removeItem(at: startupMetadataGate)
         attachStartupViewport(app, opened: opened, report: startupReport(app), row: row, context: "before retained cover")
-        defer { attachStartupViewport(app, opened: opened, report: startupReport(app), row: row, context: "after retained return") }
+        addTeardownBlock { @MainActor [self] () async in
+            attachStartupViewport(app, opened: opened, report: startupReport(app), row: row, context: "after retained return")
+        }
         startupControl(app).tap()
         let back = app.buttons["demo.conversation.return"].firstMatch
         XCTAssertTrue(back.waitForExistence(timeout: Fixture.settleTimeout))

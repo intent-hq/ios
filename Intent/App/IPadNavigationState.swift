@@ -3,12 +3,14 @@ import Foundation
 enum IPadSidebarSection: String, CaseIterable {
     case assistant
     case connections
+    case pullRequests
     case settings
     case workspaces
 }
 
 enum IPadDetailSelection: Equatable {
     case assistant
+    case pullRequest
     case workspace
 }
 
@@ -17,8 +19,16 @@ enum IPadPairingMode: Equatable {
     case qrCode
 }
 
+/// Explicit input presentation; keyboard notifications never change this state.
+enum IPadFocusPresentation: Equatable {
+    case conversationEditing
+    case normal
+    case workspaceSearch
+}
+
 /// Window-owned presentation state, independent of the backend and workspace route.
 struct IPadNavigationState: Equatable {
+    private(set) var focusPresentation: IPadFocusPresentation = .normal
     private(set) var section: IPadSidebarSection = .workspaces
     private(set) var detail: IPadDetailSelection = .workspace
     private(set) var pairing: IPadPairingMode?
@@ -28,12 +38,31 @@ struct IPadNavigationState: Equatable {
     private(set) var usesSidebarOverlay = false
     private(set) var usesCompactNavigation = false
     private(set) var hasMeasuredLayout = false
+    private(set) var mainTool: IPadWorkspaceTool?
+    let toolDragWindowId = UUID()
+
+    var canPlaceTool: Bool {
+        hasMeasuredLayout && !usesSidebarOverlay && !usesCompactNavigation && pairing == nil && section == .workspaces
+    }
+
+    @discardableResult
+    mutating func placeTool(_ tool: IPadWorkspaceTool) -> Bool {
+        guard canPlaceTool else { return false }
+        mainTool = tool
+        focusPresentation = .normal
+        detail = .workspace
+        revealSidebar()
+        return true
+    }
+
+    mutating func closeTool() { mainTool = nil }
 
     var isSidebarVisible: Bool {
         usesSidebarOverlay ? isDrawerPresented : isSidebarExpanded
     }
 
     mutating func selectSection(_ section: IPadSidebarSection) {
+        focusPresentation = .normal
         self.section = section
         switch section {
         case .assistant:
@@ -43,7 +72,7 @@ struct IPadNavigationState: Equatable {
         case .workspaces:
             detail = .workspace
             pairing = nil
-        case .connections, .settings:
+        case .connections, .pullRequests, .settings:
             break
         }
         revealSidebar()
@@ -57,11 +86,24 @@ struct IPadNavigationState: Equatable {
     }
 
     mutating func showAssistantDetail() {
+        closeTool()
         section = .assistant
         detail = .assistant
         hasOpenedAssistant = true
         pairing = nil
         detailWasSelected()
+    }
+
+    mutating func showPullRequestDetail() {
+        section = .pullRequests
+        detail = .pullRequest
+        pairing = nil
+        detailWasSelected()
+    }
+
+    /// Closing a pull request returns the main pane to the workspace and keeps the sidebar.
+    mutating func closePullRequestDetail() {
+        if detail == .pullRequest { detail = .workspace }
     }
 
     mutating func presentPairing(_ mode: IPadPairingMode) {
@@ -90,27 +132,43 @@ struct IPadNavigationState: Equatable {
         }
     }
 
+    mutating func prepareForConnectionSwitcher(showingWorkspaceList: Bool) {
+        guard usesSidebarOverlay else { return }
+        guard !usesCompactNavigation || !showingWorkspaceList || section != .workspaces else { return }
+        collapseSidebar()
+    }
+
     mutating func updateLayout(usesOverlay: Bool, usesCompactNavigation: Bool = false, showsWorkspaceList: Bool = false) {
         hasMeasuredLayout = true
         guard usesSidebarOverlay != usesOverlay || self.usesCompactNavigation != usesCompactNavigation else { return }
         usesSidebarOverlay = usesOverlay
         self.usesCompactNavigation = usesCompactNavigation
+        if usesOverlay || usesCompactNavigation { closeTool() }
         // Rotation preserves the wide-window preference, without unexpectedly
         // opening a drawer over the conversation in a narrow window.
         isDrawerPresented = false
         if usesCompactNavigation, pairing == nil,
-           section == .settings || section == .connections || (detail == .workspace && showsWorkspaceList) {
+           section == .settings || section == .connections || section == .pullRequests
+           || (detail == .workspace && showsWorkspaceList) {
             revealSidebar()
         }
     }
 
     mutating func revokeAssistantAccess() {
+        if detail == .assistant { focusPresentation = .normal }
         hasOpenedAssistant = false
         if detail == .assistant { detail = .workspace }
         if section == .assistant { section = .workspaces }
     }
 
+    mutating func setFocusPresentation(_ presentation: IPadFocusPresentation) {
+        guard pairing == nil || presentation == .normal else { return }
+        guard presentation != .workspaceSearch || section == .workspaces else { return }
+        focusPresentation = presentation
+    }
+
     private mutating func detailWasSelected() {
+        focusPresentation = .normal
         isDrawerPresented = false
     }
 }

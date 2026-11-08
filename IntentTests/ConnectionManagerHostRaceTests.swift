@@ -12,7 +12,7 @@ extension ConnectionManagerTests {
         let count: Int
     }
 
-    @Test @MainActor func collectionChannelPushesUnaffectedByBuffering() async {
+    @Test @MainActor func collectionChannelPushesUnaffectedByBuffering() {
         let manager = ConnectionManager.shared
         var received: [CollectionPushRecord] = []
 
@@ -57,7 +57,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "col-sub-2")
     }
 
-    @Test @MainActor func bufferedChatSnapshotReplayedIntoConversationStore() async {
+    @Test @MainActor func bufferedChatSnapshotReplayedIntoConversationStore() {
         let manager = ConnectionManager.shared
         let store = ConversationStore(connectionManager: manager)
         store.setTestChatChannel(subscriptionId: "buf-chat-race")
@@ -297,7 +297,7 @@ extension ConnectionManagerTests {
         let closed = OSAllocatedUnfairLock(initialState: false)
 
         init(localPort: Int) { self.localPort = localPort }
-        func close() async { closed.withLock { $0 = true } }
+        func close() { closed.withLock { $0 = true } }
 
         var isClosed: Bool { closed.withLock { $0 } }
     }
@@ -305,7 +305,7 @@ extension ConnectionManagerTests {
     nonisolated struct FakeTunnelDialer: TunnelDialing {
         let result: Result<FakeTunnelSession, WebSocketTransportError>
 
-        func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
+        func open(tcAddress _: String, remotePort _: Int) throws -> any TunnelSession {
             try result.get()
         }
     }
@@ -405,8 +405,8 @@ extension ConnectionManagerTests {
         let host: String
         let tunnel: FakeTunnelSession?
 
-        func disconnect() async {
-            await tunnel?.close()
+        func disconnect() {
+            tunnel?.close()
         }
     }
 

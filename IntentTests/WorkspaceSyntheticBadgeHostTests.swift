@@ -191,7 +191,7 @@ enum SyntheticBadgeHost {
         diagnostics: SyntheticBadgeHostTrace? = nil,
         lifecycleHooks: LifecycleHooks? = nil,
         observeLifecycle: ((LifecycleEvent) -> Void)? = nil,
-        inspect: (_ hostView: UIView, _ window: UIWindow) throws -> Result
+        inspect: @MainActor (_ hostView: UIView, _ window: UIWindow) async throws -> Result
     ) async throws -> Result {
         let diagnostics = diagnostics ?? SyntheticBadgeHostTrace(context: String(reflecting: Content.self))
         diagnostics.record("render.begin")
@@ -225,7 +225,7 @@ enum SyntheticBadgeHost {
             try await session.appear()
             try Task.checkCancellation()
             diagnostics.record("inspection.begin")
-            let inspected = try inspect(session.controller.view, session.window)
+            let inspected = try await inspect(session.controller.view, session.window)
             diagnostics.record("inspection.return")
             try Task.checkCancellation()
             operationResult = .success(inspected)

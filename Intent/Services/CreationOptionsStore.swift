@@ -18,6 +18,10 @@ import Observation
     private(set) var loadGeneration = 0
 
     let specialistCatalog: CreationCatalog<SpecialistInfo>
+    let defaultModelProviderCatalog: CreationCatalog<String>
+    var defaultModelProvider: String? {
+        defaultModelProviderCatalog.loadFailed ? nil : defaultModelProviderCatalog.value?.first
+    }
     var modelCatalogs: [String: CreationCatalog<ModelInfo>] = [:]
     @ObservationIgnored var creationConsumers: Set<UUID> = []
     @ObservationIgnored var modelConsumers: [UUID: String] = [:]
@@ -27,6 +31,13 @@ import Observation
     @ObservationIgnored var observedFeedReady = false
     @ObservationIgnored var previousConnectionState: ConnectionState
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    /// The most recently spawned `loadTask`, kept after `invalidate()` drops
+    /// `loadTask` so tests can await a superseded load's real completion.
+    /// Never read by the store.
+    @ObservationIgnored private(set) var latestLoadTask: Task<Void, Never>?
+    /// The most recent reconnect revalidation spawned for an open creation
+    /// picker, for tests to await. Never read by the store.
+    @ObservationIgnored var latestCreationRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var loadIdentity = UUID()
     @ObservationIgnored private var loadRequiresInterest = false
     @ObservationIgnored private(set) var isActive = true
@@ -36,6 +47,14 @@ import Observation
         self.connectionManager = connectionManager
         previousConnectionState = connectionManager.connectionState
         workspaceProviderOptions = WorkspaceProviderOptions(connectionManager: connectionManager)
+        defaultModelProviderCatalog = CreationCatalog {
+            let result = try await connectionManager.request("settings.get", params: ["path": "model.defaultProvider"])
+            guard let value = (result as? [String: Any])?["value"] as? String,
+                  !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw CocoaError(.coderReadCorrupt)
+            }
+            return [value.trimmingCharacters(in: .whitespacesAndNewlines)]
+        }
         specialistCatalog = CreationCatalog {
             let result = try await connectionManager.request("specialist.list")
             guard let items = (result as? [String: Any])?["specialists"] as? [[String: Any]] else {
@@ -53,6 +72,7 @@ import Observation
     isolated deinit {
         if let eventHandlerID { connectionManager.removeEventHandler(id: eventHandlerID) }
         specialistCatalog.reset(releaseConsumers: true)
+        defaultModelProviderCatalog.reset(releaseConsumers: true)
         for catalog in modelCatalogs.values { catalog.reset(releaseConsumers: true) }
     }
 
@@ -83,6 +103,7 @@ import Observation
                 isLoading = false
                 loadTask = nil
             }
+            latestLoadTask = loadTask
         }
         if force || !silent { await loadTask?.value }
     }
@@ -107,6 +128,7 @@ import Observation
         hasLoaded = false
         lastLoadedAt = nil
         specialistCatalog.reset(clear: clear)
+        defaultModelProviderCatalog.reset()
         for catalog in modelCatalogs.values { catalog.reset(clear: clear) }
     }
 
@@ -117,6 +139,7 @@ import Observation
         creationConsumers = []
         modelConsumers = [:]
         specialistCatalog.reset(releaseConsumers: true)
+        defaultModelProviderCatalog.reset(releaseConsumers: true)
         for catalog in modelCatalogs.values { catalog.reset(releaseConsumers: true) }
         if let eventHandlerID { connectionManager.removeEventHandler(id: eventHandlerID) }
         eventHandlerID = nil

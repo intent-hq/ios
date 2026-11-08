@@ -38,6 +38,7 @@ struct TerminalPresentationObserver: UIViewControllerRepresentable {
 struct TerminalEmulatorView: UIViewRepresentable {
     let connection: MobileTerminalConnection
     let controls: MobileTerminalControls
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeCoordinator() -> Coordinator { Coordinator(connection: connection, controls: controls) }
 
@@ -61,8 +62,12 @@ struct TerminalEmulatorView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: TerminalCanvasView, context: Context) {
-        view.isUserInteractionEnabled = connection.isReady
-        if connection.isReady, !context.coordinator.hasFocused {
+        let canInteract = isEnabled && connection.isReady
+        context.coordinator.isInputEnabled = canInteract
+        view.isUserInteractionEnabled = canInteract
+        if !canInteract {
+            _ = view.resignFirstResponder()
+        } else if !context.coordinator.hasFocused {
             context.coordinator.hasFocused = true
             _ = view.becomeFirstResponder()
         }
@@ -81,6 +86,7 @@ struct TerminalEmulatorView: UIViewRepresentable {
         let connection: MobileTerminalConnection
         let controls: MobileTerminalControls
         var hasFocused = false
+        var isInputEnabled = false
 
         init(connection: MobileTerminalConnection, controls: MobileTerminalControls) {
             self.connection = connection
@@ -92,6 +98,7 @@ struct TerminalEmulatorView: UIViewRepresentable {
         }
 
         func send(source _: SwiftTerm.TerminalView, data: ArraySlice<UInt8>) {
+            guard isInputEnabled else { return }
             connection.send(Data(data))
             Task { @MainActor [weak controls] in controls?.synchronize() }
         }

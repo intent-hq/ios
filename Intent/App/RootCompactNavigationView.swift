@@ -8,6 +8,7 @@ extension RootView {
                 .navigationDestination(isPresented: $showingWorkspaceDetail) {
                     if let workspaceId = coordinator.selectedWorkspaceId {
                         WorkspaceDetailView(workspaceId: workspaceId, session: session)
+                            .pullRequestLinkRouting()
                             .modifier(WorkspaceActionLauncherToolbar())
                             #if os(iOS)
                             .toolbar(sizeClass == .compact && !usesVerticalBar ? .hidden : .visible, for: .navigationBar)
@@ -16,21 +17,11 @@ extension RootView {
                             #endif
                             .navigationDestination(isPresented: $showingConversation) {
                                 conversationDestination
+                                    .pullRequestLinkRouting()
                                     .modifier(WorkspaceActionLauncherToolbar())
                             }
                             .navigationDestination(isPresented: $showingNoteDetail) {
-                                NoteDetailView(
-                                    noteId: noteDetailNoteId,
-                                    workspaceId: noteDetailWorkspaceId,
-                                    noteTitle: noteDetailNoteTitle,
-                                    session: session
-                                ) { noteId, workspaceId, title in
-                                    noteDetailNoteId = noteId
-                                    noteDetailWorkspaceId = workspaceId
-                                    noteDetailNoteTitle = title
-                                }
-                                .id(noteDetailNoteId)
-                                .modifier(WorkspaceActionLauncherToolbar())
+                                compactNoteDetail
                             }
                     }
                 }
@@ -79,6 +70,22 @@ extension RootView {
                 coordinator.onBackFromNote()
             }
         }
+    }
+
+    private var compactNoteDetail: some View {
+        NoteDetailView(
+            noteId: noteDetailNoteId,
+            workspaceId: noteDetailWorkspaceId,
+            noteTitle: noteDetailNoteTitle,
+            session: session
+        ) { noteId, workspaceId, title in
+            noteDetailNoteId = noteId
+            noteDetailWorkspaceId = workspaceId
+            noteDetailNoteTitle = title
+        }
+        .id(noteDetailNoteId)
+        .pullRequestLinkRouting()
+        .modifier(WorkspaceActionLauncherToolbar())
     }
 
     func syncNavigationState() {

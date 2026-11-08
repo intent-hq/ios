@@ -1,5 +1,18 @@
 import SwiftUI
 
+/// Keep padding in a lazy body instead of passing an opaque, non-Sendable
+/// modified view through the deferred row provider.
+struct WorkspaceAgentListEntry: View {
+    let row: WorkspaceAgentListRow
+    let isFirst: Bool
+
+    var body: some View {
+        row
+            .padding(.horizontal, WorkspaceDetailStyle.pageInset)
+            .padding(.top, isFirst ? 0 : WorkspaceDetailStyle.rowSpacing)
+    }
+}
+
 /// One identified layout child per entry keeps section expansion out of nested
 /// dynamic view lists, whose height estimates can cycle near the scroll boundary.
 struct WorkspaceAgentListRow: View, Identifiable {
@@ -78,12 +91,13 @@ struct WorkspaceAgentButton: View {
     let agent: AgentSession
     let colorScheme: ColorScheme
     let indented: Bool
+    var isSelected = false
     let onSelect: @MainActor () -> Void
     let onMute: @MainActor () -> Void
 
     var body: some View {
         Button(action: onSelect) {
-            AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented)
+            AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented, isSelected: isSelected)
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("workspace.agent.\(agent.id)")

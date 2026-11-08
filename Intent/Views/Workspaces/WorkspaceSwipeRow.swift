@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkspaceSwipeRow: View {
+    @ScaledMetric(relativeTo: .body) private var menuIconSize: CGFloat = 17
     let workspace: Workspace
     let showRepo: Bool
     let isUpdating: Bool
@@ -27,6 +28,7 @@ struct WorkspaceSwipeRow: View {
 
     private var actionSize: CGFloat { max(Constants.Accessibility.minimumTapTarget, scaledActionSize) }
     private var horizontalInset: CGFloat { spacious ? Constants.WorkspaceList.pageInset : 0 }
+    private var statusIconSize: CGFloat { isSidebar ? IPadSidebarStyle.statusDotSize : Constants.WorkspaceRow.statusIconSize }
     private var statusInset: CGFloat { horizontalInset + (isSidebar ? IPadSidebarStyle.rowInset : (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding)) }
     private var leadingLayout: WorkspaceSwipePolicy.LeadingLayout {
         WorkspaceSwipePolicy.leadingLayout(
@@ -70,11 +72,12 @@ struct WorkspaceSwipeRow: View {
             WorkspaceStatusSwipeBadge(
                 workspace: workspace,
                 progress: leadingProgress,
-                availableWidth: leadingLayout.maximumBadgeWidth
+                availableWidth: leadingLayout.maximumBadgeWidth,
+                dotSize: statusIconSize
             ) { badgeSize = $0 }
             .offset(
                 x: statusInset + min(0, swipeOffset),
-                y: statusCenter + (rowSize.height / 2 - statusCenter) * leadingProgress - Constants.WorkspaceRow.statusIconSize / 2
+                y: statusCenter + (rowSize.height / 2 - statusCenter) * leadingProgress - statusIconSize / 2
             )
         }
         .clipped()
@@ -165,16 +168,37 @@ struct WorkspaceSwipeRow: View {
 
     private var menuActions: some View {
         Group {
-            Button("Open most recent agent", systemImage: "bubble.left") {
+            Button {
                 revealedTarget = nil
                 onOpenRecentAgent()
+            } label: {
+                menuLabel("Open most recent agent", icon: .message)
             }
             if showsTrailingActions {
-                Button("Archive workspace", systemImage: "archivebox") { select(.archive) }
-                Button("Delete workspace", systemImage: "trash", role: .destructive) { select(.delete) }
+                Button {
+                    select(.archive)
+                } label: {
+                    menuLabel("Archive workspace", icon: .archive)
+                }
+                Button(role: .destructive) {
+                    select(.delete)
+                } label: {
+                    menuLabel("Delete workspace", icon: .delete)
+                }
             }
         }
         .disabled(isUpdating)
+    }
+
+    private func menuLabel(_ title: LocalizedStringKey, icon: ImageResource) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: menuIconSize, height: menuIconSize)
+        }
     }
 
     private func select(_ action: WorkspaceAction) {

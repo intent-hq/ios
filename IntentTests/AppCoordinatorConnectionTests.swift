@@ -432,21 +432,13 @@ extension AppCoordinatorTests {
 
     // MARK: - Window retarget policy (window model v2)
 
-    // WindowRetargetRoute.route decides whether a switch/pair action opens or
-    // raises the target backend's own window (multi-window platforms),
-    // replaces an unbound pairing window with the target's own window, or
-    // rebinds the current window in place (single-window platforms).
-
-    @Test func retargetRouteOpensTargetWindowOnMultiWindowPlatforms() {
-        let current = BackendID(UUID())
-        let target = BackendID(UUID())
+    @Test func retargetRouteSwitchesBoundWindowInPlaceOnMultiWindowPlatforms() {
         #expect(
             WindowRetargetRoute.route(
-                currentBackendID: current,
-                target: target,
+                currentBackendID: BackendID(UUID()),
                 supportsMultipleWindows: true
-            ) == .openTargetWindow,
-            "A bound window on a multi-window platform never retargets; the target's window is opened or raised"
+            ) == .rebindInPlace,
+            "Picking another connection reuses the window; only the explicit Open in New Window action spawns one"
         )
     }
 }

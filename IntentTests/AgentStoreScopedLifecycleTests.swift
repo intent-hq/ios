@@ -57,6 +57,26 @@ extension AgentStoreTests {
         #expect(store.agents.map(\.id) == ["new"])
     }
 
+    /// A sidebar stops expecting rows once the first read fails, so the open conversation keeps its title.
+    @Test func failedInitialReadIsReportedUntilAReadSucceeds() async {
+        let fake = FakeConnectionManager()
+        let store = AgentStore(connectionManager: fake, scopedLoading: true)
+        fake.errorMap["agent.list"] = NSError(domain: "test", code: 1)
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(!store.hasLoaded)
+        #expect(store.hasFailedToLoad)
+        #expect(!store.isLoading)
+
+        fake.errorMap["agent.list"] = nil
+        fake.responseMap["agent.list"] = scopedResponse([scopedRow("parent")])
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(store.hasLoaded)
+        #expect(!store.hasFailedToLoad)
+
+        store.prepareForWorkspaceChange(to: "ws-2")
+        #expect(!store.hasFailedToLoad)
+    }
+
     @Test func cancelledLazyReadDoesNotPublishAndCanRetry() async throws {
         let (fake, store) = await scopedStore()
         fake.pendingMethods.insert("agent.list")

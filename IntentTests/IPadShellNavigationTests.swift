@@ -111,6 +111,28 @@ extension AppCoordinatorTests {
         #expect(state.detail == .assistant)
     }
 
+    @Test @MainActor func iPadWorkspacesRailLeavesSidebarWorkspaceOnlyWhenItIsShown() {
+        let coordinator = iPadCoordinator(connection: FakeConnectionManager())
+        coordinator.iPadNavigation.updateLayout(usesOverlay: false)
+        coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
+        let agentRoute = coordinator.currentScreenDescription
+        coordinator.onSelectIPadSection(.settings)
+        coordinator.onSelectIPadSection(.workspaces)
+        #expect(coordinator.currentScreenDescription == agentRoute)
+
+        coordinator.onSelectIPadSection(.workspaces)
+        guard case .workspaceDetail(workspaceId: "workspace") = coordinator.currentScreen else {
+            Issue.record("Expected the workspace overview, got \(coordinator.currentScreenDescription)")
+            return
+        }
+        #expect(coordinator.iPadNavigation.isSidebarVisible)
+
+        coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
+        coordinator.iPadNavigation.collapseSidebar()
+        coordinator.onSelectIPadSection(.workspaces)
+        #expect(coordinator.currentScreenDescription == agentRoute)
+    }
+
     @Test @MainActor func iPadNarrowRowSelectionClosesDrawerIncludingRepeatedAgentSelection() {
         let coordinator = iPadCoordinator(connection: FakeConnectionManager())
         coordinator.iPadNavigation.updateLayout(usesOverlay: true)
@@ -210,6 +232,77 @@ extension AppCoordinatorTests {
         #expect(portrait.detailLeadingInset(sidebarVisible: true) == 0)
         let narrow = IPadShellLayout(width: IPadReference.narrowWidth, isAccessibilitySize: true)
         #expect(narrow.sidebarWidth <= narrow.contentWidth)
+    }
+
+    @Test(arguments: [true, false]) @MainActor
+    func iPadFocusPreservesSidebarPreferenceAndConversation(expanded: Bool) {
+        let coordinator = iPadCoordinator(connection: FakeConnectionManager())
+        coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
+        if !expanded { coordinator.iPadNavigation.collapseSidebar() }
+        let request = coordinator.conversationRequestId
+        let route = coordinator.currentScreenDescription
+        for presentation in [IPadFocusPresentation.workspaceSearch, .conversationEditing] {
+            coordinator.iPadNavigation.setFocusPresentation(presentation)
+            #expect(coordinator.iPadNavigation.focusPresentation == presentation)
+            coordinator.iPadNavigation.updateLayout(usesOverlay: true)
+            #expect(coordinator.iPadNavigation.focusPresentation == presentation)
+            coordinator.iPadNavigation.updateLayout(usesOverlay: false)
+            coordinator.iPadNavigation.setFocusPresentation(.normal)
+            #expect(coordinator.iPadNavigation.isSidebarExpanded == expanded)
+            #expect(coordinator.conversationRequestId == request)
+            #expect(coordinator.currentScreenDescription == route)
+        }
+    }
+
+    @Test @MainActor func iPadExplicitSelectionEndsFocusAndPairingCannotEnterIt() {
+        var state = IPadNavigationState()
+        state.setFocusPresentation(.workspaceSearch)
+        state.showWorkspaceDetail()
+        #expect(state.focusPresentation == .normal)
+        state.setFocusPresentation(.conversationEditing)
+        state.showAssistantDetail()
+        #expect(state.focusPresentation == .normal)
+        state.setFocusPresentation(.workspaceSearch)
+        #expect(state.focusPresentation == .normal)
+        state.setFocusPresentation(.conversationEditing)
+        state.presentPairing(.manual)
+        state.setFocusPresentation(.conversationEditing)
+        #expect(state.focusPresentation == .normal)
+    }
+
+    @Test @MainActor func iPadFocusedPanelFitsTheWindowWithoutReservingRailSpace() {
+        for width in [IPadReference.narrowWidth, IPadReference.portraitWidth, IPadReference.largeWidth] {
+            let layout = IPadShellLayout(width: width, isAccessibilitySize: true)
+            #expect(layout.focusedPanelWidth <= IPadShellLayout.focusPanelWidth)
+            #expect(layout.focusedPanelWidth <= layout.availableWidth)
+            #expect(layout.focusedPanelLeadingInset >= 0)
+            #expect(layout.focusedPanelLeadingInset * 2 + layout.focusedPanelWidth == layout.availableWidth)
+        }
+    }
+
+    @Test @MainActor func iPadToolPlacementKeepsChatAndClearsOnOtherDestinations() {
+        let coordinator = iPadCoordinator(connection: FakeConnectionManager())
+        coordinator.iPadNavigation.updateLayout(usesOverlay: false)
+        coordinator.onSelectAgent("coder", workspaceId: "workspace", agentName: "Coder")
+        let tool = IPadWorkspaceTool.terminal(MobileTerminal(
+            id: "terminal", workspaceId: "workspace", daemonBootId: "boot", name: "Terminal"
+        ))
+        #expect(coordinator.placeIPadTool(tool))
+        coordinator.onSelectAgent("reviewer", workspaceId: "workspace", agentName: "Reviewer")
+        #expect(coordinator.iPadNavigation.mainTool == tool)
+        #expect(coordinator.iPadNavigation.isSidebarVisible)
+        coordinator.onBackToWorkspaceDetail()
+        #expect(coordinator.iPadNavigation.mainTool == tool)
+        coordinator.onSelectIPadSection(.workspaces)
+        #expect(coordinator.iPadNavigation.mainTool == nil)
+        #expect(WorkspaceSidebarContent.resolve(screen: coordinator.currentScreen, isPersistent: true) == .workspaceList)
+        #expect(coordinator.placeIPadTool(tool))
+        coordinator.onSelectNote("spec", workspaceId: "workspace", noteTitle: "Spec")
+        #expect(coordinator.iPadNavigation.mainTool == nil)
+        #expect(coordinator.placeIPadTool(tool))
+        coordinator.onSelectWorkspace("other")
+        #expect(coordinator.iPadNavigation.mainTool == nil)
+        #expect(!coordinator.placeIPadTool(tool))
     }
 
     @MainActor private func iPadCoordinator(connection: FakeConnectionManager) -> AppCoordinator {

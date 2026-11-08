@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 extension Constants.Conversation {
     /// Shared iOS workspace-agent and Assistant styling from the approved Figma frames.
@@ -19,17 +18,13 @@ extension Constants.Conversation {
 
 extension Constants.Conversation.Design {
     enum IPad {
-        private static let readableCharacterCount: CGFloat = 72
-        static let readableWidth: CGFloat = {
-            let font = Constants.Typography.bodyS.uiFont(compatibleWith: UITraitCollection(preferredContentSizeCategory: .large))
-            // Match 72ch using the body font's zero-glyph advance at the baseline text size.
-            return "0".size(withAttributes: [.font: font]).width * Self.readableCharacterCount
-        }()
+        static let readableWidth: CGFloat = 560
         static let userBubbleMaximumWidth: CGFloat = 270
         static let minimumHorizontalInset: CGFloat = 16
         static let horizontalInset: CGFloat = 24
-        static let headerTopInset: CGFloat = 32
+        static let headerTopInset = IPadShellLayout.headerInset
         static let headerBottomInset: CGFloat = 24
+        static let miniHeaderBottomInset: CGFloat = 16
         static let composerBottomInset: CGFloat = 24
         static let transcriptRowSpacing: CGFloat = 36
     }
@@ -71,6 +66,8 @@ extension Constants.Conversation.Design {
         static let activeTrailingPadding: CGFloat = 8
         static let keyboardHorizontalInset: CGFloat = 8
         static let keyboardBottomSpacing: CGFloat = 8
+        // Duo's 48pt launcher sits 24pt from the screen bottom: 24 + (48 - 56) / 2.
+        static let verticalBarBottomSpacing: CGFloat = 20
         static let activeCornerRadius: CGFloat = 24
         static let controlSpacing: CGFloat = 16
         static let actionWidth: CGFloat = 48
@@ -83,7 +80,7 @@ extension Constants.Conversation.Design {
     enum Status {
         static let minimumHeight: CGFloat = 32
         static let leadingPadding: CGFloat = 16
-        static let trailingPadding: CGFloat = 4
+        static let trailingPadding: CGFloat = 12
         static let iconSpacing: CGFloat = 12
         static let composerSpacing: CGFloat = 8
         static let goToEndLeadingPadding: CGFloat = 12

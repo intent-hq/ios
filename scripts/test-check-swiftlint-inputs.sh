@@ -28,12 +28,24 @@ assert_check_fails() {
   [ "$status" -eq 1 ] || fail "$description exited $status instead of 1"
   assert_contains "$output" "$expected"
   assert_contains "$output" "is out of date"
+  assert_contains "$output" "run scripts/update-source-lists.sh"
+}
+
+assert_check_rejects_empty() {
+  local description=$1 expected=$2
+  set +e
+  output=$("$FIXTURE_CHECK" 2>&1)
+  status=$?
+  set -e
+  [ "$status" -eq 1 ] || fail "$description exited $status instead of 1"
+  assert_contains "$output" "$expected"
+  assert_contains "$output" "staged or committed empty"
 }
 
 assert_check_passes() {
   local description=$1
   output=$("$FIXTURE_CHECK" 2>&1) || fail "$description exited $? instead of 0: $output"
-  assert_contains "$output" "matches tracked Swift sources"
+  assert_contains "$output" "matches the Swift sources"
 }
 
 write_list() {
@@ -48,6 +60,7 @@ mkdir -p "$FIXTURE/scripts" "$FIXTURE/Intent/Nested Dir" "$FIXTURE/Intent/Resour
   "$FIXTURE/Intent/Assets.xcassets" "$FIXTURE/IntentTests/Fixtures" "$FIXTURE/IntentUITests" \
   "$FIXTURE/TailcatKit"
 cp "$CHECK" "$FIXTURE_CHECK"
+cp "$SCRIPT_DIR/source-lists.sh" "$FIXTURE/scripts/source-lists.sh"
 printf 'let app = 1\n' > "$FIXTURE/Intent/App.swift"
 printf 'let nested = 2\n' > "$FIXTURE/Intent/Nested Dir/Nested.swift"
 printf 'let tests = 3\n' > "$FIXTURE/IntentTests/AppTests.swift"
@@ -57,6 +70,9 @@ printf 'let asset = 6\n' > "$FIXTURE/Intent/Assets.xcassets/Ignored.swift"
 printf 'let fixture = 7\n' > "$FIXTURE/IntentTests/Fixtures/Ignored.swift"
 printf 'let outside = 8\n' > "$FIXTURE/TailcatKit/Outside.swift"
 printf 'not swift\n' > "$FIXTURE/Intent/Notes.md"
+printf 'Intent/Generated/\n' > "$FIXTURE/.gitignore"
+mkdir -p "$FIXTURE/Intent/Generated"
+printf 'let ignored = 10\n' > "$FIXTURE/Intent/Generated/Ignored.swift"
 write_list \
   'Intent/App.swift' \
   'Intent/Nested Dir/Nested.swift' \
@@ -75,8 +91,10 @@ set -e
 [ "$status" -eq 1 ] || fail "argument rejection exited $status instead of 1"
 assert_contains "$output" "takes no arguments"
 
+assert_check_passes "git-ignored source is skipped"
+
 printf 'let added = 9\n' > "$FIXTURE/IntentUITests/AddedUITests.swift"
-assert_check_passes "untracked source is ignored until it is tracked"
+assert_check_fails "missing untracked source" '+$(SRCROOT)/IntentUITests/AddedUITests.swift'
 git_fixture add IntentUITests/AddedUITests.swift
 assert_check_fails "missing tracked source" '+$(SRCROOT)/IntentUITests/AddedUITests.swift'
 write_list \
@@ -87,9 +105,9 @@ write_list \
   'IntentUITests/AppUITests.swift'
 assert_check_passes "list updated for the tracked source"
 
-git_fixture rm -q --cached IntentUITests/AddedUITests.swift
-assert_check_fails "stale entry" '-$(SRCROOT)/IntentUITests/AddedUITests.swift'
-git_fixture add IntentUITests/AddedUITests.swift
+mv "$FIXTURE/IntentUITests/AddedUITests.swift" "$TEMP_ROOT/AddedUITests.swift"
+assert_check_fails "stale entry for a deleted tracked source" '-$(SRCROOT)/IntentUITests/AddedUITests.swift'
+mv "$TEMP_ROOT/AddedUITests.swift" "$FIXTURE/IntentUITests/AddedUITests.swift"
 
 write_list \
   'Intent/App.swift' \
@@ -97,7 +115,8 @@ write_list \
   'Intent/Nested Dir/Nested.swift' \
   'IntentUITests/AddedUITests.swift' \
   'IntentUITests/AppUITests.swift'
-assert_check_fails "unsorted list" "sorted with LC_ALL=C"
+assert_check_fails "unsorted list" '-$(SRCROOT)/IntentTests/AppTests.swift'
+assert_contains "$output" '+$(SRCROOT)/IntentTests/AppTests.swift'
 
 write_list \
   'Intent/App.swift' \
@@ -110,6 +129,27 @@ assert_check_fails "pruned directory entry" '-$(SRCROOT)/Intent/Resources/Ignore
 
 : > "$FIXTURE_LIST"
 assert_check_fails "empty list" '+$(SRCROOT)/Intent/App.swift'
+
+write_list \
+  'Intent/App.swift' \
+  'Intent/Nested Dir/Nested.swift' \
+  'Intent/Pending.swift' \
+  'IntentTests/AppTests.swift' \
+  'IntentUITests/AddedUITests.swift' \
+  'IntentUITests/AppUITests.swift'
+printf 'let pending = 11\n' > "$FIXTURE/Intent/Pending.swift"
+git_fixture add -N Intent/Pending.swift
+assert_check_rejects_empty "intent-to-add source" 'Intent/Pending.swift'
+git_fixture add Intent/Pending.swift
+assert_check_passes "intent-to-add source staged with content"
+
+: > "$FIXTURE/Intent/Pending.swift"
+git_fixture add Intent/Pending.swift
+git_fixture commit -q -m 'empty source'
+printf 'let restored = 12\n' > "$FIXTURE/Intent/Pending.swift"
+assert_check_rejects_empty "source committed empty" 'Intent/Pending.swift'
+git_fixture add Intent/Pending.swift
+assert_check_passes "empty commit repaired"
 
 rm "$FIXTURE_LIST"
 set +e

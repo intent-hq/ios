@@ -119,6 +119,8 @@ struct MermaidWebView: UIViewRepresentable {
             render()
         }
 
+        // WebKit only calls the async form of this delegate method.
+        // swiftlint:disable:next async_without_await
         func webView(_: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
             navigationAction.targetFrame?.isMainFrame == true && navigationAction.request.url == MermaidWebView.pageURL
                 ? .allow : .cancel
@@ -157,12 +159,7 @@ struct MermaidWebView: UIViewRepresentable {
             renderTask = Task { [weak self, weak webView] in
                 guard let webView else { return }
                 do {
-                    _ = try await webView.callAsyncJavaScript(
-                        "await window.renderMermaid(request);",
-                        arguments: arguments,
-                        in: nil,
-                        contentWorld: .page
-                    )
+                    _ = try await webView.callPageJavaScript("await window.renderMermaid(request);", arguments: arguments)
                 } catch {
                     guard let self, revision == currentRevision, !Task.isCancelled else { return }
                     AppLog.userInterface.error("Mermaid JavaScript call failed: \(String(describing: error))")

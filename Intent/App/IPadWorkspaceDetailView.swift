@@ -7,13 +7,32 @@ struct IPadWorkspaceDetailView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var colorScheme
     @State private var notePath = NavigationPath()
+    @State private var firstAgent: WorkspaceFirstAgent?
+    @State private var isSwiping = false
 
     var body: some View {
+        @Bindable var coordinator = coordinator
         NavigationStack(path: $notePath) {
             content
+                .pullRequestLinkRouting(inIPadDetail: true)
+                .paneSwipe(isSwiping: $isSwiping, onBack: swipeBack, onForward: swipeForward)
+                .onPreferenceChange(WorkspaceFirstAgentPreference.self) { firstAgent = $0 }
                 .navigationDestination(for: NoteDestination.self) { destination in
                     note(destination, showsBackButton: true)
                 }
+                .navigationDestination(item: $coordinator.workspaceChange) { destination in
+                    VStack(spacing: 0) {
+                        changeHeader(destination)
+                        changeViewer(destination)
+                    }
+                    .id(destination.id)
+                    .environment(\.workspaceViewerUsesPanel, true)
+                    .navigationBarBackButtonHidden()
+                    .nativeNavigationBackGesture()
+                    .toolbar(.hidden, for: .navigationBar)
+                    .modifier(IPadNavigationVisibility())
+                }
+                .modifier(IPadNavigationVisibility())
         }
         .onChange(of: coordinator.currentScreenDescription) {
             if !notePath.isEmpty { notePath = NavigationPath() }
@@ -21,7 +40,47 @@ struct IPadWorkspaceDetailView: View {
         .onChange(of: coordinator.conversationRequestId) {
             if !notePath.isEmpty { notePath = NavigationPath() }
         }
+        #if DEBUG
         .task { await DemoFixtures.reselectConversationIfRequested(coordinator: coordinator) }
+        #endif
+    }
+
+    private func changeHeader(_ destination: WorkspaceChangeDestination) -> some View {
+        WorkspaceNavigationHeader(
+            title: changeTitle(destination),
+            subtitle: nil,
+            backIdentifier: destination.backIdentifier,
+            titleIdentifier: "workspace.change.title",
+            usesConversationLayout: true,
+            onBack: { coordinator.workspaceChange = nil },
+            actions: {
+                Color.clear
+                    .frame(width: WorkspaceDetailStyle.controlSize, height: WorkspaceDetailStyle.controlSize)
+                    .accessibilityHidden(true)
+            }
+        )
+    }
+
+    private func changeTitle(_ destination: WorkspaceChangeDestination) -> String {
+        switch destination.content {
+        case .commit: "Commit Changes"
+        case let .file(file): file.stage == "staged" ? "Staged Changes" : "Unstaged Changes"
+        }
+    }
+
+    @ViewBuilder
+    private func changeViewer(_ destination: WorkspaceChangeDestination) -> some View {
+        let loader = WorkspaceDiffLoader(
+            connectionManager: session.connection,
+            workspaceId: destination.workspaceId,
+            gitRootId: destination.gitRootId
+        )
+        switch destination.content {
+        case let .commit(commit):
+            WorkspaceCommitDiffView(loader: loader, commit: commit)
+        case let .file(file):
+            WorkspaceFileDiffView(loader: loader, path: file.path, staged: file.stage == "staged", isBinary: file.isBinary)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -36,9 +95,11 @@ struct IPadWorkspaceDetailView: View {
                 onBack: coordinator.onBackToWorkspaceDetail
             )
             .id(agentId)
+            .transition(pageTransition(isOverview: false))
         case let .noteDetail(noteId, workspaceId, noteTitle):
             note(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle), showsBackButton: false)
                 .id(noteId)
+                .transition(pageTransition(isOverview: false))
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         IntentIconButton(icon: .arrowLeft, label: "Back to workspace", action: coordinator.onBackFromNote)
@@ -47,9 +108,38 @@ struct IPadWorkspaceDetailView: View {
                 }
         case let .workspaceDetail(workspaceId):
             WorkspaceDetailView(workspaceId: workspaceId, session: session)
+                .transition(pageTransition(isOverview: true))
         default:
-            Constants.Conversation.Design.Palette.background(for: colorScheme)
+            WorkspaceDetailPlaceholder()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(IPadShellStyle.panel(for: colorScheme))
         }
+    }
+
+    /// A swipe shifts the overview toward the leading edge and its pages toward the trailing edge
+    /// while they fade; other navigation keeps the plain crossfade.
+    private func pageTransition(isOverview: Bool) -> AnyTransition {
+        guard isSwiping else { return .opacity }
+        return .opacity.combined(with: .offset(x: isOverview ? -IPadShellView.pageParallax : IPadShellView.pageParallax))
+    }
+
+    private var canSwipe: Bool {
+        coordinator.iPadNavigation.focusPresentation == .normal && notePath.isEmpty && coordinator.workspaceChange == nil
+    }
+
+    private var swipeBack: (() -> Void)? {
+        guard canSwipe else { return nil }
+        switch coordinator.currentScreen {
+        case .agentConversation: return coordinator.onBackToWorkspaceDetail
+        case .noteDetail: return coordinator.onBackFromNote
+        default: return nil
+        }
+    }
+
+    private var swipeForward: (() -> Void)? {
+        guard canSwipe, case let .workspaceDetail(workspaceId) = coordinator.currentScreen,
+              let firstAgent, firstAgent.workspaceId == workspaceId else { return nil }
+        return { coordinator.onSelectAgent(firstAgent.id, workspaceId: workspaceId, agentName: firstAgent.name) }
     }
 
     private func note(_ destination: NoteDestination, showsBackButton: Bool) -> some View {
@@ -62,5 +152,20 @@ struct IPadWorkspaceDetailView: View {
         ) { noteId, workspaceId, title in
             notePath.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
         }
+    }
+}
+
+/// The overview's top agent, which a forward swipe opens.
+nonisolated struct WorkspaceFirstAgent: Equatable, Sendable {
+    let id: String
+    let workspaceId: String
+    let name: String
+}
+
+struct WorkspaceFirstAgentPreference: PreferenceKey {
+    nonisolated static var defaultValue: WorkspaceFirstAgent? { nil }
+
+    nonisolated static func reduce(value: inout WorkspaceFirstAgent?, nextValue: () -> WorkspaceFirstAgent?) {
+        value = value ?? nextValue()
     }
 }

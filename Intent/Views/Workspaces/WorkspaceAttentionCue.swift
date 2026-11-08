@@ -96,6 +96,7 @@ final class WorkspaceAttentionCueCenter {
 
     init(
         playSound: @escaping () -> Void = {
+            guard NotificationSoundPolicy.system.attentionCuePlays() else { return }
             AudioServicesPlaySystemSound(WorkspaceAttentionCueCenter.attentionSystemSoundID)
         },
         windowEmitsCueSound: Bool = WorkspaceAttentionCueCenter.platformWindowEmitsCueSound,
@@ -151,16 +152,24 @@ extension View {
     /// slight z-lift plus scale, animated once on state change — no
     /// continuous animation (HIG: gentle, non-looping attention cues).
     /// No-op on other platforms.
+    /// While the Intent menu is open raised rows are hidden entirely (no
+    /// lift, input or accessibility) and return when it closes.
     @ViewBuilder
-    func visionAttentionCue(_ active: Bool) -> some View {
+    func visionAttentionCue(_ presentation: WorkspaceAttentionCuePresentation, reduceMotion: Bool) -> some View {
         #if os(visionOS)
         self
-            .scaleEffect(active ? Constants.WorkspaceRow.attentionCueScale : 1)
-            .offset(z: active ? Constants.WorkspaceRow.attentionCueZOffset : 0)
+            .scaleEffect(presentation.liftsTowardViewer ? Constants.WorkspaceRow.attentionCueScale : 1)
+            .offset(z: presentation.liftsTowardViewer ? Constants.WorkspaceRow.attentionCueZOffset : 0)
             .animation(
-                .easeOut(duration: Constants.WorkspaceRow.attentionCueAnimationDuration),
-                value: active
+                reduceMotion ? nil : .easeOut(duration: Constants.WorkspaceRow.attentionCueAnimationDuration),
+                value: presentation.liftsTowardViewer
             )
+            // Not animated: a row suppressed while the menu opens, or one
+            // raising attention under it, never shows a lift on the way.
+            .opacity(presentation.isHidden ? 0 : 1)
+            .allowsHitTesting(!presentation.isHidden)
+            .accessibilityHidden(presentation.isHidden)
+            .animation(nil, value: presentation.isHidden)
         #else
         self
         #endif

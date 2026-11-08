@@ -212,15 +212,20 @@ struct IntentFileImageAttachment: Attachment {
     var description: String { altText }
 
     var body: some View {
-        IntentFileAttachmentImageView(image: image, accessibilityLabel: altText)
+        // Textual's ideal-sized symbol must match the measured image proportions.
+        InlineImageThumbnail(image: image)
+            .accessibilityLabel(altText)
+            .contextMenu {
+                ImageActionMenuItems(image: image)
+            }
+            .imageSaveAlert()
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {
-        Self.thumbnailSize(proposedWidth: proposal.width)
+        InlineImageThumbnail.size(for: image.size, proposedWidth: proposal.width)
     }
 
-    /// Fixed square transcript thumbnail (FE parity), clamped to the
-    /// proposed width so narrow layouts don't overflow.
+    /// Square media-card bounds, clamped to the available text width.
     static func thumbnailSize(proposedWidth: CGFloat?) -> CGSize {
         let side = min(
             SquareImageThumbnail.transcriptSide,
@@ -289,35 +294,5 @@ private extension UIContentSizeCategory {
         case .accessibility5: return .accessibilityExtraExtraExtraLarge
         default: return .large
         }
-    }
-}
-
-/// Rendering for a loaded attachment image, cropped to fill the square
-/// frame Textual derives from `sizeThatFits`; tap handling lives in
-/// `MarkdownTextView` via the Textual attachment tap action.
-private struct IntentFileAttachmentImageView: View {
-    let image: UIImage
-    let accessibilityLabel: String
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        Color.clear
-            .overlay(
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .accessibilityLabel(accessibilityLabel)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius)
-                    .strokeBorder(
-                        Theme.border(for: colorScheme),
-                        lineWidth: Constants.Conversation.ImageThumbnail.borderWidth
-                    )
-            )
-            .contextMenu {
-                ImageActionMenuItems(image: image)
-            }
     }
 }

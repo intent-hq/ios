@@ -2,8 +2,10 @@ import SwiftUI
 import WebKit
 
 struct WorkspaceBrowserView: View {
+    @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     let browser: WorkspaceBrowser
     let connection: any SessionConnectionManaging
+    var onClose: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -20,15 +22,19 @@ struct WorkspaceBrowserView: View {
     var body: some View {
         NavigationStack {
             browserContent
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let onClose { mainContentHeader(onClose: onClose) }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 addressBar
                     .padding(.top, BrowserAppearance.rowSpacing)
-                    .background(Theme.background(for: colorScheme))
+                    .background(WorkspaceDetailStyle.background(for: colorScheme))
             }
-            .background(Theme.background(for: colorScheme))
+            .background(WorkspaceDetailStyle.background(for: colorScheme))
             .navigationTitle(page.title.isEmpty ? "Browser" : page.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { browserToolbar }
+            .toolbar(onClose == nil ? .automatic : .hidden, for: .navigationBar)
             .task(id: attachmentKey) { await attach() }
             .onAppear { addressInput = targetAddress ?? browser.url }
             .onChange(of: page.address) { _, address in
@@ -148,10 +154,29 @@ struct WorkspaceBrowserView: View {
 
     @ToolbarContentBuilder
     private var browserToolbar: some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            IntentIconButton(icon: .close, label: "Done") { dismiss() }
+        if onClose == nil {
+            ToolbarItem(placement: .cancellationAction) {
+                IntentIconButton(icon: .close, label: "Done") { dismiss() }
+            }
+            .intentToolbarSurface()
         }
-        .intentToolbarSurface()
+    }
+
+    private func mainContentHeader(onClose: @escaping () -> Void) -> some View {
+        WorkspaceNavigationHeader(
+            title: page.title.isEmpty ? "Browser" : page.title,
+            subtitle: nil,
+            backLabel: "Close main browser",
+            backIdentifier: "browser.main.close",
+            titleIdentifier: "browser.main.title",
+            leadingIcon: .close,
+            usesConversationLayout: true,
+            onBack: onClose
+        ) {
+            Color.clear
+                .frame(width: Constants.Conversation.Design.Header.controlSize, height: Constants.Conversation.Design.Header.controlSize)
+                .accessibilityHidden(true)
+        }
     }
 
     private func unavailable(_ message: String) -> some View {
@@ -159,7 +184,10 @@ struct WorkspaceBrowserView: View {
             Label {
                 Text("Page unavailable").interFont(Constants.Typography.bodyM.withFace(.semibold))
             } icon: {
-                Image(systemName: "globe")
+                Image(.globe)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: emptyStateIconSize, height: emptyStateIconSize)
             }
         } description: {
             Text(message).interFont(Constants.Typography.bodyS)

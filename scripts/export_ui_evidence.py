@@ -25,8 +25,122 @@ CAPTURES = {
             "startup-reconnect-failed", "startup-reconnect-recovered",
         ),
     },
+    "IPadToolPlacementUITests": {
+        "testBrowserDragKeepsChatDraftAndRestoresMainChatInBothThemes": tuple(
+            f"ipad-tool-{state}-{appearance}"
+            for state in ("before", "browser-chat", "restored")
+            for appearance in ("light", "dark")
+        ),
+        "testTerminalDragAllowsAgentSelectionAndLeavesShellRunning": tuple(
+            f"ipad-tool-terminal-chat-{appearance}" for appearance in ("light", "dark")
+        ),
+    },
+    "IPadWorkspaceSidebarUITests": {
+        "testOpenAgentAndNoteMoveTheWorkspaceIntoTheSidebarInBothThemes": tuple(
+            f"ipad-workspace-{state}-{appearance}"
+            for state in ("overview", "sidebar-agent", "sidebar-menu", "sidebar-note", "sidebar-portrait", "sidebar-back")
+            for appearance in ("light", "dark")
+        ),
+    },
+    "SkillAutocompleteUITests": {
+        "testSkillSuggestionsFilterInsertAndSendInBothThemes": tuple(
+            f"skill-{state}-{appearance}"
+            for state in ("suggestions", "inserted")
+            for appearance in ("light", "dark")
+        ),
+    },
+    "QuestionAttachmentUITests": {
+        "testImageAnswerCanBeRemovedReattachedAndSentAcrossSteps": tuple(
+            f"question-image{state}-{appearance}"
+            for appearance in ("light", "dark")
+            for state in ("", "-sent")
+        ),
+    },
+    "ScriptMonitorsUITests": {
+        "testRetainedWatchAndPagingActionsFitInBothThemes": (
+            "status-pills-page-error-light", "status-pills-page-error-dark",
+            "status-pills-page-recovered-light", "status-pills-page-recovered-dark", "script-monitors-final-state",
+        ),
+        "testOwnedWatchDetailsUpdateAndRemovalWithoutRestart": (
+            "script-monitors-active", "script-monitors-details", "script-monitors-text-update",
+            "script-monitors-removed-details", "script-monitors-removed", "script-monitors-final-state",
+        ),
+        "testLoadingFailureRetriesWithoutInventingAnEmptyState": (
+            "script-monitors-loading", "script-monitors-error", "script-monitors-retried", "script-monitors-final-state",
+        ),
+        "testStatusPillsShareWidthAndStaySingleLineInBothThemes": (
+            "status-pills-retry-light", "status-pills-retry-dark",
+            "status-pills-watching-light", "status-pills-watching-dark", "script-monitors-final-state",
+        ),
+        "testEmptyOwnerCanLoadNextPageAndRetryItsFailure": (
+            "script-monitors-empty-owner-more", "script-monitors-page-error", "script-monitors-next-page", "script-monitors-final-state",
+        ),
+        "testDetailFailureRetainsSummaryAndRetriesOnlySelectedWatch": (
+            "script-monitors-detail-error", "script-monitors-detail-retried", "script-monitors-final-state",
+        ),
+        "testUnsupportedConnectionDoesNotReadOrSubscribe": (
+            "script-monitors-unsupported", "script-monitors-final-state",
+        ),
+        "testDeadlineRemainsVisibleUntilServerExpiry": (
+            "script-monitors-deadline", "script-monitors-expired", "script-monitors-final-state",
+        ),
+        "testSeveralWatchesShareOneCountedPill": (
+            "script-monitors-multiple", "script-monitors-multiple-menu", "script-monitors-multiple-details",
+            "script-monitors-final-state",
+        ),
+        "testQuestionFlowKeepsWatchReachableWithAccessibilityText": (
+            "script-monitors-question-accessibility", "script-monitors-question-details", "script-monitors-final-state",
+        ),
+    },
+    "WorkspaceFilesUITests": {
+        "testBrowseFilesAndPreserveFoldersAcrossTabsInBothThemes": tuple(
+            f"{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("workspace-context", "workspace-files", "workspace-file-preview")
+        ),
+    },
+    "FixtureCaptureLifecycleUITests": {
+        "testAssertionAbortRetainsFinalCapture": ("fixture-assertion-abort-final-state",),
+        "testPassingFixtureRetainsRepeatedFinalCapture": ("fixture-passing-final-state",),
+    },
     "WorkspaceEntryUITests": {
         "testDisclosureAndNoteNavigationKeepSeparateTouchTargets": ("note-viewer-flat-back-button",),
+        "testCreateNewAgentMenuOpensAgentSetup": ("new-agent-next", "new-agent-create", "new-browser-open"),
+    },
+    "WorkspaceBackgroundUITests": {
+        "testNoteBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "note")
+        ),
+        "testNewAgentBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "agent", "provider")
+        ),
+        "testBrowserBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "browser", "browser-address")
+        ),
+        "testConversationBackgroundMatchesWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "conversation")
+        ),
+        "testSettingsBackgroundsMatchWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "settings", "manual", "disconnect-confirmation")
+        ),
+        "testIPadSettingsSidebarKeepsShellBackground": (
+            "ipad-settings-sidebar-light", "ipad-settings-sidebar-dark",
+        ),
+        "testSettingsSupportBackgroundsMatchWorkspaceInBothAppearances": tuple(
+            f"workspace-background-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("reference", "acknowledgements", "diagnostics")
+        ),
     },
     "AppCoordinatorTests": {
         "iPadWorkspaceBackFollowsWindowWidthAndKeepsSelection": (
@@ -41,23 +155,66 @@ CAPTURES = {
             "ipad-narrow-workspace-draft", "ipad-narrow-assistant-draft",
         ),
     },
+    "IPadTypingFocusUITests": {
+        "testSendingRestoresConversationInBothThemes": (
+            "iPad prompt sent light", "iPad prompt sent dark",
+        ),
+    },
     "IPadSidebarUITests": {
+        "testPullRequestsSectionListsAndOpensDetailInBothThemes": tuple(
+            f"iPad pull {screen} {appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("requests", "request detail")
+        ),
+        "testExpandedDuoUsesSharedShellAndChatHeader": (
+            "Shared shell chat scrollback light", "Shared shell chat scrollback dark",
+        ),
         "testSectionsAndPairingRestoreConversationInBothThemes": tuple(
             f"iPad {section} {appearance}"
             for appearance in ("light", "dark")
             for section in (
                 "workspace", "collapsed", "Assistant", "connections", "settings", "QR", "manual",
                 "Recent sidebar", "Repo sidebar", "Status sidebar", "first workspace selected",
+                "focused typing", "focused typing keyboard hidden", "typing restored",
             )
+        ),
+        "testScrollingIndicatorStaysOutsideWorkspaceRowsInBothThemes": tuple(
+            f"iPad scrolling {mode} sidebar {appearance}"
+            for appearance in ("light", "dark")
+            for mode in ("Recent", "Repo", "Status")
         ),
         "testRailRemainsReachableWithAccessibilityText": ("iPad accessibility manual pairing",),
     },
+    "IPadWorkspaceSidebarUITests": {
+        "testDetailPaneShowsPlaceholderWithoutSelectedWorkspaceInBothThemes": tuple(
+            f"ipad-empty-detail-{orientation}-{appearance}"
+            for appearance in ("light", "dark")
+            for orientation in ("landscape", "portrait")
+        ),
+    },
+    "IPadAssistantSwipeUITests": {
+        "testSwipeDeletionPreservesSelectionAndSupportsCancellationInBothThemes": (
+            "iPad Assistant swipe delete light", "iPad Assistant swipe delete dark",
+        ),
+    },
+    "IPhoneAssistantHistoryUITests": {
+        "testSwipeDeletionPreservesDraftAndSelectionInBothThemes": (
+            "iPhone Assistant history swipe delete light", "iPhone Assistant history swipe delete dark",
+        ),
+    },
     "HomeActionMenuUITests": {
+        "testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle": ("Duo workspace detail without header",),
+        "testClosePreservesWorkspaceScrollAndAssistantIsFirst": ("Intent home action tiles",),
+        "testMenuPlacementSurvivesDrawerRoundTrips": (
+            "Intent menu placement closed", "Intent menu placement open",
+        ),
         "testIPadConversationKeepsDraftAndRailAvailable": (
             "iPad expanded workspace conversation", "iPad collapsed conversation with draft",
             "iPad portrait conversation with draft",
+            "iPad focused multiline draft",
         ),
         "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
+        "testMenuCardsStayReachableWithLargestText": ("Menu largest text",),
     },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
@@ -69,6 +226,41 @@ CAPTURES = {
             "mermaid-fullscreen-from-button-edge", "mermaid-inline-after-pinch",
             "mermaid-inline-after-horizontal-pan", "mermaid-inline-after-vertical-pan",
         ),
+    },
+    "ConversationTranscriptHistoryUITests": {
+        "testFailedHistoryLoadCanBeRetriedWithoutLeavingConversation": (
+            "history-retry-older-message-visible",
+        ),
+        "testPendingHistoryHasNoLoadingRowAndChainsPagesFromTop": (
+            "history-before-chained-prepend", "history-after-chained-prepend",
+        ),
+    },
+    "ConversationToolActivityUITests": {
+        "testIPadClaudeToolTitlesKeepExpandedDetails": (
+            "iPad Claude tools collapsed light", "iPad Claude tools expanded light",
+            "iPad Claude tools collapsed dark", "iPad Claude tools expanded dark", "iPad Claude tools final state",
+        ),
+        "testIPadConsecutiveToolsExpandAndCollapseInBothThemes": (
+            "iPad tools collapsed light", "iPad tools expanded light",
+            "iPad tools collapsed dark", "iPad tools expanded dark", "iPad tools final state",
+        ),
+    },
+    "ConversationActionsUITests": {
+        "testAssistantModelPickerUsesInheritedProviderAndPreservesDraft": (
+            "Assistant-Model-Picker-light", "Assistant-Model-Picker-dark",
+            "Assistant-Model-Settings-selected-light", "Assistant-Model-Settings-selected-dark",
+        ),
+        "testEmptyAssistantModelPickerOffersRetryAndCancel": ("Assistant-Model-Picker-Empty",),
+        "testHistoryNoticeAndActionCancellationPreserveConversation": (
+            "Conversation-History-Light", "Agent-Actions-Light", "Agent-Delete-Confirmation-Light",
+            "Agent-Model-Picker-Light", "Agent-Actions-Updated-Light",
+        ),
+        "testLargeTextModelPickerWorksAfterSending": (
+            "Agent-Actions-Dark-LargeText", "Agent-Model-Picker-Dark-LargeText", "Agent-Model-Picker-Selected-Dark-LargeText",
+        ),
+    },
+    "WorkspaceComposerUITests": {
+        "testTranscriptTapDismissesKeyboardAndPreservesDraft": ("Workspace composer resting placement",),
     },
     "ConversationTranscriptScrollUITests": {
         "testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath": ("Transcript recovered release",),
@@ -91,12 +283,26 @@ CAPTURES = {
         ),
     },
     "InlineResponseImageUITests": {
+        "testSavedAndMissingImagesPreserveResponseAndLightboxAfterReopening": (
+            "Inline image response, entry 1", "Inline image response, entry 2", "Saved response image in lightbox",
+        ),
+        "testSavedImageOpensWithKeyboardAndPreservesDraft": (
+            "Response image with keyboard open", "Saved response image in lightbox",
+        ),
+        "testUserImageBlockOpensWithKeyboardAndPreservesDraft": (
+            "user image block with keyboard open", "Saved response image in lightbox",
+        ),
+        "testAssistantImageBlockOpensWithKeyboardAndPreservesDraft": (
+            "assistant image block with keyboard open", "Saved response image in lightbox",
+        ),
         "testPDFCardAndLinkOpenViewerAndShare": (
             "Inline PDF card and link", "PDF viewer from inline card",
             "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",
         ),
-        "testTextLinkOpensViewerSharesAndRetriesMissingFile": (
+        "testTextLinkOpensViewerAndRetriesMissingFile": (
             "Text viewer from text link", "Text unavailable with close and retry",
+            "Text viewer wrap menu", "Text viewer without wrapping",
+            "Text viewer after toggling wrapping",
         ),
     },
     "AssistantStateUITests": {
@@ -125,11 +331,21 @@ CAPTURES = {
         ),
     },
     "WorkspaceTitleEditingUITests": {
+        "testSidebarFailedSaveKeepsErrorBelowDraftInBothThemes": (
+            "Sidebar title save error light", "Sidebar title save error dark",
+        ),
         "testDoubleTapShowsKeyboardAndDoneSavesTheTitle": (
             "Workspace title editing with keyboard and floating Done",
         ),
+        "testTitleDraftSurvivesScrollingOffscreenAndBack": (
+            "Workspace title draft offscreen light", "Workspace title draft offscreen dark",
+            "Workspace title draft restored light", "Workspace title draft restored dark",
+        ),
     },
     "ConnectionLossUITests": {
+        "testDemoRelaunchAfterReturningHomeStartsAtWorkspaces": (
+            "connection-loss-demo-home-before-relaunch", "connection-loss-demo-workspaces-after-relaunch",
+        ),
         "testDifferentServerAllowsSameMachineReselection": (
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
@@ -143,7 +359,16 @@ CAPTURES = {
     },
     "WorkspaceSwipeUITests": {
         "testSlowStatusSwipeStaysOpenAfterFingerLifts": ("workspace-status-swipe-stays-open",),
-        "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": ("workspace-archived-badge",),
+        "testRightSwipeOpensRecentAgentAndBackReturnsToWorkspace": ("workspace-right-swipe-recent-agent",),
+        "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": (
+            "workspace-archive-delete-swipe", "workspace-archived-badge",
+        ),
+    },
+    "WorkspaceScriptUITests": {
+        "testSwipeStopsServerAndDeletesFinishedScript": ("workspace-script-stop-delete-actions",),
+    },
+    "WorkspaceStatusImageUITests": {
+        "testStatusImageIsAbsentFromListAndOpensFullSizeFromDetail": ("workspace-summary-and-image",),
     },
     "ManualConnectionDesignUITests": {
         "testTokenVisibilityKeepsDraftFocusAndSheetPosition": (
@@ -154,12 +379,28 @@ CAPTURES = {
     "WorkspaceListMenuUITests": {
         "testEmptyWorkspaceButtonOpensCreationAndReturns": ("empty-workspaces-light", "empty-workspaces-dark"),
         "testNewWorkspaceMenuOpensCreationAndReturns": ("new-workspace-menu-light", "new-workspace-menu-dark"),
+        "testPullRequestsListSwitchesFromMenuInBothThemes": tuple(
+            f"pull-requests{state}-{appearance}"
+            for appearance in ("light", "dark")
+            for state in ("", "-grouped", "-review", "-new-workspace")
+        ),
+        "testPullRequestDetailShowsSummaryAndCodeInBothThemes": tuple(
+            f"pull-request-detail-{tab}-{appearance}"
+            for appearance in ("light", "dark")
+            for tab in ("summary", "code")
+        ),
         "testRecentAgentsOpensAndClosesExistingDrawer": (
             "workspace-list-menu", "workspace-menu-recent-agents",
         ),
         "testRecentConnectionsOpensSwitcherAndSelectsConnection": ("workspace-menu-recent-connections",),
     },
     "WorkspaceSearchUITests": {
+        "testWorkspaceControlsHaveSeparateTargetsAndSelectEveryMode": ("Workspace list leading alignment",),
+        "testIPadSearchSurvivesCollapseAndSectionChanges": tuple(
+            f"iPad {state} {appearance}"
+            for appearance in ("light", "dark")
+            for state in ("focused search", "focused search keyboard hidden", "search restored")
+        ),
         "testSearchAboveKeyboardHidesAssistantUntilClosed": (
             "Workspace search above keyboard without Assistant launcher",
         ),
@@ -180,6 +421,8 @@ CAPTURES = {
         "testBackThenForwardPreservesProviderAndNamedModelThroughRefresh": (
             "selected-repository", "selected-branch", "branch-search-opened", "branch-search-results",
             "selected-before-back", "draft-after-source-edit",
+            "refresh-pending-light", "refresh-pending-dark",
+            "selected-after-refresh-light", "selected-after-refresh-dark",
         ),
     },
     "CreateWorkspacePreferencesUITests": {
@@ -189,8 +432,21 @@ CAPTURES = {
         "testDismissedPromptRestoresAndClearsAfterSuccessfulRetry": ("restored-workspace-draft",),
     },
     "WorkspaceChangesUITests": {
+        "testCommitFilenamesStayPinnedWhileScrollingInBothThemes": (
+            "commit-sticky-source-light", "commit-sticky-source-dark",
+            "commit-sticky-tests-light", "commit-sticky-tests-dark",
+            "commit-sticky-jump-light", "commit-sticky-jump-dark",
+        ),
+        "testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes": (
+            "ipad-commit-main-light", "ipad-commit-main-dark", "ipad-commit-portrait-light", "ipad-commit-portrait-dark",
+            "ipad-commit-from-sidebar-light", "ipad-commit-from-sidebar-dark",
+            "ipad-commit-details-light", "ipad-commit-details-dark",
+            "ipad-diff-main-light", "ipad-diff-main-dark", "ipad-diff-portrait-light", "ipad-diff-portrait-dark",
+            "ipad-diff-from-sidebar-light", "ipad-diff-from-sidebar-dark",
+        ),
         "testChangesTabOpensStagedUnstagedAndCommitDiffs": (
-            "workspace-changes", "unstaged-diff", "commit-diff",
+            "workspace-changes", "unstaged-diff", "commit-diff", "commit-details", "commit-file-search", "commit-file-picker",
+            "commit-files-fit", "commit-files-offscreen",
         ),
         "testRepositorySelectionScopesFilesAndCommitDiffs": (
             "submodule-changes", "submodule-unstaged-diff", "submodule-commit-diff",

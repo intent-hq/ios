@@ -5,9 +5,9 @@ set -euo pipefail
 # with the same major version as the selected Xcode's iOS simulator SDK (Xcode
 # 26.3 ships SDK 26.2 and pairs with the iOS 26.3.x runtime), creating one when
 # none exists. Used only on the self-hosted Mac, which also has other runtimes
-# installed (for example iOS 27 for the default Xcode); scripts/xcodebuild.sh
-# pick-simulator would otherwise choose whichever "iPhone 16" is listed last.
-# Hosted runners keep pick-simulator.
+# installed (for example iOS 27 for the default Xcode). Unlike
+# scripts/xcodebuild.sh pick-simulator, it pins the iPhone 16 model and creates
+# an owned device. Hosted runners keep pick-simulator.
 device_type='iPhone 16'
 sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)
 sdk_major=${sdk_version%%.*}

@@ -26,7 +26,7 @@ import Observation
     @ObservationIgnored private var isObserving = false
     @ObservationIgnored private var subscriptionId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
-    @ObservationIgnored private var refreshQueued = false
+    @ObservationIgnored private var refreshQueued = false // swiftlint:disable:this state_phase_flag
     @ObservationIgnored private var eventRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
     let connectionManager: ConnectionManagerRouting
@@ -134,11 +134,15 @@ import Observation
         var params: [String: Any] = ["workspaceId": workspaceId]
         if let root {
             params["gitRootId"] = root.id
+            params["forceRefresh"] = true
             let result = try await connectionManager.request("git.status", params: params)
             return try WorkspaceChangesSnapshot(result, rootId: root.id)
         }
         let result = try await connectionManager.request("file-tracking.getChanges", params: params)
-        return try WorkspaceChangesSnapshot(result)
+        let tracked = try WorkspaceChangesSnapshot(result)
+        params["forceRefresh"] = true
+        let status = try await connectionManager.request("git.status", params: params)
+        return try WorkspaceChangesSnapshot(status, rootId: "primary", trackedChanges: tracked.changes)
     }
 
     private func fetchCommits(
@@ -177,7 +181,7 @@ import Observation
     }
 
     /// Invalidates pending reads synchronously so a disappearing screen cannot be repopulated.
-    func stopObserving() {
+    func stopObserving(preservingSnapshot: Bool = false) {
         registration &+= 1
         revision &+= 1
         isObserving = false
@@ -188,6 +192,8 @@ import Observation
         eventHandlerId = nil
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
         subscriptionId = nil
+        // A commit pushed over Changes keeps its repository and rows for Back.
+        guard !preservingSnapshot else { return }
         workspaceId = nil
         roots = []
         selectedRootId = nil

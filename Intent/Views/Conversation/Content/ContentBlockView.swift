@@ -90,8 +90,11 @@ struct ContentBlockBody: View, Equatable {
     var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
+    @Environment(\.conversationComposerFocus) private var composerFocus
+    @ScaledMetric(relativeTo: .caption) private var contentIconSide: CGFloat = 12
     var disclosure = TranscriptDisclosure()
     private var thinkingExpanded: Bool {
         get { disclosure.binding(for: .thinking(block.id), default: false).wrappedValue }
@@ -100,6 +103,7 @@ struct ContentBlockBody: View, Equatable {
     @State private var lightboxPresented = false
     @State private var pdfLink: PDFLinkPreviewView.Link?
     @State private var textLink: TextLinkPreviewView.Link?
+    @State private var htmlLink: HTMLLinkPreviewView.Link?
     /// Set when a thumbnail tap started hydration: the lightbox then opens
     /// automatically once the full block merges in (dataTruncated clears).
     @State private var lightboxPendingHydration = false
@@ -195,9 +199,15 @@ struct ContentBlockBody: View, Equatable {
         }
         .fullScreenCover(item: $pdfLink) { link in
             PDFLinkPreviewView(link: link)
+                .coversConversationComposers()
         }
         .fullScreenCover(item: $textLink) { link in
             TextLinkPreviewView(link: link)
+                .coversConversationComposers()
+        }
+        .fullScreenCover(item: $htmlLink) { link in
+            HTMLLinkPreviewView(link: link)
+                .coversConversationComposers()
         }
     }
 
@@ -207,6 +217,8 @@ struct ContentBlockBody: View, Equatable {
             pdfLink = link
         case .text(let link):
             textLink = link
+        case .html(let link):
+            htmlLink = link
         case let .note(noteId, targetWorkspaceId):
             if let onNavigateToNote {
                 onNavigateToNote(noteId, targetWorkspaceId, "Note")
@@ -214,7 +226,8 @@ struct ContentBlockBody: View, Equatable {
                 coordinator.onSelectNote(noteId, workspaceId: targetWorkspaceId, noteTitle: "Note")
             }
         case .system:
-            return .systemAction
+            // Defer to the inherited handler, which opens tracked pull requests in the app.
+            openURL(url)
         }
         return .handled
     }
@@ -238,8 +251,10 @@ struct ContentBlockBody: View, Equatable {
                 .padding(.top, Constants.Conversation.ContentBlock.thinkingTopPadding)
         } label: {
             HStack(spacing: Constants.Conversation.ContentBlock.thinkingLabelSpacing) {
-                Image(systemName: "brain")
-                    .font(.caption)
+                Image(.thinking)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: contentIconSide, height: contentIconSide)
                     .accessibilityHidden(true)
                 Text("Thinking")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
@@ -285,10 +300,11 @@ struct ContentBlockBody: View, Equatable {
                     lightboxPendingHydration = true
                     onHydrateBlock?(block.id)
                 } else {
+                    composerFocus?.wrappedValue = false
                     lightboxPresented = true
                 }
             } label: {
-                SquareImageThumbnail(image: uiImage, side: SquareImageThumbnail.transcriptSide)
+                InlineImageThumbnail(image: uiImage)
                     .opacity(isHydrating
                         ? Constants.Conversation.ContentBlock.hydratingImageOpacity
                         : Constants.Conversation.ContentBlock.loadedImageOpacity)
@@ -306,14 +322,17 @@ struct ContentBlockBody: View, Equatable {
                     ImageActionMenuItems(image: uiImage, originalData: imageData)
                 }
             }
+            .imageSaveAlert()
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage, data: imageData)
+                    .coversConversationComposers()
             }
             .onChange(of: block.dataTruncation) { _, truncation in
                 // Hydration merged the full block in (the truncation flag
                 // cleared): open the lightbox the tap asked for.
                 if !truncation.isTruncated, lightboxPendingHydration {
                     lightboxPendingHydration = false
+                    composerFocus?.wrappedValue = false
                     lightboxPresented = true
                 }
             }
@@ -337,7 +356,10 @@ struct ContentBlockBody: View, Equatable {
                         Text("Loading image…")
                             .interFont(Constants.Typography.subtextXXS)
                     } else {
-                        Image(systemName: "photo")
+                        Image(.image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: contentIconSide, height: contentIconSide)
                             .accessibilityHidden(true)
                         Text(imageNeedsHydration ? "Tap to load image" : "Image")
                             .interFont(Constants.Typography.subtextXXS)
@@ -357,8 +379,10 @@ struct ContentBlockBody: View, Equatable {
     @ViewBuilder
     private var fileView: some View {
         HStack(spacing: Constants.Conversation.ContentBlock.fileLabelSpacing) {
-            Image(systemName: "doc")
-                .font(.caption)
+            Image(.file)
+                .resizable()
+                .scaledToFit()
+                .frame(width: contentIconSide, height: contentIconSide)
                 .accessibilityHidden(true)
             Text(block.fileName ?? "File")
                 .font(.caption.monospaced())
@@ -375,6 +399,7 @@ extension ContentBlockBody {
     enum TextURLRoute: Equatable {
         case pdf(PDFLinkPreviewView.Link)
         case text(TextLinkPreviewView.Link)
+        case html(HTMLLinkPreviewView.Link)
         case note(id: String, workspaceId: String)
         case system
     }
@@ -384,7 +409,10 @@ extension ContentBlockBody {
         if let link = IntentFileLink.parse(url), WorkspacePDF.isPDF(path: link.path) {
             return .pdf(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
         }
-        if let link = IntentFileLink.parse(url), WorkspaceTextFile.isText(path: link.path) {
+        if let link = IntentFileLink.parse(url), ["html", "htm"].contains(URL(fileURLWithPath: link.path).pathExtension.lowercased()) {
+            return .html(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
+        }
+        if let link = IntentFileLink.parse(url), !link.isImage, !WorkspaceVideo.isVideo(path: link.path) {
             return .text(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
         }
         if let link = NoteDetailView.parseIntentNoteLink(url) {

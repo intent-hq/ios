@@ -11,12 +11,7 @@ struct WorkspaceChangesFileTree: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var iconSize = WorkspaceChangesLayout.treeIconSize
-
-    private enum Layout {
-        static let indentation: CGFloat = 16
-        static let maximumIndentationDepth = 3
-    }
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         WorkspaceChangesSection(title: title, count: files.count, identifier: identifier, isExpanded: $isExpanded) {
@@ -25,7 +20,10 @@ struct WorkspaceChangesFileTree: View {
                     .interFont(Constants.Typography.bodyS)
                     .foregroundStyle(secondary)
             } else {
-                tree
+                WorkspaceFileTreeScrollView {
+                    tree
+                }
+                .accessibilityIdentifier("changes.tree.\(identifier)")
             }
         }
         .onChange(of: scope) { _, _ in collapsedDirectories.removeAll() }
@@ -44,10 +42,11 @@ struct WorkspaceChangesFileTree: View {
                     case .directory:
                         directoryRow(row)
                     case .file(let file):
-                        fileRow(file, name: row.node.name)
+                        fileRow(file, name: WorkspaceFileTreeLayout.displayName(path: row.node.path, depth: row.depth))
                     }
                 }
                 .padding(.leading, indentation(for: row.depth))
+                .fileTreeGuides(depth: row.depth)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -67,32 +66,13 @@ struct WorkspaceChangesFileTree: View {
     }
 
     private func directoryLabel(_ row: WorkspaceChangeTree.TreeRow, isCollapsed: Bool) -> some View {
-        HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(.folder)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(secondary)
-                .accessibilityHidden(true)
-            Text(row.depth >= Layout.maximumIndentationDepth ? row.node.path : row.node.name)
-                .interFont(Constants.Typography.bodySEmphasized)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("\(row.node.fileCount)")
-                .interFont(Constants.Typography.subtextXXS)
-                .foregroundStyle(secondary)
-            Image(isCollapsed ? .chevronRight : .chevronDown)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(secondary)
-                .accessibilityHidden(true)
-        }
-        .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-        .multilineTextAlignment(.leading)
-        .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
-        .contentShape(.rect)
+        WorkspaceFileTreeLabel(
+            name: WorkspaceFileTreeLayout.displayName(path: row.node.path, depth: row.depth),
+            isDirectory: true,
+            isExpanded: !isCollapsed,
+            showsChildGuide: WorkspaceFileTreeLayout.showsChildGuide(depth: row.depth, isExpanded: !isCollapsed),
+            count: row.node.fileCount
+        ) { EmptyView() }
     }
 
     private func fileRow(_ file: WorkspaceChange, name: String) -> some View {
@@ -105,68 +85,38 @@ struct WorkspaceChangesFileTree: View {
     }
 
     private func fileLabel(_ file: WorkspaceChange, name: String) -> some View {
-        HStack(alignment: .top, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(.file)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
+        WorkspaceFileTreeLabel(
+            name: name,
+            lineStats: file.hasLineStats && !file.isBinary ? (file.additions, file.deletions) : nil
+        ) {
+            fileMetadata(file)
+                .font(Constants.Typography.subtextXXS.font)
                 .foregroundStyle(secondary)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                Text(name)
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .tracking(CreateWorkspaceRepoStyle.nameTracking)
-                    .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
-                    .fixedSize(horizontal: false, vertical: true)
-                fileMetadata(file)
-                    .font(Constants.Typography.subtextXXS.font)
-                    .foregroundStyle(secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .multilineTextAlignment(.leading)
-        .padding(.vertical, CreateWorkspaceFormStyle.controlVerticalPadding)
-        .frame(maxWidth: .infinity, minHeight: CreateWorkspaceFormStyle.controlHeight, alignment: .leading)
-        .contentShape(.rect)
     }
 
     @ViewBuilder
     private func fileMetadata(_ file: WorkspaceChange) -> some View {
         let status = file.status == "modified" ? nil : file.status.capitalized
-        let label = [status, file.agentName].compactMap { $0 }.joined(separator: " · ")
-        if !label.isEmpty || file.isBinary || file.hasLineStats {
-            metadataLayout {
-                if !label.isEmpty {
-                    Text(label)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                if file.isBinary {
-                    Text("Binary")
-                } else if file.hasLineStats {
-                    WorkspaceChangeStats(additions: file.additions, deletions: file.deletions)
-                        .fixedSize()
-                }
-            }
+        let label = ([status, file.agentName] + [file.isBinary ? "Binary" : nil]).compactMap { $0 }.joined(separator: " · ")
+        if !label.isEmpty {
+            Text(label)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var metadataLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: WorkspaceChangesLayout.statsSpacing))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: CreateWorkspaceFormStyle.rowSpacing))
-    }
-
     private func indentation(for depth: Int) -> CGFloat {
-        let step = dynamicTypeSize.isAccessibilitySize ? WorkspaceDetailStyle.accessibilityIndentation : Layout.indentation
-        return CGFloat(min(depth, Layout.maximumIndentationDepth)) * step
+        WorkspaceFileTreeLayout.indentation(for: depth, accessibility: dynamicTypeSize.isAccessibilitySize)
     }
 
     private func toggleDirectory(_ path: String) {
-        if collapsedDirectories.contains(path) {
-            collapsedDirectories.remove(path)
-        } else {
-            collapsedDirectories.insert(path)
+        let opening = collapsedDirectories.contains(path)
+        withAnimation(WorkspaceFileTreeLayout.folderToggleAnimation(opening: opening, reduceMotion: reduceMotion)) {
+            if opening {
+                collapsedDirectories.remove(path)
+            } else {
+                collapsedDirectories.insert(path)
+            }
         }
     }
 }

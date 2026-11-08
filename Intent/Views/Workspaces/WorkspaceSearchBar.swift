@@ -1,15 +1,17 @@
 import SwiftUI
 
-struct WorkspaceSearchBar: View {
-    private static let selectionAnimationDuration = 0.35
-
+struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: View
+    where Mode.RawValue == String, Mode.AllCases: RandomAccessCollection {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Binding var viewMode: ViewMode
+    @Binding var viewMode: Mode
     @Binding var isSearching: Bool
     var horizontalPadding: CGFloat = Constants.WorkspaceList.pickerHorizontalPadding
     var isCompact = false
     var isSidebar = false
+    var identifierPrefix = "workspaces.viewMode"
+    var accessibilityTitle: LocalizedStringKey = "Workspace view"
+    var searchLabel: LocalizedStringKey = "Search workspaces"
     @Namespace private var selectionAnimation
     @ScaledMetric(relativeTo: .body) private var segmentTracking: CGFloat = -0.32
 
@@ -27,7 +29,7 @@ struct WorkspaceSearchBar: View {
                 viewModeSwitcher
 
                 if !isSidebar {
-                    WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight, visionWorkspaceHover: true)
+                    WorkspaceSearchButton(isSearching: $isSearching, height: controlHeight, label: searchLabel, visionWorkspaceHover: true)
                 }
             }
         }
@@ -36,12 +38,13 @@ struct WorkspaceSearchBar: View {
 
     private var viewModeSwitcher: some View {
         HStack(spacing: Constants.WorkspaceSearch.visionSegmentSpacing) {
-            ForEach(ViewMode.allCases, id: \.self) { mode in
+            ForEach(Mode.allCases, id: \.self) { mode in
                 Button {
+                    if viewMode != mode { HapticManager.selection() }
                     viewMode = mode
                 } label: {
                     Text(mode.rawValue)
-                        .interFont(isSidebar ? Constants.Typography.bodyXSEmphasized : Constants.Typography.bodySEmphasized)
+                        .interFont(Constants.Typography.bodySEmphasized)
                         .tracking(segmentTracking)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: controlHeight - segmentInset * 2)
@@ -54,7 +57,7 @@ struct WorkspaceSearchBar: View {
                 .buttonStyle(IntentContentButtonStyle())
                 .matchedGeometryEffect(id: mode, in: selectionAnimation)
                 .accessibilityAddTraits(viewMode == mode ? .isSelected : [])
-                .accessibilityIdentifier("workspaces.viewMode.\(mode.rawValue)")
+                .accessibilityIdentifier("\(identifierPrefix).\(mode.rawValue)")
             }
         }
         .background {
@@ -64,10 +67,14 @@ struct WorkspaceSearchBar: View {
         }
         .padding(segmentInset)
         .background { if !isSidebar { WorkspaceSearchSurface() } }
-        .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: viewMode)
+        .animation(reduceMotion ? nil : .snappy(duration: WorkspaceSearchBarStyle.selectionAnimationDuration), value: viewMode)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Workspace view")
+        .accessibilityLabel(accessibilityTitle)
     }
+}
+
+private enum WorkspaceSearchBarStyle {
+    static let selectionAnimationDuration = 0.35
 }
 
 struct WorkspaceSearchButton: View {
@@ -85,8 +92,9 @@ struct WorkspaceSearchButton: View {
         Button {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: Constants.WorkspaceSearch.focusAnimationDuration)) {
                 isSearching = true
+            } completion: {
+                if isSearching { onOpen() }
             }
-            onOpen()
         } label: {
             Image(.search)
                 .resizable()
@@ -117,6 +125,8 @@ struct WorkspaceSearchInput: View {
     var placeholder: LocalizedStringKey = "Search workspaces"
     var identifierPrefix = "workspaces.search"
     var surfaceColor: Color?
+    var horizontalPadding: CGFloat = Constants.WorkspaceSearch.contentSpacing
+    var focusesOnAppear = true
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
     var body: some View {
@@ -142,8 +152,9 @@ struct WorkspaceSearchInput: View {
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Close search")
             .accessibilityIdentifier("\(identifierPrefix).cancel")
+            .keyboardShortcut(.cancelAction)
         }
-        .padding(.horizontal, Constants.WorkspaceSearch.contentSpacing)
+        .padding(.horizontal, horizontalPadding)
         .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
     }
 
@@ -157,7 +168,7 @@ struct WorkspaceSearchInput: View {
                 .submitLabel(.search)
                 .focused(isFocused)
                 .accessibilityIdentifier("\(identifierPrefix).field")
-                .onAppear { isFocused.wrappedValue = true }
+                .onAppear { if focusesOnAppear { isFocused.wrappedValue = true } }
                 .onSubmit { isFocused.wrappedValue = false }
             if !text.isEmpty {
                 Button {

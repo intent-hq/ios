@@ -7,6 +7,7 @@ opt_in_rules:
   - accessibility_trait_for_button
   - anonymous_argument_in_multiline_closure
   - array_init
+  - async_without_await
   - balanced_xctest_lifecycle
   - closure_body_length
   - closure_end_indentation
@@ -41,7 +42,6 @@ opt_in_rules:
   - flatmap_over_map_reduce
   - force_unwrapping
   - function_default_parameter_at_end
-  - ibinspectable_in_extension
   - identical_operands
   - implicit_return
   - implicitly_unwrapped_optional
@@ -50,11 +50,11 @@ opt_in_rules:
   - last_where
   - legacy_multiple
   - legacy_objc_type
+  - legacy_uigraphics_function
   - let_var_whitespace
   - literal_expression_end_indentation
   - local_doc_comment
   - lower_acl_than_parent
-  - missing_docs
   - modifier_order
   - multiline_arguments
   - multiline_arguments_brackets
@@ -63,13 +63,10 @@ opt_in_rules:
   - multiline_literal_brackets
   - multiline_parameters
   - multiline_parameters_brackets
-  - nimble_operator
   - no_magic_numbers
   - non_overridable_class_declaration
   - nslocalizedstring_key
-  - nslocalizedstring_require_bundle
   - number_separator
-  - object_literal
   - operator_usage_whitespace
   - optional_enum_case_matching
   - overridden_super_call
@@ -82,17 +79,13 @@ opt_in_rules:
   - prefer_self_type_over_type_of_self
   - prefer_zero_over_explicit_init
   - prefixed_toplevel_constant
-  - private_action
-  - private_outlet
   - private_subject
   - private_swiftui_state
   - prohibited_interface_builder
   - prohibited_super_call
-  - quick_discouraged_call
-  - quick_discouraged_focused_test
-  - quick_discouraged_pending_test
   - raw_value_for_camel_cased_codable_enum
   - reduce_into
+  - redundant_final
   - redundant_nil_coalescing
   - redundant_self
   - redundant_type_annotation
@@ -107,7 +100,6 @@ opt_in_rules:
   - sorted_imports
   - static_operator
   - strict_fileprivate
-  - strong_iboutlet
   - superfluous_else
   - test_case_accessibility
   - toggle_bool
@@ -129,7 +121,6 @@ opt_in_rules:
 
 analyzer_rules:
   - capture_variable
-  - explicit_self
   - typesafe_array_init
   - unused_declaration
   - unused_import
@@ -138,30 +129,18 @@ included:
   - Intent
   - IntentTests
   - IntentUITests
-excluded:
-  - Carthage
-  - Pods
 
 allow_zero_lintable_files: false
-strict: false
-lenient: false
-
 check_for_updates: false
 
-force_cast: warning
-force_try:
-  severity: warning
 line_length: 225
 type_body_length:
   warning: 300
 file_length:
   warning: 500
-  error: 1200
 type_name:
   min_length: 4
-  max_length:
-    warning: 40
-    error: 50
+  max_length: 40
   excluded:
     - iPhone
     - Tab
@@ -173,8 +152,6 @@ identifier_name:
   excluded:
     - up
     - id
-    - URL
-    - GlobalAPIKey
     - p
     - i
     - x
@@ -206,6 +183,18 @@ custom_rules:
       - identifier
       - typeidentifier
     severity: error
+  state_phase_flag:
+    name: "Model Lifecycle Phases As An Enum"
+    # A Bool named after a step (scheduled, queued, pending, awaiting, performed,
+    # in progress, in flight) is usually one state of an implicit state machine.
+    # The lookahead keeps the match on `var name`; IntentTests/StateFlagBudgetPolicyTests
+    # also ratchets flag counts per type.
+    regex: '\bvar\s+[a-z]\w*(?:Scheduled|Queued|Pending|Awaiting[A-Z]\w*|Performed|InProgress|InFlight)\b(?=\s*(?::\s*Bool\s*)?=\s*(?:true|false)\b)'
+    message: "Lifecycle-phase Bool flag. Model the phases as one enum (see ConversationTranscriptScrollState.EntryScroll) or reuse CoalescedRead for single-flight reads. Suppress with a reason only for an independent one-off guard."
+    match_kinds:
+      - keyword
+      - identifier
+    severity: warning
   geometry_reader_usage:
     name: "GeometryReader Is Banned"
     regex: '\bGeometryReader\b'
@@ -213,4 +202,19 @@ custom_rules:
     match_kinds:
       - typeidentifier
       - identifier
+    severity: error
+  launch_options_only:
+    name: "Read Launch Options Through LaunchOptions"
+    # Test targets may set up their own launches; only app code is checked.
+    # Excluded by path segment so a checkout under a directory named Intent
+    # still lints IntentTests and IntentUITests as test code.
+    regex: '\bProcessInfo\s*\.\s*processInfo\s*\.\s*(?:arguments|environment)\b'
+    message: "Read launch arguments and environment through LaunchOptions.current instead of ProcessInfo.processInfo."
+    match_kinds:
+      - identifier
+      - typeidentifier
+    excluded:
+      - '/IntentTests/'
+      - '/IntentUITests/'
+      - '/Intent/Utils/LaunchOptions\.swift$'
     severity: error

@@ -3,22 +3,29 @@ import SwiftUI
 /// Section chrome shared by the persistent iPad sidebars.
 enum IPadSidebarStyle {
     static let inset: CGFloat = 24
-    static let topInset: CGFloat = 32
+    static let compactInset: CGFloat = 8
+    static let compactSectionSpacing: CGFloat = 16
+    static let topInset = IPadShellLayout.headerInset
     static let sectionSpacing: CGFloat = 48
+    static let filterListSpacing: CGFloat = 56
+    static let scrollFadeHeight: CGFloat = 32
+    static let groupLabelSpacing: CGFloat = 16
     static let settingsSpacing: CGFloat = 40
     static let rowHeight: CGFloat = 64
+    static let rowVerticalPadding: CGFloat = 24
     static let rowInset: CGFloat = 20
     static let rowRadius: CGFloat = 16
+    static let statusDotSize: CGFloat = 10
     static let titleSize: CGFloat = 24
     static let titleTracking: CGFloat = -0.72
     static let titleStyle = Constants.Typography.Style(face: .semibold, size: titleSize, relativeTo: .title2)
 
     static func background(for scheme: ColorScheme) -> Color {
-        SettingsStyle.surface(for: scheme)
+        IPadShellStyle.background(for: scheme)
     }
 
     static func selection(for scheme: ColorScheme) -> Color {
-        Constants.Connections.surface(for: scheme)
+        IPadShellStyle.selection(for: scheme)
     }
 }
 
@@ -38,6 +45,7 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
     let onCollapse: () -> Void
     @ViewBuilder let title: () -> Title
     @ViewBuilder let actions: () -> Actions
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
@@ -57,9 +65,9 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
             }
         }
         .foregroundStyle(Constants.Pairing.foreground(for: colorScheme))
-        .padding(.horizontal, IPadSidebarStyle.inset)
+        .padding(.horizontal, usesVerticalBar ? IPadSidebarStyle.compactInset : IPadSidebarStyle.inset)
         .padding(.top, IPadSidebarStyle.topInset)
-        .padding(.bottom, IPadSidebarStyle.sectionSpacing)
+        .padding(.bottom, usesVerticalBar ? IPadSidebarStyle.compactSectionSpacing : IPadSidebarStyle.sectionSpacing)
     }
 
     private var stackedHeader: some View {
@@ -73,9 +81,11 @@ struct IPadSidebarHeader<Title: View, Actions: View>: View {
         HStack(spacing: 0) {
             if isPaneVisible {
                 actions()
-                IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: onCollapse)
-                    .accessibilityIdentifier("ipad.sidebar.collapse")
-                    .accessibilityAction(.escape, onCollapse)
+                if !usesVerticalBar {
+                    IntentIconButton(icon: .collapseLeft, label: "Hide sidebar", showsBackground: false, action: onCollapse)
+                        .accessibilityIdentifier("ipad.sidebar.collapse")
+                        .accessibilityAction(.escape, onCollapse)
+                }
             } else {
                 Color.clear.frame(width: Constants.WorkspaceSearch.compactHeight, height: Constants.WorkspaceSearch.compactHeight)
             }

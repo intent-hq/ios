@@ -9,6 +9,9 @@ struct QuestionWizardView: View {
     /// Opt in only for the floating workspace panel. Supply its keyboard-safe
     /// available height; nil keeps the shared composer-slot behavior.
     let workspaceAvailableHeight: CGFloat?
+    let attachments: ConversationAttachmentPipeline
+    let workspaceId: String
+    let isSubmitting: Bool
     let onComplete: ([QuestionAnswer]) -> Void
     var onDismiss: (() -> Void)?
     var onCollapse: (() -> Void)?
@@ -31,18 +34,22 @@ struct QuestionWizardView: View {
     @State private var idx = 0
     @State private var movingForward = true
     @State private var drafts: [DraftAnswer]
-    @State private var submitted = false
     @State private var confirmingDismiss = false
     @State private var dismissed = false
     @State private var stepContentHeights: [Int: CGFloat] = [:]
-    @FocusState private var answerFocused: Bool
+    @State private var answerFocused = false
+    @State private var showsPhotos = false
+    @State private var showsFiles = false
     @State private var answerComposerHeight: CGFloat = Constants.Conversation.Design.Composer.minimumHeight
 
     init(
         questions: [Question],
         collapsed: Binding<Bool>,
+        attachments: ConversationAttachmentPipeline,
+        workspaceId: String,
         containerHeight: CGFloat = 0,
         workspaceAvailableHeight: CGFloat? = nil,
+        isSubmitting: Bool = false,
         onComplete: @escaping ([QuestionAnswer]) -> Void,
         onDismiss: (() -> Void)? = nil,
         onCollapse: (() -> Void)? = nil
@@ -51,6 +58,9 @@ struct QuestionWizardView: View {
         self._collapsed = collapsed
         self.containerHeight = containerHeight
         self.workspaceAvailableHeight = workspaceAvailableHeight
+        self.attachments = attachments
+        self.workspaceId = workspaceId
+        self.isSubmitting = isSubmitting
         self.onComplete = onComplete
         self.onDismiss = onDismiss
         self.onCollapse = onCollapse
@@ -58,6 +68,7 @@ struct QuestionWizardView: View {
     }
 
     private var current: Question { questions[idx] }
+    private var submitted: Bool { isSubmitting || attachments.isLoadingPhotos || !attachments.selectedPhotoItems.isEmpty }
     private var isLast: Bool { idx == questions.count - 1 }
     private var isMulti: Bool { current.multiSelect }
     private var multiStep: Bool { questions.count > 1 }
@@ -105,6 +116,13 @@ struct QuestionWizardView: View {
                 legacyWizard
             }
         }
+        .disabled(submitted)
+        .modifier(QuestionAttachmentPickers(
+            attachments: attachments,
+            workspaceId: workspaceId,
+            showsPhotos: $showsPhotos,
+            showsFiles: $showsFiles
+        ))
         .onChange(of: collapsed) { _, collapsed in
             if collapsed { answerFocused = false }
         }
@@ -120,13 +138,21 @@ struct QuestionWizardView: View {
     }
 
     private var workspaceAnswerComposer: some View {
-        WorkspaceQuestionFreeText(
-            text: $drafts[idx].text,
-            focused: $answerFocused,
-            isLast: isLast,
-            onSubmit: handleNext,
-            onTextChange: markCurrentDraftUnskipped
-        )
+        VStack(spacing: 0) {
+            QuestionAttachmentTray(attachments: attachments)
+            WorkspaceQuestionFreeText(
+                text: $drafts[idx].text,
+                focused: $answerFocused,
+                isLast: isLast,
+                onSubmit: handleNext,
+                onTextChange: markCurrentDraftUnskipped,
+                onPhotos: { showsPhotos = true },
+                onFiles: { showsFiles = true },
+                onPasteImages: attachments.pasteImages,
+                photosEnabled: attachments.remainingPhotoImageCount != 0
+            )
+        }
+        .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.cornerRadius))
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { answerComposerHeight = $0 }
     }
 
@@ -204,14 +230,17 @@ struct QuestionWizardView: View {
                 isMulti: questions[step].multiSelect,
                 contentHeight: stepContentHeights[step],
                 maximumHeight: stepBodyMaxHeight,
-                onContentHeight: { step, height in
-                    stepContentHeights[step] = height
-                },
+                onContentHeight: { step, height in stepContentHeights[step] = height },
                 onSelect: selectOption,
                 onSubmit: handleNext,
                 onTextChange: { drafts[step].skipped = false },
-                isActive: step == idx && !collapsed && isPaneVisible
+                isActive: step == idx && !collapsed && isPaneVisible,
+                onPhotos: { showsPhotos = true },
+                onFiles: { showsFiles = true },
+                onPasteImages: attachments.pasteImages,
+                photosEnabled: attachments.remainingPhotoImageCount != 0
             )
+            QuestionAttachmentTray(attachments: attachments)
             footer(for: step)
         }
     }
@@ -251,7 +280,6 @@ struct QuestionWizardView: View {
     private func advance() {
         if idx >= questions.count - 1 {
             guard !submitted, !dismissed else { return }
-            submitted = true
             onComplete(buildAnswers())
             return
         }
@@ -295,7 +323,9 @@ struct QuestionWizardView: View {
         movingForward = false
         idx = max(idx - 1, 0)
     }
+}
 
+extension QuestionWizardView {
     private var stepBodyMaxHeight: CGFloat {
         containerHeight > 0
             ? containerHeight * Constants.Conversation.QuestionWizard.bodyHeightFraction

@@ -18,7 +18,9 @@ import Observation
     @ObservationIgnored private var tasksLive = false
     @ObservationIgnored private var taskSubscriptionId: String?
     @ObservationIgnored private var taskReconciler: DeltaReconciler<WorkspaceTask>?
-    @ObservationIgnored private var resnapshotInProgress = false
+    @ObservationIgnored private var resnapshotInProgress = false // swiftlint:disable:this state_phase_flag
+    /// Reads the rest of a paged `task.subscribe` snapshot (§6.9).
+    @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
 
     init(workspaceId: String, connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.workspaceId = workspaceId
@@ -54,10 +56,11 @@ import Observation
         }
         taskSubscriptionId = nil
         taskReconciler = nil
+        snapshotFiller.cancel()
         resnapshotInProgress = false
 
         await fetchAll()
-        await subscribeToEvents()
+        subscribeToEvents()
         await subscribeLiveState()
     }
 
@@ -67,12 +70,16 @@ import Observation
         await _fetchAll()
     }
 
+    /// `task.list` without `limit` / `nextToken` answers the whole list; if a
+    /// reply carries `nextToken` anyway, every page is read before publishing,
+    /// and a failed page keeps the previous list (bounded reads).
     private func _fetchAll() async {
         isLoading = true
         do {
-            let result = try await connectionManager.request("task.list", params: [
-                "workspaceId": workspaceId
-            ])
+            let params: [String: Any] = ["workspaceId": workspaceId]
+            let result = try await PagedReads.requestWholeReply(params: params, field: "tasks") { [connectionManager] page in
+                try await connectionManager.request("task.list", params: page)
+            }
             if let dict = result as? [String: Any],
                let tasksArray = dict["tasks"] as? [[String: Any]] {
                 tasks = tasksArray.compactMap { WorkspaceTask.parseTask($0) }
@@ -86,7 +93,7 @@ import Observation
 
     // MARK: - Event subscription
 
-    private func subscribeToEvents() async {
+    private func subscribeToEvents() {
         // Remove old handler to prevent accumulation on reconnect
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)
@@ -251,15 +258,23 @@ import Observation
             guard let rawItems = push.snapshot else { return }
             tasksLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
-            tasks = reconciler.values()
-            lastUpdated = Date()
             AppLog.tasks.debug("[TaskStore] Applied snapshot with \(rawItems.count) tasks, seq=\(push.seq)")
+            if let token = push.nextToken {
+                fillSnapshot(reconciler: reconciler, firstToken: token)
+            } else {
+                snapshotFiller.cancel()
+                tasks = reconciler.values()
+                lastUpdated = Date()
+            }
 
         case .delta:
             guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
-                tasks = reconciler.values()
-                lastUpdated = Date()
+                // A paged snapshot still filling publishes once complete.
+                if !snapshotFiller.isFilling {
+                    tasks = reconciler.values()
+                    lastUpdated = Date()
+                }
                 AppLog.tasks.debug("[TaskStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
@@ -272,12 +287,39 @@ import Observation
         }
     }
 
+    /// Reads the rest of a paged snapshot (§6.9) through the paged `task.list`
+    /// (`WorkspaceTask` rows, which parse like the snapshot's task notes), then
+    /// publishes the whole list; the previous list stays visible meanwhile.
+    /// A walk that gives up shows what it has unless that would shrink the
+    /// list, then resubscribes.
+    private func fillSnapshot(reconciler: DeltaReconciler<WorkspaceTask>, firstToken: String) {
+        let workspaceId = workspaceId
+        let source = PagedReads.PageSource(field: "tasks") { [connectionManager] token in
+            try await connectionManager.request("task.list", params: [
+                "workspaceId": workspaceId, "limit": PagedReads.taskPageLimit, "nextToken": token
+            ])
+        }
+        snapshotFiller.start(reconciler, from: firstToken, source: source, owner: .init(
+            isCurrent: { [weak self] in self?.taskReconciler === reconciler },
+            publish: { [weak self] complete in
+                guard let self, complete || reconciler.values().count >= tasks.count else { return }
+                tasks = reconciler.values()
+                lastUpdated = Date()
+            },
+            resubscribe: { [weak self] in
+                guard let self, !resnapshotInProgress else { return }
+                await resnapshot()
+            }
+        ))
+    }
+
     private func resnapshot() async {
         resnapshotInProgress = true
         defer { resnapshotInProgress = false }
 
         tasksLive = false
         taskReconciler?.reset()
+        snapshotFiller.cancel()
 
         if let subId = taskSubscriptionId {
             // Unregister handler before unsubscribing

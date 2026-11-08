@@ -99,10 +99,10 @@ extension NotificationManager {
         }
     }
 
-    /// Routes an agent history tap like an alert tap, except where an alert
-    /// tap would be dropped (a single window showing another backend): the
-    /// selection is held, `switchWindow` moves the window to the entry's
-    /// backend, and that backend's window registration delivers it.
+    /// Routes an agent history tap to an open window for the entry's
+    /// backend. With none open, the tap never spawns a window: the selection
+    /// is held, `switchWindow` moves this window to the entry's backend, and
+    /// that backend's window registration delivers it.
     func routeHistorySelection(
         agentId: String,
         workspaceId: String,
@@ -115,7 +115,7 @@ extension NotificationManager {
             registeredBackends: Set(agentSelectionHandlers.keys),
             supportsMultipleWindows: supportsMultipleWindows
         )
-        guard route == .drop else {
+        guard route == .drop || route == .openSourceWindow else {
             routeAgentSelection(
                 agentId: agentId,
                 workspaceId: workspaceId,

@@ -45,7 +45,7 @@ struct PersistenceBackendSyncTests {
         let connection = FakeConnectionManager()
         connection.responseMap["host.status"] = ["prettyHostname": "Paired Mac"]
         let local = BackendSyncFixtures.local()
-        try await connection.connect(hosts: local.server.hosts, port: local.server.port, token: local.token, certFingerprint: local.server.certFingerprint, tcAddress: local.server.tcAddress)
+        try connection.connect(hosts: local.server.hosts, port: local.server.port, token: local.token, certFingerprint: local.server.certFingerprint, tcAddress: local.server.tcAddress)
         let paired = try await ConnectionPairing.finalize(
             server: local.server,
             token: local.token,
@@ -95,7 +95,7 @@ struct PersistenceBackendSyncTests {
         store.local.setSaveFailure(true)
         let local = BackendSyncFixtures.local()
         let connection = FakeConnectionManager()
-        try await connection.connect(hosts: local.server.hosts, port: local.server.port, token: local.token, certFingerprint: local.server.certFingerprint, tcAddress: local.server.tcAddress)
+        try connection.connect(hosts: local.server.hosts, port: local.server.port, token: local.token, certFingerprint: local.server.certFingerprint, tcAddress: local.server.tcAddress)
         await #expect(throws: ConnectionPairing.PersistenceError.saveFailed) {
             try await ConnectionPairing.finalize(
                 server: local.server,

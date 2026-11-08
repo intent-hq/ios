@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    @Entry var workspaceViewerUsesPanel = false
+}
+
 enum WorkspaceDetailStyle {
     static let pageInset: CGFloat = 24
     static let headingTopSpacing: CGFloat = 64
@@ -9,6 +13,8 @@ enum WorkspaceDetailStyle {
     static let sectionSpacing: CGFloat = 48
     static let sectionHeadingSpacing: CGFloat = 24
     static let titleTracking: CGFloat = -0.56
+    /// The iPad main pane's 40 pt title keeps the sidebar title's -3% tracking.
+    static let largeTitleTracking: CGFloat = -1.2
     static let rowTitleTracking: CGFloat = -0.36
     static let bodyTracking: CGFloat = -0.16
     static let controlSize: CGFloat = 48
@@ -17,8 +23,8 @@ enum WorkspaceDetailStyle {
     static let tabLabelTracking: CGFloat = -0.32
     static let tabCornerRadius: CGFloat = 20
     static let selectedTabCornerRadius: CGFloat = 16
-    static let progressHeight: CGFloat = 8
-    static let progressBottomSpacing: CGFloat = 56
+    static let selectionAnimationDuration = 0.35
+    static let tabLabelMinimumScale: CGFloat = 0.75
     static let rowSpacing: CGFloat = 36
     static let avatarSize: CGFloat = 32
     static let avatarSpacing: CGFloat = 24
@@ -42,9 +48,8 @@ enum WorkspaceDetailStyle {
     static let accent = Constants.Pairing.accent
     static let onAccent = Constants.Pairing.onAccent
 
-    // Literal 8-bit channels preserve Figma Grey400 for repository text and neutral avatar tiles.
-    // swiftlint:disable:next no_magic_numbers
-    static let neutral = Color(.sRGB, red: 82 / 255, green: 82 / 255, blue: 80 / 255)
+    // Exact 8-bit palette channels preserve Figma Grey400 for repository text and neutral avatar tiles.
+    static let neutral = Color(sRGBHex: Constants.DesignPalette.darkGrey)
 
     static func avatarSurface(for scheme: ColorScheme) -> Color {
         scheme == .dark ? neutral : Constants.Pairing.background(for: .light)
@@ -86,21 +91,44 @@ struct ToolbarOverflowLabel: View {
 }
 
 struct WorkspaceContentTabs: View {
-    private static let selectionAnimationDuration = 0.35
-
     @Binding var selection: WorkspaceTab
+
+    var body: some View {
+        IntentContentSwitcher(
+            selection: $selection,
+            options: [
+                .init(value: .agents, title: "Agents"),
+                .init(value: .context, title: "Context"),
+                .init(value: .changes, title: "Changes")
+            ],
+            accessibilityLabel: "Workspace Content",
+            identifierPrefix: "workspace.content"
+        )
+    }
+}
+
+struct IntentContentSwitcher<Value: Hashable>: View {
+    struct Option {
+        let value: Value
+        let title: String
+    }
+
+    @Binding var selection: Value
+    let options: [Option]
+    let accessibilityLabel: String
+    let identifierPrefix: String
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionAnimation
 
     var body: some View {
         HStack(spacing: 0) {
-            tab("Agents", value: .agents)
-            tab("Context", value: .context)
-            tab("Changes", value: .changes)
+            ForEach(options, id: \.value) { option in
+                tab(option.title, value: option.value)
+            }
         }
         .background {
-            if selection == .agents || selection == .context || selection == .changes {
+            if options.contains(where: { $0.value == selection }) {
                 RoundedRectangle(cornerRadius: WorkspaceDetailStyle.selectedTabCornerRadius)
                     .fill(WorkspaceDetailStyle.foreground(for: colorScheme))
                     .matchedGeometryEffect(id: selection, in: selectionAnimation, isSource: false)
@@ -110,16 +138,21 @@ struct WorkspaceContentTabs: View {
         .background(WorkspaceDetailStyle.surface(for: colorScheme), in: .rect(
             cornerRadius: WorkspaceDetailStyle.tabCornerRadius
         ))
-        .animation(reduceMotion ? nil : .snappy(duration: Self.selectionAnimationDuration), value: selection)
+        .animation(reduceMotion ? nil : .snappy(duration: WorkspaceDetailStyle.selectionAnimationDuration), value: selection)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Workspace Content")
+        .accessibilityLabel(accessibilityLabel)
     }
 
-    private func tab(_ title: String, value: WorkspaceTab) -> some View {
-        Button { selection = value } label: {
+    private func tab(_ title: String, value: Value) -> some View {
+        Button {
+            if selection != value { HapticManager.selection() }
+            selection = value
+        } label: {
             Text(title)
                 .interFont(Constants.Typography.bodySEmphasized)
                 .tracking(WorkspaceDetailStyle.tabLabelTracking)
+                .lineLimit(1)
+                .minimumScaleFactor(WorkspaceDetailStyle.tabLabelMinimumScale)
                 .padding(.vertical, WorkspaceDetailStyle.tabInset)
                 .frame(maxWidth: .infinity, minHeight: WorkspaceDetailStyle.controlSize)
                 .foregroundStyle(selection == value
@@ -130,5 +163,6 @@ struct WorkspaceContentTabs: View {
         .buttonStyle(IntentContentButtonStyle())
         .matchedGeometryEffect(id: value, in: selectionAnimation)
         .accessibilityAddTraits(selection == value ? .isSelected : [])
+        .accessibilityIdentifier("\(identifierPrefix).\(title)")
     }
 }

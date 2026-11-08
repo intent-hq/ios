@@ -19,29 +19,42 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     @MainActor
     func testClosePreservesWorkspaceScrollAndAssistantIsFirst() {
         let app = launchHome()
-        let list = app.scrollViews["workspaces.list"]
+        let list = app.descendants(matching: .any).matching(identifier: "workspaces.list").firstMatch
         list.swipeUp()
         let visibleRow = list.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Workspace scroll fixture"))
             .allElementsBoundByIndex.first { $0.isHittable }
         XCTAssertNotNil(visibleRow)
         let position = visibleRow?.frame.minY ?? 0
+        let launcherFrame = app.buttons["intent.menu.open"].frame
         openMenu(app)
         let assistant = app.buttons["intent.menu.assistant"]
         let workspace = app.buttons["intent.menu.workspace"]
-        XCTAssertTrue(assistant.isHittable)
-        XCTAssertTrue(workspace.isHittable)
+        XCTAssertTrue(waitUntilHittable(assistant))
+        XCTAssertTrue(waitUntilHittable(workspace))
         XCTAssertLessThan(assistant.frame.minX, workspace.frame.minX)
+        let actions = ["assistant", "workspace", "pullRequests", "connections", "appearance", "settings"]
+        let viewport = app.scrollViews["intent.menu.tiles"].frame.intersection(app.frame)
+        for action in actions {
+            let tile = reveal(action, in: app)
+            XCTAssertGreaterThanOrEqual(tile.frame.minX, viewport.minX)
+            XCTAssertLessThanOrEqual(tile.frame.maxX, viewport.maxX)
+        }
         XCTAssertFalse(app.buttons["assistant.actions"].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Intent home action tiles"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+        if ProcessInfo.processInfo.environment["INTENT_UITEST_VERTICAL_BAR"] == "1" {
+            let close = app.buttons["intent.menu.close"]
+            XCTAssertTrue(app.frame.contains(close.frame))
+            XCTAssertEqual(close.frame.midX, launcherFrame.midX, accuracy: Self.scrollTolerance)
+        }
         verifyMenuDragBehavior(in: app)
         app.buttons["intent.menu.close"].tap()
         XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(visibleRow?.frame.minY ?? 0, position, accuracy: Self.scrollTolerance)
         list.swipeDown()
-        XCTAssertTrue(app.staticTexts["workspaces.title"].isHittable)
+        XCTAssertTrue(app.buttons["workspace.row.demo-ws-reconnect"].isHittable)
     }
 
     @MainActor
@@ -119,8 +132,15 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertGreaterThan(composer.frame.height, emptyHeight)
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
-        XCTAssertFalse(rail.frame.intersects(send.frame))
-        app.buttons["ipad.sidebar.collapse"].tap()
+        attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad focused multiline draft")
+        XCTAssertFalse(rail.exists, "Focused typing hides background navigation\n\(app.debugDescription)")
+        let closeFocus = app.buttons["ipad.focus.close"]
+        XCTAssertTrue(closeFocus.isHittable)
+        XCTAssertFalse(closeFocus.frame.intersects(send.frame))
+        closeFocus.tap()
+        XCTAssertTrue(rail.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, draft)
+        app.hideWorkspaceSidebar()
         XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad collapsed conversation with draft")
@@ -136,7 +156,8 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, draft)
         XCUIDevice.shared.orientation = .portrait
-        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").singleHittableElement().isEnabled)
+        // The orientation notification precedes the retained pane's width update.
+        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").waitForSingleHittableElement(timeout: Self.timeout).isEnabled)
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad portrait conversation with draft")
         try verifySendAndBack(in: app, draft: draft)
@@ -292,7 +313,7 @@ extension HomeActionMenuUITests {
         backdropStart.press(forDuration: 0, thenDragTo: backdropEnd)
         backdropEnd.press(forDuration: 0, thenDragTo: backdropStart)
         XCTAssertTrue(app.buttons["intent.menu.close"].isHittable)
-        XCTAssertEqual(reveal("connections", in: app).frame.minY, position, accuracy: Self.scrollTolerance)
+        _ = reveal("connections", in: app)
     }
 
     @MainActor
@@ -300,6 +321,7 @@ extension HomeActionMenuUITests {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-long-workspace-list", "-appThemePreference", themePreference]
         app.launch()
+        // Only the ordinary iPad shell keeps the global rail; the unfolded Duo uses the launcher.
         let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
         XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
         return app
@@ -334,6 +356,31 @@ extension HomeActionMenuUITests {
 }
 
 extension HomeActionMenuUITests {
+    @MainActor
+    func testDuoWorkspaceDetailKeepsOnlyTheAccessibleContentTitle() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(
+            environment["INTENT_UITEST_FOLDED_DUO"] == "1" || environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
+            "Requires a user-configured Duo; this test never changes display mode"
+        )
+        let app = launchHome(themePreference: "light")
+        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
+        XCTAssertTrue(waitUntilHittable(workspace))
+        workspace.tap()
+        let heading = app.staticTexts["workspace.title.heading"]
+        XCTAssertTrue(waitUntilHittable(heading))
+        XCTAssertEqual(heading.label, "Add usage analytics dashboard")
+        XCTAssertEqual(app.navigationBars.staticTexts.count, 0, "Duo must not repeat the workspace title above the content")
+        if environment["INTENT_UITEST_UNFOLDED_DUO"] != "1" {
+            XCTAssertEqual(app.scrollViews["workspace.detail.scroll"].frame.minY, app.windows.firstMatch.frame.minY, accuracy: 1)
+        }
+        let actions = app.buttons["Workspace actions"]
+        XCTAssertTrue(waitUntilHittable(actions))
+        XCTAssertGreaterThan(actions.frame.minX, heading.frame.maxX)
+        XCTAssertEqual(app.buttons["workspaceDetail.back"].exists, environment["INTENT_UITEST_FOLDED_DUO"] == "1")
+        attachScreenshot(app.screenshot(), named: "Duo workspace detail without header")
+    }
+
     @MainActor
     func testFoldedDuoLauncherStaysInRailAcrossDetailNavigation() throws {
         try XCTSkipUnless(
@@ -385,7 +432,7 @@ extension HomeActionMenuUITests {
     }
 
     @MainActor
-    func testUnfoldedDuoKeepsHalfWidthSidebarAndDetailNavigation() throws {
+    func testUnfoldedDuoKeepsSharedSidebarAndDetailNavigation() throws {
         try XCTSkipUnless(
             ProcessInfo.processInfo.environment["INTENT_UITEST_UNFOLDED_DUO"] == "1",
             "Requires a user-configured unfolded Duo; this test never changes display mode"
@@ -398,19 +445,14 @@ extension HomeActionMenuUITests {
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         XCTAssertTrue(waitUntilHittable(agent))
         XCTAssertFalse(app.buttons["workspaceDetail.back"].exists)
-        let sidebar = app.collectionViews.firstMatch
-        XCTAssertEqual(sidebar.frame.maxX, window.frame.midX, accuracy: Self.scrollTolerance)
+        let sidebar = app.descendants(matching: .any).matching(identifier: "workspaces.list").firstMatch
         XCTAssertLessThanOrEqual(sidebar.frame.maxX, agent.frame.minX)
         XCTAssertTrue(workspace.isHittable)
         let rootActions = app.buttons["Workspace actions"]
         XCTAssertTrue(waitUntilHittable(rootActions))
         XCTAssertLessThan(rootActions.frame.maxY, window.frame.midY)
-        let launcher = app.buttons["intent.menu.open"]
-        XCTAssertTrue(waitUntilHittable(launcher))
-        XCTAssertEqual(app.buttons.matching(identifier: "intent.menu.open").count, 1)
-        XCTAssertEqual(launcher.frame.midX, rootActions.frame.midX, accuracy: Self.scrollTolerance)
-        XCTAssertGreaterThan(launcher.frame.minX, agent.frame.maxX)
-        XCTAssertGreaterThan(launcher.frame.minY, window.frame.midY)
+        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists, "The unfolded Duo replaces the global rail with its launcher")
+        XCTAssertTrue(app.buttons["intent.menu.open"].isHittable)
         attachScreenshot(app.screenshot(), named: "Unfolded Duo workspace split")
 
         let sidebarFrame = sidebar.frame
@@ -421,14 +463,13 @@ extension HomeActionMenuUITests {
         let actions = app.buttons["conversation.actions.open"]
         XCTAssertTrue(waitUntilHittable(back))
         XCTAssertTrue(actions.isHittable)
-        XCTAssertTrue(workspace.isHittable)
-        XCTAssertEqual(sidebar.frame, sidebarFrame)
-        XCTAssertLessThanOrEqual(sidebar.frame.maxX, composer.frame.minX)
-        XCTAssertLessThanOrEqual(back.frame.maxY, actions.frame.minY)
+        // The open agent's workspace replaces the list in the sidebar.
+        XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        XCTAssertLessThanOrEqual(agent.frame.maxX, composer.frame.minX)
+        XCTAssertEqual(back.frame.midY, actions.frame.midY, accuracy: Self.scrollTolerance)
         XCTAssertLessThan(actions.frame.maxY, window.frame.midY)
-        XCTAssertGreaterThan(launcher.frame.minX, composer.frame.maxX)
-        XCTAssertGreaterThan(launcher.frame.minY, window.frame.midY)
-        XCTAssertEqual(launcher.frame.midX, back.frame.midX, accuracy: Self.scrollTolerance)
+        XCTAssertFalse(app.buttons["ipad.rail.workspaces"].exists)
+        XCTAssertTrue(app.buttons["intent.menu.open"].isHittable)
         attachScreenshot(app.screenshot(), named: "Unfolded Duo conversation split")
         back.tap()
         XCTAssertTrue(waitUntilHittable(agent))

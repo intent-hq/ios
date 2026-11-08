@@ -5,10 +5,10 @@ extension WebSocketConnection {
 
     /// Bootstrap sockets stay outside the app's message pump. Even a ready
     /// snapshot retires this socket; only a fresh hello can admit a principal.
-    func admittedPrincipal(
+    func admittedHandshake(
         helloRequest: Data,
         onStartup: @escaping @Sendable (DaemonStartupState) async throws -> Void = { _ in }
-    ) async throws -> ConnectionPrincipal {
+    ) async throws -> ConnectionHandshake {
         let hello: Any
         do {
             hello = try await admissionRequest(helloRequest, id: -1)
@@ -18,7 +18,7 @@ extension WebSocketConnection {
         }
         let request = Data(#"{"jsonrpc":"2.0","id":-2,"method":"principal.me"}"#.utf8)
         let principal = try await admissionRequest(request, id: -2)
-        return try ConnectionPrincipal.parse(principal, hello: hello)
+        return try ConnectionHandshake(principal: ConnectionPrincipal.parse(principal, hello: hello), capabilities: ConnectionCapabilities(hello: hello))
     }
 
     private func awaitStartup(
@@ -104,14 +104,14 @@ extension WebSocketConnection {
 }
 
 extension ConnectionManager {
-    func admit(_ winner: RacedConnection) async throws -> ConnectionPrincipal {
+    func admit(_ winner: RacedConnection) async throws -> ConnectionHandshake {
         let data = try JSONSerialization.data(withJSONObject: [
             "jsonrpc": "2.0", "id": -1, "method": "client.hello", "params": PairingClientIdentity.parameters()
         ])
         let attemptID = startupAdmissionID
         let generation = connectionGeneration
         return try await withTaskCancellationHandler {
-            try await winner.socket.admittedPrincipal(helloRequest: data) { [weak self] state in
+            try await winner.socket.admittedHandshake(helloRequest: data) { [weak self] state in
                 try await self?.receiveStartup(state, attemptID: attemptID, generation: generation)
             }
         } onCancel: {

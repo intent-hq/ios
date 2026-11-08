@@ -45,6 +45,9 @@ struct CreateWorkspaceSubmitButton: View {
     let isCreating: Bool
     let isDisabled: Bool
     var title: LocalizedStringKey = "Create"
+    var progressTitle: LocalizedStringKey = "Creating workspace"
+    var icon: ImageResource = .addIcon
+    var identifier = "creation.create"
     let onCreate: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -61,8 +64,8 @@ struct CreateWorkspaceSubmitButton: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(isDisabled || isCreating)
-        .accessibilityLabel(isCreating ? "Creating workspace" : title)
-        .accessibilityIdentifier("creation.create")
+        .accessibilityLabel(isCreating ? progressTitle : title)
+        .accessibilityIdentifier(identifier)
     }
 
     private var morphingLabel: some View {
@@ -73,7 +76,7 @@ struct CreateWorkspaceSubmitButton: View {
                 .scaleEffect(isCreating && !reduceMotion ? Motion.labelScale : 1)
                 .opacity(isCreating ? 0 : 1)
             if isCreating {
-                IntentLoadingIndicator(size: iconSize, label: "Creating workspace")
+                IntentLoadingIndicator(size: iconSize, label: progressTitle)
                     .environment(\.colorScheme, .light)
                     .transition(.opacity)
             }
@@ -96,7 +99,7 @@ struct CreateWorkspaceSubmitButton: View {
 
     private var readyLabel: some View {
         HStack(spacing: CreateWorkspaceFormStyle.rowSpacing) {
-            Image(.addIcon)
+            Image(icon)
                 .resizable()
                 .scaledToFit()
                 .frame(width: iconSize, height: iconSize)

@@ -13,6 +13,9 @@ private final class FakeLocalNotificationCenter: LocalNotificationCenter {
     var authorizationStatus: UNAuthorizationStatus = .notDetermined
     var authorizationGranted = true
     var completesAuthorizationRequest = true
+    var soundEnabled = false
+
+    func soundIsEnabled() -> Bool { soundEnabled }
 
     func getAuthorizationStatus(
         completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
@@ -77,9 +80,10 @@ struct LocalNotificationServiceTests {
         #expect(center.authorizationOptions == [[.alert, .sound]])
     }
 
-    @Test func postsExpectedAgentCompletionRequest() throws {
+    @Test(arguments: [false, true], [Float(0), 0.01, 1])
+    func postsExpectedAgentCompletionRequest(foregroundPresentationHandled: Bool, volume: Float) throws {
         let center = FakeLocalNotificationCenter()
-        let service = LocalNotificationService(center: center)
+        let service = LocalNotificationService(center: center, playForegroundSound: {}, outputVolume: { volume })
         let connectionId = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
 
         service.postAgentIdleNotification(
@@ -87,7 +91,8 @@ struct LocalNotificationServiceTests {
             workspaceId: "workspace-1",
             agentName: "Build Agent",
             workspaceName: "iOS App",
-            connectionId: connectionId
+            connectionId: connectionId,
+            foregroundPresentationHandled: foregroundPresentationHandled
         )
 
         guard let request = center.requests.first else {
@@ -98,19 +103,67 @@ struct LocalNotificationServiceTests {
         #expect(request.trigger == nil)
         #expect(request.content.title == "Build Agent")
         #expect(request.content.body == "Finished in iOS App")
-        #expect(request.content.sound != nil)
+        #expect((request.content.sound != nil) == (volume > 0))
+        #expect(request.content.interruptionLevel == .active)
         #expect(request.content.userInfo["agentId"] as? String == "agent-1")
         #expect(request.content.userInfo["workspaceId"] as? String == "workspace-1")
         #expect(request.content.userInfo["agentName"] as? String == "Build Agent")
         #expect(request.content.userInfo["connectionId"] as? String == connectionId.uuidString)
+        let response = LocalNotificationService.response(
+            actionIdentifier: UNNotificationDefaultActionIdentifier,
+            userInfo: request.content.userInfo
+        )
+        #expect(response.foregroundPresentationHandled == foregroundPresentationHandled)
     }
 
-    @Test func delegateIsInstalledAndSuppressesForegroundPresentation() {
+    @Test func foregroundDeliveryWithoutHandlerIsSilent() async {
         let center = FakeLocalNotificationCenter()
         let service = LocalNotificationService(center: center)
 
         #expect(center.delegate === service)
-        #expect(LocalNotificationService.presentationOptionsForForegroundNotification().isEmpty)
+        let response = LocalNotificationService.response(
+            actionIdentifier: UNNotificationDefaultActionIdentifier,
+            userInfo: [:]
+        )
+        let options = await withCheckedContinuation { continuation in
+            service.deliverForegroundNotification(response) { options in
+                continuation.resume(returning: options)
+            }
+        }
+        #expect(options.isEmpty)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func foregroundCompletionDoesNotWaitForTheChime() async {
+        let center = FakeLocalNotificationCenter()
+        center.soundEnabled = true
+        let chimeGate = AsyncStream<Void>.makeStream()
+        var chimeFinished = false
+        let service = LocalNotificationService(
+            center: center,
+            playForegroundSound: {
+                for await _ in chimeGate.stream {}
+                chimeFinished = true
+            },
+            outputVolume: { 1 }
+        )
+        service.onWillPresentNotification = { _ in [.banner, .sound] }
+        let response = LocalNotificationService.response(
+            actionIdentifier: UNNotificationDefaultActionIdentifier,
+            userInfo: [:]
+        )
+
+        let options = await withCheckedContinuation { continuation in
+            service.deliverForegroundNotification(response) { options in
+                continuation.resume(returning: options)
+            }
+        }
+
+        #expect(options == [.banner])
+        #expect(!chimeFinished)
+        chimeGate.continuation.finish()
+        await service.foregroundSoundTask?.value
+        #expect(chimeFinished)
     }
 
     @Test func removesDeliveredNotificationForAgent() throws {
@@ -144,6 +197,7 @@ struct LocalNotificationServiceTests {
         #expect(response.workspaceId == "workspace-1")
         #expect(response.agentName == "Build Agent")
         #expect(response.connectionId == connectionId)
+        #expect(!response.foregroundPresentationHandled)
     }
 
     @Test func notificationResponseCompletesAfterRoutingCallback() async {

@@ -4,6 +4,7 @@ struct ConnectionSwitcherList: View {
     let connections: [StoredConnection]
     let selectedID: UUID?
     let onSelect: (UUID) -> Void
+    var onOpenInNewWindow: ((UUID) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @ScaledMetric(relativeTo: .body) private var iconSize = ConnectionSwitcherStyle.iconSize
@@ -69,5 +70,21 @@ struct ConnectionSwitcherList: View {
         .accessibilityLabel(connection.displayName)
         .accessibilityAddTraits(connection.id == selectedID ? .isSelected : [])
         .accessibilityIdentifier("connection-switcher.connection.\(connection.id)")
+        .contextMenu {
+            if let onOpenInNewWindow {
+                Button { onOpenInNewWindow(connection.id) } label: {
+                    Label {
+                        Text("Open in New Window").interFont(Constants.Typography.bodyS)
+                    } icon: {
+                        Image(systemName: "macwindow.badge.plus")
+                    }
+                }
+            }
+        }
+        .accessibilityActions {
+            if let onOpenInNewWindow {
+                Button("Open in New Window") { onOpenInNewWindow(connection.id) }
+            }
+        }
     }
 }

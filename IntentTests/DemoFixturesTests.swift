@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 @testable import Intent
 import Testing
@@ -861,5 +862,6 @@ extension DemoFixturesTests {
         #expect(!text.contains("bearer"))
     }
 }
+#endif
 // swiftlint:enable type_body_length
 // swiftlint:enable file_length function_body_length

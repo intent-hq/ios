@@ -4,8 +4,9 @@ import SwiftUI
 struct HomeActionTiles: View {
     enum Action: String, CaseIterable {
         case assistant
-        case workspaces
         case workspace
+        case workspaces
+        case pullRequests
         case connections
         case appearance
         case settings
@@ -18,8 +19,12 @@ struct HomeActionTiles: View {
     var allowsWorkspaceCreation = true
     var allowsAssistant = true
     var showsWorkspaceList = false
+    var showsPullRequests = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @State private var availableWidth: CGFloat = 0
+    @State private var carouselContentHeight: CGFloat = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var tileHeight = Layout.minimumHeight
@@ -30,8 +35,10 @@ struct HomeActionTiles: View {
         static let inset: CGFloat = 24
         static let spacing: CGFloat = 8
         static let maximumTileWidth: CGFloat = 192
-        static let minimumTileWidth: CGFloat = 160
+        static let minimumFittedTileWidth: CGFloat = 152
         static let minimumHeight: CGFloat = 240
+        static let wrappedHeight: CGFloat = 144
+        static let maximumHeightFraction: CGFloat = 0.75
         static let cornerRadius: CGFloat = 20
         static let iconSize: CGFloat = 24
         static let iconOpacity = 0.3
@@ -41,28 +48,101 @@ struct HomeActionTiles: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: Layout.spacing) {
-                ForEach(Action.allCases.filter { action in
-                    (action != .workspace || allowsWorkspaceCreation) && (action != .assistant || allowsAssistant)
-                        && (action != .workspaces || showsWorkspaceList)
-                }, id: \.self) { action in
-                    tile(action)
-                }
+        Group {
+            if sizeClass == .compact || usesVerticalBar {
+                carousel
+            } else {
+                wrappedTiles
             }
-            .scrollTargetLayout()
         }
-        .scrollIndicators(.hidden)
-        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
-        .scrollTargetBehavior(.viewAligned)
-        .defaultScrollAnchor(.trailing, for: .alignment)
-        .contentMargins(.horizontal, sizeClass == .regular ? 0 : Layout.inset, for: .scrollContent)
-        .padding(.horizontal, sizeClass == .regular ? Layout.inset : 0)
-        .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("intent.menu.tiles")
     }
 
-    private func tile(_ action: Action) -> some View {
+    /// Large text can make cards taller than a short landscape window, so the
+    /// viewport is capped like the wrapped grid and scrolls vertically when needed.
+    private var carousel: some View {
+        ScrollView([.horizontal, .vertical]) {
+            HStack(alignment: .top, spacing: Layout.spacing) {
+                ForEach(actions, id: \.self) { action in
+                    tile(action, height: tileHeight, fillsHeight: true)
+                        .frame(width: carouselTileWidth)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, Layout.inset)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { carouselContentHeight = $0 }
+        }
+        .scrollIndicators(.hidden, axes: .horizontal)
+        .scrollBounceBehavior(.basedOnSize, axes: [.horizontal, .vertical])
+        .containerRelativeFrame(.vertical) { containerHeight, _ in
+            Self.carouselHeight(content: max(tileHeight, carouselContentHeight), container: containerHeight)
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            max(0, geometry.size.width - 2 * Layout.inset)
+        } action: { availableWidth = $0 }
+    }
+
+    /// Accessibility text gets one card per viewport so titles wrap at word boundaries.
+    private var carouselTileWidth: CGFloat {
+        Self.carouselTileWidth(in: availableWidth, accessibility: dynamicTypeSize.isAccessibilitySize)
+    }
+
+    static func carouselTileWidth(in width: CGFloat, accessibility: Bool) -> CGFloat {
+        accessibility ? max(Layout.maximumTileWidth, width) : Layout.maximumTileWidth
+    }
+
+    static func carouselHeight(content: CGFloat, container: CGFloat) -> CGFloat {
+        min(content, container * Layout.maximumHeightFraction)
+    }
+
+    private var wrappedTiles: some View {
+        let columns = Self.columnCount(in: availableWidth, actionCount: actions.count, accessibility: dynamicTypeSize.isAccessibilitySize)
+        let width = Self.tileWidth(in: availableWidth, actionCount: actions.count, accessibility: dynamicTypeSize.isAccessibilitySize)
+        let rows = max(1, (actions.count + columns - 1) / columns)
+        let height = rows == 1 ? tileHeight : tileHeight * Layout.wrappedHeight / Layout.minimumHeight
+        return ScrollView(.vertical) {
+            Grid(horizontalSpacing: Layout.spacing, verticalSpacing: Layout.spacing) {
+                ForEach(0..<rows, id: \.self) { row in
+                    GridRow {
+                        ForEach(actions.dropFirst(row * columns).prefix(columns), id: \.self) { action in
+                            tile(action, height: height)
+                                .frame(width: width)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal, Layout.inset)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+        .containerRelativeFrame(.vertical) { containerHeight, _ in
+            min(CGFloat(rows) * height + CGFloat(rows - 1) * Layout.spacing, containerHeight * Layout.maximumHeightFraction)
+        }
+        .onGeometryChange(for: CGFloat.self) { geometry in
+            max(0, geometry.size.width - 2 * Layout.inset)
+        } action: { availableWidth = $0 }
+    }
+
+    private var actions: [Action] {
+        Action.allCases.filter { action in
+            (action != .workspace || allowsWorkspaceCreation) && (action != .assistant || allowsAssistant)
+                && (action != .workspaces || showsWorkspaceList) && (action != .pullRequests || showsPullRequests)
+        }
+    }
+
+    static func tileWidth(in width: CGFloat, actionCount: Int, accessibility: Bool) -> CGFloat {
+        let columns = CGFloat(columnCount(in: width, actionCount: actionCount, accessibility: accessibility))
+        let fittedWidth = max(0, (width - Layout.spacing * (columns - 1)) / columns)
+        return accessibility ? fittedWidth : min(Layout.maximumTileWidth, fittedWidth)
+    }
+
+    static func columnCount(in width: CGFloat, actionCount: Int, accessibility: Bool) -> Int {
+        guard !accessibility else { return 1 }
+        let columns = Int(max(0, width + Layout.spacing) / (Layout.minimumFittedTileWidth + Layout.spacing))
+        return max(1, min(actionCount, columns))
+    }
+
+    private func tile(_ action: Action, height: CGFloat, fillsHeight: Bool = false) -> some View {
         Button { onSelect(action) } label: {
             VStack(alignment: .leading) {
                 icon(action)
@@ -72,14 +152,9 @@ struct HomeActionTiles: View {
                 tileTitle(action)
             }
             .padding(Layout.inset)
-            .frame(maxWidth: .infinity, minHeight: max(Layout.minimumHeight, tileHeight), alignment: .leading)
-            .containerRelativeFrame(.horizontal) { width, _ in
-                let columns: CGFloat = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-                let contentWidth = min(width, Layout.maximumTileWidth * 2 + Layout.spacing)
-                return max(Layout.minimumTileWidth, (contentWidth - Layout.spacing * (columns - 1)) / columns)
-            }
-            .background(Constants.WorkspaceList.controlSurface(for: colorScheme), in: RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
+            .frame(maxWidth: .infinity, minHeight: height, maxHeight: fillsHeight ? .infinity : nil, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius, style: .circular))
+            .homeActionTileSurface(cornerRadius: Layout.cornerRadius, fill: Constants.WorkspaceList.controlSurface(for: colorScheme))
         }
         .buttonStyle(HomeActionTileStyle())
         .accessibilityLabel(action == .appearance ? "Appearance" : title(action))
@@ -148,6 +223,7 @@ struct HomeActionTiles: View {
         switch action {
         case .assistant: "Chat With\nAssistant"
         case .workspaces: "Workspaces"
+        case .pullRequests: "Pull\nRequests"
         case .workspace: "New\nWorkspace"
         case .connections: "Connections:\n\(connectionCount) \(connectionCount == 1 ? "Device" : "Devices")"
         case .appearance: "Appearance:\n\(appearance)"
@@ -159,6 +235,7 @@ struct HomeActionTiles: View {
         switch action {
         case .assistant: .intentDandelion
         case .workspaces: .agentGeneral1
+        case .pullRequests: .pullRequests
         case .workspace: .addIcon
         case .connections: .connectionLaptop
         case .appearance:

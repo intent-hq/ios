@@ -4,7 +4,9 @@ struct IPadNavigationRail: View {
     let section: IPadSidebarSection
     let isSidebarVisible: Bool
     let canUseAssistant: Bool
+    let canCreateWorkspace: Bool
     let onSelect: (IPadSidebarSection) -> Void
+    let onCreateWorkspace: () -> Void
     let onExpand: () -> Void
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage("appThemePreference") private var themePreference = "system"
@@ -18,6 +20,7 @@ struct IPadNavigationRail: View {
                 destination(.assistant, asset: .dandelion, label: "Assistant")
                     .disabled(!canUseAssistant)
                 destination(.workspaces, asset: .agentGeneral1, label: "Workspaces")
+                destination(.pullRequests, asset: .pullRequests, label: "Pull requests")
                 destination(.connections, asset: .connectionLaptop, label: "Connections")
                 railButton(asset: appearanceAsset, label: "Appearance", identifier: "ipad.rail.appearance") {
                     themePreference = ["light": "dark", "dark": "system"][themePreference] ?? "light"
@@ -25,6 +28,8 @@ struct IPadNavigationRail: View {
                 .accessibilityValue(appearanceTitle)
                 .accessibilityHint("Changes appearance")
                 destination(.settings, asset: .settings2, label: "Settings")
+                railButton(asset: .addIcon, label: "New workspace", identifier: "ipad.rail.createWorkspace", action: onCreateWorkspace)
+                    .disabled(!canCreateWorkspace)
             }
             .padding(.top, IPadShellLayout.railTopInset)
         }
@@ -64,7 +69,7 @@ struct IPadNavigationRail: View {
                 .background {
                     if isSelected {
                         RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius)
-                            .fill(Constants.Pairing.surface(for: colorScheme))
+                            .fill(IPadShellStyle.selection(for: colorScheme))
                     }
                 }
                 .contentShape(RoundedRectangle(cornerRadius: IPadShellLayout.cornerRadius))

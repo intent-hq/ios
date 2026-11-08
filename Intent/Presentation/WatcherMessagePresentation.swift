@@ -23,12 +23,12 @@ struct WatcherMessagePresentation {
             }
         }
 
-        var symbol: String {
-            if needsAttention { return "exclamationmark.circle.fill" }
+        var iconName: String? {
+            if needsAttention { return "AttentionCircleFill" }
             switch status {
-            case "success": return "checkmark.circle"
-            case "in_progress": return "arrow.trianglehead.2.clockwise.rotate.90"
-            default: return "circle.dashed"
+            case "success": return "CheckCircle"
+            case "in_progress": return "Circular"
+            default: return nil
             }
         }
     }

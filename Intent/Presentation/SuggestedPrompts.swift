@@ -14,7 +14,12 @@ import Foundation
 ///
 /// Base syntax mirrors `scanSuggestedPrompts` / `parseSuggestedPrompts` in the
 /// desktop app's `messageParser.ts`, including `Label|` / `delay:N|` stripping,
-/// the four-chip cap, and dropping individually invalid lines. Empty duplicate
+/// the four-chip cap, and dropping individually invalid lines. The
+/// HTML-escaped spelling (`&lt;!-- suggested-prompts` ... `--&gt;`), which a
+/// model can copy from an XML-escaped history replay, is a block too: it
+/// closes only on the escaped closer and its lines are entity-decoded once.
+/// Shared cases: `IntentTests/Fixtures/suggested-prompts/` (monorepo
+/// `docs/protocol/suggested-prompts.md`). Empty duplicate
 /// opener recovery also removes the otherwise visible leftover marker on iOS.
 enum SuggestedPrompts {
     private static let markdownMarkerLength = 3
@@ -26,19 +31,23 @@ enum SuggestedPrompts {
     /// Maximum length of a single prompt; longer lines are dropped.
     static let maxPromptLength = 200
 
-    private static let openerPattern = "<!--[ \t]*suggested-prompts[ \t]*$"
+    private static let openerPattern = "(<|&lt;)!--[ \t]*suggested-prompts[ \t]*$"
+    private static let escapedOpenerPrefix = "&lt;"
+    private static let closer = "-->"
+    private static let escapedCloser = "--&gt;"
 
     private struct Block {
         let openerLine: Int
         let closerLine: Int
         let openerPrefix: String
         let body: [String]
+        /// Opened with `&lt;!--`: closes on `--&gt;`, lines are entity-decoded.
+        let escaped: Bool
     }
 
     private struct CloserSearch {
         let closerLine: Int?
         let closerRemainder: String?
-        let resumeIndex: Int
     }
 
     private struct FenceMarker {
@@ -103,7 +112,7 @@ enum SuggestedPrompts {
     private static func prompts(fromLastOf found: [Block]) -> [String] {
         guard let last = found.last else { return [] }
         let lines = last.body
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { (last.escaped ? decodeEntities($0) : $0).trimmingCharacters(in: promptTrimSet) }
             .filter { !$0.isEmpty }
         guard !lines.isEmpty, !lines.contains(where: looksLikeBodyText) else { return [] }
         return prompts(from: lines)
@@ -163,15 +172,7 @@ enum SuggestedPrompts {
         while index < lines.count {
             let line = trimmingTrailingWhitespace(lines[index])
             if let marker = fenceMarker(line) {
-                if let open = fence {
-                    // Only a matching, at-least-as-long, bare marker closes.
-                    if marker.character == open.char, marker.length >= open.length,
-                       marker.info.trimmingCharacters(in: .whitespaces).isEmpty {
-                        fence = nil
-                    }
-                } else {
-                    fence = (marker.character, marker.length)
-                }
+                fence = nextFence(after: marker, in: fence)
                 index += 1
                 continue
             }
@@ -184,11 +185,17 @@ enum SuggestedPrompts {
             // later line whose non-empty remainder becomes the final body line;
             // an embedded `-->` mid-line (Mermaid edge, prose arrow) never
             // closes a block. A second opener means this one was never closed.
-            let closerSearch = findCloser(in: lines, after: index)
+            let escaped = line[openerRange].hasPrefix(escapedOpenerPrefix)
+            let closerSearch = findCloser(
+                in: lines,
+                after: index,
+                closer: escaped ? escapedCloser : closer
+            )
             guard let closer = closerSearch.closerLine else {
-                // Unclosed opener — resume from wherever the scan stopped so a
-                // later well-formed block is still found.
-                index = closerSearch.resumeIndex > index ? closerSearch.resumeIndex : index + 1
+                // Unclosed opener: rescan from the next line so the fence
+                // bookkeeping above sees every line and a later well-formed
+                // block is still found.
+                index += 1
                 continue
             }
             var body = Array(lines[(index + 1)..<closer])
@@ -199,26 +206,43 @@ enum SuggestedPrompts {
                 openerLine: start,
                 closerLine: closer,
                 openerPrefix: start == index ? prefix : "",
-                body: body
+                body: body,
+                escaped: escaped
             ))
             index = closer + 1
         }
         return result
     }
 
-    private static func findCloser(in lines: [String], after openerIndex: Int) -> CloserSearch {
+    private static func findCloser(
+        in lines: [String],
+        after openerIndex: Int,
+        closer: String
+    ) -> CloserSearch {
         var closerLine: Int?
         var closerRemainder: String?
+        var fence: (char: Character, length: Int)?
         var scan = openerIndex + 1
         while scan < lines.count {
             let candidate = trimmingTrailingWhitespace(lines[scan])
-            if candidate.trimmingCharacters(in: .whitespaces) == "-->" {
+            // A closer or opener inside a fenced region never counts, so a
+            // fenced example cannot close the block and strip reply text.
+            if let marker = fenceMarker(candidate) {
+                fence = nextFence(after: marker, in: fence)
+                scan += 1
+                continue
+            }
+            if fence != nil {
+                scan += 1
+                continue
+            }
+            if candidate.trimmingCharacters(in: .whitespaces) == closer {
                 closerLine = scan
                 break
             }
-            if candidate.hasSuffix("-->") {
+            if candidate.hasSuffix(closer) {
                 let remainder = trimmingTrailingWhitespace(
-                    String(candidate.dropLast(Self.markdownMarkerLength))
+                    String(candidate.dropLast(closer.count))
                 )
                 // An opener-shaped remainder must not close the block: stripping
                 // is ungated and would delete text under an unclosed opener.
@@ -232,11 +256,19 @@ enum SuggestedPrompts {
             if candidate.range(of: openerPattern, options: .regularExpression) != nil { break }
             scan += 1
         }
-        return CloserSearch(
-            closerLine: closerLine,
-            closerRemainder: closerRemainder,
-            resumeIndex: scan
-        )
+        return CloserSearch(closerLine: closerLine, closerRemainder: closerRemainder)
+    }
+
+    /// Fence state after a marker line: only a matching, at-least-as-long,
+    /// bare marker closes an open fence; any marker opens one otherwise.
+    private static func nextFence(
+        after marker: FenceMarker,
+        in fence: (char: Character, length: Int)?
+    ) -> (char: Character, length: Int)? {
+        guard let open = fence else { return (marker.character, marker.length) }
+        let closes = marker.character == open.char && marker.length >= open.length
+            && marker.info.trimmingCharacters(in: .whitespaces).isEmpty
+        return closes ? nil : open
     }
 
     /// Opening/closing markdown fence (backtick or tilde), indented at most 3.
@@ -290,32 +322,100 @@ enum SuggestedPrompts {
     /// `[0-9]` (not `\d`) keeps digit matching ASCII-only like the desktop's
     /// non-Unicode JS regex; ICU `\d` would also match e.g. Arabic-Indic digits.
     private static func parsePromptLine(_ line: String) -> String? {
-        let delayPattern = "^delay:[0-9]+\\|"
-        if let delayRange = line.range(
-            of: delayPattern,
-            options: [.regularExpression, .caseInsensitive]
-        ) {
-            let text = String(line[delayRange.upperBound...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return text.isEmpty || text.utf16.count > maxPromptLength ? nil : text
+        if let text = afterDelayPrefix(line) {
+            return isValidPrompt(text) ? text : nil
         }
         var promptPart = line
-        if let pipeIndex = line.firstIndex(of: "|") {
-            promptPart = String(line[line.index(after: pipeIndex)...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let afterLabel = SuggestedPromptLinks.textAfterLabel(line) {
+            promptPart = afterLabel.trimmingCharacters(in: promptTrimSet)
         }
-        if let delayRange = promptPart.range(
-            of: delayPattern,
-            options: [.regularExpression, .caseInsensitive]
-        ) {
-            promptPart = String(promptPart[delayRange.upperBound...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let text = afterDelayPrefix(promptPart) { promptPart = text }
+        return isValidPrompt(promptPart) ? promptPart : nil
+    }
+
+    /// The trimmed text after a `delay:N|` prefix, or nil. Like the desktop's
+    /// `/^delay:(\d+)\|(.*)$/i`, the rest must not span a line terminator (a
+    /// decoded `&#10;` can put one inside a prompt).
+    private static func afterDelayPrefix(_ text: String) -> String? {
+        guard let range = text.range(of: "^delay:[0-9]+\\|", options: [.regularExpression, .caseInsensitive]) else {
+            return nil
         }
-        return promptPart.isEmpty || promptPart.utf16.count > maxPromptLength ? nil : promptPart
+        let rest = text[range.upperBound...]
+        guard !rest.unicodeScalars.contains(where: lineTerminators.contains) else { return nil }
+        return String(rest).trimmingCharacters(in: promptTrimSet)
+    }
+
+    /// Non-empty, and the visible text (link labels in place of their
+    /// markdown) fits `maxPromptLength`, like the desktop.
+    private static func isValidPrompt(_ text: String) -> Bool {
+        !text.isEmpty && SuggestedPromptLinks.visibleText(text).utf16.count <= maxPromptLength
     }
 }
 
 private extension SuggestedPrompts {
+    /// Decodes the entities a model imitating escaped text emits, in one pass
+    /// (so `&amp;lt;` becomes `&lt;`): the five XML named entities plus decimal
+    /// (1–7 digits) and hex (1–6 digits) references. Unknown, zero,
+    /// out-of-range and surrogate references stay literal, matching the
+    /// desktop's `decodeEscapedPromptText`.
+    /// What JS `String.prototype.trim` removes: whitespace and line
+    /// terminators, plus the U+FEFF byte-order mark Foundation keeps.
+    static let promptTrimSet = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}"))
+    /// Characters the desktop's `.` never matches.
+    static let lineTerminators = CharacterSet(charactersIn: "\n\r\u{2028}\u{2029}")
+    static let namedEntities: [String: String] = ["lt": "<", "gt": ">", "quot": "\"", "apos": "'", "amp": "&"]
+    static let maxEntityBodyLength = 8
+    static let hexRadix = 16
+    static let decimalRadix = 10
+    static let maxHexDigits = 6
+    static let maxDecimalDigits = 7
+
+    static func decodeEntities(_ line: String) -> String {
+        let scalars = Array(line.unicodeScalars)
+        var out = String.UnicodeScalarView()
+        var index = 0
+        while index < scalars.count {
+            // Only look as far as the longest entity body, so a run of `&`
+            // without a nearby `;` stays linear.
+            let window = scalars[(index + 1)..<min(scalars.count, index + 2 + maxEntityBodyLength)]
+            guard scalars[index] == "&", let semicolon = window.firstIndex(of: ";") else {
+                out.append(scalars[index])
+                index += 1
+                continue
+            }
+            let name = String(String.UnicodeScalarView(scalars[(index + 1)..<semicolon]))
+            if let decoded = namedEntities[name] ?? numericReference(name) {
+                out.append(contentsOf: decoded.unicodeScalars)
+                index = semicolon + 1
+            } else {
+                out.append(scalars[index])
+                index += 1
+            }
+        }
+        return String(out)
+    }
+
+    /// `#123` / `#x1F` body of a numeric reference, decoded to its scalar.
+    private static func numericReference(_ body: String) -> String? {
+        guard body.hasPrefix("#") else { return nil }
+        var digits = body.dropFirst()
+        let radix: Int
+        let maxDigits: Int
+        if let first = digits.first, first == "x" || first == "X" {
+            digits = digits.dropFirst()
+            radix = hexRadix
+            maxDigits = maxHexDigits
+        } else {
+            radix = decimalRadix
+            maxDigits = maxDecimalDigits
+        }
+        let allowed = radix == hexRadix ? "0123456789abcdefABCDEF" : "0123456789"
+        guard !digits.isEmpty, digits.count <= maxDigits, digits.allSatisfy(allowed.contains),
+              let value = UInt32(digits, radix: radix), value > 0,
+              let scalar = Unicode.Scalar(value) else { return nil }
+        return String(Character(scalar))
+    }
+
     /// Only absorb standalone openers separated by whitespace, and only after
     /// a closed block has been found. Stop at any prose or fence so an earlier
     /// unclosed example cannot consume response text (ios#445).

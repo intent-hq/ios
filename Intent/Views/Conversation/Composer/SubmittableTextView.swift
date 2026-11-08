@@ -26,6 +26,7 @@ class KeyCommandTextView: UITextView {
     var onSubmit: (() -> Void)?
     var onLayoutChange: (() -> Void)?
     var onPasteImages: (() -> Void)?
+    weak var skillCompletion: ComposerSkillCompletion?
     var allowsImagePaste = true
     var imagePasteboard: ImagePasteboard = .general
 
@@ -135,18 +136,37 @@ class KeyCommandTextView: UITextView {
     override var keyCommands: [UIKeyCommand]? {
         // Don't intercept Return where it should insert a newline (iPhone
         // always; visionOS without a hardware keyboard)
-        guard Self.returnSubmitsNow else { return nil }
+        var commands: [UIKeyCommand] = []
+        if skillCompletion?.context != nil {
+            commands = [UIKeyCommand.inputUpArrow, UIKeyCommand.inputDownArrow, "\t", UIKeyCommand.inputEscape].map { input in
+                let command = UIKeyCommand(input: input, modifierFlags: [], action: #selector(handleSkillCommand(_:)))
+                command.wantsPriorityOverSystemBehavior = true
+                return command
+            }
+        }
+        guard Self.returnSubmitsNow else { return commands }
         // Intercept bare Return (no modifiers) — calls handleReturn
         let returnCommand = UIKeyCommand(
             input: "\r",
             modifierFlags: [],
             action: #selector(handleReturn)
         )
-        return [returnCommand]
+        return commands + [returnCommand]
     }
 
     @objc private func handleReturn() {
+        if skillCompletion?.acceptSelection() == true { return }
         onSubmit?()
+    }
+
+    @objc private func handleSkillCommand(_ command: UIKeyCommand) {
+        switch command.input {
+        case UIKeyCommand.inputUpArrow: skillCompletion?.moveSelection(by: -1)
+        case UIKeyCommand.inputDownArrow: skillCompletion?.moveSelection(by: 1)
+        case UIKeyCommand.inputEscape: skillCompletion?.dismiss()
+        case "\t": skillCompletion?.acceptSelection()
+        default: break
+        }
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -200,6 +220,7 @@ struct SubmittableTextView: UIViewRepresentable {
     /// Opt-in foreground for a scoped composer design. Nil preserves UIKit's
     /// existing color without rewriting attributed text or changing editing policy.
     var textColor: UIColor?
+    var skillCompletion: ComposerSkillCompletion?
     @Environment(\.isEnabled) private var isEnabled
 
     func makeUIView(context: Context) -> KeyCommandTextView {
@@ -207,6 +228,7 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.delegate = context.coordinator
         textView.onSubmit = onSubmit
         textView.onPasteImages = onPasteImages
+        textView.skillCompletion = skillCompletion
         textView.allowsImagePaste = isEnabled
         textView.accessibilityLabel = accessibilityLabel
         textView.accessibilityIdentifier = "composer.textView"
@@ -223,6 +245,7 @@ struct SubmittableTextView: UIViewRepresentable {
         let inset = Constants.Conversation.Composer.textContainerInset
         textView.textContainerInset = UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)
         textView.isScrollEnabled = true
+        textView.clipsToBounds = true
         textView.alwaysBounceVertical = false
         textView.setContentHuggingPriority(.defaultHigh, for: .vertical)
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -238,6 +261,12 @@ struct SubmittableTextView: UIViewRepresentable {
         return textView
     }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView _: KeyCommandTextView, context _: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height,
+              width.isFinite, height.isFinite else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
     func updateUIView(_ textView: KeyCommandTextView, context: Context) {
         // Keep the coordinator's parent current so its closures (e.g.
         // onCaretChange) capture the latest state
@@ -246,6 +275,7 @@ struct SubmittableTextView: UIViewRepresentable {
         // Update onSubmit closure so it always captures current state
         textView.onSubmit = onSubmit
         textView.onPasteImages = onPasteImages
+        textView.skillCompletion = skillCompletion
         textView.allowsImagePaste = isEnabled
         textView.accessibilityLabel = accessibilityLabel
         textView.updateTypography()
@@ -295,11 +325,13 @@ struct SubmittableTextView: UIViewRepresentable {
                 guard textView.text != latestText else { return }
                 textView.text = latestText
                 parent.onHeightChange?(textView.naturalHeight)
+                parent.skillCompletion?.update(from: textView)
             }
         }
 
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
+            parent.skillCompletion?.update(from: textView)
 
             // Report ideal content height to SwiftUI
             let idealHeight = (textView as? KeyCommandTextView)?.naturalHeight
@@ -320,17 +352,20 @@ struct SubmittableTextView: UIViewRepresentable {
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange
             parent.onCaretChange?(range.location + range.length)
+            parent.skillCompletion?.update(from: textView)
         }
 
-        func textViewDidBeginEditing(_: UITextView) {
+        func textViewDidBeginEditing(_ textView: UITextView) {
             nativeFocusRevision &+= 1
+            parent.skillCompletion?.update(from: textView)
             DispatchQueue.main.async {
                 self.parent.isFocused = true
             }
         }
 
-        func textViewDidEndEditing(_: UITextView) {
+        func textViewDidEndEditing(_ textView: UITextView) {
             nativeFocusRevision &+= 1
+            parent.skillCompletion?.update(from: textView)
             DispatchQueue.main.async {
                 self.parent.isFocused = false
             }
@@ -353,6 +388,7 @@ struct SubmittableTextView: UIViewRepresentable {
                 // Return inserts a newline where the submit rule is off
                 // (iPhone always; visionOS without a hardware keyboard)
                 guard KeyCommandTextView.returnSubmitsNow else { return true }
+                if parent.skillCompletion?.acceptSelection() == true { return false }
                 // Software keyboard Return (or bare Return fallback) → submit
                 parent.onSubmit()
                 return false

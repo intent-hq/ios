@@ -7,14 +7,18 @@ struct WorkspaceActionLauncher: ViewModifier {
     var alignment: HorizontalAlignment = .trailing
     var avoidsConversationInput = true
     var hostsVerticalBarButton = true
+    var floatingVerticalBarButtonOffset: CGFloat?
+    var floatingVerticalBarButtonEdge: HorizontalEdge = .trailing
     var onWorkspaces: (() -> Void)?
     var onAssistant: (() -> Void)?
+    var onPullRequests: (() -> Void)?
     let onCreateWorkspace: () -> Void
     let onConnections: () -> Void
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
+    @Environment(\.workspaceVerticalBarEdge) private var verticalBarEdge
     @AppStorage("appThemePreference") private var themePreference = "system"
     @State private var isOpen = false
     @State private var connectionCount = 0
@@ -23,33 +27,39 @@ struct WorkspaceActionLauncher: ViewModifier {
     private enum Layout {
         static let blurRadius: CGFloat = 15
         static let shadeOpacity = 0.8
-        // Literal 8-bit channels preserve the shared light/dark home-menu fade in IOS Working.
-        // swiftlint:disable:next no_magic_numbers
-        static let shade = Color(.sRGB, red: 26 / 255, green: 26 / 255, blue: 25 / 255)
+        // Exact 8-bit palette channels preserve the shared light/dark home-menu fade in IOS Working.
+        static let shade = Color(sRGBHex: Constants.DesignPalette.homeMenuFade)
         static let springResponse = 0.35
         static let springDamping = 0.85
         static let footerSpacing: CGFloat = 23
-        static let menuBottomInset: CGFloat = 24
-        static let launcherBottomInset: CGFloat = 12
         static let tileEntranceOffset: CGFloat = 20
     }
 
     func body(content: Content) -> some View {
-        if usesVerticalBar {
-            floatingMenu(content: content)
-                .onChange(of: isOpen) { _, open in
-                    if open { connectionCount = PersistenceManager.shared.loadConnections().count }
-                }
-                .modifier(WorkspaceActionLauncherToolbar(isEnabled: isEnabled && hostsVerticalBarButton && !isSearching))
-                .environment(\.workspaceActionMenuPresented, $isOpen)
-        } else {
-            floatingMenu(content: content)
+        Group {
+            if usesVerticalBar {
+                floatingMenu(content: content)
+                    .onChange(of: isOpen) { _, open in
+                        if open { connectionCount = PersistenceManager.shared.loadConnections().count }
+                    }
+                    .modifier(WorkspaceActionLauncherToolbar(
+                        isEnabled: isEnabled && hostsVerticalBarButton && floatingVerticalBarButtonOffset == nil && !isSearching
+                    ))
+                    .environment(\.workspaceActionMenuPresented, $isOpen)
+            } else {
+                floatingMenu(content: content)
+            }
         }
+        .onChange(of: isOpen) { _, open in HapticManager.impact(open ? .medium : .light) }
     }
 
     // Keep the original modifier chain and ordering on devices without a vertical bar.
     private func floatingMenu(content: Content) -> some View {
         content
+            // Raised attention rows hide while the menu is open; the launcher's
+            // clearance keeps floating-composer transcripts out from under it.
+            .environment(\.workspaceActionMenuOpen, isOpen)
+            .environment(\.workspaceActionLauncherClearance, isSearching ? 0 : AssistantLaunchButton.scrollClearance)
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
@@ -78,6 +88,9 @@ struct WorkspaceActionLauncher: ViewModifier {
             }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
+            // Temporary coverage: the window's floating chat composer hides
+            // while the menu is open and keeps its draft and imports.
+            .coversConversationComposers(while: isOpen)
     }
 
     private func actionOverlay(bottomInset: CGFloat) -> some View {
@@ -93,7 +106,7 @@ struct WorkspaceActionLauncher: ViewModifier {
             }
             if isEnabled, !isSearching {
                 actionControls
-                    .padding(.bottom, bottomInset + (isOpen && bottomInset == 0 ? Layout.menuBottomInset : Layout.launcherBottomInset))
+                    .padding(.bottom, bottomInset + (isOpen && bottomInset == 0 ? AssistantLauncherLayout.current.menuBottomInset : AssistantLauncherLayout.current.launcherBottomInset))
                     .ignoresSafeArea(.container, edges: isOpen && bottomInset == 0 ? .bottom : [])
                     .animation(
                         reduceMotion ? nil : .spring(response: Layout.springResponse, dampingFraction: Layout.springDamping),
@@ -122,14 +135,17 @@ struct WorkspaceActionLauncher: ViewModifier {
                     onSelect: select,
                     allowsWorkspaceCreation: coordinator.canCreateWorkspace,
                     allowsAssistant: coordinator.canUseAssistant,
-                    showsWorkspaceList: onWorkspaces != nil
+                    showsWorkspaceList: onWorkspaces != nil,
+                    showsPullRequests: onPullRequests != nil
                 )
+                    .padding(.horizontal, AssistantLauncherLayout.current.tileExtraInset)
+                    .visionActionMenuDepth()
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
             if usesVerticalBar {
                 // Keep the close control inside the modal overlay's accessibility boundary.
-                if isOpen {
-                    AssistantLaunchButton(isOpen: isOpen) { isOpen.toggle() }
+                if isOpen || floatingVerticalBarButtonOffset != nil {
+                    verticalBarButton
                 }
             } else {
                 AssistantLaunchButton(isOpen: isOpen) {
@@ -141,12 +157,33 @@ struct WorkspaceActionLauncher: ViewModifier {
         .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .bottom))
     }
 
+    private var verticalBarButton: some View {
+        AssistantLaunchButton(
+            isOpen: isOpen,
+            isInVerticalBar: floatingVerticalBarButtonOffset != nil,
+            action: toggleMenu
+        )
+        .frame(maxWidth: .infinity, alignment: buttonRailEdge == .leading ? .leading : .trailing)
+        .offset(x: (floatingVerticalBarButtonOffset ?? 0) * (floatingVerticalBarButtonEdge == .leading ? -1 : 1))
+        .ignoresSafeArea(.container, edges: floatingVerticalBarButtonOffset == nil ? nativeRailEdges : [])
+    }
+
+    private var nativeRailEdges: Edge.Set { verticalBarEdge == .leading ? .leading : .trailing }
+    private var buttonRailEdge: HorizontalEdge {
+        floatingVerticalBarButtonOffset == nil ? verticalBarEdge ?? .trailing : floatingVerticalBarButtonEdge
+    }
+
     private var appearanceTitle: String {
         switch themePreference {
         case "light": "Light Mode"
         case "dark": "Dark Mode"
         default: "System"
         }
+    }
+
+    private func toggleMenu() {
+        if !isOpen { connectionCount = PersistenceManager.shared.loadConnections().count }
+        isOpen.toggle()
     }
 
     private func select(_ action: HomeActionTiles.Action) {
@@ -159,6 +196,7 @@ struct WorkspaceActionLauncher: ViewModifier {
         case .assistant:
             if let onAssistant { onAssistant() } else { coordinator.onSelectAssistant() }
         case .workspaces: onWorkspaces?()
+        case .pullRequests: onPullRequests?()
         case .workspace: if coordinator.canCreateWorkspace { onCreateWorkspace() }
         case .connections: onConnections()
         case .settings: coordinator.onOpenSettings()
@@ -248,23 +286,32 @@ extension EnvironmentValues {
     @Entry var workspaceActionMenuPresented: Binding<Bool>?
 
     var workspaceUsesVerticalBar: Bool {
+        workspaceVerticalBarEdge != nil
+    }
+
+    var workspaceVerticalBarEdge: HorizontalEdge? {
         #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
         if #available(iOS 27.1, *) { return self[WorkspaceVerticalBarKey.self] }
         #endif
-        return false
+        return nil
     }
 }
 
 #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
 @available(iOS 27.1, *)
 private struct WorkspaceVerticalBarKey: UITraitBridgedEnvironmentKey {
-    nonisolated static let defaultValue = false
+    nonisolated static let defaultValue: HorizontalEdge? = nil
 
-    static func read(from traitCollection: UITraitCollection) -> Bool {
-        traitCollection.userInterfaceIdiom == .phone && traitCollection.verticalBarEdge == .trailing
+    static func read(from traitCollection: UITraitCollection) -> HorizontalEdge? {
+        guard traitCollection.userInterfaceIdiom == .phone else { return nil }
+        switch traitCollection.verticalBarEdge {
+        case .leading: return .leading
+        case .trailing: return .trailing
+        default: return nil
+        }
     }
 
     // This observes a system-owned trait; the app must not override its placement.
-    static func write(to _: inout any UIMutableTraits, value _: Bool) {}
+    static func write(to _: inout any UIMutableTraits, value _: HorizontalEdge?) {}
 }
 #endif

@@ -294,13 +294,6 @@ extension Constants.WorkspaceDetail {
     static let horizontalPadding: CGFloat = 16
     static let regularTitleTopPadding: CGFloat = 4
     static let titleBottomPadding: CGFloat = 4
-    static let progressSectionSpacing: CGFloat = 4
-    static let progressSpacing: CGFloat = 1
-    static let progressCornerRadius: CGFloat = 2
-    static let remainingProgressOpacity: Double = 0.2
-    static let progressHeight: CGFloat = 4
-    static let progressBottomPadding: CGFloat = 8
-    static let statusImageBottomPadding: CGFloat = 8
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
     // visionOS deliberate confirmation sheets for destructive/irreversible
@@ -410,6 +403,9 @@ extension Constants.Notes.Detail {
     static let tagVerticalPadding: CGFloat = 3
     static let tagCornerRadius: CGFloat = 6
     static let contentPadding: CGFloat = 16
+    static let truncationNoticeSpacing: CGFloat = 4
+    static let truncationNoticePadding: CGFloat = 12
+    static let truncationNoticeCornerRadius: CGFloat = 8
 }
 
 extension Constants.Notes.List {
@@ -454,6 +450,8 @@ extension Constants.Toast {
     static let shadowRadius: CGFloat = 12
     static let shadowYOffset: CGFloat = 4
     static let outerHorizontalPadding: CGFloat = 12
+    /// Wide windows keep the toast to the conversation's readable width instead of the full screen.
+    static let maximumWidth = Constants.Conversation.Design.IPad.readableWidth
     static let resetSpringResponse: Double = 0.3
     static let resetSpringDamping: Double = 0.7
 }

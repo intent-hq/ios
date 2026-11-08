@@ -137,7 +137,7 @@ import Testing
         #expect(cloud.updates.allSatisfy { !($0.query[kSecAttrAccount as String] as? String ?? "").hasPrefix("invited-v2-r:") })
     }
 
-    @Test func repairNeedsCompleteReadAndIsTheOnlyOperationAdvancingPairingClock() async throws {
+    @Test func repairNeedsCompleteReadAndIsTheOnlyOperationAdvancingPairingClock() throws {
         let cloud = MemorySyncedKeychain()
         let removal = try InvitedSessionFixtures.removal()
         cloud.items[removal.account] = removal.data

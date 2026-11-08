@@ -1,13 +1,23 @@
+import AVFAudio
 import Foundation
 
 /// Synthesizes the agent-notification chime as a WAV file on disk.
 ///
 /// visionOS emits the notification sound from the source window's scene via
 /// RealityKit (`WindowFeedbackSoundEmitter`), which needs a loadable audio
-/// file — the non-spatial system sound id (1152) played elsewhere has no
-/// file API, and the bundle ships no audio assets. The chime (two decaying
+/// file, and the bundle ships no audio assets. The chime (two decaying
 /// sine tones) is generated once and cached in the temporary directory.
 enum NotificationChime {
+    @MainActor
+    static func playForegroundSound() async {
+        guard let lease = try? await MediaAudioSession.shared.acquire(.notification) else { return }
+        defer { Task { try? await MediaAudioSession.shared.release(lease) } }
+        guard !Task.isCancelled, let url = fileURL(),
+              let player = try? AVAudioPlayer(contentsOf: url), player.play() else { return }
+        try? await Task.sleep(for: .seconds(player.duration))
+        player.stop()
+    }
+
     /// 16-bit mono PCM.
     private static let sampleRate = 44_100
     private static let duration = 0.6
@@ -18,11 +28,13 @@ enum NotificationChime {
     private static let pcmFormat: UInt16 = 1
     private static let channelCount: UInt16 = 1
     private static let bitsPerSample: UInt16 = 16
-    private static let firstToneFrequency = 880.0
-    private static let secondToneFrequency = 1174.66
-    private static let secondToneDelay = 0.12
-    private static let toneAmplitude = 0.38
-    private static let decayRate = 7.0
+    private static let firstToneFrequency = 523.25
+    private static let secondToneFrequency = 659.25
+    private static let secondToneDelay = 0.08
+    private static let toneAmplitude = 0.10
+    private static let decayRate = 9.0
+    private static let attackDuration = 0.018
+    private static let fadeDuration = 0.12
     private static let normalizedAmplitudeLimit = 1.0
     private static let int16AmplitudeLimit = 32_766.0
 
@@ -30,7 +42,7 @@ enum NotificationChime {
     /// when the file cannot be written.
     static func fileURL() -> URL? {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("intent-notification-chime.wav")
+            .appendingPathComponent("intent-notification-chime-v2.wav")
         if FileManager.default.fileExists(atPath: url.path) { return url }
         do {
             try wavData().write(to: url, options: .atomic)
@@ -70,8 +82,7 @@ enum NotificationChime {
         return data
     }
 
-    /// Two overlapping decaying sine tones (A5, then D6 120 ms later) — a
-    /// short, license-free "ding".
+    /// A quiet C5/E5 pair with rounded attacks and a fade to silence.
     static func chimeSamples() -> [Int16] {
         let count = Int(Double(sampleRate) * duration)
         return (0..<count).map { sampleIndex in
@@ -79,18 +90,27 @@ enum NotificationChime {
             var value = Self.toneAmplitude
                 * sin(2 * .pi * Self.firstToneFrequency * time)
                 * exp(-Self.decayRate * time)
+                * attack(at: time)
             let secondToneTime = time - Self.secondToneDelay
             if secondToneTime >= 0 {
                 value += Self.toneAmplitude
                     * sin(2 * .pi * Self.secondToneFrequency * secondToneTime)
                     * exp(-Self.decayRate * secondToneTime)
+                    * attack(at: secondToneTime)
             }
+            let fade = min(1, (duration - time) / fadeDuration)
+            value *= fade * fade
             let limitedValue = max(
                 -Self.normalizedAmplitudeLimit,
                 min(Self.normalizedAmplitudeLimit, value)
             )
             return Int16((limitedValue * Self.int16AmplitudeLimit).rounded())
         }
+    }
+
+    private static func attack(at time: Double) -> Double {
+        let ramp = sin(.pi / 2 * min(1, time / attackDuration))
+        return ramp * ramp
     }
 
     private static func appendUInt16(_ data: inout Data, _ value: UInt16) {

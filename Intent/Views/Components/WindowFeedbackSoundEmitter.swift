@@ -82,7 +82,7 @@ struct WindowFeedbackSoundEmitter: View {
         if resource == nil, let url = NotificationChime.fileURL() {
             resource = try? await AudioFileResource(contentsOf: url)
         }
-        guard let resource else { return }
+        guard let resource, NotificationSoundPolicy.system.windowSoundPlays() else { return }
         // Anchor immediately before playback: the first play suspends on
         // the resource load above, and an interleaved first play from
         // another window could re-anchor the shared audio session in

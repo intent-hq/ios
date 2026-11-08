@@ -58,7 +58,7 @@ struct ConnectionManagerTests {
 
     // MARK: - Event handlers
 
-    @Test @MainActor func onEventRegistersHandler() async {
+    @Test @MainActor func onEventRegistersHandler() {
         let manager = ConnectionManager.shared
         let initialCount = manager.eventHandlers.count
         let handlerId = manager.onEvent { _, _ in }
@@ -67,7 +67,7 @@ struct ConnectionManagerTests {
         manager.removeEventHandler(id: handlerId)
     }
 
-    @Test @MainActor func eventHandlerReceivesEvents() async {
+    @Test @MainActor func eventHandlerReceivesEvents() {
         let manager = ConnectionManager.shared
         var receivedMethod: String?
         var receivedParams: Any?

@@ -53,18 +53,12 @@ struct AppCoordinatorDependencies {
     let claimScreenRestoration: @MainActor () -> Bool
 }
 
-final class AppCoordinatorLifecycleState {
-    var hasEnteredRemoteUI = false
-    var hasCompletedInitialRouting = false
-    var workspaceDataAtInitialFlowStart: Date?
-    var hasReturnedToSavedMachines = false
-}
-
 @MainActor
 @Observable
 class AppCoordinator {
     var currentScreen: AppScreen = .loading {
         didSet {
+            workspaceChange = nil
             navigationState.recentWorkspaceAgentRequestId = nil
             recordAgentVisit()
             if !currentScreen.supportsConnectionLossOverlay {
@@ -82,6 +76,12 @@ class AppCoordinator {
     }
     var usesIPadShell = false
     var iPadNavigation = IPadNavigationState()
+    /// The window's workspace list settings, reported by its iPad sidebar.
+    var workspaceListPresentation = WorkspaceListPresentation()
+    var workspaceChange: WorkspaceChangeDestination?
+    /// The pull request in the iPad main pane.
+    var iPadPullRequest: PullRequestListItem?
+    var workspaceSidebarAgents = WorkspaceSidebarAgents()
     var assistantAgentId: String?
     var workspaceCreationDraft: WorkspaceCreationDraft?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
@@ -116,6 +116,7 @@ class AppCoordinator {
 
     var selectedWorkspaceId: String? {
         didSet {
+            if selectedWorkspaceId != oldValue { iPadNavigation.closeTool() }
             if selectedWorkspaceId != oldValue { navigationState.recentWorkspaceAgentRequestId = nil }
             if let workspaceId = selectedWorkspaceId,
                selectedWorkspaceId != oldValue,
@@ -150,7 +151,18 @@ class AppCoordinator {
     }
 
     func makeWorkspaceCreationDraft() -> WorkspaceCreationDraft {
-        workspaceCreationDraft ?? WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
+        workspaceCreationDraft ?? makeFreshWorkspaceCreationDraft()
+    }
+
+    func makeFreshWorkspaceCreationDraft() -> WorkspaceCreationDraft {
+        WorkspaceCreationDraft(backendID: backendID, persistence: dependencies.persistence)
+    }
+
+    /// A fresh prefilled draft; the saved ordinary draft stays untouched.
+    func makeWorkspaceCreationDraft(for pullRequest: PullRequestListItem) -> WorkspaceCreationDraft {
+        var draft = makeFreshWorkspaceCreationDraft()
+        draft.prefill(pullRequest: pullRequest)
+        return draft
     }
 
     /// Temporary transport recovery keeps the draft while submission remains
@@ -168,14 +180,15 @@ class AppCoordinator {
     /// window that has no backend yet (pairing session). Bound windows route
     /// straight to .connecting on load and dial this backend's saved record.
     @ObservationIgnored let backendID: BackendID?
-    /// Rebinds this coordinator's window to another backend, set by the
-    /// window root (BackendWindowRoot). On single-window platforms it
-    /// retargets the window in place; where multiple windows are supported
-    /// it opens/raises the target backend's window instead (window model
-    /// v2: a bound multi-window scene never retargets). When unset (tests,
+    /// Rebinds this coordinator's window to another backend in place, set
+    /// by the window root (BackendWindowRoot); an unbound pairing window is
+    /// replaced by the target's own window instead. When unset (tests,
     /// previews), switch/pair actions fall back to in-place routing over
     /// this session's connection.
     @ObservationIgnored var retargetWindow: ((BackendID) -> Void)?
+    /// Hands a hijacked shared connection's re-dial to a window that stays
+    /// on this backend, set by the session. When unset, this window re-dials.
+    @ObservationIgnored var repairSharedConnection: (() -> Void)?
     /// Detaches only this window and supplies a fresh pairing session. The
     /// root, not the coordinator, owns the registry's attachment count.
     @ObservationIgnored var returnWindowToSavedMachines: (() -> Void)?
@@ -212,7 +225,8 @@ class AppCoordinator {
         self.backendID = backendID
         connectingStartedByLaunch = !sessionRegistry.consumeConnectionSelection(for: backendID)
         self.connectionLossPresentation = connectionLossPresentation
-        lifecycleState.workspaceDataAtInitialFlowStart = workspaceStore.lastUpdated
+        workspaceListPresentation = WorkspaceListPresentation(persistence: persistence)
+        lifecycleState.entry = .routing(dataStamp: workspaceStore.lastUpdated)
         savedConnectionsObserver = persistence.connectionsDidChange.sink { [weak self] _ in
             self?.refreshSavedConnectionsPresentation()
         }
@@ -222,6 +236,7 @@ class AppCoordinator {
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
+        startObservingIPadAutoSelection()
     }
 
     /// Restarts the keyed ConnectingView task while preserving its transition order.
@@ -250,13 +265,12 @@ extension AppCoordinator {
     /// A timed-out initial data wait still uses the normal navigation fallback,
     /// but cannot arm the blocking overlay. Require data fetched in this flow.
     func establishConnectionLossEligibility() {
-        guard !lifecycleState.hasEnteredRemoteUI,
-              lifecycleState.hasCompletedInitialRouting,
+        guard case .routed(let dataStamp) = lifecycleState.entry,
               currentScreen.supportsConnectionLossOverlay,
               dependencies.connection.connectionState == .connected,
               let lastUpdated = dependencies.workspaceStore.lastUpdated,
-              lastUpdated != lifecycleState.workspaceDataAtInitialFlowStart else { return }
-        lifecycleState.hasEnteredRemoteUI = true
+              lastUpdated != dataStamp else { return }
+        lifecycleState.entry = .entered
         // Retire only deliveries queued before entry became usable.
         startObservingConnection()
     }
@@ -264,9 +278,7 @@ extension AppCoordinator {
     /// A new initial flow must not inherit a previous session's loss or delayed recovery work.
     func resetConnectionLossEligibility() {
         connectionLossPresentation.reset()
-        lifecycleState.hasEnteredRemoteUI = false
-        lifecycleState.hasCompletedInitialRouting = false
-        lifecycleState.workspaceDataAtInitialFlowStart = dependencies.workspaceStore.lastUpdated
+        lifecycleState.entry = .routing(dataStamp: dependencies.workspaceStore.lastUpdated)
         isDisconnected = false
         cancelReconnectLoadingObservation()
         reconnectOverlayTimeoutTask?.cancel()
@@ -442,7 +454,6 @@ extension AppCoordinator {
                 // Only validate after workspaces have been fetched at least once
                 guard dependencies.workspaceStore.lastUpdated != nil else { return }
                 validateCurrentWorkspaceExists(in: dependencies.workspaceStore.workspaces)
-                ensureIPadWorkspaceSelection()
             }
         }
     }

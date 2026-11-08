@@ -10,10 +10,17 @@ import Testing
 /// Both plists are read from the copies packaged into the test bundle (see
 /// TestSourceInputs), not from the checkout.
 struct InfoPlistSyncTests {
-    @Test func builtAppSupportsOnlyUprightPortraitOnIPhone() {
+    @Test func builtAppSupportsOnlyUprightPortraitOnIPhone() throws {
+        // Read the built declaration, not Bundle's current-device dictionary:
+        // an iPad runtime may omit the iPhone-qualified entry from that view.
+        let data = try Data(contentsOf: Bundle.main.bundleURL.appendingPathComponent("Info.plist"))
+        let plist = try #require(
+            try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        )
+        let orientations = plist["UISupportedInterfaceOrientations~iphone"]
+            ?? plist["UISupportedInterfaceOrientations"]
         #expect(
-            Bundle.main.infoDictionary?["UISupportedInterfaceOrientations~iphone"] as? [String]
-                == ["UIInterfaceOrientationPortrait"]
+            orientations as? [String] == ["UIInterfaceOrientationPortrait"]
         )
     }
 

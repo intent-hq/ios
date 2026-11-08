@@ -280,18 +280,6 @@ final class AppCoordinatorTests {
 }
 
 extension AppCoordinatorTests {
-    @Test func retargetRouteRebindsInPlaceWhenTargetIsCurrentBackend() {
-        let current = BackendID(UUID())
-        #expect(
-            WindowRetargetRoute.route(
-                currentBackendID: current,
-                target: current,
-                supportsMultipleWindows: true
-            ) == .rebindInPlace,
-            "Switching to the backend the window is already bound to stays in place"
-        )
-    }
-
     @Test @MainActor func firstFetch_archivedWorkspace_bootsToWorkspaceListFromConversation() async throws {
         let wsId = "test-coord-archived-\(UUID().uuidString)"
         defer { cleanupLastScreen() }

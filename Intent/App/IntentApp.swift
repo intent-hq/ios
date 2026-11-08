@@ -6,9 +6,11 @@ struct IntentApp: App {
     init() {
         ConversationTrace.emit("AppStarted", "")
         LifecycleDiagnostics.sessionStarted()
+        #if DEBUG
         DemoConnectionLoss.seedSavedMachineIfNeeded()
         DemoSettings.seedConnectionsIfNeeded()
         DemoStartupConnection.seedSavedMachineIfNeeded()
+        #endif
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
         // session attaches an observer on creation and detaches on
@@ -34,7 +36,7 @@ struct IntentApp: App {
         WindowGroup(for: BackendID.self) { $backendID in
             BackendWindowRoot(
                 backendID: $backendID,
-                networkAvailability: DemoConnectionLoss.networkAvailability ?? .shared
+                networkAvailability: Self.networkAvailability
             )
                 .buttonStyle(IntentContentButtonStyle())
                 #if os(visionOS)
@@ -52,31 +54,33 @@ struct IntentApp: App {
         .windowResizability(.contentMinSize)
         #endif
     }
+
+    /// Debug connection-loss demos substitute a scripted network monitor.
+    private static var networkAvailability: NetworkAvailability {
+        #if DEBUG
+        DemoConnectionLoss.networkAvailability ?? .shared
+        #else
+        .shared
+        #endif
+    }
 }
 
-/// The v2 retarget policy for a switch/pair action performed in a window:
-/// where multiple windows are supported, a bound window never retargets —
-/// the target backend's own window is opened or raised — and an unbound
-/// (pairing) window is REPLACED by the target's own window rather than
-/// rebound: `openWindow(value:)` only matches windows whose scene value was
-/// set at creation, so a window rebound via the scene-value binding write
-/// is never raised again — later switches to its backend open duplicate
-/// windows (observed on visionOS). Replacing keeps every bound multi-window
-/// scene natively valued. Single-window platforms (iPhone; iPad without
-/// multi-window) rebind the one window in place.
+/// The retarget policy for a switch/pair action performed in a window: a
+/// bound window switches in place on every platform, so picking another
+/// connection never spawns a window ("Open in New Window" in a connection's
+/// context menu is the explicit multi-window path). Where multiple windows
+/// are supported, an unbound (pairing) window is REPLACED by the target's
+/// own window rather than rebound, so the first window bound after pairing
+/// keeps a native scene value that `openWindow(value:)` can raise.
 enum WindowRetargetRoute: Equatable {
-    case openTargetWindow
     case rebindInPlace
     case replaceWindow
 
     static func route(
         currentBackendID: BackendID?,
-        target: BackendID,
         supportsMultipleWindows: Bool
     ) -> Self {
-        guard supportsMultipleWindows else { return .rebindInPlace }
-        guard let current = currentBackendID else { return .replaceWindow }
-        return current == target ? .rebindInPlace : .openTargetWindow
+        supportsMultipleWindows && currentBackendID == nil ? .replaceWindow : .rebindInPlace
     }
 }
 
@@ -112,6 +116,9 @@ struct SessionWindowRoot: View {
         RootView(networkAvailability: networkAvailability)
             .environment(session)
             .environment(coordinator)
+            #if DEBUG
+            .environment(\.scriptMonitorPresentationDate, DemoScriptMonitorFixtures.configuredPresentationDate())
+            #endif
             .onAppear {
                 coordinator.retargetWindow = retargetWindow
                 coordinator.returnWindowToSavedMachines = returnToSavedMachines
@@ -126,7 +133,9 @@ struct SessionWindowRoot: View {
                     coordinator.onScenePhaseNotActive()
                     if phase == .background { coordinator.onScenePhaseBackground() }
                 }
+                #if DEBUG
                 DemoConnectionLoss.sceneChanged(phase, connection: session.connection)
+                #endif
             }
     }
 }
@@ -213,15 +222,15 @@ struct BackendWindowRoot: View {
         }
         .onAppear {
             windowSession.updateNetworkObservation(for: scenePhase)
+            #if DEBUG
             if let demoBackendID = DemoSettings.consumeStartupBackendID() ?? DemoStartupConnection.consumeStartupBackendID() {
                 // Connection and settings demos use this process's fresh fixtures,
                 // not an obsolete native scene value or restored Home state.
                 restoresSavedMachines = false
                 backendID = demoBackendID
             }
-            if restoresSavedMachines {
-                windowSession.returnToSavedMachines()
-            }
+            #endif
+            restoresSavedMachines = windowSession.restoreSavedMachines(restoresSavedMachines)
             if backendID == nil, !windowSession.isShowingSavedMachines,
                let lastUsed = PersistenceManager.shared.lastUsedConnection() {
                 // Plain launch (no restored scene value): bind to the
@@ -271,26 +280,16 @@ struct BackendWindowRoot: View {
         windowSession.bind(to: backendID)
     }
 
-    /// The coordinator's retarget hook: apply the v2 policy for switching
-    /// this window to `target` (rebind in place, open/raise the target
-    /// backend's own window, or replace this unbound pairing window with
-    /// the target's own window so it stays raisable by value).
+    /// The coordinator's retarget hook: switch this window to `target` in
+    /// place, or replace this unbound pairing window with the target's own
+    /// window so it stays raisable by value.
     private func retarget(to target: BackendID) {
         let route = WindowRetargetRoute.route(
             currentBackendID: backendID,
-            target: target,
             supportsMultipleWindows: supportsMultipleWindows
         )
         windowSession.prepareForSelection(to: target, route: route)
         switch route {
-        case .openTargetWindow:
-            openWindow(value: target)
-            if windowSession.isShowingSavedMachines {
-                // A new pairing may have used Home's transient connection.
-                // The target now owns its own session; Home must stay idle.
-                windowSession.release()
-                windowSession.bind(to: nil)
-            }
         case .replaceWindow:
             openWindow(value: target)
             dismissWhenReplacementConnects()

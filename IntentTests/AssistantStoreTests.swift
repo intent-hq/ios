@@ -145,6 +145,66 @@ struct AssistantStoreTests {
         #expect(second.threads.map(\.id) == ["second-backend"])
     }
 
+    @Test func deletionWaitsForSuccessAndRejectsDuplicateRequests() async throws {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [thread("delete"), thread("keep")]]
+        let store = AssistantStore(connection: connection)
+        await store.refresh()
+        connection.pendingMethods = ["agent.delete"]
+        let deletion = Task { await store.deleteThread("delete") }
+        try await waitUntil("Assistant deletion request") { connection.pendingRequestCount("agent.delete") == 1 }
+
+        #expect(store.threads.contains { $0.id == "delete" })
+        #expect(store.deletingThreadIDs == ["delete"])
+        #expect(await store.deleteThread("delete") == false)
+        #expect(connection.paramsForMethod("agent.delete").count == 1)
+        let params = try #require(connection.paramsForMethod("agent.delete").first)
+        #expect(params["agentId"] as? String == "delete")
+        #expect(params["workspaceId"] as? String == Workspace.chiefWorkspaceId)
+
+        connection.resolvePending("agent.delete", with: [:] as [String: Any])
+        #expect(await deletion.value)
+        #expect(store.threads.map(\.id) == ["keep"])
+        #expect(store.deletingThreadIDs.isEmpty)
+    }
+
+    @Test func failedDeletionPreservesThreadAndCanRetry() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [thread("keep")]]
+        let store = AssistantStore(connection: connection)
+        await store.refresh()
+        connection.errorMap["agent.delete"] = NSError(domain: "Test", code: 1)
+
+        #expect(await store.deleteThread("keep") == false)
+        #expect(store.threads.map(\.id) == ["keep"])
+        #expect(store.errorMessage != nil)
+        #expect(store.deletingThreadIDs.isEmpty)
+
+        connection.errorMap.removeValue(forKey: "agent.delete")
+        connection.responseMap["agent.delete"] = [:] as [String: Any]
+        #expect(await store.deleteThread("keep"))
+        #expect(store.threads.isEmpty)
+        #expect(store.errorMessage == nil)
+    }
+
+    @Test func deletionDuringRefreshRequestsFreshHistory() async throws {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [thread("delete")]]
+        connection.responseMap["agent.delete"] = [:] as [String: Any]
+        let store = AssistantStore(connection: connection)
+        await store.refresh()
+        connection.pendingMethods = ["agent.list"]
+        let refresh = Task { await store.refresh() }
+        try await waitUntil("Assistant history request") { connection.pendingRequestCount("agent.list") == 1 }
+
+        #expect(await store.deleteThread("delete"))
+        connection.resolvePending("agent.list", with: ["agents": [thread("delete")]])
+        try await waitUntil("Assistant history after deletion") { connection.paramsForMethod("agent.list").count == 3 }
+        connection.resolvePending("agent.list", with: ["agents": []])
+        await refresh.value
+        #expect(store.threads.isEmpty)
+    }
+
     @Test func observesConnectionEventsOnlyAfterFirstUse() async {
         let connection = FakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": []]

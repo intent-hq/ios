@@ -1,0 +1,27 @@
+{
+  "package": "@pierre/highlights",
+  "version": "0.3.0",
+  "resolved": "https://registry.npmjs.org/@pierre/highlights/-/highlights-0.3.0.tgz",
+  "integrity": "sha512-s6xZ/giPPrSeCO2w254GiysUXD4ditKMTOrl1vHynvPqP7VdlujYi01O9joxJ0T16XkoXGQMN6zkRi9+O8NCzg==",
+  "esbuild": "0.28.2",
+  "themes": [
+    "pierre-light",
+    "pierre-dark"
+  ],
+  "packageLockSha256": "8ac114ed0e71881a2cf1c2cb2a58c7a728696772f937fb22ec9ee98cd873f910",
+  "entrySha256": "82360be8c2f2621a332f07d1b01d11b62f1e518d1d159f43e475051e35c7713f",
+  "assets": {
+    "highlights.bundle.js": {
+      "bytes": 417200,
+      "sha256": "3e8c9b816c86d75631a70c3edf64ea7ef2c9bc087a2d0552524ef6df13420f59"
+    },
+    "index.html": {
+      "bytes": 394,
+      "sha256": "234bd74f176421c7e69519a9c02a13f840ea699ad36c81bd4fcf4412dd545faf"
+    },
+    "NOTICE.txt": {
+      "bytes": 25756,
+      "sha256": "f70459894561689cacad5608ddbac930406c3c0e7b25ba61a097f82ea07627a7"
+    }
+  }
+}

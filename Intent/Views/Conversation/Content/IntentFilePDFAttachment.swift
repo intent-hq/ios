@@ -44,7 +44,11 @@ struct IntentFilePDFFailureAttachment: Attachment {
 
     var body: some View {
         VStack(spacing: Constants.Conversation.ImagePlaceholder.failureLabelSpacing) {
-            Label("PDF", systemImage: "doc.richtext")
+            Label {
+                Text("PDF")
+            } icon: {
+                PDFFileAttachmentIcon()
+            }
             Text(name)
                 .lineLimit(2)
                 .truncationMode(.middle)
@@ -70,5 +74,17 @@ struct IntentFilePDFFailureAttachment: Attachment {
         guard let workspaceId else { return false }
         loader.forgetFailure(workspaceId: workspaceId, path: path)
         return true
+    }
+}
+
+private struct PDFFileAttachmentIcon: View {
+    @ScaledMetric(relativeTo: .caption) private var iconSide: CGFloat = Constants.Typography.subtextXXS.size
+
+    var body: some View {
+        Image(.fileList)
+            .resizable()
+            .scaledToFit()
+            .frame(width: iconSide, height: iconSide)
+            .accessibilityHidden(true)
     }
 }

@@ -91,7 +91,7 @@ struct ConversationStoreLiveStateTests {
         #expect(store.loadingStage == .idle, "a late ack must not restore the receiving stage")
     }
 
-    @Test func appliesObjectShapedSnapshot() async {
+    @Test func appliesObjectShapedSnapshot() {
         let (store, _) = makeStore()
 
         let params = snapshotParams(
@@ -144,7 +144,7 @@ struct ConversationStoreLiveStateTests {
         #expect(changeCount.withLock { $0 } == 1)
     }
 
-    @Test func snapshotWithoutMetaResetsTruncationDefaults() async {
+    @Test func snapshotWithoutMetaResetsTruncationDefaults() {
         let (store, _) = makeStore()
 
         // First snapshot marks the transcript truncated.
@@ -178,7 +178,7 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Mid-turn hydration
 
-    @Test func midTurnSnapshotShowsPartialAndStreaming() async {
+    @Test func midTurnSnapshotShowsPartialAndStreaming() {
         let (store, _) = makeStore()
 
         // Snapshot taken mid-turn: synthetic in-flight assistant message with
@@ -208,7 +208,7 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isStreaming == true)
     }
 
-    @Test func activityFlagsAloneRaiseStreaming() async {
+    @Test func activityFlagsAloneRaiseStreaming() {
         let (store, _) = makeStore()
 
         // Turn in flight but no partial content yet (no synthetic message).
@@ -230,7 +230,7 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Growing-text delta sequence
 
-    @Test func growingTextDeltasAccumulateFullText() async {
+    @Test func growingTextDeltasAccumulateFullText() {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
@@ -271,7 +271,7 @@ struct ConversationStoreLiveStateTests {
 }
 
 extension ConversationStoreLiveStateTests {
-    @Test func toolUseAndResultBlocksAppendInOrder() async {
+    @Test func toolUseAndResultBlocksAppendInOrder() {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
@@ -311,7 +311,7 @@ extension ConversationStoreLiveStateTests {
 
     // MARK: - Terminal frame
 
-    @Test func terminalFrameClearsStreamingAndHonorsRemovedIds() async {
+    @Test func terminalFrameClearsStreamingAndHonorsRemovedIds() {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
@@ -355,7 +355,7 @@ extension ConversationStoreLiveStateTests {
 
     // MARK: - Gap detection
 
-    @Test func gapLeavesTranscriptUntouched() async {
+    @Test func gapLeavesTranscriptUntouched() {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
@@ -378,7 +378,7 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.count == 1)
     }
 
-    @Test func idleSnapshotClearsStaleStreaming() async {
+    @Test func idleSnapshotClearsStaleStreaming() {
         let (store, _) = makeStore()
 
         // Turn in flight at first snapshot.

@@ -141,16 +141,44 @@ struct AttachmentImageLoaderTests {
     @Test func concurrentLoadsShareOneResolution() async throws {
         let png = Self.pngBytes()
         let fake = FakeConnectionManager()
-        fake.delayMap["file.getAttachmentInfo"] = 50_000_000
-        fake.responseMap["file.getAttachmentInfo"] = Self.infoResponse(path: ".intent/attachments/pic.png")
+        fake.pendingMethods = ["file.getAttachmentInfo"]
         fake.responseMap["file.readChunk"] = Self.chunkResponse(png)
         let loader = Self.makeLoader(fake)
 
-        async let firstLoad = loader.image(workspaceId: "ws-1", attachmentId: "att-1")
-        async let secondLoad = loader.image(workspaceId: "ws-1", attachmentId: "att-1")
-        let (first, second) = try await (firstLoad, secondLoad)
+        // Once the first read is suspended its resolution is in flight. The
+        // second load marks itself started and then, in the same main-actor
+        // job (same-actor calls do not suspend before the join's `await`),
+        // reaches the in-flight join — so observing the mark proves it joined
+        // before the read resolves.
+        let firstLoad = Task { try await loader.image(workspaceId: "ws-1", attachmentId: "att-1") }
+        try await fake.waitForPendingRequests("file.getAttachmentInfo")
+        let secondStarted = StartMark()
+        let secondLoad = Task {
+            secondStarted.isSet = true
+            return try await loader.image(workspaceId: "ws-1", attachmentId: "att-1")
+        }
+        try await waitUntil("second load at its join point") { secondStarted.isSet }
+        #expect(fake.paramsForMethod("file.getAttachmentInfo").count == 1)
+        // Answer any later read at once and resolve every suspended one, so a
+        // regression that skips the join fails the count below, not hangs.
+        fake.pendingMethods = []
+        fake.responseMap["file.getAttachmentInfo"] = Self.infoResponse(path: ".intent/attachments/pic.png")
+        while fake.pendingRequestCount("file.getAttachmentInfo") > 0 {
+            fake.resolvePending(
+                "file.getAttachmentInfo",
+                with: Self.infoResponse(path: ".intent/attachments/pic.png")
+            )
+        }
+        let first = try await firstLoad.value
+        let second = try await secondLoad.value
 
         #expect(first === second)
         #expect(fake.paramsForMethod("file.getAttachmentInfo").count == 1)
     }
+}
+
+/// Main-actor flag a spawned task sets as its first statement.
+@MainActor
+private final class StartMark {
+    var isSet = false
 }

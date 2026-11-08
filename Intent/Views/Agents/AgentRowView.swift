@@ -12,10 +12,10 @@ extension AgentAttentionKind {
 
 extension AgentAvatarState {
     /// Discussion and blocker cues; questions use the row's status text.
-    var cornerSymbol: String? {
+    var cornerIcon: String? {
         switch self {
-        case .attentionDiscussion: return AgentAttentionKind.discussion.systemImage
-        case .attentionBlocker: return AgentAttentionKind.blocker.systemImage
+        case .attentionDiscussion: return AgentAttentionKind.discussion.iconName
+        case .attentionBlocker: return AgentAttentionKind.blocker.iconName
         case .idle, .running, .waiting, .failed, .completed, .question: return nil
         }
     }
@@ -69,14 +69,15 @@ struct AgentRowView: View {
     let agent: AgentSession
     let colorScheme: ColorScheme
     var indented: Bool = false
+    var isSelected = false
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var avatarState: AgentAvatarState { AgentAvatarState.state(for: agent) }
 
     /// Muting hides attention cues but preserves the running dot.
-    private var cornerSymbol: String? {
-        agent.notificationsMuted ? nil : avatarState.cornerSymbol
+    private var cornerIcon: String? {
+        agent.notificationsMuted ? nil : avatarState.cornerIcon
     }
 
     var body: some View {
@@ -85,6 +86,8 @@ struct AgentRowView: View {
             agentDetails
         }
         .frame(minHeight: Constants.Accessibility.minimumTapTarget, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .workspaceSidebarSelection(isSelected)
         .padding(.leading, indented ? WorkspaceDetailStyle.noteIndentation : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -108,9 +111,12 @@ struct AgentRowView: View {
                         height: Constants.AgentRow.activeDotSize
                     )
                     .offset(x: Constants.AgentRow.activeDotOffset, y: -Constants.AgentRow.activeDotOffset)
-            } else if let symbol = cornerSymbol {
-                Image(systemName: symbol)
-                    .font(.system(size: Constants.AgentRow.attentionIconSize))
+            } else if let icon = cornerIcon {
+                Image(icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Constants.AgentRow.attentionIconSize, height: Constants.AgentRow.attentionIconSize)
+                    .accessibilityHidden(true)
                     .foregroundStyle(avatarState.cornerColor)
                     .offset(x: Constants.AgentRow.attentionIconOffset, y: -Constants.AgentRow.attentionIconOffset)
             }

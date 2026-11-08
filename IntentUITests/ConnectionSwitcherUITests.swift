@@ -36,6 +36,27 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
     }
 
     @MainActor
+    func testWorkspaceViewModeSurvivesSwitchingConnections() throws {
+        let app = try launch()
+        let repo = app.buttons["workspaces.viewMode.Repo"]
+        let status = app.buttons["workspaces.viewMode.Status"]
+        repo.tap()
+        XCTAssertTrue(repo.isSelected)
+
+        reveal(app)
+        connection("Travel Mac", in: app).tap()
+        assertClosed(app)
+        XCTAssertTrue(repo.isSelected)
+        status.tap()
+        XCTAssertTrue(status.isSelected)
+
+        reveal(app)
+        connection("Studio Mac", in: app).tap()
+        assertClosed(app)
+        XCTAssertTrue(status.isSelected)
+    }
+
+    @MainActor
     func testCancelledAndNonEdgeDragsPreserveThePageAndReverseSwipeCloses() throws {
         let app = try launch()
         drag(app, from: CGVector(dx: 0.005, dy: 0.5), to: CGVector(dx: 0.15, dy: 0.5))

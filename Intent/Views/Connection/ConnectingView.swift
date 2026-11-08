@@ -27,10 +27,12 @@ struct ConnectingView: View {
                 }
                 .scrollBounceBehavior(.basedOnSize)
             }
+            #if DEBUG
             if DemoConnectionLoss.initialDataGate != nil {
                 Text(verbatim: String(describing: session.connection.connectionState))
                     .accessibilityIdentifier("demo-connection-startup")
             }
+            #endif
             if ConnectionNetworkMessage(status: networkStatus).isUnavailable {
                 ConnectionNetworkStatusView(status: networkStatus)
                     .padding(.horizontal, Layout.mismatchHorizontalPadding)
@@ -116,9 +118,11 @@ struct ConnectingView: View {
         // WorkspaceStore auto-fetches on .connected and sets lastUpdated
         // when done. Poll with a 5-second timeout to avoid getting stuck.
         do {
+            #if DEBUG
             if let gate = DemoConnectionLoss.initialRoutingGate {
                 try await DemoFixtures.wait(for: gate)
             }
+            #endif
             try await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
         } catch {
             // Cancelled mid-wait (attempt restarted or view dismissed): the

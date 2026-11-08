@@ -6,7 +6,7 @@ import SwiftUI
 /// tap-to-retry placeholder on failure.
 struct AttachmentReferenceImageView: View {
     enum Style {
-        /// Assistant-row inline rendering: large fixed square thumbnail.
+        /// Assistant-row inline rendering: full image with its original proportions.
         case inline
         /// User-row attachment grid: small fixed square thumbnail.
         case thumbnail
@@ -22,6 +22,7 @@ struct AttachmentReferenceImageView: View {
     /// fetch attachments over their own backend connection.
     @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.conversationComposerFocus) private var composerFocus
     @State private var image: UIImage?
     @State private var failed = false
     /// Bumped on retry taps so the `.task(id:)` re-runs the fetch.
@@ -58,17 +59,22 @@ struct AttachmentReferenceImageView: View {
     @ViewBuilder
     private var content: some View {
         if let image {
-            Button { lightboxPresented = true } label: {
-                SquareImageThumbnail(image: image, side: side)
+            Button {
+                composerFocus?.wrappedValue = false
+                lightboxPresented = true
+            } label: {
+                thumbnail(image)
                     .copyContextMenuPassthrough()
             }
             .buttonStyle(IntentContentButtonStyle())
             .contextMenu {
                 ImageActionMenuItems(image: image)
             }
+            .imageSaveAlert()
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: image)
+                    .coversConversationComposers()
             }
         } else if failed {
             Button { attempt += 1 } label: {
@@ -98,8 +104,15 @@ struct AttachmentReferenceImageView: View {
         }
     }
 
-    /// Rendered side for this style: transcript-size square for inline
-    /// images, the small user-row square for attachment-grid thumbnails.
+    @ViewBuilder
+    private func thumbnail(_ image: UIImage) -> some View {
+        switch style {
+        case .inline: InlineImageThumbnail(image: image)
+        case .thumbnail: SquareImageThumbnail(image: image, side: side)
+        }
+    }
+
+    /// Placeholder side before the image dimensions are available.
     private var side: CGFloat {
         switch style {
         case .inline: SquareImageThumbnail.transcriptSide
@@ -107,7 +120,7 @@ struct AttachmentReferenceImageView: View {
         }
     }
 
-    /// Placeholder square sized to match the eventual rendering.
+    /// Placeholder square shown while image dimensions are unknown.
     private func placeholder<Content: View>(@ViewBuilder _ label: () -> Content) -> some View {
         VStack(spacing: Constants.Conversation.ImagePlaceholder.loadingLabelSpacing) { label() }
             .font(.caption)

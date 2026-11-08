@@ -54,7 +54,12 @@ struct QuestionWizardLayoutTests {
                 QuestionOption(label: "Build"), QuestionOption(label: "Review")
             ])
         ]
-        let wizard = QuestionWizardView(questions: questions, collapsed: .constant(false)) { _ in }
+        let wizard = QuestionWizardView(
+            questions: questions,
+            collapsed: .constant(false),
+            attachments: ConversationAttachmentPipeline(),
+            workspaceId: "layout"
+        ) { _ in }
         try await SyntheticBadgeHost.render(wizard, width: 390, height: 700, safeAreaRegions: []) { host, _ in
             #expect(button("Back", in: host) == nil)
             #expect(button("Build", in: host) == nil, "Offscreen pages must not be exposed to VoiceOver")
@@ -159,7 +164,7 @@ struct QuestionWizardLayoutTests {
 
     private struct AnswerTextHost: View {
         let text: String
-        @FocusState private var focused: Bool
+        @State private var focused = false
 
         var body: some View {
             WorkspaceQuestionFreeText(

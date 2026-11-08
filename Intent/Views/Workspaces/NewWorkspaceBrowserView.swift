@@ -22,6 +22,7 @@ struct NewWorkspaceBrowserView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Open", action: create)
                         .buttonStyle(IntentButtonStyle())
+                        .fixedSize(horizontal: true, vertical: false)
                         .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 .intentToolbarSurface()

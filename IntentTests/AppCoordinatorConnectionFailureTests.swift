@@ -31,7 +31,7 @@ extension AppCoordinatorTests {
         #expect(!coordinator.connectingStartedByLaunch)
     }
 
-    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .openTargetWindow, .replaceWindow], [false, true])
+    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .replaceWindow], [false, true])
     @MainActor func selectedBackendHandsOffBackVisibilityOnce(route: WindowRetargetRoute, pairing: Bool) {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let other = persistence.upsertConnection(Self.makeConnection(port: 5252))

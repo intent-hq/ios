@@ -26,7 +26,7 @@ nonisolated enum WorkspaceStatusImageLayout {
     }
 }
 
-/// Renders a workspace's status screenshot, fetched through the session's
+/// Renders a workspace's status screenshot as a square thumbnail, fetched through the session's
 /// `WorkspaceFileImageLoader` asset path (`note.readAsset`). Callers only
 /// mount it when `WorkspaceStatusImageLayout.assetId(for:)` is non-nil, so
 /// an unset image leaves no gap.
@@ -78,12 +78,11 @@ struct WorkspaceStatusImageView: View {
             Button { lightboxPresented = true } label: {
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFit()
-                    .accessibilityLabel(Layout.accessibilityLabel)
-                    .frame(maxHeight: Layout.detailMaxHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+                    .scaledToFill()
+                    .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize, alignment: .top)
+                    .clipShape(thumbnailShape)
                     .overlay(border)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(thumbnailShape)
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel(Layout.accessibilityLabel)
@@ -92,49 +91,38 @@ struct WorkspaceStatusImageView: View {
             .contextMenu {
                 ImageActionMenuItems(image: image)
             }
+            .imageSaveAlert()
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: image)
             }
         } else if failed {
             Button { attempt += 1 } label: {
-                placeholder(
-                    systemImage: "photo.badge.exclamationmark",
-                    text: "Status image unavailable — tap to retry"
-                )
+                placeholder { Image(systemName: "photo.badge.exclamationmark") }
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Status image unavailable")
             .accessibilityHint("Retries loading the image")
         } else {
-            placeholder(systemImage: nil, text: "Loading status image…")
+            placeholder { ProgressView().controlSize(.mini) }
                 .accessibilityHidden(true)
         }
     }
 
-    private var border: some View {
+    private var thumbnailShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: Layout.cornerRadius)
-            .strokeBorder(Theme.border(for: colorScheme), lineWidth: Layout.borderWidth)
     }
 
-    /// Fixed-height, full-width band standing in for the detail banner so
-    /// the header neither jumps on load nor looks broken on failure.
-    private func placeholder(systemImage: String?, text: LocalizedStringKey) -> some View {
-        HStack(spacing: Layout.placeholderSpacing) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .accessibilityHidden(true)
-            } else {
-                ProgressView()
-                    .controlSize(.mini)
-            }
-            Text(text)
-                .interFont(Constants.Typography.subtextXXS)
-        }
-        .font(.caption)
-        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        .frame(maxWidth: .infinity)
-        .frame(height: Layout.detailPlaceholderHeight)
-        .background(Theme.muted(for: colorScheme).opacity(Layout.placeholderOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+    private var border: some View {
+        thumbnailShape.strokeBorder(Theme.border(for: colorScheme), lineWidth: Layout.borderWidth)
+    }
+
+    /// Holds the thumbnail's square so the header neither jumps on load nor looks broken on failure.
+    private func placeholder(@ViewBuilder _ icon: () -> some View) -> some View {
+        icon()
+            .font(.caption)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize)
+            .background(Theme.muted(for: colorScheme).opacity(Layout.placeholderOpacity))
+            .clipShape(thumbnailShape)
     }
 }

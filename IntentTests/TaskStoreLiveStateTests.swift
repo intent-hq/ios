@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct TaskStoreLiveStateTests {
-    @Test func appliesSnapshot() async {
+    @Test func appliesSnapshot() {
         let push = SubscriptionPush(
             subscriptionId: "sub-123",
             seq: 0,
@@ -35,7 +35,7 @@ struct TaskStoreLiveStateTests {
         #expect(values[1].status == "in_progress")
     }
 
-    @Test func appliesContiguousDelta() async {
+    @Test func appliesContiguousDelta() {
         let reconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in WorkspaceTask.parseTask(dict) }
@@ -66,7 +66,7 @@ struct TaskStoreLiveStateTests {
         #expect(values[1].status == "complete")
     }
 
-    @Test func detectsGapAndReturnsFalse() async {
+    @Test func detectsGapAndReturnsFalse() {
         let reconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in WorkspaceTask.parseTask(dict) }
@@ -88,7 +88,7 @@ struct TaskStoreLiveStateTests {
         #expect(success == false)
     }
 
-    @Test func resetsOnReconnect() async {
+    @Test func resetsOnReconnect() {
         let reconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in WorkspaceTask.parseTask(dict) }
@@ -114,7 +114,7 @@ struct TaskStoreLiveStateTests {
         #expect(success == false)
     }
 
-    @Test func rejectsMalformedPush() async {
+    @Test func rejectsMalformedPush() {
         // Snapshot push missing "snapshot" field
         let snapshotMissingPayload: [String: Any] = [
             "subscriptionId": "sub-1",

@@ -10,15 +10,17 @@ struct PDFLinkPreviewView: View {
     }
 
     let link: Link
+    var loaderOverride: WorkspaceFileImageLoader?
     @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.dismiss) private var dismiss
     @State private var pdf: WorkspacePDF?
     @State private var hasFailed = false
     @State private var attempt = 0
+    @ScaledMetric(relativeTo: .largeTitle) private var unavailableIconSide: CGFloat = 48
     @ScaledMetric(relativeTo: .body) private var closeIconSide: CGFloat = 17
 
     private var fileLoader: WorkspaceFileImageLoader {
-        session?.workspaceFileImageLoader ?? .shared
+        loaderOverride ?? session?.workspaceFileImageLoader ?? .shared
     }
 
     var body: some View {
@@ -67,7 +69,14 @@ struct PDFLinkPreviewView: View {
     private var loadingContent: some View {
         if hasFailed {
             ContentUnavailableView {
-                Label("PDF unavailable", systemImage: "doc.richtext")
+                Label {
+                    Text("PDF unavailable")
+                } icon: {
+                    Image(.fileList)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: unavailableIconSide, height: unavailableIconSide)
+                }
             } description: {
                 Text("Could not load this PDF. Check your connection and try again.")
             } actions: {

@@ -296,7 +296,7 @@ extension ConnectionManagerTests {
     nonisolated struct PathTunnelDialer: TunnelDialing {
         let localPort: Int
 
-        func open(tcAddress _: String, remotePort _: Int) async -> any TunnelSession {
+        func open(tcAddress _: String, remotePort _: Int) -> any TunnelSession {
             PathTunnelSession(localPort: localPort)
         }
     }

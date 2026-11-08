@@ -52,7 +52,7 @@ import Testing
         }
         try await fake.waitForPendingRequests("system.status")
         if superseded {
-            try await fake.connect(hosts: ["new.example"], port: 443, token: "C-token", certFingerprint: InvitedSessionFixtures.pin, tcAddress: nil)
+            try fake.connect(hosts: ["new.example"], port: 443, token: "C-token", certFingerprint: InvitedSessionFixtures.pin, tcAddress: nil)
         } else {
             fake.disconnect()
         }

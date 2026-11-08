@@ -24,13 +24,17 @@ struct WorkspaceDiffLoader {
     }
 
     func commitFile(path: String, hash: String) async throws -> [WorkspaceDiffHunk] {
+        try await commitPresentation(path: path, hash: hash).hunks
+    }
+
+    func commitPresentation(path: String, hash: String) async throws -> WorkspaceDiffPresentation {
         let contents = try await commitContents(path: path, hash: hash)
         try Task.checkCancellation()
         let hunks = try await Task.detached(priority: .userInitiated) {
             try WorkspaceDiffBuilder.hunks(old: contents.old, new: contents.new)
         }.value
         try Task.checkCancellation()
-        return hunks
+        return WorkspaceDiffPresentation(hunks: hunks, oldSource: contents.old, newSource: contents.new)
     }
 
     private func commitContents(path: String, hash: String) async throws -> (old: String, new: String) {

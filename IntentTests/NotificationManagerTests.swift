@@ -9,11 +9,16 @@ final class NotificationManagerFakeCenter: LocalNotificationCenter {
     weak var delegate: (any UNUserNotificationCenterDelegate)?
     private(set) var requests: [UNNotificationRequest] = []
     private(set) var removedNotificationIdentifiers: [[String]] = []
+    var authorizationStatus: UNAuthorizationStatus = .authorized
+    var addError: (any Error)?
+    var soundEnabled = true
+
+    func soundIsEnabled() -> Bool { soundEnabled && authorizationStatus == .authorized }
 
     func getAuthorizationStatus(
         completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
     ) {
-        completionHandler(.authorized)
+        completionHandler(authorizationStatus)
     }
 
     func requestAuthorization(
@@ -28,7 +33,7 @@ final class NotificationManagerFakeCenter: LocalNotificationCenter {
         withCompletionHandler completionHandler: (@Sendable ((any Error)?) -> Void)?
     ) {
         requests.append(request)
-        completionHandler?(nil)
+        completionHandler?(addError)
     }
 
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
@@ -54,7 +59,7 @@ struct NotificationManagerTests {
         feedback: @escaping () -> Void = {}
     ) -> (NotificationManager, NotificationManagerFakeCenter) {
         let center = NotificationManagerFakeCenter()
-        let service = LocalNotificationService(center: center)
+        let service = LocalNotificationService(center: center, playForegroundSound: {}, outputVolume: { 1 })
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { state },
@@ -246,9 +251,15 @@ struct NotificationChimeTests {
         #expect(Int(chunkSize) == data.count - 8)
     }
 
-    @Test func chimeIsAudible() {
+    @Test func chimeIsQuietWithClickFreeEdges() {
         let samples = NotificationChime.chimeSamples()
-        #expect(samples.contains { abs(Int($0)) > 8000 })
+        let peak = samples.map { abs(Int($0)) }.max() ?? 0
+        #expect(peak > 500)
+        #expect(peak < 6000)
+        #expect(samples.first == 0)
+        #expect(samples.last == 0)
+        let largestStep = zip(samples, samples.dropFirst()).map { abs(Int($0) - Int($1)) }.max() ?? 0
+        #expect(largestStep < 500)
     }
 
     @Test func fileURLIsCreatedOnceAndStable() throws {

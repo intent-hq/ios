@@ -6,10 +6,9 @@ extension ConnectionManager {
     private static let connectionClosedErrorCode = -3
     private static let notConnectedErrorCode = -4
 
-    private func requireStartupDemoAdmission() throws {
-        if DemoStartupConnection.isEnabled, connectionState != .connected {
-            throw NSError(domain: Self.webSocketErrorDomain, code: Self.notConnectedErrorCode)
-        }
+    /// The error a request gets when no admitted connection can answer it.
+    static func notConnectedRequestError() -> NSError {
+        localRequestError(code: notConnectedErrorCode, message: "Not connected", classification: .notConnected)
     }
 
     // MARK: - Public API
@@ -32,16 +31,9 @@ extension ConnectionManager {
         params: [String: Any] = [:],
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        try requireStartupDemoAdmission()
-        if DemoMode.isEnabled || servesDemoFixtures {
-            return try await demoResponse(for: method, params: params)
-        }
+        if let requestTransport { return try await requestTransport.response(for: method, params: params, on: self) }
         guard let currentSocket = socket else {
-            let error = Self.localRequestError(
-                code: Self.notConnectedErrorCode,
-                message: "Not connected",
-                classification: .notConnected
-            )
+            let error = Self.notConnectedRequestError()
             recordRequestFailure(error)
             throw error
         }
@@ -85,22 +77,6 @@ extension ConnectionManager {
                 }
             }
         }
-    }
-
-    private func demoResponse(for method: String, params: [String: Any]) async throws -> Any {
-        if let gate = DemoFixtures.responseGate(for: method, params: params) {
-            try await DemoFixtures.wait(for: gate)
-        }
-        let response = DemoFixtures.response(for: method, params: params)
-        // Routed ahead of the ack: the router buffers it until the caller
-        // registers its handler, the same order a live daemon can produce.
-        if let push = DemoFixtures.subscriptionPush(for: method, params: params) {
-            subscriptionRouter.route(push)
-        }
-        if let event = DemoFixtures.designScenario?.event(for: method, params: params) {
-            for handler in Array(eventHandlers.values) { handler("event", event) }
-        }
-        return response
     }
 
     private static func localRequestError(

@@ -20,6 +20,7 @@ struct SettingsView: View {
                 onManualPairing: onManualPairing
             )
                 .environment(\.colorScheme, contentColorScheme ?? colorScheme)
+                .modifier(IPadNavigationVisibility(isEnabled: isEmbedded))
         }
         #if os(iOS)
         .background {

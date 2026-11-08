@@ -38,7 +38,7 @@ struct StatusDerivationTests {
 
     // MARK: - Wire value mapping
 
-    @Test func wireValueMapping() async {
+    @Test func wireValueMapping() {
         #expect(WorkspaceDisplayStatus(wireValue: "failed") == .failed)
         #expect(WorkspaceDisplayStatus(wireValue: "blocked") == .blocked)
         #expect(WorkspaceDisplayStatus(wireValue: "needs_attention") == .needsAttention)
@@ -58,28 +58,28 @@ struct StatusDerivationTests {
 
     // MARK: - Resolution (BE-owned value only)
 
-    @Test func resolveUsesBackendValue() async {
+    @Test func resolveUsesBackendValue() {
         // BE value is authoritative — local workspace fields never override it
         let workspace = makeWorkspace(displayStatus: "in_progress", prStatus: "Merged")
         #expect(resolveDisplayStatus(for: workspace) == .inProgress)
     }
 
-    @Test func resolveMapsPrReady() async {
+    @Test func resolveMapsPrReady() {
         let workspace = makeWorkspace(displayStatus: "pr_ready", prStatus: "Open")
         #expect(resolveDisplayStatus(for: workspace) == .prReady)
     }
 
-    @Test func resolveMapsPrQueued() async {
+    @Test func resolveMapsPrQueued() {
         let workspace = makeWorkspace(displayStatus: "pr_queued", prStatus: "Open")
         #expect(resolveDisplayStatus(for: workspace) == .prQueued)
     }
 
-    @Test func resolveDefaultsToNotStartedWhenFieldAbsent() async {
+    @Test func resolveDefaultsToNotStartedWhenFieldAbsent() {
         let workspace = makeWorkspace(prStatus: "Merged")
         #expect(resolveDisplayStatus(for: workspace) == .notStarted)
     }
 
-    @Test func resolveMapsUnknownWireValueToUnknown() async {
+    @Test func resolveMapsUnknownWireValueToUnknown() {
         // A newer daemon's value must not masquerade as .notStarted
         // ("No Code Changes") — it gets its own neutral treatment.
         let workspace = makeWorkspace(displayStatus: "some_future_status", prStatus: "Open")
@@ -87,41 +87,41 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: workspace) != .notStarted)
     }
 
-    @Test func resolveMapsIdle() async {
+    @Test func resolveMapsIdle() {
         let workspace = makeWorkspace(displayStatus: "idle")
         #expect(resolveDisplayStatus(for: workspace) == .idle)
     }
 
-    @Test func resolveMapsNeedsAttention() async {
+    @Test func resolveMapsNeedsAttention() {
         let workspace = makeWorkspace(displayStatus: "needs_attention")
         #expect(resolveDisplayStatus(for: workspace) == .needsAttention)
     }
 
-    @Test func resolveMapsFailed() async {
+    @Test func resolveMapsFailed() {
         let workspace = makeWorkspace(displayStatus: "failed", prStatus: "Open")
         #expect(resolveDisplayStatus(for: workspace) == .failed)
     }
 
-    @Test func resolveMapsBlocked() async {
+    @Test func resolveMapsBlocked() {
         let workspace = makeWorkspace(displayStatus: "blocked")
         #expect(resolveDisplayStatus(for: workspace) == .blocked)
     }
 
-    @Test func resolveMapsLegacyUnreadToIdle() async {
+    @Test func resolveMapsLegacyUnreadToIdle() {
         let workspace = makeWorkspace(displayStatus: "unread")
         #expect(resolveDisplayStatus(for: workspace) == .idle)
     }
 
     // MARK: - Unread attention flag (blue dot)
 
-    @Test func unreadAttentionFlag() async {
+    @Test func unreadAttentionFlag() {
         #expect(hasUnreadAttention(makeWorkspace(attention: "unread")))
         #expect(!hasUnreadAttention(makeWorkspace(attention: "none")))
         #expect(!hasUnreadAttention(makeWorkspace(attention: "review_required")))
         #expect(!hasUnreadAttention(makeWorkspace()))
     }
 
-    @Test func unreadAttentionIndependentOfDisplayStatus() async {
+    @Test func unreadAttentionIndependentOfDisplayStatus() {
         // The dot overlays the real status: a complete workspace can be unread.
         let workspace = makeWorkspace(displayStatus: "complete", attention: "unread")
         #expect(resolveDisplayStatus(for: workspace) == .complete)
@@ -130,18 +130,18 @@ struct StatusDerivationTests {
 
     // MARK: - Waiting flag (grey dot, protocol 6.17)
 
-    @Test func waitingDotShownWhenOnlyWaiting() async {
+    @Test func waitingDotShownWhenOnlyWaiting() {
         #expect(showsWaitingDot(makeWorkspace(waiting: true)))
         #expect(!showsWaitingDot(makeWorkspace(waiting: false)))
     }
 
-    @Test func waitingDotYieldsToRunning() async {
+    @Test func waitingDotYieldsToRunning() {
         // Dot precedence: running > unread > waiting.
         let workspace = makeWorkspace(activity: "agent_running", waiting: true)
         #expect(!showsWaitingDot(workspace))
     }
 
-    @Test func runningPredicateSharedByGreenAndWaitingDots() async {
+    @Test func runningPredicateSharedByGreenAndWaitingDots() {
         // hasRunningAgents is the single predicate behind both the green
         // running dot and the waiting-dot precedence check — they can never
         // disagree on what "running" means (case-insensitive match included).
@@ -152,19 +152,19 @@ struct StatusDerivationTests {
         #expect(!showsWaitingDot(makeWorkspace(activity: "AGENT_RUNNING", waiting: true)))
     }
 
-    @Test func waitingDotYieldsToUnread() async {
+    @Test func waitingDotYieldsToUnread() {
         let workspace = makeWorkspace(attention: "unread", waiting: true)
         #expect(!showsWaitingDot(workspace))
     }
 
-    @Test func waitingDotShownWithNonUnreadAttention() async {
+    @Test func waitingDotShownWithNonUnreadAttention() {
         // Only the unread dot outranks waiting; other attention values don't
         // render a dot and must not suppress the waiting affordance.
         #expect(showsWaitingDot(makeWorkspace(attention: "none", waiting: true)))
         #expect(showsWaitingDot(makeWorkspace(attention: "review_required", waiting: true)))
     }
 
-    @Test func waitingOrthogonalToDisplayStatus() async {
+    @Test func waitingOrthogonalToDisplayStatus() {
         // waiting is orthogonal: any status (including in_progress) can wait,
         // and it never changes the resolved display status.
         for wire in ["in_progress", "complete", "pr_ready", "idle"] {
@@ -174,14 +174,14 @@ struct StatusDerivationTests {
         }
     }
 
-    @Test func waitingNeverFeedsUnreadAttention() async {
+    @Test func waitingNeverFeedsUnreadAttention() {
         // Informational only — no attention/badge escalation from waiting.
         #expect(!hasUnreadAttention(makeWorkspace(waiting: true)))
     }
 
     // MARK: - Labels
 
-    @Test func statusLabels() async {
+    @Test func statusLabels() {
         #expect(WorkspaceDisplayStatus.failed.label == "Failed")
         #expect(WorkspaceDisplayStatus.blocked.label == "Blocked")
         #expect(WorkspaceDisplayStatus.needsAttention.label == "Needs Attention")
@@ -198,7 +198,7 @@ struct StatusDerivationTests {
 
     // MARK: - Sort order
 
-    @Test func sortOrderOrdering() async {
+    @Test func sortOrderOrdering() {
         let ordered: [WorkspaceDisplayStatus] = [
             .failed,
             .blocked,
@@ -218,14 +218,14 @@ struct StatusDerivationTests {
         }
     }
 
-    @Test func failedSortsFirst() async {
+    @Test func failedSortsFirst() {
         #expect(WorkspaceDisplayStatus.failed.sortOrder == 0)
         for status in WorkspaceDisplayStatus.allCases where status != .failed {
             #expect(WorkspaceDisplayStatus.failed.sortOrder < status.sortOrder)
         }
     }
 
-    @Test func unknownSortsLast() async {
+    @Test func unknownSortsLast() {
         for status in WorkspaceDisplayStatus.allCases where status != .unknown {
             #expect(WorkspaceDisplayStatus.unknown.sortOrder > status.sortOrder)
         }

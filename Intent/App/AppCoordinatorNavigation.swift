@@ -102,6 +102,7 @@ extension AppCoordinator {
     /// (`restoreLastScreenIfAvailable`); explicit agent/note selection and
     /// notification routing go through `onSelectAgent` / `onSelectNote`.
     func onSelectWorkspace(_ workspaceId: String) {
+        iPadNavigation.closeTool()
         if workspaceId == Workspace.chiefWorkspaceId {
             onSelectAssistant()
             return
@@ -131,22 +132,32 @@ extension AppCoordinator {
             }
             do {
                 // Unscoped reads include delegated and background agents too.
-                let result = try await connection.request("agent.list", params: ["workspaceId": workspaceId])
-                guard let self, !Task.isCancelled,
-                      navigationState.recentWorkspaceAgentRequestId == requestId,
-                      selectedSection == .workspaces,
-                      case let .workspaceDetail(currentWorkspaceId) = currentScreen,
-                      currentWorkspaceId == workspaceId,
+                // Every page is read: the newest agents are on the last one.
+                let result = try await PagedReads.requestAgentList(["workspaceId": workspaceId], connection: connection) {
+                    self?.recentAgentLookupIsCurrent(requestId, workspaceId: workspaceId) == true
+                }
+                guard let self, recentAgentLookupIsCurrent(requestId, workspaceId: workspaceId),
                       let response = result as? [String: Any],
                       let rows = response["agents"] as? [[String: Any]],
                       let agent = rows.compactMap(AgentSession.parseAgent)
                           .filter({ $0.retiredAt == nil })
                           .min(by: AgentListViewModel.byLastActivity) else { return }
                 onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
+            } catch is CancellationError {
+                // A newer swipe or navigation superseded this lookup.
             } catch {
                 AppLog.app.error("[AppCoordinator] Recent workspace agent lookup failed: \(error)")
             }
         }
+    }
+
+    /// The swipe's lookup still owns navigation: no newer swipe, and the user
+    /// is still on that workspace's overview.
+    private func recentAgentLookupIsCurrent(_ requestId: UUID, workspaceId: String) -> Bool {
+        guard !Task.isCancelled, navigationState.recentWorkspaceAgentRequestId == requestId,
+              selectedSection == .workspaces,
+              case let .workspaceDetail(currentWorkspaceId) = currentScreen else { return false }
+        return currentWorkspaceId == workspaceId
     }
 
     /// Fire-and-forget workspace.markSeen: clears the server-owned unread
@@ -175,9 +186,9 @@ extension AppCoordinator {
         }
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
-        ensureIPadWorkspaceSelection()
-        if usesIPadShell, iPadNavigation.section == .workspaces,
-           case .workspaceList = currentScreen {
+        // The next workspace opens from the auto-selection observer; only an
+        // empty list reveals the sidebar.
+        if usesIPadShell, iPadNavigation.section == .workspaces, iPadAutoSelectedWorkspaceId == nil {
             iPadNavigation.revealSidebar()
         }
     }
@@ -236,6 +247,7 @@ extension AppCoordinator {
     }
 
     func onSelectNote(_ noteId: String, workspaceId: String, noteTitle: String) {
+        iPadNavigation.closeTool()
         selectedSection = .workspaces
         currentScreen = .noteDetail(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
         saveCurrentScreen()

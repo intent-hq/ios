@@ -29,7 +29,7 @@ import UniformTypeIdentifiers
             case .unreadableVideo:
                 return "Could not read this video. Choose a different video or try again."
             case .tooMany:
-                return "You can attach up to 5 images or videos. Remove an attachment before adding more."
+                return "You can attach up to \(Constants.Conversation.Composer.maximumImageSelectionCount) images or videos. Remove an attachment before adding more."
             case .tooLarge:
                 return "These images are too large. Choose smaller images or remove an attachment."
             case .requestTooLarge:

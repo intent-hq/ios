@@ -18,9 +18,10 @@ struct PrMonitorWakeAttributionView: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Design.Watcher.rowSpacing) {
-            Image(systemName: "arrow.triangle.pull")
-                .font(.subheadline)
-                .frame(width: Design.toolIconSize)
+            Image(.gitPr)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Design.toolIconSize, height: Design.toolIconSize)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Design.Watcher.attributionSpacing) {

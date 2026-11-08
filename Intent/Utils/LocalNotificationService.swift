@@ -17,6 +17,7 @@ protocol LocalNotificationCenter: AnyObject {
         withCompletionHandler completionHandler: (@Sendable ((any Error)?) -> Void)?
     )
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
+    func soundIsEnabled() async -> Bool
 }
 
 @MainActor
@@ -56,6 +57,11 @@ private final class SystemLocalNotificationCenter: LocalNotificationCenter {
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
+
+    func soundIsEnabled() async -> Bool {
+        let settings = await center.notificationSettings()
+        return settings.soundSetting == .enabled
+    }
 }
 
 @MainActor
@@ -66,17 +72,32 @@ final class LocalNotificationService: NSObject {
         let workspaceId: String?
         let agentName: String?
         let connectionId: UUID?
+        let foregroundPresentationHandled: Bool
     }
 
     static let shared = LocalNotificationService()
 
-    var onWillPresentNotification: ((Response) -> Void)?
+    var onWillPresentNotification: ((Response) -> UNNotificationPresentationOptions)?
     var onNotificationResponse: ((Response) -> Void)?
 
     private let center: any LocalNotificationCenter
+    private let soundPolicy: NotificationSoundPolicy
+    private let playForegroundSound: () async -> Void
+    /// The in-app chime for the latest foreground banner. It runs after the
+    /// presentation completion handler so the banner never waits for it;
+    /// exposed so tests can await the sound decision.
+    private(set) var foregroundSoundTask: Task<Void, Never>?
 
-    init(center: any LocalNotificationCenter = SystemLocalNotificationCenter()) {
+    init(
+        center: any LocalNotificationCenter = SystemLocalNotificationCenter(),
+        playForegroundSound: @escaping () async -> Void = { await NotificationChime.playForegroundSound() },
+        outputVolume: @escaping () -> Float = NotificationSoundPolicy.system.outputVolume
+    ) {
         self.center = center
+        soundPolicy = NotificationSoundPolicy(outputVolume: outputVolume) {
+            await center.soundIsEnabled()
+        }
+        self.playForegroundSound = playForegroundSound
         super.init()
         center.delegate = self
     }
@@ -93,17 +114,20 @@ final class LocalNotificationService: NSObject {
         workspaceId: String,
         agentName: String,
         workspaceName: String,
-        connectionId: UUID
+        connectionId: UUID,
+        foregroundPresentationHandled: Bool = false
     ) {
         let content = UNMutableNotificationContent()
         content.title = agentName
         content.body = "Finished in \(workspaceName)"
-        content.sound = .default
+        content.sound = soundPolicy.scheduledNotificationPlaysSound() ? .default : nil
+        content.interruptionLevel = .active
         content.userInfo = [
             "agentId": agentId,
             "workspaceId": workspaceId,
             "agentName": agentName,
-            "connectionId": connectionId.uuidString
+            "connectionId": connectionId.uuidString,
+            "foregroundPresentationHandled": foregroundPresentationHandled
         ]
 
         let request = UNNotificationRequest(
@@ -144,7 +168,8 @@ final class LocalNotificationService: NSObject {
             agentId: userInfo["agentId"] as? String,
             workspaceId: userInfo["workspaceId"] as? String,
             agentName: userInfo["agentName"] as? String,
-            connectionId: (userInfo["connectionId"] as? String).flatMap(UUID.init(uuidString:))
+            connectionId: (userInfo["connectionId"] as? String).flatMap(UUID.init(uuidString:)),
+            foregroundPresentationHandled: userInfo["foregroundPresentationHandled"] as? Bool ?? false
         )
     }
 
@@ -153,8 +178,20 @@ final class LocalNotificationService: NSObject {
         completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
     ) {
         Task { @MainActor [weak self] in
-            self?.onWillPresentNotification?(response)
-            completionHandler(Self.presentationOptionsForForegroundNotification())
+            var options = self?.onWillPresentNotification?(response) ?? []
+            let requestsSound = options.contains(.sound)
+            // The app plays its own chime instead of the system sound, and the
+            // banner is presented without waiting for it.
+            options.remove(.sound)
+            completionHandler(options)
+            guard let self else { return }
+            let soundPolicy = soundPolicy
+            let playForegroundSound = playForegroundSound
+            foregroundSoundTask = Task {
+                if await soundPolicy.foregroundBannerPlaysSound(requested: requestsSound) {
+                    await playForegroundSound()
+                }
+            }
         }
     }
 
@@ -166,11 +203,6 @@ final class LocalNotificationService: NSObject {
             self?.onNotificationResponse?(response)
             completionHandler()
         }
-    }
-
-    nonisolated static func presentationOptionsForForegroundNotification()
-        -> UNNotificationPresentationOptions {
-        []
     }
 }
 

@@ -106,19 +106,31 @@ final class ConversationLiveTranscript {
     /// across rejection, timeout, retry and reconnect (each re-registers for
     /// the same binding), cleared when a snapshot applies or the binding is
     /// torn down.
-    @ObservationIgnored var snapshotPending = false
-    /// The channel applied a snapshot and owns the streaming flag; while it
-    /// is false (no channel yet, rejected registration, reconnect), the
-    /// content-free `agent:stream:*` firehose is the only liveness signal.
-    var chatLive = false
-    @ObservationIgnored var chatSubscriptionId: String?
-    var chatChannelActive = false
-    var chatSeeded = false {
+    @ObservationIgnored var snapshotPending = false // swiftlint:disable:this state_phase_flag
+
+    enum ChatChannel: Equatable {
+        /// No registration: before the first subscribe, after a rejection,
+        /// reconnect or reset.
+        case inactive
+        /// A registration is open (requested or acked) and its seq-0 snapshot
+        /// has not applied yet.
+        case registering
+        /// A snapshot applied: the channel owns the transcript and streaming flag.
+        case live
+    }
+
+    var chatChannel = ChatChannel.inactive {
         didSet {
-            guard oldValue != chatSeeded else { return }
-            traceEvent("ChatSeeded", "seeded=\(chatSeeded) messages=\(messages.count)")
+            guard oldValue != chatChannel else { return }
+            traceEvent("ChatChannel", "state=\(chatChannel) messages=\(messages.count)")
         }
     }
+    @ObservationIgnored var chatSubscriptionId: String?
+    var chatChannelActive: Bool { chatChannel != .inactive }
+    /// While false (no channel yet, rejected registration, reconnect), the
+    /// content-free `agent:stream:*` firehose is the only liveness signal.
+    var chatLive: Bool { chatChannel == .live }
+    var chatSeeded: Bool { chatLive }
     /// Only the latest accepted snapshot can enable fragment appends.
     @ObservationIgnored var incrementalDeltas = false
     /// A known encoding-parameter rejection is remembered for this connection;
@@ -172,8 +184,7 @@ final class ConversationLiveTranscript {
 
 extension ConversationLiveTranscript {
     func setTestChannel(subscriptionId: String) {
-        chatChannelActive = true
-        chatSeeded = false
+        chatChannel = .registering
         incrementalDeltas = false
         chatSubscriptionId = subscriptionId
     }
@@ -231,8 +242,7 @@ extension ConversationLiveTranscript {
             "seq=\(push.seq) items=\(items.count) messages=\(snapshotMessages.count) blocks=\(snapshotMessages.reduce(0) { $0 + $1.contentBlocks.count }) predecoded=\(push.snapshotMessages != nil) resumed=\(resumed)"
         )
         guard shouldAcceptSnapshot(snapshotMessages, resumed: resumed) else { return }
-        chatLive = true
-        chatSeeded = true
+        chatChannel = .live
         incrementalDeltas = push.snapshotMeta?["deltaEncoding"] as? String == "incremental"
         snapshotPending = false
         chatExpectedSeq = push.seq + 1
@@ -418,10 +428,8 @@ extension ConversationLiveTranscript {
         hydratingBlockKeys = []
         hydratedBlocks = [:]
         hydratedBlockOrder = []
-        chatLive = false
         releaseActiveRegistration()
-        chatChannelActive = false
-        chatSeeded = false
+        chatChannel = .inactive
         incrementalDeltas = false
         useFullDeltaEncoding = false
         snapshotPending = false

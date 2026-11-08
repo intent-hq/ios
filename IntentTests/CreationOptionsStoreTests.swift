@@ -53,17 +53,23 @@ struct CreationOptionsStoreTests {
         return (store, fake)
     }
 
-    /// Poll (bounded) until the condition holds — avoids fixed-sleep
-    /// flakiness for assertions on Task-spawned background refreshes.
-    /// Records a failure on timeout so a missed update cannot pass silently.
-    func waitFor(_ description: String = "condition", _ condition: () -> Bool) async throws {
-        for _ in 0 ..< 200 {
-            if condition() {
-                return
-            }
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
-        Issue.record("Timed out waiting for \(description)")
+    /// Bounded wait until the condition holds, for assertions on
+    /// Task-spawned background refreshes. Throws on timeout so a missed
+    /// update cannot pass silently.
+    func waitFor(
+        _ description: String = "condition",
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ condition: () -> Bool
+    ) async throws {
+        try await waitUntil(description, sourceLocation: sourceLocation, condition)
+    }
+
+    /// The latest task of each kind the store spawns; unchanged identities
+    /// prove a synchronously delivered trigger left nothing to await.
+    func spawnedWork(_ store: CreationOptionsStore) -> [Task<Void, Never>?] {
+        let catalogs = [store.specialistCatalog.latestReadTask, store.defaultModelProviderCatalog.latestReadTask]
+        return [store.latestLoadTask, store.latestCreationRefreshTask] + catalogs
+            + store.modelCatalogs.keys.sorted().map { store.modelCatalogs[$0]?.latestReadTask }
     }
 
     // MARK: - Cold load
@@ -211,8 +217,10 @@ struct CreationOptionsStoreTests {
         fake.errorMap["host.providerAuthStatus"] = NSError(domain: "t", code: -1)
 
         await store.loadIfNeeded()
-        try await waitFor("refresh reads") { fake.paramsForMethod("specialist.list").count == 2 }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // Await the background refresh itself, not just its reads.
+        let refresh = try #require(store.latestLoadTask)
+        await refresh.value
+        #expect(fake.paramsForMethod("specialist.list").count == 2)
 
         #expect(store.specialists.map(\.id) == cachedSpecialists)
         #expect(store.providers == cachedProviders)
@@ -294,6 +302,8 @@ extension CreationOptionsStoreTests {
         fake.pendingMethods = ["specialist.list"]
         await store.loadIfNeeded()
         try await waitFor("refresh read") { fake.paramsForMethod("specialist.list").count == 2 }
+        let staleLoad = try #require(store.latestLoadTask)
+        let staleRead = try #require(store.specialistCatalog.latestReadTask)
 
         store.invalidate()
         #expect(store.specialists.isEmpty)
@@ -302,7 +312,8 @@ extension CreationOptionsStoreTests {
         // The superseded refresh completes with data from before the
         // invalidation: it must not repopulate the cache or mark it loaded.
         fake.resolvePending("specialist.list", with: ["specialists": [specialistDict(id: "stale")]])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await staleRead.value
+        await staleLoad.value
         #expect(store.specialists.isEmpty)
         #expect(store.providers.isEmpty)
         #expect(store.hasLoaded == false)
@@ -325,10 +336,13 @@ extension CreationOptionsStoreTests {
         // The cached path spawns a silent refresh task and returns without
         // suspending, so this invalidate() runs before that task's first
         // line: the task must exit at entry instead of issuing reads.
+        let previousLoad = store.latestLoadTask
         await store.loadIfNeeded()
+        let refresh = try #require(store.latestLoadTask)
+        #expect(refresh != previousLoad)
         store.invalidate()
 
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await refresh.value
         #expect(fake.requestLog.isEmpty)
         #expect(store.isLoading == false)
         #expect(store.hasLoaded == false)
@@ -413,6 +427,8 @@ extension CreationOptionsStoreTests {
         fake.pendingMethods = ["specialist.list"]
         await store.loadIfNeeded()
         try await waitFor("pre-reconnect read") { fake.paramsForMethod("specialist.list").count == 2 }
+        let staleLoad = try #require(store.latestLoadTask)
+        let staleRead = try #require(store.specialistCatalog.latestReadTask)
 
         fake.simulateConnect()
 
@@ -426,7 +442,8 @@ extension CreationOptionsStoreTests {
         // The pre-reconnect read resolves first (oldest pending) with stale
         // data: dropped.
         fake.resolvePending("specialist.list", with: ["specialists": [specialistDict(id: "stale")]])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await staleRead.value
+        await staleLoad.value
         #expect(store.specialists.map(\.id) == ["implementor", "coordinator"])
         #expect(store.hasLoaded == false)
         #expect(store.isLoading)
@@ -441,17 +458,19 @@ extension CreationOptionsStoreTests {
     /// A models-only consumer (the conversation menu, before any creation
     /// picker ran `loadIfNeeded`) keeps last-good data but expires freshness
     /// on reconnect; no inactive catalog is fetched on its behalf.
-    @Test func reconnectExpiresInactiveModelsWithoutLoadingOptions() async throws {
+    @Test func reconnectExpiresInactiveModelsWithoutLoadingOptions() async {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
         let store = CreationOptionsStore(connectionManager: fake)
         await store.loadModelsIfNeeded(providerId: "auggie")
         #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
         fake.clearRequestLog()
+        let before = spawnedWork(store)
 
+        // The connection sink runs synchronously inside simulateConnect().
         fake.simulateConnect()
-        try await waitFor("model freshness expired") { !store.modelCatalog(for: "auggie").isFresh }
-        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(store.modelCatalog(for: "auggie").isFresh == false)
+        #expect(spawnedWork(store) == before)
 
         #expect(store.loadGeneration == 1)
         #expect(fake.requestLog.isEmpty)
@@ -465,13 +484,15 @@ extension CreationOptionsStoreTests {
         #expect(fake.didCallMethod("specialist.list") == false)
     }
 
-    @Test func reconnectWithoutCacheDoesNotFetch() async throws {
+    @Test func reconnectWithoutCacheDoesNotFetch() {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
         let store = CreationOptionsStore(connectionManager: fake)
+        let before = spawnedWork(store)
 
+        // The connection sink (if any) runs synchronously inside simulateConnect().
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(spawnedWork(store) == before)
 
         #expect(fake.requestLog.isEmpty)
         #expect(store.hasLoaded == false)

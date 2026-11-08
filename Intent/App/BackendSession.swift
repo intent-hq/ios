@@ -56,7 +56,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
 extension SessionConnectionManaging {
     var startupState: DaemonStartupState? { nil }
 
-    func makeBrowserProxy() async throws -> any BrowserProxySession {
+    func makeBrowserProxy() throws -> any BrowserProxySession {
         throw BrowserTunnelError.unavailable
     }
 }
@@ -96,7 +96,9 @@ final class BackendSession {
     /// Workspace final step; same reopen-instantly contract as the repo cache.
     let creationOptionsStore: CreationOptionsStore
     let hooksStore: WorkspaceStatusStore<BackgroundHook>
+    let scriptMonitorsStore: WorkspaceScriptMonitorsStore
     let prMonitorsStore: WorkspacePrMonitorsStore
+    let pullRequestListStore: PullRequestListStore
     let mobileTerminalStore: MobileTerminalStore
     let browserStore: WorkspaceBrowserStore
     let attachmentUploadService: AttachmentUploadService
@@ -106,6 +108,7 @@ final class BackendSession {
 
     private let coordinatorFactory: CoordinatorFactory
     private var screenRestorationClaimed = false
+    @ObservationIgnored private var coordinators: [WeakCoordinator] = []
 
     init(
         backendID: BackendID?,
@@ -133,6 +136,8 @@ final class BackendSession {
         self.creationOptionsStore = creationOptionsStore
         self.hooksStore = BackgroundHookStore.makeWorkspaceStore(connection: connection)
         self.prMonitorsStore = prMonitorsStore
+        self.scriptMonitorsStore = WorkspaceScriptMonitorsStore(connection: connection)
+        pullRequestListStore = PullRequestListStore(connection: connection)
         mobileTerminalStore = MobileTerminalStore(
             connection: connection,
             persistence: MobileTerminalPersistence(backendID: backendID)
@@ -155,11 +160,28 @@ final class BackendSession {
             self?.claimScreenRestoration() ?? false
         }
         coordinator.agentDetails = agentDetails
+        coordinators.removeAll { $0.value == nil }
+        coordinators.append(WeakCoordinator(value: coordinator))
+        coordinator.repairSharedConnection = { [weak self, weak coordinator] in
+            self?.repairConnection(leaving: coordinator)
+        }
         if startingAtSavedMachines {
             coordinator.routingState.hasLoadCompleted = true
             coordinator.onReconnect()
         }
         return coordinator
+    }
+
+    /// A pairing from `leaving`'s window dialed another daemon over this
+    /// session's shared connection, and that window is switching away. One
+    /// window that stays on this backend re-dials it; with none left, the
+    /// registry tears the session down when `leaving` detaches.
+    func repairConnection(leaving: AppCoordinator?) {
+        coordinators.removeAll { $0.value == nil }
+        coordinators
+            .compactMap(\.value)
+            .first { $0 !== leaving && !$0.lifecycleState.hasReturnedToSavedMachines }?
+            .redialWindowBackend()
     }
 
     /// Grants last-screen restoration to this session's first claimant only:
@@ -196,8 +218,14 @@ final class BackendSession {
         creationOptionsStore.reset()
         hooksStore.reset()
         prMonitorsStore.reset()
+        pullRequestListStore.reset()
+        scriptMonitorsStore.reset()
         conversations.reset()
         agentDetails.reset()
         connection.disconnect()
     }
+}
+
+private struct WeakCoordinator {
+    weak var value: AppCoordinator?
 }

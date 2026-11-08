@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct WorkspaceParsingTests {
-    @Test func parseCompleteWorkspace() async {
+    @Test func parseCompleteWorkspace() {
         let dict: [String: Any] = [
             "id": "ws-1",
             "title": "My Workspace",
@@ -49,7 +49,7 @@ struct WorkspaceParsingTests {
         #expect(workspace?.taskStatsInProgress == 2)
     }
 
-    @Test func parseNeedsAttentionDisplayStatus() async {
+    @Test func parseNeedsAttentionDisplayStatus() {
         // "needs_attention" is a known wire value: it parses verbatim and
         // resolves to .needsAttention (no fallback to .notStarted).
         let dict: [String: Any] = ["id": "ws-6", "title": "Attention", "displayStatus": "needs_attention"]
@@ -59,7 +59,7 @@ struct WorkspaceParsingTests {
         #expect(workspace.map { resolveDisplayStatus(for: $0) } == .needsAttention)
     }
 
-    @Test func parseUnknownDisplayStatusTolerated() async {
+    @Test func parseUnknownDisplayStatusTolerated() {
         // Unknown future wire values are kept as-is; mapping to the enum
         // happens at display time and lands on the neutral `.unknown`.
         let dict: [String: Any] = ["id": "ws-4", "title": "Future", "displayStatus": "some_future_status"]
@@ -69,7 +69,7 @@ struct WorkspaceParsingTests {
         #expect(workspace.map { resolveDisplayStatus(for: $0) } == .unknown)
     }
 
-    @Test func parseMinimalWorkspace() async {
+    @Test func parseMinimalWorkspace() {
         let dict: [String: Any] = ["id": "ws-2", "title": "Minimal"]
         let workspace = WorkspaceStore.parseWorkspace(dict)
         #expect(workspace != nil)
@@ -86,7 +86,7 @@ struct WorkspaceParsingTests {
         #expect(workspace?.statusImageAssetId == nil)
     }
 
-    @Test func parseStatusImageAssetIdTreatsBlankAsUnset() async {
+    @Test func parseStatusImageAssetIdTreatsBlankAsUnset() {
         // The daemon omits the field until an agent sets one and folds a
         // blank string to a clear (PROTOCOL §5.1 `statusImageAssetId`); the
         // parser mirrors that so the views never render an empty asset id.
@@ -106,7 +106,7 @@ struct WorkspaceParsingTests {
         #expect(null?.statusImageAssetId == nil)
     }
 
-    @Test func decodeStatusImageAssetIdViaJSONDecoder() async throws {
+    @Test func decodeStatusImageAssetIdViaJSONDecoder() throws {
         let decoder = JSONDecoder()
 
         let present = try decoder.decode(
@@ -122,7 +122,7 @@ struct WorkspaceParsingTests {
         #expect(absent.statusImageAssetId == nil)
     }
 
-    @Test func parseWaitingField() async {
+    @Test func parseWaitingField() {
         // Present-true, present-false, and absent (⇒ false — the wire omits
         // the field when false, and older daemons never send it).
         let waitingTrue = WorkspaceStore.parseWorkspace(
@@ -141,7 +141,7 @@ struct WorkspaceParsingTests {
         #expect(waitingAbsent?.waiting == false)
     }
 
-    @Test func decodeWaitingViaJSONDecoder() async throws {
+    @Test func decodeWaitingViaJSONDecoder() throws {
         // The Decodable conformance must honor the same absent ⇒ false
         // contract as parseWorkspace (PROTOCOL §5.1: the wire omits the
         // field when false), so a future JSONDecoder path can't throw
@@ -161,7 +161,7 @@ struct WorkspaceParsingTests {
         #expect(present.waiting == true)
     }
 
-    @Test func decodeCreatedAtViaJSONDecoder() async throws {
+    @Test func decodeCreatedAtViaJSONDecoder() throws {
         let decoder = JSONDecoder()
 
         let present = try decoder.decode(
@@ -177,7 +177,7 @@ struct WorkspaceParsingTests {
         #expect(absent.createdAt == nil)
     }
 
-    @Test func parsePullRequests() async throws {
+    @Test func parsePullRequests() throws {
         // Present array: full row, minimal row, and a malformed row missing
         // the required `number` (skipped — lenient dict-path parse).
         let dict: [String: Any] = [
@@ -211,14 +211,14 @@ struct WorkspaceParsingTests {
         #expect(pullRequests[1].title == nil)
     }
 
-    @Test func parseAbsentPullRequestsYieldsUnreportedEmptyPool() async {
+    @Test func parseAbsentPullRequestsYieldsUnreportedEmptyPool() {
         let workspace = WorkspaceStore.parseWorkspace(["id": "ws-pr2", "title": "No PRs"])
         #expect(workspace != nil)
         #expect(workspace?.pullRequests.isEmpty == true)
         #expect(workspace?.pullRequestsWereReported == false)
     }
 
-    @Test func parseUnknownPullRequestStatusKeptRaw() async {
+    @Test func parseUnknownPullRequestStatusKeptRaw() {
         let dict: [String: Any] = [
             "id": "ws-pr3",
             "title": "Future",
@@ -229,7 +229,7 @@ struct WorkspaceParsingTests {
         #expect(workspace?.pullRequests.first?.status == "SomeFutureStatus")
     }
 
-    @Test func parseActivePullRequest() async throws {
+    @Test func parseActivePullRequest() throws {
         let dict: [String: Any] = [
             "id": "ws-apr1",
             "title": "Active PR",
@@ -253,13 +253,13 @@ struct WorkspaceParsingTests {
         #expect(pullRequest.updatedAt == "2026-08-02T10:00:00Z")
     }
 
-    @Test func parseAbsentActivePullRequestYieldsNil() async {
+    @Test func parseAbsentActivePullRequestYieldsNil() {
         let workspace = WorkspaceStore.parseWorkspace(["id": "ws-apr2", "title": "No active PR"])
         #expect(workspace != nil)
         #expect(workspace?.activePullRequest == nil)
     }
 
-    @Test func parseMalformedActivePullRequestDropped() async {
+    @Test func parseMalformedActivePullRequestDropped() {
         // Missing the required `number` — the lenient wire init rejects it.
         let dict: [String: Any] = [
             "id": "ws-apr3",
@@ -271,29 +271,29 @@ struct WorkspaceParsingTests {
         #expect(workspace?.activePullRequest == nil)
     }
 
-    @Test func parseMissingIdReturnsNil() async {
+    @Test func parseMissingIdReturnsNil() {
         let dict: [String: Any] = ["title": "No ID"]
         #expect(WorkspaceStore.parseWorkspace(dict) == nil)
     }
 
-    @Test func parseMissingTitleReturnsNil() async {
+    @Test func parseMissingTitleReturnsNil() {
         let dict: [String: Any] = ["id": "ws-3"]
         #expect(WorkspaceStore.parseWorkspace(dict) == nil)
     }
 
-    @Test func repositoryNameFallsBackToRepo() async {
+    @Test func repositoryNameFallsBackToRepo() {
         let dict: [String: Any] = ["id": "ws-4", "title": "Fallback", "repo": "legacy-repo"]
         let workspace = WorkspaceStore.parseWorkspace(dict)
         #expect(workspace?.repositoryName == "legacy-repo")
     }
 
-    @Test func repositoryNamePreferredOverRepo() async {
+    @Test func repositoryNamePreferredOverRepo() {
         let dict: [String: Any] = ["id": "ws-5", "title": "Preferred", "repositoryName": "new-repo", "repo": "old-repo"]
         let workspace = WorkspaceStore.parseWorkspace(dict)
         #expect(workspace?.repositoryName == "new-repo")
     }
 
-    @Test func parseWorkspacesWithWrapper() async {
+    @Test func parseWorkspacesWithWrapper() {
         let result: [String: Any] = [
             "workspaces": [
                 ["id": "a", "title": "Alpha"],
@@ -306,7 +306,7 @@ struct WorkspaceParsingTests {
         #expect(workspaces[1].id == "b")
     }
 
-    @Test func parseWorkspacesWithPlainArray() async {
+    @Test func parseWorkspacesWithPlainArray() {
         let result: [[String: Any]] = [
             ["id": "c", "title": "Charlie"]
         ]
@@ -315,7 +315,7 @@ struct WorkspaceParsingTests {
         #expect(workspaces[0].id == "c")
     }
 
-    @Test func parseWorkspacesWithInvalidInputReturnsEmpty() async {
+    @Test func parseWorkspacesWithInvalidInputReturnsEmpty() {
         #expect(WorkspaceStore.parseWorkspaces(from: "invalid").isEmpty)
         #expect(WorkspaceStore.parseWorkspaces(from: [:] as [String: Any]).isEmpty)
         #expect(WorkspaceStore.parseWorkspaces(from: 42).isEmpty)

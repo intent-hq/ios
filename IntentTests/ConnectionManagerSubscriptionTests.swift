@@ -8,7 +8,7 @@ import Testing
 extension ConnectionManagerTests {
     // MARK: - Subscription Push Routing
 
-    @Test @MainActor func registerSubscriptionHandlerStoresHandler() async {
+    @Test @MainActor func registerSubscriptionHandlerStoresHandler() {
         let manager = ConnectionManager.shared
         var receivedPush: SubscriptionPush?
 
@@ -30,7 +30,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "test-sub-1")
     }
 
-    @Test @MainActor func unregisterRemovesHandler() async {
+    @Test @MainActor func unregisterRemovesHandler() {
         let manager = ConnectionManager.shared
         var receivedCount = 0
 
@@ -58,7 +58,7 @@ extension ConnectionManagerTests {
     // must drop all registered subscription handlers, buffered unrouted pushes, and
     // unregister tombstones — ids can be reused after a daemon restart, so stale
     // prior-connection buffer/tombstone state must not leak into the next connection.
-    @Test @MainActor func disconnectClearsSubscriptionHandlers() async {
+    @Test @MainActor func disconnectClearsSubscriptionHandlers() {
         let manager = ConnectionManager.shared
         var receivedCount = 0
 
@@ -91,7 +91,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "disc-sub-1")
     }
 
-    @Test @MainActor func twoHandlersOnlyReceiveTheirOwnPushes() async {
+    @Test @MainActor func twoHandlersOnlyReceiveTheirOwnPushes() {
         let manager = ConnectionManager.shared
         var receivedPush1: SubscriptionPush?
         var receivedPush2: SubscriptionPush?
@@ -132,7 +132,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "test-sub-b")
     }
 
-    @Test @MainActor func reregisterSameIdReplacesHandler() async {
+    @Test @MainActor func reregisterSameIdReplacesHandler() {
         let manager = ConnectionManager.shared
         var firstHandlerCalled = false
         var secondHandlerCalled = false
@@ -158,7 +158,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "test-sub-3")
     }
 
-    @Test @MainActor func subscriptionPushDoesNotReachLegacyEventHandlers() async {
+    @Test @MainActor func subscriptionPushDoesNotReachLegacyEventHandlers() {
         let manager = ConnectionManager.shared
         var legacyHandlerReceivedSubscriptionPush = false
         var routerHandlerReceivedPush = false
@@ -189,7 +189,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "test-sub-4")
     }
 
-    @Test @MainActor func malformedSubscriptionPushIsDropped() async {
+    @Test @MainActor func malformedSubscriptionPushIsDropped() {
         let manager = ConnectionManager.shared
         var legacyHandlerReceivedSubscriptionPush = false
         var routerHandlerCalled = false
@@ -221,7 +221,7 @@ extension ConnectionManagerTests {
 }
 
 extension ConnectionManagerTests {
-    @Test @MainActor func unregisteredSubscriptionIdIsDropped() async {
+    @Test @MainActor func unregisteredSubscriptionIdIsDropped() {
         let manager = ConnectionManager.shared
         var legacyHandlerReceivedSubscriptionPush = false
 
@@ -248,7 +248,7 @@ extension ConnectionManagerTests {
 
     // MARK: - Unrouted push buffering (dropped seq-0 snapshot race)
 
-    @Test @MainActor func bufferedPushesReplayedInOrderOnRegistration() async {
+    @Test @MainActor func bufferedPushesReplayedInOrderOnRegistration() {
         let manager = ConnectionManager.shared
         var received: [(kind: SubscriptionPush.Kind, seq: Int)] = []
 
@@ -279,7 +279,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "buf-sub-1")
     }
 
-    @Test @MainActor func bufferEvictionRespectsBounds() async {
+    @Test @MainActor func bufferEvictionRespectsBounds() {
         let manager = ConnectionManager.shared
         manager.disconnect()
 
@@ -304,7 +304,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "buf-sub-evict")
     }
 
-    @Test @MainActor func bufferTTLExpiresOldPushes() async {
+    @Test @MainActor func bufferTTLExpiresOldPushes() {
         var currentDate = Date()
         let router = ConnectionSubscriptionRouter { currentDate }
         let delta: [String: Any] = ["added": [], "updated": [], "removedIds": []]
@@ -334,7 +334,7 @@ extension ConnectionManagerTests {
         router.unregister(id: "buf-sub-ttl")
     }
 
-    @Test @MainActor func noDoubleDeliveryWhenHandlerRegisteredMidStream() async {
+    @Test @MainActor func noDoubleDeliveryWhenHandlerRegisteredMidStream() {
         let manager = ConnectionManager.shared
         var receivedSeqs: [Int] = []
 
@@ -360,7 +360,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "buf-sub-mid")
     }
 
-    @Test @MainActor func unregisterDropsBufferedPushes() async {
+    @Test @MainActor func unregisterDropsBufferedPushes() {
         let manager = ConnectionManager.shared
 
         // Push buffered for a subscription that then gets unregistered (e.g. resnapshot)
@@ -380,7 +380,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "buf-sub-unreg")
     }
 
-    @Test @MainActor func stragglerPushesAfterUnregisterAreNotBuffered() async {
+    @Test @MainActor func stragglerPushesAfterUnregisterAreNotBuffered() {
         let manager = ConnectionManager.shared
 
         manager.registerSubscriptionHandler(id: "buf-sub-dead") { _ in }
@@ -408,7 +408,7 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "buf-sub-fresh")
     }
 
-    @Test @MainActor func reusedIdRevivedByFreshSnapshotAfterUnregister() async {
+    @Test @MainActor func reusedIdRevivedByFreshSnapshotAfterUnregister() {
         let manager = ConnectionManager.shared
 
         manager.registerSubscriptionHandler(id: "buf-sub-reused") { _ in }

@@ -27,7 +27,10 @@ enum WorkspaceScriptRepository {
         let key = RegistrationKey(connection: ObjectIdentifier(connection), workspaceId: candidate.workspaceId, candidateId: candidate.id)
         if let task = registrations[key] { return try await task.value }
         let task = Task {
-            let response = try await connection.request("script.list", params: ["workspaceId": candidate.workspaceId])
+            // Every page: a matching script on a later page must not be created again.
+            let response = try await PagedReads.requestAllScripts(workspaceId: candidate.workspaceId) { params in
+                try await connection.request("script.list", params: params)
+            }
             guard connection.connectionState == .connected, !Task.isCancelled else { throw CancellationError() }
             guard let result = response as? [String: Any], let rows = result["scripts"] as? [[String: Any]] else {
                 throw WorkspaceScriptError.invalidResponse

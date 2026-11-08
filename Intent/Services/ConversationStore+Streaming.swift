@@ -26,7 +26,7 @@ extension ConversationStore {
     }
 
     @discardableResult
-    func subscribeToStreaming(agentId: String, workspaceId: String) async -> Int? {
+    func subscribeToStreaming(agentId: String, workspaceId: String) -> Int? {
         guard !Task.isCancelled else { return nil }
         return bindStreaming(agentId: agentId, workspaceId: workspaceId)
     }

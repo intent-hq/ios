@@ -22,7 +22,8 @@ struct CompactMarkdownStyle: StructuredText.Style {
             .foregroundColor(Self.codeForeground),
             .backgroundColor(Self.codeBackground)
         )
-        .link(.foregroundColor(.blue))
+        // Links keep the surrounding text color and read as links by underline.
+        .link(.underlineStyle(.single))
     let headingStyle = CompactHeadingStyle()
     let paragraphStyle = CompactParagraphStyle()
     let blockQuoteStyle = CompactBlockQuoteStyle()

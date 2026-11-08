@@ -14,8 +14,10 @@ struct MarkdownTextView: View {
     private let mermaidSources: [String: String]
     private let pendingDiagram: MermaidMarkdownContent.PendingDiagram?
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.openURL) private var inheritedOpenURL
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.assistantMessageStreaming) private var isStreaming
+    @Environment(\.conversationComposerFocus) private var composerFocus
     /// The window's session, when present: workspace images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
@@ -75,6 +77,12 @@ struct MarkdownTextView: View {
         }
     }
 
+    private var textColor: Color {
+        workspaceDesign
+            ? Constants.Conversation.Design.Palette.assistantForeground(for: colorScheme)
+            : Theme.foreground(for: colorScheme)
+    }
+
     var body: some View {
         let pending = isStreaming ? pendingDiagram : nil
         let markdownView = StructuredText(
@@ -104,6 +112,7 @@ struct MarkdownTextView: View {
             .textual.textSelection(.enabled)
             .textual.onAttachmentTap { attachment in
                 if let image = Self.lightboxImage(for: attachment) {
+                    composerFocus?.wrappedValue = false
                     lightboxItem = LightboxItem(image: image)
                 } else if let video = Self.playbackVideo(for: attachment) {
                     videoItem = VideoItem(video: video)
@@ -122,18 +131,21 @@ struct MarkdownTextView: View {
             .id(attachmentAttempt)
             .interFont(Constants.Typography.bodyS)
             .tracking(workspaceDesign ? Constants.Conversation.Design.Typography.bodyTracking : 0)
-            .foregroundStyle(workspaceDesign
-                ? Constants.Conversation.Design.Palette.assistantForeground(for: colorScheme)
-                : Theme.foreground(for: colorScheme))
+            .foregroundStyle(textColor)
+            // SwiftUI draws link runs in the tint; links match the text and are underlined instead.
+            .tint(textColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)
+                    .coversConversationComposers()
             }
             .fullScreenCover(item: $videoItem) { item in
                 VideoLightboxView(video: item.video)
+                    .coversConversationComposers()
             }
             .fullScreenCover(item: $pdfItem) { item in
                 PDFLightboxView(pdf: item.pdf)
+                    .coversConversationComposers()
             }
 
         markdownView
@@ -141,6 +153,7 @@ struct MarkdownTextView: View {
             .fullScreenCover(item: $browserItem) { browser in
                 if let session {
                     WorkspaceBrowserView(browser: browser, connection: session.connection)
+                        .coversConversationComposers()
                 }
             }
     }
@@ -154,7 +167,9 @@ struct MarkdownTextView: View {
         } catch {
             return .discarded
         }
-        return onOpenURL?(url) ?? .systemAction
+        if let onOpenURL { return onOpenURL(url) }
+        inheritedOpenURL(url)
+        return .handled
     }
 
     static func workspaceBrowser(

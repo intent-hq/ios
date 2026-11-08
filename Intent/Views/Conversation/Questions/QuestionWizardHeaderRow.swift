@@ -11,6 +11,7 @@ struct QuestionWizardHeaderRow: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @ScaledMetric(relativeTo: .caption) private var questionIconSide: CGFloat = 12
 
     private typealias Layout = Constants.Conversation.QuestionWizard.Header
 
@@ -37,8 +38,10 @@ struct QuestionWizardHeaderRow: View {
 
     private var title: some View {
         Group {
-            Image(systemName: "questionmark.circle")
-                .font(.caption)
+            Image(.questionCircle)
+                .resizable()
+                .scaledToFit()
+                .frame(width: questionIconSide, height: questionIconSide)
                 .foregroundStyle(Theme.primary(for: colorScheme))
                 .accessibilityHidden(true)
             Text("Questions")

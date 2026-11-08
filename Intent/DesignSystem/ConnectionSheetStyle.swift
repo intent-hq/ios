@@ -26,8 +26,8 @@ struct ConnectionSceneBackdrop: ViewModifier {
     private let blurRadius: CGFloat = 10
     private let transitionDuration: Double = 0.2
     // Keep Figma Fade's exact #080808 channel as an 8-bit fraction for comparison with the design.
-    // swiftlint:disable:next no_magic_numbers
-    private let shade = Color(.sRGB, white: 8 / 255, opacity: 1)
+    private static let shadeWhite: UInt32 = 0x08
+    private let shade = Color(.sRGB, white: Constants.EightBitChannel.fraction(Self.shadeWhite), opacity: 1)
 
     private var usesCompactBackdrop: Bool {
         #if os(iOS)
@@ -70,12 +70,10 @@ extension Constants {
         static let minimumTouchTarget: CGFloat = 44
         static let placeholderOpacity: Double = 0.3
         static let pressedOpacity: Double = 0.7
-        // Literal 8-bit channels preserve direct comparison with Figma Grey600 in dark/light modes.
-        // swiftlint:disable no_magic_numbers
-        private static let darkDisabledBackground = Color(.sRGB, red: 82 / 255, green: 82 / 255, blue: 80 / 255)
-        private static let lightDisabledBackground = Color(.sRGB, red: 186 / 255, green: 186 / 255, blue: 183 / 255)
-        private static let lightDisabledForeground = Color(.sRGB, red: 240 / 255, green: 240 / 255, blue: 235 / 255)
-        // swiftlint:enable no_magic_numbers
+        // Exact 8-bit palette channels preserve direct comparison with Figma Grey600 in dark/light modes.
+        private static let darkDisabledBackground = Color(sRGBHex: Constants.DesignPalette.darkGrey)
+        private static let lightDisabledBackground = Color(sRGBHex: Constants.DesignPalette.lightDisabledGrey)
+        private static let lightDisabledForeground = Color(sRGBHex: Constants.DesignPalette.paper)
 
         static func disabledBackground(for scheme: ColorScheme) -> Color {
             scheme == .dark ? darkDisabledBackground : lightDisabledBackground
@@ -111,8 +109,7 @@ extension Constants.ManualTokenEntry {
     static let pasteHitExpansion: CGFloat = 10
 
     // Keep exact Grey400 channels visible for light labels, distinct from the Grey500 subtitle.
-    // swiftlint:disable:next no_magic_numbers
-    private static let lightLabelForeground = Color(.sRGB, red: 82 / 255, green: 82 / 255, blue: 80 / 255)
+    private static let lightLabelForeground = Color(sRGBHex: Constants.DesignPalette.darkGrey)
 
     static func labelForeground(for scheme: ColorScheme) -> Color {
         scheme == .dark ? Constants.Pairing.mutedForeground(for: scheme) : lightLabelForeground

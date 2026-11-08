@@ -4,6 +4,51 @@ import Testing
 
 @MainActor
 struct MobileTerminalStoreTests {
+    @Test func shortcutCreatesWhenNoMobileTerminalExists() async throws {
+        let fixture = try MobileTerminalFixture()
+        fixture.list(ids: ["desktop"])
+        let terminal = try #require(await fixture.store.openOrCreate(workspaceId: "workspace"))
+        #expect(terminal.workspaceId == "workspace")
+        #expect(fixture.fake.paramsForMethod("terminal.create").count == 1)
+    }
+
+    @Test func shortcutReusesAnExistingTerminalButExplicitCreateStillCreates() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.fake.clearRequestLog()
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace") == terminal)
+        #expect(!fixture.fake.didCallMethod("terminal.create"))
+        fixture.fake.responseMap["terminal.create"] = ["terminalId": "second-mobile"]
+        #expect(await fixture.store.create(workspaceId: "workspace")?.id == "second-mobile")
+        #expect(fixture.fake.paramsForMethod("terminal.create").count == 1)
+    }
+
+    @Test func shortcutReplacesAnEndedTerminal() async throws {
+        let fixture = try MobileTerminalFixture()
+        _ = try await fixture.create()
+        fixture.list(ids: [])
+        fixture.fake.responseMap["terminal.create"] = ["terminalId": "replacement"]
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace")?.id == "replacement")
+        #expect(fixture.store.activeTerminals(workspaceId: "workspace").map(\.id) == ["replacement"])
+    }
+
+    @Test func shortcutDoesNotCreateAfterFailedReconciliation() async throws {
+        let fixture = try MobileTerminalFixture()
+        _ = try await fixture.create()
+        fixture.fake.clearRequestLog()
+        fixture.fake.errorMap["terminal.list"] = MobileTerminalError.disconnected
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace") == nil)
+        #expect(!fixture.fake.didCallMethod("terminal.create"))
+    }
+
+    @Test func shortcutCanRetryAFailedInitialCreation() async throws {
+        let fixture = try MobileTerminalFixture()
+        fixture.fake.errorMap["terminal.create"] = MobileTerminalError.disconnected
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace") == nil)
+        fixture.fake.errorMap["terminal.create"] = nil
+        #expect(await fixture.store.openOrCreate(workspaceId: "workspace") != nil)
+    }
+
     @Test func visitingAndRefreshingNeverCreatesOrAdoptsDesktopTerminals() async throws {
         let fixture = try MobileTerminalFixture()
         fixture.list(ids: ["desktop", "setup"])
@@ -145,6 +190,125 @@ struct MobileTerminalStoreTests {
         #expect(fixture.store.activeTerminals(workspaceId: "workspace").contains(terminal))
     }
 
+    @Test func titleFollowsTheRunningThenLastProgramThenTheTerminalName() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        #expect(fixture.store.title(for: terminal) == "Terminal 1")
+
+        fixture.list(ids: [terminal.id], fields: ["foregroundProcess": "claude", "lastProcess": "npm"])
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.title(for: terminal) == "claude")
+        #expect(!fixture.store.hasExitedProcess(terminal))
+
+        fixture.list(ids: [terminal.id], fields: ["foregroundProcess": NSNull(), "lastProcess": "claude"])
+        await fixture.store.refresh(workspaceId: "workspace")
+        #expect(fixture.store.title(for: terminal) == "claude")
+        #expect(fixture.store.hasExitedProcess(terminal))
+    }
+
+    @Test func processEventsRenameTheTerminalAndSubscribeAlongsideExit() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        let subscribe = try #require(fixture.fake.paramsForMethod("events.subscribe").first)
+        #expect(subscribe["eventTypes"] as? [String] == ["terminal:exit", "terminal:process"])
+
+        fixture.processEvent(id: terminal.id, foreground: "vim", last: nil)
+        #expect(fixture.store.title(for: terminal) == "vim")
+        fixture.processEvent(id: terminal.id, foreground: nil, last: "vim")
+        #expect(fixture.store.title(for: terminal) == "vim")
+        #expect(fixture.store.hasExitedProcess(terminal))
+        fixture.processEvent(id: terminal.id, foreground: "top", last: nil, workspaceId: "other")
+        #expect(fixture.store.title(for: terminal) == "vim")
+    }
+
+    @Test func aListStartedBeforeAProcessEventDoesNotOverwriteIt() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.fake.pendingMethods.insert("terminal.list")
+        let refresh = Task { await fixture.store.refresh(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("terminal.list")
+        fixture.processEvent(id: terminal.id, foreground: "make", last: nil)
+        fixture.fake.resolvePending("terminal.list", with: [
+            "daemonBootId": "boot",
+            "terminals": [["id": terminal.id, "name": "Terminal", "foregroundProcess": NSNull(), "lastProcess": NSNull()]]
+        ])
+        await refresh.value
+        #expect(fixture.store.title(for: terminal) == "make")
+    }
+
+    @Test func aProcessEventSkipsOnlyItsOwnRowInAPendingList() async throws {
+        let fixture = try MobileTerminalFixture()
+        let first = try await fixture.create()
+        fixture.fake.responseMap["terminal.create"] = ["terminalId": "second"]
+        let second = try await fixture.create()
+        fixture.fake.responseMap["terminal.create"] = ["terminalId": "elsewhere"]
+        let elsewhere = try #require(await fixture.store.create(workspaceId: "other"))
+        fixture.list(ids: [first.id, second.id])
+
+        fixture.fake.pendingMethods.insert("terminal.list")
+        let refresh = Task { await fixture.store.refresh(workspaceId: "workspace") }
+        try await fixture.fake.waitForPendingRequests("terminal.list")
+        fixture.processEvent(id: first.id, foreground: "make", last: nil)
+        fixture.processEvent(id: elsewhere.id, foreground: "top", last: nil, workspaceId: "other")
+        fixture.fake.resolvePending("terminal.list", with: [
+            "daemonBootId": "boot",
+            "terminals": [
+                ["id": first.id, "name": "Terminal", "foregroundProcess": NSNull(), "lastProcess": NSNull()],
+                ["id": second.id, "name": "Terminal", "foregroundProcess": "sleep", "lastProcess": "vim"]
+            ]
+        ])
+        await refresh.value
+        #expect(fixture.store.title(for: first) == "make")
+        #expect(fixture.store.title(for: second) == "sleep")
+        #expect(fixture.store.title(for: elsewhere) == "top")
+    }
+
+    @Test func aCustomNameWinsUntilItIsCleared() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.processEvent(id: terminal.id, foreground: nil, last: "npm")
+        fixture.store.rename(terminal, to: "  dev server ")
+        #expect(fixture.store.title(for: terminal) == "dev server")
+        #expect(!fixture.store.hasExitedProcess(terminal))
+
+        fixture.store.rename(terminal, to: "  ")
+        #expect(fixture.store.title(for: terminal) == "npm")
+        #expect(fixture.store.hasExitedProcess(terminal))
+    }
+
+    @Test func customNamesSurviveRelaunchAndEndWithTheirTerminal() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.store.rename(terminal, to: "logs")
+        let restored = MobileTerminalStore(connection: fixture.fake, persistence: fixture.persistence)
+        #expect(restored.title(for: terminal) == "logs")
+
+        fixture.event(type: "terminal:exit", id: terminal.id)
+        #expect(fixture.persistence.loadNames().isEmpty)
+    }
+
+    @Test func renamingAnEndedTerminalChangesNothing() async throws {
+        let fixture = try MobileTerminalFixture()
+        let terminal = try await fixture.create()
+        fixture.event(type: "terminal:exit", id: terminal.id)
+        fixture.store.rename(terminal, to: "logs")
+        #expect(fixture.store.customNames.isEmpty)
+        #expect(fixture.persistence.loadNames().isEmpty)
+    }
+
+    @Test func aStaleHandleCannotRenameAReplacementWithTheSameId() async throws {
+        let fixture = try MobileTerminalFixture()
+        let old = try await fixture.create()
+        fixture.list(ids: [], bootId: "new-boot")
+        let replacement = try #require(await fixture.store.create(workspaceId: "workspace"))
+        #expect(replacement.id == old.id)
+        #expect(replacement.daemonBootId == "new-boot")
+
+        fixture.store.rename(old, to: "logs")
+        #expect(fixture.store.title(for: replacement) == replacement.name)
+        #expect(fixture.persistence.loadNames().isEmpty)
+    }
+
     @Test func persistenceIsScopedToTheBackend() async throws {
         let fixture = try MobileTerminalFixture()
         _ = try await fixture.create()
@@ -183,11 +347,27 @@ struct MobileTerminalFixture {
         return terminal
     }
 
-    func list(ids: [String], bootId: String = "boot") {
+    func list(ids: [String], bootId: String = "boot", fields: [String: Any] = [:]) {
         fake.responseMap["terminal.list"] = [
             "daemonBootId": bootId,
-            "terminals": ids.map { ["id": $0, "name": "Terminal", "isExecutingCommand": true] }
+            "terminals": ids.map { id in
+                (["id": id, "name": "Terminal", "isExecutingCommand": true] as [String: Any]).merging(fields) { _, new in new }
+            }
         ]
+    }
+
+    func processEvent(id: String, foreground: String?, last: String?, workspaceId: String = "workspace") {
+        fake.deliverEvent(method: "events.event", params: [
+            "subscriptionId": "mobile-sub",
+            "event": [
+                "type": "terminal:process", "workspaceId": workspaceId,
+                "data": [
+                    "terminalId": id,
+                    "foregroundProcess": foreground as Any? ?? NSNull(),
+                    "lastProcess": last as Any? ?? NSNull()
+                ]
+            ]
+        ])
     }
 
     func event(type: String, id: String = "mobile", data: Data = Data(), subscriptionId: String = "mobile-sub") {

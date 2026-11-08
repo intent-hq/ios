@@ -1,4 +1,3 @@
-import AudioToolbox
 import Observation
 import SwiftUI
 import UserNotifications
@@ -31,8 +30,6 @@ struct ToastInfo: Equatable {
 
 @MainActor
 @Observable class NotificationManager {
-    private static let agentIdleFeedbackSoundID: SystemSoundID = 1152
-
     /// Platform default for `windowEmitsFeedbackSound` (see its doc).
     nonisolated static var platformWindowEmitsFeedbackSound: Bool {
         #if os(visionOS)
@@ -66,7 +63,7 @@ struct ToastInfo: Equatable {
 
     /// The latest feedback request for a window to emit; observed by window
     /// roots (`WindowFeedbackSoundEmitter` via RootView). Never set on
-    /// platforms that play global feedback.
+    /// platforms that use system notification sounds.
     var windowFeedbackEvent: FeedbackEvent?
 
     /// Agent conversations currently on screen, keyed by their session's
@@ -84,7 +81,7 @@ struct ToastInfo: Equatable {
     @ObservationIgnored let applicationState: () -> UIApplication.State
     @ObservationIgnored let presentFeedback: () -> Void
     /// Whether the source window's scene emits the feedback sound instead of
-    /// `presentFeedback` playing a global one. True on visionOS, where the
+    /// the system notification service. True on visionOS, where the
     /// global system sound is non-spatial: emitting from the source window's
     /// own view hierarchy lets spatial audio tell the user which window's
     /// workspace finished. visionOS has no haptics (HapticManager no-ops),
@@ -130,7 +127,6 @@ struct ToastInfo: Equatable {
         },
         presentFeedback: @escaping () -> Void = {
             HapticManager.notification(.success)
-            AudioServicesPlaySystemSound(NotificationManager.agentIdleFeedbackSoundID)
         },
         windowEmitsFeedbackSound: Bool = NotificationManager.platformWindowEmitsFeedbackSound,
         connection: ConnectionManagerRouting = ConnectionManager.shared,
@@ -145,7 +141,7 @@ struct ToastInfo: Equatable {
         self.connection = connection
         self.workspaceStore = workspaceStore
         localNotificationService.onWillPresentNotification = { [weak self] response in
-            self?.handleForegroundNotification(response)
+            self?.handleForegroundNotification(response) ?? []
         }
         localNotificationService.onNotificationResponse = { [weak self] response in
             self?.handleNotificationResponse(response)
@@ -156,19 +152,25 @@ struct ToastInfo: Equatable {
 }
 
 private extension NotificationManager {
-    func handleForegroundNotification(_ response: LocalNotificationService.Response) {
+    func handleForegroundNotification(
+        _ response: LocalNotificationService.Response
+    ) -> UNNotificationPresentationOptions {
         guard let agentId = response.agentId,
               let workspaceId = response.workspaceId,
               let agentName = response.agentName,
               let connectionId = response.connectionId
-        else { return }
-        presentForegroundAlert(
-            agentId: agentId,
-            workspaceId: workspaceId,
-            agentName: agentName,
-            workspaceName: nil,
-            connectionId: connectionId
-        )
+        else { return [] }
+        guard canPresentForegroundAlert(connectionId: connectionId) else { return [] }
+        if !response.foregroundPresentationHandled {
+            presentForegroundAlert(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                workspaceName: nil,
+                connectionId: connectionId
+            )
+        }
+        return windowEmitsFeedbackSound ? [] : [.sound]
     }
 
     func registerEventHandler() {

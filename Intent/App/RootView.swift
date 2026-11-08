@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct RootView: View {
+    @ScaledMetric(relativeTo: .body) private var warningIconSize: CGFloat = 17
     var networkAvailability: NetworkAvailability = .shared
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
@@ -15,6 +16,7 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
+    @State private var sceneActivator = WindowSceneActivator()
     @State private var statusConsumer = UUID()
     @State private var statusWorkspaceId: String?
     @State private var isSearchingWorkspaces = false
@@ -22,6 +24,8 @@ struct RootView: View {
     @State private var showingConnections = false
     @State private var showingConnectionSwitcher = false
     @State private var conversationIsPopping = false
+    /// Modal layers open in this window; keeps only the foremost chat's composer.
+    @State private var composerCoverage = ComposerCoverage()
     @State private var connectionSwitcherOpen = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
@@ -131,6 +135,10 @@ struct RootView: View {
                 launchContent
             }
         }
+        #if DEBUG
+        .modifier(DemoIPadProducerEntry())
+        .modifier(DemoToastOverlay())
+        #endif
     }
 
     private var assistantPresented: Binding<Bool> {
@@ -174,10 +182,12 @@ struct RootView: View {
             .sheet(isPresented: $showingCreateWorkspace) {
                 CreateWorkspaceView(session: session, coordinator: coordinator)
                     .environment(coordinator)
+                    .coversConversationComposers()
             }
             .sheet(isPresented: $showingConnections) {
                 ConnectionsView()
                     .environment(coordinator)
+                    .coversConversationComposers()
             }
         }
     }
@@ -259,7 +269,10 @@ struct RootView: View {
                session.connection.connectionState == .connected,
                !coordinator.isDisconnected {
                 HStack(spacing: Constants.Root.reconnectButtonTopPadding) {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                    Image(.attentionCircleFill)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: warningIconSize, height: warningIconSize)
                         .foregroundStyle(.orange)
                         .accessibilityHidden(true)
                     Text("Live updates unavailable")
@@ -311,17 +324,19 @@ struct RootView: View {
         .onChange(of: isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil, initial: true) { _, workspaceId in
             updateWorkspaceStatusLease(workspaceId)
         }
+        #if DEBUG
         .task { await DemoConnectionLoss.run(connection: session.connection, coordinator: coordinator) }
+        #endif
         // intent://pair deep-link confirmation — presented over whichever
         // screen is current (first-run pairing or an existing connection).
         .sheet(item: $coordinator.pendingDeepLinkPairing) { request in
             DeepLinkPairingView(payload: request.payload)
+                .coversConversationComposers()
+        }
+        .onChange(of: usesIPadShell, initial: true) { _, enabled in
+            coordinator.updateShellPresentation(enabled)
         }
         .onAppear {
-            coordinator.usesIPadShell = usesIPadShell
-            if usesIPadShell, coordinator.selectedSection == .assistant {
-                coordinator.iPadNavigation.showAssistantDetail()
-            }
             updateWorkspaceStatusLease(isWorkspaceFlow ? coordinator.selectedWorkspaceId : nil)
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
@@ -333,19 +348,9 @@ struct RootView: View {
             // a backend route to that backend's own window instead.
             guard let backendID = session.backendID else { return }
             selectionHandlerToken = notificationManager.registerAgentSelectionHandler(
-                for: backendID
-            ) { [weak coordinator = coordinator] agentId, workspaceId, agentName, connectionId in
-                if supportsMultipleWindows {
-                    // Raise this backend's window before navigating it.
-                    openWindow(value: backendID)
-                }
-                coordinator?.handleNotificationSelection(
-                    agentId: agentId,
-                    workspaceId: workspaceId,
-                    agentName: agentName,
-                    connectionId: connectionId
-                )
-            }
+                for: backendID,
+                coordinator.agentSelectionHandler(raising: supportsMultipleWindows ? sceneActivator : nil)
+            )
         }
         .onDisappear {
             updateWorkspaceStatusLease(nil)
@@ -353,6 +358,8 @@ struct RootView: View {
                   let token = selectionHandlerToken else { return }
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
+        .environment(composerCoverage)
+        .background { WindowSceneReader(activator: sceneActivator).frame(width: 0, height: 0) }
     }
 }
 
@@ -380,7 +387,7 @@ private extension RootView {
 
     var usesIPadShell: Bool {
         #if os(iOS)
-        UIDevice.current.userInterfaceIdiom == .pad
+        IPadShellLayout.usesShell(isPad: UIDevice.current.userInterfaceIdiom == .pad, hasVerticalBar: usesVerticalBar, sizeClass: sizeClass)
         #else
         false
         #endif
@@ -414,6 +421,7 @@ private extension RootView {
             AssistantView(session: session)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
+                .coversConversationComposers()
         }
         .sheet(isPresented: settingsPresented) {
             SettingsView(presentedAsSheet: true, contentColorScheme: colorScheme)
@@ -423,6 +431,7 @@ private extension RootView {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
                 .presentationCornerRadius(Constants.ConnectionSheet.cornerRadius)
+                .coversConversationComposers()
         }
         .background {
             Color.clear.preference(

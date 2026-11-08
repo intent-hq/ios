@@ -1,29 +1,36 @@
 import SwiftUI
 
 extension View {
-    /// Apply once around the conversation's header, transcript and composer together.
-    /// Other detail routes retain the full pane width supplied by the shell.
+    /// Constrain the transcript and composer; navigation stays outside this column.
     func conversationReadableColumn() -> some View {
         modifier(ConversationReadableColumn())
+    }
+
+    /// Detail children already own their page inset, so count it outside the readable body.
+    func iPadDetailColumn(isEnabled: Bool = true) -> some View {
+        modifier(ConversationReadableColumn(contentHorizontalInset: WorkspaceDetailStyle.pageInset, isEnabled: isEnabled))
     }
 }
 
 private struct ConversationReadableColumn: ViewModifier {
+    var contentHorizontalInset: CGFloat = 0
+    var isEnabled = true
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var readableWidth = Constants.Conversation.Design.IPad.readableWidth
     @State private var availableWidth: CGFloat = 0
 
     private typealias Layout = Constants.Conversation.Design.IPad
 
     private var maximumWidth: CGFloat {
-        presentation == .iPad && !dynamicTypeSize.isAccessibilitySize ? readableWidth : .infinity
+        isEnabled && presentation == .iPad && !dynamicTypeSize.isAccessibilitySize
+            ? Layout.readableWidth + 2 * contentHorizontalInset : .infinity
     }
 
     private var horizontalInset: CGFloat {
-        guard presentation == .iPad else { return 0 }
-        return availableWidth >= readableWidth + Layout.horizontalInset * 2
+        guard isEnabled, presentation == .iPad else { return 0 }
+        let inset = availableWidth >= Layout.readableWidth + Layout.horizontalInset * 2
             ? Layout.horizontalInset : Layout.minimumHorizontalInset
+        return max(0, inset - contentHorizontalInset)
     }
 
     func body(content: Content) -> some View {

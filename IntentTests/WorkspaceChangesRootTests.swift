@@ -79,6 +79,28 @@ extension WorkspaceChangesModelTests {
 }
 
 extension WorkspaceChangesStoreTests {
+    @Test func returningFromCommitRestoresRepositoryButChangingWorkspaceResetsIt() async {
+        let fake = makeRootsFake()
+        fake.responseMap["git.commits"] = WorkspaceChangesFixture.secondaryPage(["new"])
+        let store = WorkspaceChangesStore(connectionManager: fake)
+        await store.startObserving(workspaceId: "workspace-1")
+        await store.selectRoot(id: "root-a")
+        store.stopObserving(preservingSnapshot: true)
+        #expect(store.selectedRootId == "root-a")
+        #expect(store.commits.map(\.hash) == ["new"])
+
+        fake.clearRequestLog()
+        await store.startObserving(workspaceId: "workspace-1")
+        #expect(store.selectedRootId == "root-a")
+        #expect(fake.paramsForMethod("git.commits").last?["gitRootId"] as? String == "root-a")
+        store.stopObserving(preservingSnapshot: true)
+        await store.startObserving(workspaceId: "workspace-2")
+        #expect(store.selectedRootId == nil)
+        #expect(fake.paramsForMethod("git.status").last?["workspaceId"] as? String == "workspace-2")
+        #expect(fake.paramsForMethod("git.status").last?["gitRootId"] == nil)
+        store.stopObserving()
+    }
+
     func makeRootsFake() -> FakeConnectionManager {
         let fake = makeFake()
         fake.responseMap["gitRoot.list"] = [
@@ -116,6 +138,7 @@ extension WorkspaceChangesStoreTests {
             #expect(params["gitRootId"] as? String == "root-a")
             #expect(params["workspaceId"] as? String == "workspace-1")
         }
+        #expect(fake.paramsForMethod("git.status").first?["forceRefresh"] as? Bool == true)
         #expect(fake.didCallMethod("file-tracking.getChanges") == false)
         #expect(fake.didCallMethod("file-tracking.loadCommits") == false)
         #expect(fake.didCallMethod("git.diffs") == false)

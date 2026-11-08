@@ -3,7 +3,7 @@ import SwiftUI
 // These builders remain on the transcript so extraction does not add a new
 // observation boundary or change the lazy stack's row and anchor identities.
 extension ConversationTranscriptView {
-    private static let eagerTailMessageLimit = 12
+    static let eagerTailMessageLimit = 12
 
     @ViewBuilder
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
@@ -60,14 +60,15 @@ extension ConversationTranscriptView {
         // The stack's bottom padding lives on the marker so that
         // `scrollTo("scroll-bottom", anchor: .bottom)` targets the true end
         // of the content, not a point 12 points above it that a landing
-        // judged against `followLandingTolerance` could never reach. Its
-        // realization is the end-row signal the unrealized-end recovery
+        // judged against `followLandingTolerance` could never reach. A
+        // floating launcher's `bottomClearance` lives here for the same
+        // reason. Its realization is the end-row signal the unrealized-end recovery
         // reads (#338): the lazy stack appears and disappears the marker as
         // it realizes and drops it. Realizing while scrolled away replays
         // the live edge; derealizing arms the recovery.
-        if demoWithdrawnEnd == nil {
+        if !isDemoEndWithdrawn {
             Color.clear.frame(height: Layout.bottomAnchorHeight)
-                .padding(.bottom, Layout.bottomAnchorPadding)
+                .padding(.bottom, Layout.bottomAnchorPadding + bottomClearance)
                 .id("scroll-bottom")
                 .onGeometryChange(for: CGRect.self) { geometry in
                     ConversationTrace.enabled ? geometry.frame(in: .named(Self.viewportCoordinateSpace)) : .zero
@@ -90,7 +91,7 @@ extension ConversationTranscriptView {
             // finds nothing and `isEndRealized` stays false, exactly as over
             // a dropped end row.
             Color.clear.frame(height: Layout.bottomAnchorHeight)
-                .padding(.bottom, Layout.bottomAnchorPadding)
+                .padding(.bottom, Layout.bottomAnchorPadding + bottomClearance)
         }
     }
 
@@ -242,11 +243,18 @@ extension ConversationTranscriptView {
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityIdentifier("transcript.goToEnd")
         .padding(.bottom, Layout.goToEndBottomPadding)
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .transition(goToEndTransition)
         .animation(
             .easeInOut(duration: Constants.Conversation.Transcript.goToEndVisibilityAnimationDuration),
             value: userIsScrolledAway
         )
+    }
+
+    private var goToEndTransition: AnyTransition {
+        switch ConversationTranscriptScrollPolicy.goToEndVisibilityTransition(reduceMotion: reduceMotion) {
+        case .slideAndFade: .opacity.combined(with: .move(edge: .bottom))
+        case .fade: .opacity
+        }
     }
 
     @ViewBuilder
@@ -315,7 +323,7 @@ extension ConversationTranscriptView {
                 Task { await viewModel.sendSuggestedPrompt(prompt) }
             } label: {
                 HStack(spacing: Constants.Conversation.Design.SuggestedPrompt.contentSpacing) {
-                    Text(LocalizedStringKey(prompt))
+                    Text(SuggestedPromptLinks.displayText(prompt))
                         .interFont(Constants.Typography.bodyS)
                         .tracking(Constants.Conversation.Design.Typography.bodyTracking)
                         .multilineTextAlignment(.leading)
@@ -350,7 +358,7 @@ extension ConversationTranscriptView {
                     .frame(width: actionIconSide, height: actionIconSide)
                     .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
                     .accessibilityHidden(true)
-                Text(LocalizedStringKey(prompt))
+                Text(SuggestedPromptLinks.displayText(prompt))
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.foreground(for: transcriptColorScheme))
                     .frame(maxWidth: .infinity, alignment: .leading)

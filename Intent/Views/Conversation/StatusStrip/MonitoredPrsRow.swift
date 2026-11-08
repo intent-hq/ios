@@ -17,7 +17,9 @@ struct MonitoredPrsRow: View {
     private let usesWorkspaceDesign: Bool
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.openURL) private var openURL
+    @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 11
 
     private typealias Layout = Constants.Conversation.StatusStrip.MonitoredPrs
 
@@ -37,6 +39,12 @@ struct MonitoredPrsRow: View {
                 if monitoredPrStore.error != nil { retryButton }
                 if activeMonitors.count == 1, let monitor = activeMonitors.first {
                     monitorChip(monitor)
+                } else if activeMonitors.count == 2 {
+                    WorkspaceStatusPillsLayout(spacing: Constants.Conversation.Design.Status.composerSpacing, layoutDirection: layoutDirection) {
+                        ForEach(activeMonitors) { monitor in
+                            monitorChip(monitor)
+                        }
+                    }
                 } else if !activeMonitors.isEmpty {
                     ScrollView(.horizontal) {
                         HStack(spacing: Constants.Conversation.Design.Status.composerSpacing) {
@@ -56,8 +64,10 @@ struct MonitoredPrsRow: View {
     private var legacyRow: some View {
         ScrollView(.horizontal) {
             HStack(spacing: Constants.Conversation.StatusStrip.contentSpacing) {
-                Image(systemName: "arrow.triangle.pull")
-                    .font(.caption2)
+                Image(.gitPr)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .accessibilityHidden(true)
                 Text("Monitored PRs")
@@ -82,7 +92,14 @@ struct MonitoredPrsRow: View {
         Button {
             Task { await monitoredPrStore.refetch() }
         } label: {
-            Label("Status unavailable · Retry", systemImage: "exclamationmark.triangle")
+            Label {
+                Text("Status unavailable · Retry")
+            } icon: {
+                Image(.attentionCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+            }
         }
         .buttonStyle(IntentContentButtonStyle())
         .font(.caption2)
@@ -126,10 +143,7 @@ struct MonitoredPrsRow: View {
             }
         } label: {
             if usesWorkspaceDesign {
-                WorkspaceMonitoringLabel(
-                    pullRequest: Self.chipLabel(monitor, workspaceRepo: workspaceRepo),
-                    hasPendingChanges: monitor.hasPendingChanges
-                )
+                workspacePill(monitor)
             } else {
                 chipLabel(monitor)
             }
@@ -142,6 +156,20 @@ struct MonitoredPrsRow: View {
                 : Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
         )
         .accessibilityValue(Text(Self.pendingSummary(monitor)))
+    }
+
+    private func workspacePill(_ monitor: MonitoredPr) -> some View {
+        WorkspaceStatusPill(
+            icon: .infoCircle,
+            text: Text("Monitoring PR \(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))")
+        ) {
+            if monitor.hasPendingChanges {
+                Circle()
+                    .fill(Color.orange)
+                    .frame(width: Layout.pendingIndicatorSide, height: Layout.pendingIndicatorSide)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 
     @ViewBuilder
@@ -281,43 +309,5 @@ struct MonitoredPrsRow: View {
         return monitor.pendingChanges.count == 1
             ? "1 pending change"
             : "\(monitor.pendingChanges.count) pending changes"
-    }
-}
-
-private struct WorkspaceMonitoringLabel: View {
-    let pullRequest: String
-    let hasPendingChanges: Bool
-    @Environment(\.colorScheme) private var colorScheme
-
-    private typealias Design = Constants.Conversation.Design
-
-    var body: some View {
-        HStack(spacing: Design.Status.iconSpacing) {
-            Image(.infoCircle)
-                .resizable()
-                .scaledToFit()
-                .frame(width: Design.smallIconSize, height: Design.smallIconSize)
-                .accessibilityHidden(true)
-            Text("Monitoring PR \(pullRequest)")
-                .interFont(Design.Typography.status)
-                .fixedSize(horizontal: false, vertical: true)
-            if hasPendingChanges {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(
-                        width: Constants.Conversation.StatusStrip.MonitoredPrs.pendingIndicatorSide,
-                        height: Constants.Conversation.StatusStrip.MonitoredPrs.pendingIndicatorSide
-                    )
-                    .accessibilityHidden(true)
-            }
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(Design.Palette.foreground(for: colorScheme))
-        .padding(.leading, Design.Status.leadingPadding)
-        .padding(.trailing, Design.Status.trailingPadding)
-        .frame(minHeight: Design.Status.minimumHeight)
-        .background(Design.Palette.surface(for: colorScheme), in: Capsule())
-        .frame(minHeight: Design.minimumTapTarget)
-        .contentShape(Rectangle())
     }
 }

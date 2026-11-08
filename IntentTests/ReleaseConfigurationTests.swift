@@ -27,5 +27,23 @@ struct ReleaseConfigurationTests {
             _ = try WebSocketConnection.makeURL(host: "127.0.0.1", port: 4242, certFingerprint: nil)
         }
     }
+
+    @Test func demoLaunchFlagsAreIgnored() {
+        let arguments = ["--demo-data", "--pretend-paired"]
+        #expect(!DemoMode.demoDataRequested(by: arguments))
+        #expect(!DemoMode.pretendPairedRequested(by: arguments))
+        #expect(!DemoMode.isEnabled)
+        #expect(!DemoMode.pretendPaired)
+    }
+
+    @Test @MainActor func connectionsHaveNoInProcessTransport() {
+        let arguments = ["--demo-data", "--pretend-paired", "--demo-script-monitors=active"]
+        #expect(ConnectionManager.makeInProcessTransport(serveFixtures: true, arguments: arguments) == nil)
+        #expect(ConnectionManager.makeInProcessTransport(serveFixtures: false, arguments: arguments) == nil)
+        let connection = ConnectionManager(persistence: .ephemeral())
+        defer { connection.disconnect() }
+        connection.connectDemo(serveFixtures: true)
+        #expect(connection.requestTransport == nil)
+    }
 }
 #endif

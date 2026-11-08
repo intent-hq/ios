@@ -76,38 +76,30 @@ extension ConversationStore {
 
     func refreshQueue() {
         commands.invalidateQueueReads()
-        queueReadPending = true
-        guard queueReadTask == nil, !queueRefreshQueued, let agentId else { return }
-        queueRefreshQueued = true
+        guard queueReads.invalidate() else { return }
+        guard let agentId else {
+            queueReads.settleScheduled()
+            return
+        }
         let activation = eventRegistrationGeneration
         let epoch = bootstrapGeneration
         Task { [weak self] in
-            guard let self, ownsStreamingRegistration(activation), bootstrapGeneration == epoch else { return }
-            await fetchQueue(agentId: agentId)
-            if bootstrapGeneration == epoch { queueRefreshQueued = false }
+            guard let self, bootstrapGeneration == epoch else { return }
+            if ownsStreamingRegistration(activation) { await fetchQueue(agentId: agentId) }
+            if bootstrapGeneration == epoch { queueReads.settleScheduled() }
         }
     }
 
     func fetchQueue(agentId: String) async {
-        guard !Task.isCancelled else { return }
-        if let queueReadTask { await queueReadTask.value; return }
         let generation = bootstrapGeneration
-        let task = Task { [weak self] in
+        await queueReads.run { [weak self] in
+            generation == self?.bootstrapGeneration
+        } pass: { [weak self] _ in
             guard let self else { return }
-            // One trailing read per owner. Further incomplete events leave the
-            // queue dirty for the next explicit read/event/reconnect, not a loop.
-            for _ in 0..<2 {
-                guard !Task.isCancelled, generation == bootstrapGeneration else { return }
-                queueReadPending = false
-                do { try await commands.fetchQueue(agentId: agentId) } catch {
-                    AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
-                }
-                if !queueReadPending { return }
+            do { try await commands.fetchQueue(agentId: agentId) } catch {
+                AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
             }
         }
-        queueReadTask = task
-        await task.value
-        if generation == bootstrapGeneration { queueReadTask = nil }
     }
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
@@ -132,58 +124,49 @@ extension ConversationStore {
 
     // MARK: - Models
 
-    func getModels(agentId: String) async throws -> [[String: Any]] {
-        try await commands.getModels(agentId: agentId)
-    }
-
-    func setModel(agentId: String, modelId: String, workspaceId: String) async throws {
+    func setModel(agentId: String, modelId: String, workspaceId: String, providerId: String? = nil) async throws {
         try await commands.setModel(
             agentId: agentId,
             modelId: modelId,
-            workspaceId: workspaceId
+            workspaceId: workspaceId,
+            providerId: providerId
         )
+    }
+
+    func setReasoningEffort(agentId: String, workspaceId: String, effort: String?) async throws {
+        try await commands.setReasoningEffort(agentId: agentId, workspaceId: workspaceId, effort: effort)
     }
 
     // MARK: - Agent subscriptions
 
     func invalidateSubscriptions() {
-        subscriptionRevision &+= 1
-        guard subscriptionReadTask == nil, !subscriptionRefreshQueued,
-              let agentId, let workspaceId = workspaceId ?? bootstrapWorkspaceHint else { return }
-        subscriptionRefreshQueued = true
+        guard subscriptionReads.invalidate() else { return }
+        guard let agentId, let workspaceId = workspaceId ?? bootstrapWorkspaceHint else {
+            subscriptionReads.settleScheduled()
+            return
+        }
         let activation = eventRegistrationGeneration
         let epoch = bootstrapGeneration
         Task { [weak self] in
-            guard let self, ownsStreamingRegistration(activation), bootstrapGeneration == epoch else { return }
-            await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
-            if bootstrapGeneration == epoch { subscriptionRefreshQueued = false }
+            guard let self, bootstrapGeneration == epoch else { return }
+            if ownsStreamingRegistration(activation) { await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) }
+            if bootstrapGeneration == epoch { subscriptionReads.settleScheduled() }
         }
     }
 
     func fetchSubscriptions(agentId: String, workspaceId: String) async {
-        guard !Task.isCancelled else { return }
-        if let subscriptionReadTask { await subscriptionReadTask.value; return }
         let generation = bootstrapGeneration
-        let task = Task { [weak self] in
+        await subscriptionReads.run { [weak self] in
+            generation == self?.bootstrapGeneration
+        } pass: { [weak self] revision in
             guard let self else { return }
-            // Match metadata/queue reconciliation: retain the invalidation
-            // revision after the trailing read, without scheduling a third.
-            for _ in 0..<2 {
-                guard !Task.isCancelled, generation == bootstrapGeneration else { return }
-                let revision = subscriptionRevision
-                let workspace = self.workspaceId ?? workspaceId
-                await watchedAgentCoordinator.fetchSubscriptions(
-                    agentId: agentId,
-                    workspaceId: workspace,
-                    awaitAuthority: { await self.awaitWorkspaceAuthority() },
-                    isCurrent: { generation == self.bootstrapGeneration && revision == self.subscriptionRevision }
-                )
-                if revision == subscriptionRevision { return }
-            }
+            await watchedAgentCoordinator.fetchSubscriptions(
+                agentId: agentId,
+                workspaceId: self.workspaceId ?? workspaceId,
+                awaitAuthority: { await self.awaitWorkspaceAuthority() },
+                isCurrent: { generation == self.bootstrapGeneration && revision == self.subscriptionReads.revision }
+            )
         }
-        subscriptionReadTask = task
-        await task.value
-        if generation == bootstrapGeneration { subscriptionReadTask = nil }
     }
 
     func cancelSubscriptions(agentId: String, workspaceId: String) async {

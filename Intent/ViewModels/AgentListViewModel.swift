@@ -11,6 +11,8 @@ import Observation
     private var index = AgentListIndex(agents: [])
     let list: AgentListState
     var expandedGroups: Set<AgentListGroup> = []
+    /// The selection whose sections a sidebar list finished opening and loading.
+    var completedReveal: String?
 
     init(list: AgentListState = AgentListState()) { self.list = list }
 
@@ -113,6 +115,20 @@ import Observation
            expandedGroups.contains(.orphaned) {
             if !collapsedLegacyParents.insert(group).inserted { collapsedLegacyParents.remove(group) }
         } else if !expandedGroups.insert(group).inserted { expandedGroups.remove(group) }
+    }
+
+    /// Which sections are open, so another list of the same workspace can match it.
+    struct Expansion: Equatable {
+        var groups: Set<AgentListGroup> = []
+        var collapsedLegacyParents: Set<AgentListGroup> = []
+    }
+
+    var expansion: Expansion {
+        get { Expansion(groups: expandedGroups, collapsedLegacyParents: collapsedLegacyParents) }
+        set {
+            expandedGroups = newValue.groups
+            collapsedLegacyParents = newValue.collapsedLegacyParents
+        }
     }
 
     func reset() {

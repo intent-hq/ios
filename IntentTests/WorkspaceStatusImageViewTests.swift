@@ -63,10 +63,6 @@ struct WorkspaceStatusImageViewTests {
         #expect(Layout.accessibilityLabel == "Workspace status image")
     }
 
-    @Test func detailImageIsBounded() {
-        #expect(Layout.detailMaxHeight > 0)
-    }
-
     // MARK: - Hosted: a superseded fetch must not overwrite its replacement
 
     /// The loader's fetch task outlives the SwiftUI `.task` that awaited it,

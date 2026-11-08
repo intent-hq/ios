@@ -12,14 +12,13 @@ extension Constants.Conversation.Design {
 
         // Exact sRGB values from full-frame modes 3020:36994 / 3016:35726,
         // answer cards 3223:18416 / 3223:19376 and blockers 3198:12684 / 3198:11702.
-        // Literal 8-bit channels and alpha retain direct comparison with those design exports.
-        // swiftlint:disable no_magic_numbers
-        private static let lightSecondary = Color(.sRGB, red: 82 / 255, green: 82 / 255, blue: 80 / 255)
-        private static let darkRaisedSurface = Color(.sRGB, red: 61 / 255, green: 61 / 255, blue: 60 / 255)
-        private static let blocker = Color(.sRGB, red: 232 / 255, green: 127 / 255, blue: 57 / 255)
-        private static let blockerBody = Color(.sRGB, red: 133 / 255, green: 115 / 255, blue: 103 / 255)
-        private static let borderOpacity: Double = 26 / 255
-        // swiftlint:enable no_magic_numbers
+        // Exact 8-bit palette channels and alpha retain direct comparison with those design exports.
+        private static let lightSecondary = Color(sRGBHex: Constants.DesignPalette.darkGrey)
+        private static let darkRaisedSurface = Color(sRGBHex: Constants.DesignPalette.charcoalGrey)
+        private static let blocker = Color(sRGBHex: Constants.DesignPalette.blockerOrange)
+        private static let blockerBody = Color(sRGBHex: Constants.DesignPalette.blockerBody)
+        private static let borderAlpha: UInt32 = 0x1A
+        private static let borderOpacity = Constants.EightBitChannel.fraction(borderAlpha)
 
         static let accent = Constants.Pairing.accent
         static let onAccent = Constants.Pairing.onAccent

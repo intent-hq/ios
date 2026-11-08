@@ -107,15 +107,16 @@ extension AppCoordinator {
             let target = BackendID(connection.id)
             retargetWindow(target)
             // The pairing dialed the new backend over THIS window's live
-            // session connection. Where multiple windows are supported the
-            // retarget opened/raised the target's own window and this window
-            // keeps its binding — re-dial its own backend or it keeps showing
-            // the newly paired daemon's data over the hijacked socket. On
-            // single-window platforms the retarget rebinds this window in
-            // place (session torn down and replaced), so the repair state is
-            // discarded with the old session.
+            // session connection. The retarget replaces this window's
+            // coordinator, so a window still sharing the old backend's
+            // session must re-dial it, or it keeps showing the newly paired
+            // daemon's data over the hijacked socket.
             if let bound = backendID, bound != target {
-                redialWindowBackend()
+                if let repairSharedConnection {
+                    repairSharedConnection()
+                } else {
+                    redialWindowBackend()
+                }
             }
             return
         }
@@ -319,7 +320,7 @@ extension AppCoordinator {
 
     func onConnectionSuccess() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
-        lifecycleState.hasCompletedInitialRouting = true
+        lifecycleState.completeInitialRouting()
         defer { establishConnectionLossEligibility() }
         if routePendingNotificationSelection() { return }
         if restoreLastScreenIfAvailable() { return }
@@ -385,11 +386,11 @@ extension AppCoordinator {
     }
 
     /// Re-dial this window's own backend after its live session connection
-    /// was used to pair a different one (onPaired's bound multi-window
-    /// route): drop the hijacked socket and the other daemon's workspace
-    /// data, then restart the attempt — ConnectingView dials from
-    /// windowConnection, this window's own saved record.
-    private func redialWindowBackend() {
+    /// was used to pair a different one: drop the hijacked socket and the
+    /// other daemon's workspace data, then restart the attempt —
+    /// ConnectingView dials from windowConnection, this window's own saved
+    /// record.
+    func redialWindowBackend() {
         resetConnectionLossEligibility()
         dependencies.connection.disconnect()
         resetWorkspaceStore()

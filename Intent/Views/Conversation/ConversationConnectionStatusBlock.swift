@@ -184,7 +184,7 @@ private struct ConversationConnectionStepRow<Phase: Equatable>: View {
 
 private struct ConversationConnectionRetryButton: View {
     let onRetry: () async -> Void
-    @State private var retryInProgress = false
+    @State private var retryInProgress = false // swiftlint:disable:this state_phase_flag
 
     var body: some View {
         Button("Retry Now") {

@@ -16,8 +16,10 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         static let launchTimeout: TimeInterval = 30
         static let inertTapTimeout: TimeInterval = 2
         static let thumbnailSide: CGFloat = 160
+        static let imageHeight: CGFloat = 90
         static let entryCount = 2
         static let maximumScrolls = 3
+        static let scrollPressDuration: TimeInterval = 0.05
         static let failureTapVerticalFraction: CGFloat = 0.75
     }
 
@@ -66,6 +68,45 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             XCTAssertTrue(app.buttons["Context"].waitForExistence(timeout: Fixture.timeout))
             XCTAssertTrue(transcript.waitForNonExistence(timeout: Fixture.timeout))
         }
+    }
+
+    @MainActor
+    func testSavedImageOpensWithKeyboardAndPreservesDraft() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-images", "--demo-inline-image-keyboard"]
+        app.launch()
+        openWorkspace(in: app)
+        let agent = app.staticTexts[Fixture.agentName].firstMatch
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        agent.tap()
+        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        let composer = app.textViews["composer.textView"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
+        let draft = "Keep this draft"
+        composer.tap()
+        composer.typeText(draft)
+        let saved = message(in: app, containing: Fixture.savedCaption)
+        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
+        reveal(saved, in: transcript)
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
+            app.keyboards.firstMatch.exists && app.keyboards.firstMatch.isHittable
+                && saved.frame.height >= Fixture.imageHeight
+        }, "The image must be loaded and the software keyboard visible before the tap")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Response image with keyboard open"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        assertLightbox(in: app, transcript: transcript)
+
+        XCTAssertEqual(composer.value as? String, draft)
+        XCTAssertTrue(saved.exists, "Closing the image must return to the same conversation")
+        composer.tap()
+        composer.typeText(" intact")
+        let editedDraft = composer.value as? String ?? ""
+        XCTAssertTrue(editedDraft.contains(" intact"))
+        XCTAssertEqual(editedDraft.replacingOccurrences(of: " intact", with: ""), draft)
     }
 
     @MainActor
@@ -137,9 +178,12 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             app.otherElements["ActivityListView"].firstMatch.waitForExistence(timeout: Fixture.timeout),
             "Share must present the native activity sheet"
         )
+        assertPDFShareKeepsOriginalName(in: app, timeout: Fixture.timeout)
         captureMedia(app, named: "PDF share sheet")
     }
+}
 
+extension InlineResponseImageUITests {
     @MainActor
     private func assertPDFViewer(in app: XCUIApplication) {
         let viewer = app.descendants(matching: .any).matching(
@@ -222,7 +266,7 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         }
 
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
-            saved.frame.height >= Fixture.thumbnailSide
+            saved.frame.height >= Fixture.imageHeight
                 && missing.frame.height < Fixture.thumbnailSide
                 && before.frame.maxY <= saved.frame.minY
                 && saved.frame.maxY <= between.frame.minY
@@ -236,21 +280,36 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         let saved = message(in: app, containing: Fixture.savedCaption)
         reveal(saved, in: transcript)
         // Textual draws attachments in a Canvas. The caption and hard break
-        // identify the paragraph; the final 160pt square is the real thumbnail.
+        // identify the paragraph; the final 160 × 90pt region is the full image.
         saved.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(
                 dx: Fixture.thumbnailSide / 2,
-                dy: saved.frame.height - Fixture.thumbnailSide / 2
+                dy: saved.frame.height - Fixture.imageHeight / 2
             ))
             .tap()
+        assertPresentedLightbox(in: app)
+    }
+
+    @MainActor
+    private func assertPresentedLightbox(in app: XCUIApplication) {
         let preview = app.images["Image preview"].firstMatch
         XCTAssertTrue(preview.waitForExistence(timeout: Fixture.timeout), "The saved image did not open the lightbox")
+        let keyboard = app.keyboards.firstMatch
+        let keyboardHidden = waitUntil(timeout: Fixture.timeout) {
+            !keyboard.exists || !keyboard.isHittable
+        }
+        let close = app.buttons["Close image"].firstMatch
+        let viewerReady = waitUntil(timeout: Fixture.timeout) {
+            preview.isHittable && close.exists && close.isHittable
+        }
         XCTAssertGreaterThan(preview.frame.width, Fixture.thumbnailSide)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "Saved response image in lightbox"
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        app.buttons["Close image"].firstMatch.tap()
+        XCTAssertTrue(keyboardHidden, "The keyboard must not cover the image viewer")
+        XCTAssertTrue(viewerReady, "The image and close control must be available")
+        close.tap()
         XCTAssertTrue(preview.waitForNonExistence(timeout: Fixture.timeout))
     }
 
@@ -280,11 +339,13 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             let paragraphFrame = paragraph.frame
             if transcriptFrame.minY <= paragraphFrame.minY,
                paragraphFrame.maxY <= transcriptFrame.maxY { return }
-            if paragraphFrame.minY < transcriptFrame.minY {
-                transcript.swipeDown()
-            } else {
-                transcript.swipeUp()
-            }
+            let distance = paragraphFrame.minY < transcriptFrame.minY
+                ? transcriptFrame.minY - paragraphFrame.minY
+                : transcriptFrame.maxY - paragraphFrame.maxY
+            let limit = transcriptFrame.height / 2
+            let start = transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = start.withOffset(CGVector(dx: 0, dy: min(limit, max(-limit, distance))))
+            start.press(forDuration: Fixture.scrollPressDuration, thenDragTo: end)
         }
         XCTAssertTrue(waitUntilVisible(paragraph, in: transcript, timeout: Fixture.timeout))
     }
@@ -292,7 +353,50 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
 
 extension InlineResponseImageUITests {
     @MainActor
-    func testTextLinkOpensViewerSharesAndRetriesMissingFile() {
+    func testUserImageBlockOpensWithKeyboardAndPreservesDraft() {
+        assertImageBlockOpensWithKeyboard(role: "user")
+    }
+
+    @MainActor
+    func testAssistantImageBlockOpensWithKeyboardAndPreservesDraft() {
+        assertImageBlockOpensWithKeyboard(role: "assistant")
+    }
+
+    @MainActor
+    private func assertImageBlockOpensWithKeyboard(role: String) {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-images", "--demo-\(role)-image-block"]
+        app.launch()
+        openWorkspace(in: app)
+        let agent = app.staticTexts[Fixture.agentName].firstMatch
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        agent.tap()
+        let thumbnail = app.buttons["Attached image"].firstMatch
+        XCTAssertTrue(thumbnail.waitForExistence(timeout: Fixture.timeout))
+        thumbnail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        assertPresentedLightbox(in: app)
+
+        let composer = app.textViews["composer.textView"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
+        let draft = "Keep this draft"
+        composer.tap()
+        composer.typeText(draft)
+        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+        reveal(thumbnail, in: transcript)
+        XCTAssertTrue(app.keyboards.firstMatch.exists && app.keyboards.firstMatch.isHittable)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "\(role) image block with keyboard open"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        thumbnail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        assertPresentedLightbox(in: app)
+        XCTAssertEqual(composer.value as? String, draft)
+    }
+}
+
+extension InlineResponseImageUITests {
+    @MainActor
+    func testTextLinkOpensViewerAndRetriesMissingFile() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-inline-text"]
         app.launch()
@@ -307,7 +411,8 @@ extension InlineResponseImageUITests {
         reveal(link, in: transcript)
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
-        assertTextViewerAndShare(in: app)
+        assertTextViewer(in: app)
+        assertFileOptions(in: app)
         let close = app.buttons["text.close"].firstMatch
         close.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Fixture.timeout))
@@ -322,7 +427,7 @@ extension InlineResponseImageUITests {
     }
 
     @MainActor
-    private func assertTextViewerAndShare(in app: XCUIApplication) {
+    private func assertTextViewer(in app: XCUIApplication) {
         let content = app.textViews["text.content"].firstMatch
         XCTAssertTrue(content.waitForExistence(timeout: Fixture.timeout))
         let text = content.value as? String ?? ""
@@ -331,21 +436,37 @@ extension InlineResponseImageUITests {
         XCTAssertTrue(text.contains("3. Return to the conversation."))
         XCTAssertTrue(app.navigationBars["Demo notes.txt"].exists)
         let close = app.buttons["text.close"].firstMatch
-        let share = app.buttons["Share text file"].firstMatch
-        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && share.isHittable })
-        XCTAssertEqual(close.label, "Close text file")
-        captureMedia(app, named: "Text viewer from text link")
-        share.tap()
-        let activity = app.otherElements["ActivityListView"].firstMatch
-        XCTAssertTrue(activity.waitForExistence(timeout: Fixture.timeout), "Share must present the native activity sheet")
-        let dismissRegion = app.otherElements["PopoverDismissRegion"].firstMatch
-        if dismissRegion.exists {
-            dismissRegion.tap()
-        } else {
-            activity.swipeDown()
-        }
-        XCTAssertTrue(activity.waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
+        XCTAssertEqual(close.label, "Back")
+        captureMedia(app, named: "Text viewer from text link")
+    }
+
+    @MainActor
+    private func assertFileOptions(in app: XCUIApplication) {
+        let options = app.buttons["text.options"]
+        let content = app.textViews["text.content"].firstMatch
+        let original = content.value as? String
+        for title in ["Copy contents", "Copy path", "Show line numbers", "Show line numbers"] {
+            options.tap()
+            let action = app.buttons[title].firstMatch
+            XCTAssertTrue(action.waitForExistence(timeout: Fixture.timeout))
+            action.tap()
+            XCTAssertTrue(action.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertEqual(content.value as? String, original)
+        }
+        XCTAssertTrue(options.isHittable)
+        options.tap()
+        let wrap = app.buttons["Wrap lines"].firstMatch
+        XCTAssertTrue(wrap.waitForExistence(timeout: Fixture.timeout))
+        captureMedia(app, named: "Text viewer wrap menu")
+        wrap.tap()
+        captureMedia(app, named: "Text viewer after toggling wrapping")
+        content.swipeLeft()
+        XCTAssertEqual(content.value as? String, original)
+        options.tap()
+        XCTAssertTrue(wrap.waitForExistence(timeout: Fixture.timeout))
+        wrap.tap()
+        XCTAssertEqual(content.value as? String, original)
     }
 
     @MainActor
@@ -360,7 +481,7 @@ extension InlineResponseImageUITests {
         let close = app.buttons["text.close"].firstMatch
         let retry = app.buttons["Retry loading text file"].firstMatch
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable && retry.isHittable })
-        XCTAssertEqual(close.label, "Close text file")
+        XCTAssertEqual(close.label, "Back")
         XCTAssertFalse(app.buttons["Share text file"].exists)
         captureMedia(app, named: "Text unavailable with close and retry")
         retry.tap()

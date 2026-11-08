@@ -29,6 +29,8 @@ func waitUntil(
     let deadline = ContinuousClock.now + timeout
     while ContinuousClock.now < deadline {
         if condition() { return }
+        // Required: the poll interval of this bounded condition wait, not a
+        // fixed delay — it returns as soon as `condition` holds.
         try await Task.sleep(for: kConditionPollInterval)
     }
     if condition() { return }
@@ -56,6 +58,8 @@ func expectNever(
                 description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
             )
         }
+        // Required: this helper's contract is a timed observation window;
+        // the sleep is its poll interval.
         try await Task.sleep(for: kConditionPollInterval)
     } while ContinuousClock.now < deadline
     if forbidden() {
@@ -229,7 +233,7 @@ class FakeConnectionManager: SessionConnectionManaging {
         token: String,
         certFingerprint: String?,
         tcAddress: String?
-    ) async throws {
+    ) throws {
         connectLog.append(
             ConnectionLogEntry(
                 hosts: hosts,
@@ -263,7 +267,7 @@ class FakeConnectionManager: SessionConnectionManaging {
         )
     }
 
-    func refreshHostRoutes() async {
+    func refreshHostRoutes() {
         refreshHostRoutesCallCount += 1
     }
 
@@ -276,7 +280,7 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     /// Map of method names to response values. If a method is not in this map, request() throws.
     var responseMap: [String: Any] = [
-        "client.hello": ["server": ["capabilities": [String: Int]()]],
+        "client.hello": ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": [String: Int]()]],
         "principal.me": ["id": "test-owner", "isAdministrator": true]
     ]
 
@@ -297,16 +301,15 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// Recorded request log: [(method, params, timestamp)]
     var requestLog: [RequestLogEntry] = []
 
-    /// Optional per-method artificial delay (nanoseconds) applied before responding,
-    /// for tests that need to interleave work while a request is in flight.
-    var delayMap: [String: UInt64] = [:]
-
     /// Methods whose requests suspend until `resolvePending(_:with:)` supplies the
-    /// payload. Unlike `delayMap` + `responseMap` (which reads the response only
-    /// after the delay), this lets a test pin the exact payload an in-flight
-    /// request resolves with — e.g. a stale list captured before a state change —
-    /// while later requests for the same method stay suspended.
+    /// payload (or `failPending(_:with:)` its error), so a test pins the exact
+    /// outcome an in-flight request resolves with — e.g. a stale list captured
+    /// before a state change — while later requests for the same method stay
+    /// suspended.
     var pendingMethods: Set<String> = []
+    /// Opt-in: throw `CancellationError` for requests made from a cancelled
+    /// task, as `ConnectionManager.awaitResponse` does.
+    var failsCancelledRequests = false
     private var pendingContinuations: [String: [(id: UUID, continuation: CheckedContinuation<Any, Error>)]] = [:]
 
     /// Resolve the oldest suspended request for `method` with `response`.
@@ -330,6 +333,8 @@ class FakeConnectionManager: SessionConnectionManaging {
         params: [String: Any] = [:],
         timeout _: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
+        // Like the real ConnectionManager, a request from an already-cancelled task fails at once.
+        if failsCancelledRequests, Task.isCancelled { throw CancellationError() }
         requestLog.append(RequestLogEntry(method: method, params: params, timestamp: Date()))
 
         if pendingMethods.contains(method) {
@@ -347,10 +352,6 @@ class FakeConnectionManager: SessionConnectionManaging {
                     pending.continuation.resume(throwing: CancellationError())
                 }
             }
-        }
-
-        if let delay = delayMap[method] {
-            try await Task.sleep(nanoseconds: delay)
         }
 
         if var errorQueue = errorQueueMap[method], !errorQueue.isEmpty {
@@ -479,11 +480,6 @@ class FakeConnectionManager: SessionConnectionManaging {
         requestLog.removeAll()
     }
 
-    /// Check if a specific request method was called.
-    func didCallMethod(_ method: String) -> Bool {
-        requestLog.contains { $0.method == method }
-    }
-
     /// Get all parameters for calls to a specific method.
     func paramsForMethod(_ method: String) -> [[String: Any]] {
         requestLog.filter { $0.method == method }.map { $0.params }
@@ -542,5 +538,12 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// Count of registered subscription handlers.
     var subscriptionHandlerCount: Int {
         subscriptionHandlers.count
+    }
+}
+
+extension FakeConnectionManager {
+    /// Check if a specific request method was called.
+    func didCallMethod(_ method: String) -> Bool {
+        requestLog.contains { $0.method == method }
     }
 }

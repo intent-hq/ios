@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-tests for scripts/xcodebuild.sh: the simulator lock, the
-# crash-vs-failure classification of a test run, the resolution of
+# crash-vs-failure classification of a test run, the launch watchdog, the resolution of
 # ONLY_TESTING selectors against the enumerated test catalog, explicit build
 # configuration, and the per-selector summary read back from the result bundle. xcrun and
 # xcodebuild are replaced by stubs on PATH, so this runs anywhere with bash
@@ -25,13 +25,21 @@ mkdir -p "$stubs"
 # xcrun records its argv as "xcrun: [arg] ..." lines in STUB_ARGS; an
 # xcresulttool test-results query prints $STUB_RESULTS (fixture JSON; a
 # "-retry" bundle path prints $STUB_RESULTS_RETRY when set) or fails under
-# STUB_RESULTS_FAIL=1; every other invocation (simctl) exits 0.
+# STUB_RESULTS_FAIL=1; `simctl list devices available -j` prints
+# $STUB_SIMCTL_DEVICES or fails under STUB_SIMCTL_FAIL=1; `--show-sdk-version` prints $STUB_SDK_VERSION, or fails
+# when it is unset; every other invocation (simctl) exits 0.
 cat > "$stubs/xcrun" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
   { printf 'xcrun:'; printf ' [%s]' "$@"; echo; } >> "$STUB_ARGS"
 fi
 case " $* " in
+  *" simctl list devices available -j "*)
+    [ -z "${STUB_SIMCTL_FAIL:-}" ] || exit 1
+    [ -z "${STUB_SIMCTL_DEVICES:-}" ] || cat "$STUB_SIMCTL_DEVICES" ;;
+  *" --sdk iphonesimulator --show-sdk-version "*)
+    [ -n "${STUB_SDK_VERSION:-}" ] || exit 1
+    echo "$STUB_SDK_VERSION" ;;
   *" xcresulttool get test-results tests --path "*)
     if [ -n "${STUB_RESULTS_FAIL:-}" ]; then
       echo "Error: the result bundle could not be opened (stub)" >&2
@@ -63,7 +71,17 @@ EOF
 # directory (not under STUB_NO_BUNDLE=1). An -enumerate-tests invocation
 # copies $STUB_CATALOG to the requested -test-enumeration-output-path and
 # exits 0 (nonzero with STUB_ENUMERATE_FAIL=1) without running the canned
-# outcome.
+# outcome; STUB_ENUM_DYLD=1 makes it print dyld's launch abort first and take
+# three seconds, like a hosted enumeration whose host app cannot launch.
+# Launch failures (ios#905): STUB_REPORT=<file> copies that crash report into
+# $LAUNCH_CRASH_REPORTS_DIR STUB_REPORT_DELAY seconds (default 1) after a test
+# invocation starts, without delaying it; STUB_LOG_DYLD=1 prints dyld's
+# abort lines; mode "hang" waits on "Launch dev.intentapp.ios" for
+# STUB_HANG seconds (default 60), as XCUITest does, and mode "dyldhang" prints
+# dyld's abort lines first (so with STUB_THEN only the later invocation does);
+# STUB_RESIST_DETACHED=1 points the STUB_RESIST child's stdout/stderr at
+# /dev/null, like xcodebuild's SIGTERM-immune DTServiceHub, which does not
+# hold the log pipe.
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
@@ -86,15 +104,31 @@ case " $* " in
       [ "$prev" != "-test-enumeration-output-path" ] || out=$arg
       prev=$arg
     done
+    if [ -n "${STUB_ENUM_DYLD:-}" ]; then
+      echo "dyld[4242]: Library not loaded: /usr/lib/swift/libswiftWebKit.dylib"
+      echo "  Referenced from: <UUID> /stub/Intent.app/Intent.debug.dylib"
+      sleep 3
+    fi
     cp "$STUB_CATALOG" "$out"
     exit 0 ;;
 esac
+if [ -n "${STUB_REPORT:-}" ]; then
+  (sleep "${STUB_REPORT_DELAY:-1}"; cp "$STUB_REPORT" "$LAUNCH_CRASH_REPORTS_DIR/Intent-stub-$$.ips") > /dev/null 2>&1 &
+fi
+if [ -n "${STUB_LOG_DYLD:-}" ]; then
+  echo "dyld[4242]: Library not loaded: /usr/lib/swift/libswiftWebKit.dylib"
+  echo "  Referenced from: <UUID> /stub/Intent.app/Intent.debug.dylib"
+fi
 [ -z "${STUB_LOG:-}" ] || echo "start $(date +%s) $$" >> "$STUB_LOG"
 if [ -n "${STUB_WATCH:-}" ]; then
   if kill -0 "$STUB_WATCH" 2>/dev/null; then echo "peer alive" >> "$STUB_LOG"; else echo "peer dead" >> "$STUB_LOG"; fi
 fi
 if [ -n "${STUB_RESIST:-}" ]; then
-  (trap '' TERM; exec sleep "$STUB_RESIST") &
+  if [ -n "${STUB_RESIST_DETACHED:-}" ]; then
+    (trap '' TERM; exec sleep "$STUB_RESIST") > /dev/null 2>&1 &
+  else
+    (trap '' TERM; exec sleep "$STUB_RESIST") &
+  fi
   [ -z "${STUB_LOG:-}" ] || echo "child $!" >> "$STUB_LOG"
 fi
 [ -z "${STUB_RESIST_ROOT:-}" ] || trap '' TERM
@@ -106,6 +140,13 @@ if [ -n "${STUB_THEN:-}" ]; then
   if [ -e "$STUB_STATE" ]; then mode=$STUB_THEN; else : > "$STUB_STATE"; fi
 fi
 case "$mode" in
+  hang|dyldhang)
+    echo "    t =     0.03s     Launch dev.intentapp.ios"
+    if [ "$mode" = dyldhang ]; then
+      echo "dyld[4242]: Library not loaded: /usr/lib/swift/libswiftWebKit.dylib"
+      echo "  Referenced from: <UUID> /stub/Intent.app/Intent.debug.dylib"
+    fi
+    exec sleep "${STUB_HANG:-60}" ;;
   marker)
     echo "Test Suite 'FooTests' started"
     echo "$STUB_MARKER"
@@ -216,8 +257,13 @@ export TMPDIR=$work
 # The wrapper appends to a caller's step summary; the self-test's own CI job
 # must not receive the fixture tables.
 unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING BUILD_CONFIGURATION DERIVED_DATA_DIR
+unset UI_TEST_SHARD UI_TEST_SHARD_PLAN_PATH ONLY_TESTING_IDENTITIES_PATH
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
+# Never read this machine's real crash reports.
+export LAUNCH_CRASH_REPORTS_DIR=$work/reports
+mkdir -p "$LAUNCH_CRASH_REPORTS_DIR"
+unset LAUNCH_CRASH_WATCH
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
 
 failures=0
@@ -663,6 +709,168 @@ status=$(SIM_LOCK_KILL_GRACE=-1 run_wrapper "$work/knob2.out" test-without-build
 assert_eq "non-numeric SIM_LOCK_KILL_GRACE is refused" "$status" 1
 assert_contains "non-numeric SIM_LOCK_KILL_GRACE names the knob" "$(cat "$work/knob2.out")" "SIM_LOCK_KILL_GRACE must be a non-negative integer"
 
+echo "# launch failures (ios#905): a dyld abort stops the run with exit 84 and is never re-run"
+# make_report <file> <udid> <namespace>: an .ips crash report (JSON header
+# line plus JSON body) for the app on that simulator.
+make_report() {
+  python3 - "$@" <<'EOF'
+import json, sys
+out, udid, namespace = sys.argv[1:4]
+header = {"app_name": "Intent", "bundleID": "dev.intentapp.ios", "bug_type": "309", "name": "Intent"}
+dyld = namespace == "DYLD"
+body = {"procName": "Intent", "bundleInfo": {"CFBundleIdentifier": "dev.intentapp.ios"},
+        "procPath": "/Users/USER/Library/Developer/CoreSimulator/Devices/%s/data/Containers/Bundle/Application/X/Intent.app/Intent" % udid,
+        "termination": {"namespace": namespace, "indicator": "Library missing" if dyld else "Abort trap: 6",
+                        "reasons": ["Library not loaded: /usr/lib/swift/libswiftWebKit.dylib",
+                                    "Referenced from: <UUID> /x/Intent.debug.dylib"] if dyld else []}}
+with open(out, "w") as f:
+    f.write(json.dumps(header) + "\n" + json.dumps(body, indent=2) + "\n")
+EOF
+}
+make_report "$work/report-dyld.ips" "$SIM_UDID" DYLD
+make_report "$work/report-other-device.ips" 11111111-2222-3333-4444-555555555555 DYLD
+make_report "$work/report-signal.ips" "$SIM_UDID" SIGNAL
+cat > "$work/sims-launch.json" <<EOF
+{"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-18-4": [
+  {"name": "iPhone 16", "udid": "$SIM_UDID", "isAvailable": true}]}}
+EOF
+reset_reports() { rm -f -- "$LAUNCH_CRASH_REPORTS_DIR"/*; }
+# scratch_count <prefix>: entries of $work whose name starts with <prefix>.
+scratch_count() { find "$work" -maxdepth 1 -name "$1*" | wc -l | tr -d ' '; }
+launch_dirs=$(scratch_count xcodebuild-launch.)
+launch_started=$(date +%s)
+: > "$work/launch-summary.md"
+status=$(run_filtered launchhang "" test-without-building STUB_MODE=hang STUB_REPORT="$work/report-dyld.ips" \
+  STUB_SIMCTL_DEVICES="$work/sims-launch.json" GITHUB_STEP_SUMMARY="$work/launch-summary.md")
+launch_elapsed=$(( $(date +%s) - launch_started ))
+out=$(cat "$work/launchhang.out")
+assert_eq "a hung launch with a dyld crash report exits 84" "$status" 84
+if [ "$launch_elapsed" -lt 20 ]; then pass "a hung launch fails fast (${launch_elapsed}s)"; else fail "a hung launch took ${launch_elapsed}s"; fi
+assert_contains "the launch failure names the process and dyld's indicator" "$out" \
+  "dyld terminated Intent (dev.intentapp.ios) before main (Library missing)"
+assert_contains "the launch failure names the simulator and runtime" "$out" "on iPhone 16 (iOS 18.4) $SIM_UDID"
+assert_contains "the launch failure quotes the missing library" "$out" "  Library not loaded: /usr/lib/swift/libswiftWebKit.dylib"
+assert_contains "the launch failure names the crash report" "$out" "Seen in the crash report $LAUNCH_CRASH_REPORTS_DIR/Intent-stub-"
+assert_contains "the launch failure keeps the log" "$out" "Full xcodebuild output kept at: $work/xcodebuild-test."
+assert_contains "the launch failure says why it exits" "$out" "Exiting 84 (app launch failure)."
+assert_lacks "a launch failure is not reported as a test-process crash" "$out" "crashed or was terminated"
+assert_eq "a launch failure is not re-run" "$(argv_count launchhang)" 1
+assert_contains "the job summary records the launch failure" "$(cat "$work/launch-summary.md")" \
+  "### App launch failure (the test run)"
+assert_lock_free "lock released after a launch failure"
+assert_eq "no launch-watch state is left behind" "$(scratch_count xcodebuild-launch.)" "$launch_dirs"
+
+echo "# a SIGTERM-immune hung xcodebuild is SIGKILLed after the grace period"
+reset_reports
+status=$(run_filtered launchresist "" test-without-building STUB_MODE=hang STUB_RESIST_ROOT=1 SIM_LOCK_KILL_GRACE=1 \
+  STUB_REPORT="$work/report-dyld.ips")
+assert_eq "a SIGTERM-immune hung launch still exits 84" "$status" 84
+assert_lock_free "lock released after killing a SIGTERM-immune launch"
+
+echo "# dyld's abort lines in the xcodebuild output suffice without a crash report"
+reset_reports
+status=$(run_filtered launchlog "" test-without-building STUB_MODE=hang STUB_LOG_DYLD=1)
+out=$(cat "$work/launchlog.out")
+assert_eq "a dyld abort in the log exits 84" "$status" 84
+assert_contains "the log-only launch failure names dyld's process and reason" "$out" \
+  "dyld terminated the launched process (pid 4242) before main (Library not loaded)"
+assert_contains "the log-only launch failure quotes the referencing image" "$out" \
+  "  Referenced from: <UUID> /stub/Intent.app/Intent.debug.dylib"
+assert_contains "the log-only launch failure names the log" "$out" "Seen in the xcodebuild output, "
+
+echo "# a hosted run that exits as a crash before the report lands is a launch failure, not 80"
+reset_reports
+status=$(run_filtered launchhosted "" test-without-building STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/launchhosted.state" \
+  STUB_MARKER="Intent (4242) encountered an error (Test crashed with signal abrt before establishing connection.)" \
+  STUB_NO_FAILING=1 STUB_REPORT="$work/report-dyld.ips" STUB_REPORT_DELAY=2)
+assert_eq "a hosted launch crash exits 84" "$status" 84
+assert_eq "a hosted launch crash is not re-run" "$(argv_count launchhosted)" 1
+assert_lacks "a hosted launch crash is not classified as 80" "$(cat "$work/launchhosted.out")" "Exiting 80"
+
+echo "# a hosted enumeration whose host cannot launch exits 84 before any test runs, not 82"
+reset_reports
+status=$(run_filtered launchenum "IntentTests/DemoFixturesTests" test-without-building STUB_ENUM_DYLD=1)
+out=$(cat "$work/launchenum.out")
+assert_eq "an enumeration launch failure exits 84" "$status" 84
+assert_contains "the enumeration launch failure names the phase" "$out" "into test enumeration"
+assert_eq "an enumeration launch failure starts no test run" "$(argv_count launchenum)" 1
+assert_lacks "an enumeration launch failure is not an unmatched selector" "$out" "matched no test"
+assert_lock_free "lock released after an enumeration launch failure"
+assert_eq "an enumeration launch failure leaves no enumeration scratch files" "$(scratch_count xcodebuild-enumerate.)" 0
+assert_contains "an enumeration launch failure keeps its log" "$out" "Full xcodebuild output kept at: $work/xcodebuild-test."
+
+echo "# a launch failure stops xcodebuild's whole tree: a SIGTERM-immune child holding the log pipe is SIGKILLed after the grace"
+reset_reports
+: > "$work/launchchild.log"
+launch_started=$(date +%s)
+status=$(run_filtered launchchild "" test-without-building STUB_MODE=hang STUB_LOG_DYLD=1 STUB_RESIST=40 \
+  SIM_LOCK_KILL_GRACE=1 STUB_LOG="$work/launchchild.log")
+launch_elapsed=$(( $(date +%s) - launch_started ))
+assert_eq "a launch failure with a SIGTERM-immune child exits 84" "$status" 84
+if [ "$launch_elapsed" -lt 12 ]; then pass "the SIGTERM-immune child is stopped within the grace (${launch_elapsed}s)"; else fail "the SIGTERM-immune child kept the run alive for ${launch_elapsed}s"; fi
+child=$(sed -n 's/^child //p' "$work/launchchild.log")
+if [ -n "$child" ] && ! kill -0 "$child" 2>/dev/null; then pass "the SIGTERM-immune child is gone"; else fail "the SIGTERM-immune child ($child) is still running"; kill -9 "$child" 2>/dev/null || true; fi
+assert_lock_free "lock released after stopping the SIGTERM-immune child"
+
+echo "# a SIGTERM-immune child that does not hold the log pipe is SIGKILLed once the pipeline ends, without the grace"
+: > "$work/launchdetached.log"
+launch_started=$(date +%s)
+status=$(run_filtered launchdetached "" test-without-building STUB_MODE=hang STUB_LOG_DYLD=1 STUB_RESIST=40 STUB_RESIST_DETACHED=1 \
+  SIM_LOCK_KILL_GRACE=30 STUB_LOG="$work/launchdetached.log")
+launch_elapsed=$(( $(date +%s) - launch_started ))
+assert_eq "a launch failure with a detached SIGTERM-immune child exits 84" "$status" 84
+if [ "$launch_elapsed" -lt 12 ]; then pass "a detached SIGTERM-immune child does not cost the grace (${launch_elapsed}s)"; else fail "a detached SIGTERM-immune child cost ${launch_elapsed}s"; fi
+child=$(sed -n 's/^child //p' "$work/launchdetached.log")
+if [ -n "$child" ] && ! kill -0 "$child" 2>/dev/null; then pass "the detached SIGTERM-immune child is gone"; else fail "the detached SIGTERM-immune child ($child) is still running"; kill -9 "$child" 2>/dev/null || true; fi
+
+echo "# a filtered run that exits 84 keeps and names its temporary result bundle"
+bundles_before=$(temp_bundles)
+status=$(run_filtered launchbundle "IntentTests/DemoFixturesTests" test-without-building STUB_MODE=dyldhang)
+assert_eq "a filtered launch failure exits 84" "$status" 84
+assert_eq "a filtered launch failure keeps its temporary bundle" "$(temp_bundles)" $((bundles_before + 1))
+kept=$(kept_bundle "$work/launchbundle.out")
+if [ -n "$kept" ] && [ -e "$kept" ]; then pass "the kept bundle is named and exists"; else fail "the kept bundle is not named or missing ('$kept')"; fi
+assert_lacks "a filtered launch failure reads no result bundle" "$(cat "$work/launchbundle.out")" "ONLY_TESTING summary"
+
+echo "# a launch failure in the crash re-run names both kept bundles"
+status=$(run_filtered launchretry "IntentTests" test-without-building STUB_MODE=crash STUB_THEN=dyldhang \
+  STUB_STATE="$work/launchretry.state")
+out=$(cat "$work/launchretry.out")
+assert_eq "a launch failure in the re-run exits 84" "$status" 84
+assert_contains "the re-run launch failure names its phase" "$out" "into the re-run"
+assert_contains "the re-run launch failure keeps the primary bundle" "$out" "Result bundle kept at: $work/xcodebuild-result."
+assert_contains "the re-run launch failure keeps the re-run bundle" "$out" "Re-run result bundle kept at: $work/xcodebuild-result."
+assert_lacks "the re-run launch failure is not re-run again" "$out" "crashed as well"
+rm -rf -- "$work"/xcodebuild-result.*
+reset_reports
+
+echo "# no false positives: old, other-device, and non-dyld crash reports"
+reset_reports
+cp "$work/report-dyld.ips" "$LAUNCH_CRASH_REPORTS_DIR/Intent-old.ips"
+touch -t 202001010000 "$LAUNCH_CRASH_REPORTS_DIR/Intent-old.ips"
+status=$(run_filtered launchold "" test-without-building STUB_MODE=pass STUB_SLEEP=2)
+assert_eq "a dyld report from before the run is ignored" "$status" 0
+status=$(run_filtered launchotherdev "" test-without-building STUB_MODE=pass STUB_SLEEP=3 STUB_REPORT="$work/report-other-device.ips")
+assert_eq "another simulator's dyld report is ignored" "$status" 0
+status=$(run_filtered launchsignal "" test-without-building STUB_MODE=pass STUB_SLEEP=3 STUB_REPORT="$work/report-signal.ips")
+assert_eq "a non-dyld crash report during a passing run is ignored" "$status" 0
+status=$(run_filtered launchfailtests "" test-without-building STUB_MODE=fail STUB_REPORT="$work/report-signal.ips" STUB_REPORT_DELAY=0)
+assert_eq "failing tests with a non-dyld crash report keep 65" "$status" 65
+status=$(run_filtered launchcrash "" test-without-building STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/launchcrash.state" \
+  STUB_REPORT="$work/report-signal.ips" STUB_REPORT_DELAY=0)
+assert_eq "an ordinary test-process crash keeps the re-run" "$(argv_count launchcrash)" 2
+assert_eq "an ordinary test-process crash recovered by the re-run exits 0" "$status" 0
+assert_lacks "an ordinary crash is not a launch failure" "$(cat "$work/launchcrash.out")" "could not launch"
+
+echo "# LAUNCH_CRASH_WATCH=0 disables the watchdog"
+reset_reports
+status=$(run_filtered launchoff "" test-without-building STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/launchoff.state" \
+  STUB_MARKER="Test crashed with signal abrt." STUB_REPORT="$work/report-dyld.ips" STUB_REPORT_DELAY=0 STUB_SLEEP=2 \
+  LAUNCH_CRASH_WATCH=0)
+assert_eq "with the watchdog off a launch crash takes the ordinary crash path" "$(argv_count launchoff)" 2
+assert_lacks "with the watchdog off nothing reports a launch failure" "$(cat "$work/launchoff.out")" "could not launch"
+reset_reports
+
 echo "# empty ONLY_TESTING: no enumeration, xcodebuild argv unchanged"
 status=$(run_filtered plain "" test-without-building)
 assert_eq "empty ONLY_TESTING exits 0" "$status" 0
@@ -929,6 +1137,15 @@ status=$(run_filtered defaultbuild "" build-ios)
 assert_eq "default iOS build exits 0" "$status" 0
 assert_eq "default iOS build keeps its exact destination and signing argv" "$(argv_line defaultbuild 1)" \
   'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [generic/platform=iOS Simulator] [CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO]'
+status=$(run_filtered devicebuild "" build-ios-device DEVICE_UDID=00008160-000925E83EC0000A)
+assert_eq "device build exits 0" "$status" 0
+assert_eq "device build pins its destination and preserves project signing" "$(argv_line devicebuild 1)" \
+  'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS,id=00008160-000925E83EC0000A]'
+status=$(run_filtered missingdevice "" build-ios-device DEVICE_UDID=)
+assert_eq "device build refuses missing identifier" "$status" 1
+assert_eq "missing device never invokes Xcode" "$(wc -l < "$work/missingdevice.args" | tr -d ' ')" 0
+status=$(run_filtered invaliddevice "" build-ios-device 'DEVICE_UDID=device,platform=iOS Simulator')
+assert_eq "device build refuses destination injection" "$status" 1
 status=$(run_filtered emptyconfig "" build-ios BUILD_CONFIGURATION=)
 assert_eq "empty configuration keeps the default argv" "$(argv_line emptyconfig 1)" "$(argv_line defaultbuild 1)"
 status=$(run_filtered debugbuild "" build-ios BUILD_CONFIGURATION=Debug)
@@ -1195,6 +1412,131 @@ rm -rf -- "$work"/xcodebuild-result.*
 status=$(run_filtered nosummary "IntentTests/DemoFixturesTests" test-without-building)
 assert_eq "without GITHUB_STEP_SUMMARY the run exits 0" "$status" 0
 assert_eq "without GITHUB_STEP_SUMMARY no summary file appears" "$(ls "$work" | grep -c 'step-summary')" 3
+
+echo "# full UI shards use one built inventory, exact selectors, and verified identities"
+cat > "$work/full-catalog.json" <<'EOF'
+{"values":[{"enabledTests":[
+  {"identifier":"IntentUITests/Alpha/testOne()"},
+  {"identifier":"IntentUITests/Beta/testTwo()"}],
+  "disabledTests":[{"identifier":"IntentUITests/AppStoreScreenshotTests/testCapture()"}]}]}
+EOF
+make_results "$work/full-results.json" \
+  "IntentUITests/Alpha/testOne()=Passed" "IntentUITests/Beta/testTwo()=Passed"
+for shard in 1 2; do
+  mkdir -p "$work/plans/$shard"
+  status=$(run_filtered "fullshard$shard" "" test-without-building-ui \
+    UI_TEST_SHARD="$shard" STUB_CATALOG="$work/full-catalog.json" STUB_RESULTS="$work/full-results.json" \
+    UI_TEST_SHARD_PLAN_PATH="$work/plans/$shard/ui-test-shard-plan.json" \
+    ONLY_TESTING_IDENTITIES_PATH="$work/plans/$shard/ui-test-identities.json" GITHUB_SHA=fixture)
+  assert_eq "full shard $shard passes" "$status" 0
+  assert_eq "full shard $shard enumerates once then tests" "$(argv_count "fullshard$shard")" 2
+done
+assert_contains "first shard only selects Alpha" "$(argv_line fullshard1 2)" "[-only-testing:IntentUITests/Alpha/testOne]"
+assert_lacks "first shard does not select Beta" "$(argv_line fullshard1 2)" "-only-testing:IntentUITests/Beta"
+assert_contains "second shard only selects Beta" "$(argv_line fullshard2 2)" "[-only-testing:IntentUITests/Beta/testTwo]"
+status=0
+python3 scripts/ui_full_tests.py --verify-plans "$work/plans" --revision fixture > "$work/plan-verification.out" 2>&1 || status=$?
+assert_eq "both actual resolved identity exports agree with the plans" "$status" 0
+
+for mode in invalid narrow wrongcommand; do
+  case "$mode" in
+    invalid) shard=3; only=; command=test-without-building-ui ;;
+    narrow) shard=1; only=IntentUITests/Alpha; command=test-without-building-ui ;;
+    wrongcommand) shard=1; only=; command=test-without-building-unit ;;
+  esac
+  status=$(run_filtered "full-$mode" "$only" "$command" UI_TEST_SHARD="$shard")
+  assert_eq "invalid full-shard mode $mode fails before native work" "$status" 1
+  assert_eq "invalid full-shard mode $mode makes no native calls" "$(argv_count "full-$mode")" 0
+done
+status=$(run_filtered fullplanfailure "" test-without-building-ui UI_TEST_SHARD=1 \
+  STUB_CATALOG="$work/full-catalog.json" UI_TEST_SHARD_PLAN_PATH="$work/missing/plan.json")
+assert_eq "failed full-shard evidence export exits 83" "$status" 83
+assert_eq "failed full-shard evidence export never runs tests" "$(argv_count fullplanfailure)" 1
+status=$(run_filtered fullinventoryfailure "" test-without-building-ui UI_TEST_SHARD=1)
+assert_eq "incomplete full inventory exits 83" "$status" 83
+assert_eq "incomplete full inventory never runs tests" "$(argv_count fullinventoryfailure)" 1
+status=$(run_filtered fullnativefailure "" test-without-building-ui UI_TEST_SHARD=1 \
+  STUB_CATALOG="$work/full-catalog.json" STUB_RESULTS="$work/full-results.json" STUB_MODE=fail)
+assert_eq "full shard preserves native failure exit 65" "$status" 65
+
+# pick-simulator without SIM_UDID: the newest iOS runtime the selected Xcode's
+# SDK can run wins over an "iPhone 16" on an older runtime (ios#905).
+cat > "$work/sims.json" <<'EOF'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.watchOS-12-0": [
+    {"name": "Apple Watch Series 11 (46mm)", "udid": "99999999-0000-0000-0000-000000000001", "isAvailable": true}],
+  "com.apple.CoreSimulator.SimRuntime.iOS-18-2": [
+    {"name": "iPhone 16", "udid": "18181818-0000-0000-0000-000000000016", "isAvailable": true},
+    {"name": "iPhone 16 Pro", "udid": "18181818-0000-0000-0000-000000000017", "isAvailable": true}],
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+    {"name": "iPad Pro 13-inch (M5)", "udid": "26262626-0000-0000-0000-00000000000a", "isAvailable": true},
+    {"name": "iPhone 17 Pro", "udid": "26262626-0000-0000-0000-000000000171", "isAvailable": true},
+    {"name": "iPhone 17", "udid": "26262626-0000-0000-0000-000000000170", "isAvailable": true}],
+  "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [
+    {"name": "iPhone 18 Pro", "udid": "27272727-0000-0000-0000-000000000181", "isAvailable": true},
+    {"name": "iPhone 18", "udid": "27272727-0000-0000-0000-000000000180", "isAvailable": true},
+    {"name": "iPhone 18 Pro Max", "udid": "27272727-0000-0000-0000-000000000182", "isAvailable": true}]
+}}
+EOF
+cat > "$work/sims-iphone16.json" <<'EOF'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+    {"name": "iPhone 17", "udid": "26262626-0000-0000-0000-000000000170", "isAvailable": true},
+    {"name": "iPhone 16", "udid": "26262626-0000-0000-0000-000000000160", "isAvailable": true}]
+}}
+EOF
+cat > "$work/sims-numeric.json" <<'EOF'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-5": [
+    {"name": "iPhone 17", "udid": "26262626-0000-0000-0000-000000000170", "isAvailable": true}],
+  "com.apple.CoreSimulator.SimRuntime.iOS-26-10": [
+    {"name": "iPhone 17 Pro", "udid": "2626260a-0000-0000-0000-000000000171", "isAvailable": true},
+    {"name": "iPhone 17 Pro Max", "udid": "2626260a-0000-0000-0000-000000000172", "isAvailable": true}]
+}}
+EOF
+cat > "$work/sims-none.json" <<'EOF'
+{"devices": {
+  "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [
+    {"name": "iPad Air 11-inch (M4)", "udid": "27272727-0000-0000-0000-0000000000a1", "isAvailable": true}]
+}}
+EOF
+# pick <name> <fixture> [env...]: the picked UDID on stdout, stderr in $work/<name>.err,
+# exit status in $work/<name>.status.
+pick() {
+  local name=$1 fixture=$2 status=0
+  shift 2
+  env -u SIM_UDID STUB_SIMCTL_DEVICES="$fixture" "$@" "$SCRIPT" pick-simulator \
+    2> "$work/$name.err" || status=$?
+  echo "$status" > "$work/$name.status"
+}
+assert_eq "pick prefers the newest runtime over an older iPhone 16" \
+  "$(pick newest "$work/sims.json" STUB_SDK_VERSION=27.2)" 27272727-0000-0000-0000-000000000180
+assert_contains "pick names the device and its runtime" "$(cat "$work/newest.err")" \
+  "Selected simulator: iPhone 18 (iOS 27.0) (27272727-0000-0000-0000-000000000180)"
+assert_eq "pick skips runtimes newer than the selected Xcode's SDK" \
+  "$(pick sdkcap "$work/sims.json" STUB_SDK_VERSION=26.2)" 26262626-0000-0000-0000-000000000170
+assert_eq "pick falls back to the newest runtime when the SDK version is unknown" \
+  "$(pick nosdk "$work/sims.json")" 27272727-0000-0000-0000-000000000180
+assert_eq "pick compares runtime versions numerically and takes the first iPhone when no base model exists" \
+  "$(pick numeric "$work/sims-numeric.json" STUB_SDK_VERSION=26.4)" 2626260a-0000-0000-0000-000000000171
+assert_eq "pick keeps preferring iPhone 16 within the newest runtime" \
+  "$(pick prefer16 "$work/sims-iphone16.json" STUB_SDK_VERSION=26.4)" 26262626-0000-0000-0000-000000000160
+pick none "$work/sims-none.json" STUB_SDK_VERSION=27.2 > /dev/null
+assert_eq "pick fails without an available iPhone" "$(cat "$work/none.status")" 1
+assert_contains "pick explains the missing iPhone" "$(cat "$work/none.err")" "no available iPhone simulator"
+pick capnone "$work/sims.json" STUB_SDK_VERSION=17.0 > /dev/null
+assert_eq "pick fails when every iPhone runtime is newer than the SDK" "$(cat "$work/capnone.status")" 1
+printf '{"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-27-0": [' > "$work/sims-truncated.json"
+pick badjson "$work/sims-truncated.json" STUB_SDK_VERSION=27.2 > /dev/null
+assert_eq "pick fails on an unreadable simulator list" "$(cat "$work/badjson.status")" 1
+assert_contains "pick reports an unreadable list, not a missing iPhone" "$(cat "$work/badjson.err")" \
+  "could not read the simulator list"
+assert_lacks "pick does not blame a missing iPhone for an unreadable list" "$(cat "$work/badjson.err")" \
+  "no available iPhone simulator"
+pick simctlfail "$work/sims.json" STUB_SDK_VERSION=27.2 STUB_SIMCTL_FAIL=1 > /dev/null
+assert_eq "pick fails when simctl fails" "$(cat "$work/simctlfail.status")" 1
+assert_contains "pick names the failed simctl call" "$(cat "$work/simctlfail.err")" \
+  "xcrun simctl list devices available -j failed"
 
 echo
 if [ "$failures" -eq 0 ]; then

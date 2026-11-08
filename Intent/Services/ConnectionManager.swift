@@ -37,19 +37,29 @@ import os
 
     var connectionState: ConnectionState = .disconnected {
         didSet {
-            if isDemoConnection {
+            if isInProcessConnection {
                 globalSubscriptionState = connectionState == .connected ? .subscribed : .idle
             }
             connectionStateSubject.send(connectionState)
         }
     }
-    @ObservationIgnored private var isDemoConnection = false
-    @ObservationIgnored var servesDemoFixtures = false
+    /// Set while connected without a daemon socket (pretend-paired launches);
+    /// readiness then follows the connection state directly.
+    @ObservationIgnored private var isInProcessConnection = false
+    /// Answers requests in process instead of over the socket when set.
+    @ObservationIgnored private(set) var requestTransport: (any ConnectionRequestTransport)?
+
+    @ObservationIgnored var scriptMonitorsDisabledForConnection = false
+    var capabilities: ConnectionCapabilities = .unknown {
+        didSet { capabilitiesSubject.send(capabilities) }
+    }
+    @ObservationIgnored private let capabilitiesSubject = CurrentValueSubject<ConnectionCapabilities, Never>(.unknown)
+    var capabilitiesPublisher: AnyPublisher<ConnectionCapabilities, Never> { capabilitiesSubject.eraseToAnyPublisher() }
     private var admittedPrincipal: ConnectionPrincipal?
     @ObservationIgnored var admission: ConnectionAdmission?
     @ObservationIgnored private(set) var pairingAttemptID: UUID?
     var currentPrincipal: ConnectionPrincipal? {
-        get { DemoMode.isEnabled && !DemoStartupConnection.isEnabled ? .demoOwner : admittedPrincipal }
+        get { requestTransport?.principal ?? admittedPrincipal }
         set { admittedPrincipal = newValue }
     }
     @ObservationIgnored var authorityRefreshTask: Task<Void, Never>?
@@ -160,10 +170,12 @@ import os
         self.diagnostics = diagnostics
         self.persistence = persistence
         subscriptionRouter = ConnectionSubscriptionRouter(diagnostics: diagnostics)
+        requestTransport = Self.makeInProcessTransport(serveFixtures: false)
         observeStartupLifecycle()
     }
 
     isolated deinit {
+        requestTransport?.stop()
         authorityRefreshTask?.cancel()
         stopPathMonitor()
     }
@@ -173,10 +185,22 @@ extension ConnectionManager {
     /// Demo sessions use fixture pushes instead of a socket's remote feed.
     /// Keep readiness tied to the same connection transitions as their stores.
     func connectDemo(serveFixtures: Bool) {
-        if !isDemoConnection { disconnect() }
-        isDemoConnection = true
-        servesDemoFixtures = serveFixtures
+        connectInProcess(using: Self.makeInProcessTransport(serveFixtures: serveFixtures))
+    }
+
+    /// Marks the connection live without a socket; requests go to `transport`.
+    func connectInProcess(using transport: (any ConnectionRequestTransport)?) {
+        if !isInProcessConnection { disconnect() }
+        isInProcessConnection = true
+        replaceRequestTransport(with: transport)
         connectionState = .connected
+    }
+
+    /// Installs `transport` and adopts the capabilities it advertises.
+    func replaceRequestTransport(with transport: (any ConnectionRequestTransport)?) {
+        requestTransport?.stop()
+        requestTransport = transport
+        capabilities = transport?.capabilities ?? .unknown
     }
 
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
@@ -258,7 +282,7 @@ extension ConnectionManager {
         let winner = raced.winner
         var lateMismatchGeneration = context.generation
         defer { recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration) }
-        let principal = raced.principal
+        let handshake = raced.handshake
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
         AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(context.generation)")
@@ -275,7 +299,7 @@ extension ConnectionManager {
         }
         lateMismatchGeneration = adoptConnectedWinner(
             winner,
-            principal: principal,
+            handshake: handshake,
             target: target,
             preservesLiveConnection: context.preservesLiveConnection,
             initialGeneration: context.generation
@@ -343,7 +367,7 @@ extension ConnectionManager {
 
     private func adoptConnectedWinner(
         _ winner: RacedConnection,
-        principal: ConnectionPrincipal,
+        handshake: ConnectionHandshake,
         target: ConnectTarget,
         preservesLiveConnection: Bool,
         initialGeneration: Int
@@ -358,10 +382,7 @@ extension ConnectionManager {
         activeTunnel = winner.tunnel
         host = winner.host
         configureSocketMessagePump()
-        currentPrincipal = principal
-        admission = ConnectionAdmission(id: UUID(), token: target.token, fingerprint: target.certFingerprint, principal: principal)
-        bindSavedIdentity(principal)
-        connectionState = .connected
+        finishIdentityAdmission(handshake, token: target.token, fingerprint: target.certFingerprint)
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = 0
         subscribeToAllEvents()
@@ -425,8 +446,9 @@ extension ConnectionManager {
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
         cancelStartupAdmission()
-        isDemoConnection = false
-        servesDemoFixtures = false
+        requestTransport?.stop()
+        requestTransport = Self.makeInProcessTransport(serveFixtures: false)
+        isInProcessConnection = false
         connectionGeneration += 1
         pairingAttemptID = nil
         clearPrincipal()

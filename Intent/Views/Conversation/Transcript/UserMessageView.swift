@@ -19,6 +19,7 @@ struct UserMessageView: View {
     @Environment(\.legibilityWeight) private var legibilityWeight
     @ScaledMetric(relativeTo: .body) private var workspaceFontSize = Constants.Typography.bodyS.size
     @ScaledMetric(relativeTo: .body) private var iPadBubbleWidth = Design.IPad.userBubbleMaximumWidth
+    @ScaledMetric(relativeTo: .caption) private var fileIconSide: CGFloat = 12
 
     /// Derived once per message value in `init` rather than on every `body`
     /// evaluation (the body also re-runs on the expansion toggle): the wake /
@@ -58,7 +59,16 @@ struct UserMessageView: View {
     }
 
     var body: some View {
-        if workspaceDesign {
+        if agentMessage != nil {
+            VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+                attributionHeader
+                if isAgentMessageExpanded {
+                    messageContents
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(MessageCopyContextMenu(text: copyText, userStyled: true, isStreaming: false))
+        } else if workspaceDesign {
             WorkspaceUserBubbleLayout(
                 usesFullWidth: dynamicTypeSize.isAccessibilitySize || hookWake != nil || prWake != nil,
                 layoutDirection: layoutDirection,
@@ -265,8 +275,10 @@ struct UserMessageView: View {
 
     private func fileAttachmentChip(_ block: ContentBlock) -> some View {
         HStack(spacing: Layout.fileChipSpacing) {
-            Image(systemName: "doc.fill")
-                .font(.caption)
+            Image(.file)
+                .resizable()
+                .scaledToFit()
+                .frame(width: fileIconSide, height: fileIconSide)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .accessibilityHidden(true)
             Text(block.fileName ?? "Attachment")

@@ -17,8 +17,15 @@ struct PDFLightboxView: View {
                         closeButton
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        ShareLink(item: pdf.url) {
-                            Label("Share PDF", systemImage: "square.and.arrow.up")
+                        ShareLink(item: pdf.shareURL) {
+                            Label {
+                                Text("Share PDF")
+                            } icon: {
+                                Image(.upload)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: closeIconSide, height: closeIconSide)
+                            }
                         }
                         .buttonStyle(IntentContentButtonStyle())
                     }

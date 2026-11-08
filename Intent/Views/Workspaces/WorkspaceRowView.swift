@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct WorkspaceRowView: View {
+    @ScaledMetric(relativeTo: .body) private var warningIconSize: CGFloat = 17
     let workspace: Workspace
     let colorScheme: ColorScheme
     var showRepo: Bool = true
@@ -18,6 +19,9 @@ struct WorkspaceRowView: View {
     /// own backend; falls back to the shared store when no session is in the
     /// environment (previews/tests).
     @Environment(BackendSession.self) private var session: BackendSession?
+    /// Raised attention rows hide while the Intent menu is open (visionOS).
+    @Environment(\.workspaceActionMenuOpen) private var actionMenuOpen
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var monitorConsumer = UUID()
     @ScaledMetric(relativeTo: .headline) private var titleTracking: CGFloat = -0.36
 
@@ -33,6 +37,10 @@ struct WorkspaceRowView: View {
         session?.prMonitorsStore ?? .shared
     }
 
+    private var statusIconSize: CGFloat {
+        isSidebar ? IPadSidebarStyle.statusDotSize : Constants.WorkspaceRow.statusIconSize
+    }
+
     private var prIndicator: PrIndicatorModel {
         Self.derivePrIndicator(
             workspace: workspace,
@@ -45,7 +53,10 @@ struct WorkspaceRowView: View {
             Button {
                 Task { await monitorsSource.refetch(workspaceId: workspace.id) }
             } label: {
-                Image(systemName: "exclamationmark.triangle")
+                Image(.attentionCircle)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: warningIconSize, height: warningIconSize)
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("PR monitors may be out of date. Retry refresh")
@@ -55,7 +66,7 @@ struct WorkspaceRowView: View {
     var body: some View {
         HStack(alignment: Self.firstTitleLineCenter, spacing: spacious || isSidebar ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
-            WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
+            WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme, size: statusIconSize)
                 .opacity(statusIconHidden ? 0 : 1)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.frame(in: .named(workspace.id)).midY
@@ -76,13 +87,13 @@ struct WorkspaceRowView: View {
 
             monitorRefreshButton
         }
-        .offset(x: -(Constants.WorkspaceRow.statusIconSize + (spacious || isSidebar ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing)) * leadingSwipeProgress)
+        .offset(x: -(statusIconSize + (spacious || isSidebar ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing)) * leadingSwipeProgress)
         .contentShape(Rectangle())
-        .padding(.vertical, spacious ? Constants.WorkspaceRow.spaciousPadding : Constants.WorkspaceRow.verticalPadding)
+        .padding(.vertical, isSidebar ? IPadSidebarStyle.rowVerticalPadding : (spacious ? Constants.WorkspaceRow.spaciousPadding : Constants.WorkspaceRow.verticalPadding))
         .padding(.horizontal, isSidebar ? IPadSidebarStyle.rowInset : (spacious ? 0 : Constants.WorkspaceRow.horizontalPadding))
         .frame(minHeight: isSidebar ? max(IPadSidebarStyle.rowHeight, minimumHeight) : minimumHeight)
         .coordinateSpace(name: workspace.id)
-        .visionAttentionCue(workspaceNeedsInput(workspace))
+        .visionAttentionCue(WorkspaceAttentionCuePresentation.resolve(for: workspace, actionMenuOpen: actionMenuOpen), reduceMotion: reduceMotion)
         .task(id: workspace.id) {
             guard !Task.isCancelled else { return }
             monitorsSource.retain(workspaceId: workspace.id, consumer: monitorConsumer)
@@ -142,7 +153,7 @@ struct WorkspaceRowView: View {
             Text(title)
                 .interFont(isSidebar ? Constants.Typography.bodySEmphasized : Constants.Typography.bodyM.withFace(.semibold))
                 .tracking(titleTracking)
-                .lineLimit(Self.titleLineLimit(for: dynamicTypeSize))
+                .lineLimit(isSidebar ? nil : Self.titleLineLimit(for: dynamicTypeSize))
                 .fixedSize(horizontal: false, vertical: true)
                 .alignmentGuide(Self.firstTitleLineCenter) { dimensions in
                     let additionalLineHeight = dimensions[.lastTextBaseline] - dimensions[.firstTextBaseline]
