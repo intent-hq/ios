@@ -52,7 +52,10 @@ struct RetainedTranscriptMemoryTests {
         let afterBytes = Self.footprintBytes()
         let retainedMegabytes = (afterBytes - before) / Self.bytesPerMegabyte
         print("[read-only] retained \(ConversationStorePool.retainedConversationLimit) conversations x \(Self.messagesPerConversation) messages (\(loaded) rows loaded): footprint +\(retainedMegabytes) MB")
-        #expect(loaded > 0, "The transcripts must actually load into the stores")
+        #expect(
+            loaded == ConversationStorePool.retainedConversationLimit * Self.messagesPerConversation,
+            "Every transcript must actually load into its store"
+        )
         #expect(retainedMegabytes < Self.retainedCeilingMegabytes)
         withExtendedLifetime(pool) {}
     }

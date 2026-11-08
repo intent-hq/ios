@@ -23,8 +23,6 @@ struct ConnectionLossOverlay: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var viewportHeight: CGFloat = 0
     @State private var bottomBalancePadding: CGFloat = 0
-    var startupState: DaemonStartupState?
-    var onRetry: (() -> Void)?
     let mismatches: [HostCertMismatch]
     var machineName: String?
     var reason: String?
@@ -42,11 +40,7 @@ struct ConnectionLossOverlay: View {
                     .frame(width: Layout.markSize, height: Layout.markSize)
                     .accessibilityHidden(true)
                 VStack(spacing: Layout.actionSpacing) {
-                    if let startupState {
-                        DaemonStartupProgressView(state: startupState, onRetry: onRetry)
-                    } else {
-                        messages
-                    }
+                    messages
                     homeButton
                 }
             }

@@ -203,6 +203,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         let detailsTitle = app.staticTexts["saved-connection.details-title"]
         XCTAssertTrue(detailsTitle.waitForExistence(timeout: Fixture.timeout))
         capture(app, named: "sheet-before-loss")
+        let titleBeforeLoss = detailsTitle.frame.minY
 
         try trigger("network-offline", in: directory)
         try trigger("loss", in: directory)
@@ -211,6 +212,8 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(detailsTitle.exists, "A drop must not dismiss or hide the open sheet")
         XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
         XCTAssertLessThan(banner.frame.minY, detailsTitle.frame.minY, "The banner stays on top of the sheet")
+        // The partial-height sheet starts below the banner, so it gets no empty band.
+        XCTAssertEqual(detailsTitle.frame.minY, titleBeforeLoss, accuracy: Fixture.layoutTolerance, "The sheet must not move down under the banner")
         capture(app, named: "sheet-offline-banner")
         banner.tap()
         XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].waitForExistence(timeout: Fixture.timeout))
