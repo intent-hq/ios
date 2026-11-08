@@ -36,7 +36,8 @@ extension AppCoordinator {
 
     // MARK: - Deep links (intent:// URLs)
 
-    /// Entry point for `intent://` URLs (IntentApp.onOpenURL). Only
+    /// Entry point for `intent://` URLs (IntentApp.onOpenURL routes Live
+    /// Activity `intent://agent` links before this). Only
     /// `intent://pair` URIs are actionable: they surface a confirmation
     /// (DeepLinkPairingView) before any connection is attempted. Every other
     /// or malformed `intent://` URL is ignored without disturbing app state.
