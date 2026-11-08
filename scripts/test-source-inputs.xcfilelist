@@ -347,7 +347,7 @@ $(SRCROOT)/Intent/DesignSystem/WorkspaceDetailStyle.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspacePageLayout.swift
 $(SRCROOT)/Intent/LiveActivity
 $(SRCROOT)/Intent/LiveActivity/AgentActivityAttributes.swift
-$(SRCROOT)/Intent/LiveActivity/AgentActivityTracker.swift
+$(SRCROOT)/Intent/LiveActivity/AgentActivityContent.swift
 $(SRCROOT)/Intent/LiveActivity/AgentActivityViews.swift
 $(SRCROOT)/Intent/LiveActivity/AgentLiveActivityController.swift
 $(SRCROOT)/Intent/LiveActivity/Widget
@@ -958,7 +958,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTitleEditingControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTitleEditor.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTransferSheet.swift
 $(SRCROOT)/IntentTests
-$(SRCROOT)/IntentTests/AgentActivityTrackerTests.swift
+$(SRCROOT)/IntentTests/AgentActivityContentTests.swift
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentAvatarPulseTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
