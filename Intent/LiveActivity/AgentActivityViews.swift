@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// Live Activity metrics and colors, shared by the widget extension and the
-/// app. Colors mirror the workspace status palette.
+/// app.
 enum AgentActivityStyle {
     static let markSize: CGFloat = 16
     static let minimalMarkSize: CGFloat = 14
@@ -17,18 +17,13 @@ enum AgentActivityStyle {
     static let islandInset: CGFloat = 4
     static let staleOpacity = 0.6
 
-    private static let needsYouRGB: UInt32 = 0xFAA755
     private static let runningRGB: UInt32 = 0xDDEC61
-    private static let failedRGB: UInt32 = 0xE87F39
-    private static let doneRGB: UInt32 = 0x6FA356
     private static let byteMask: UInt32 = 0xFF
     private static let redShift: UInt32 = 16
     private static let greenShift: UInt32 = 8
 
-    static let needsYou = color(needsYouRGB)
+    /// The workspace list's running dot.
     static let running = color(runningRGB)
-    static let failed = color(failedRGB)
-    static let done = color(doneRGB)
 
     private static func color(_ rgb: UInt32) -> Color {
         let channel = { (shift: UInt32) in Double((rgb >> shift) & byteMask) / Double(byteMask) }
@@ -36,42 +31,8 @@ enum AgentActivityStyle {
     }
 }
 
-extension AgentActivityRow.Phase {
-    var color: Color {
-        switch self {
-        case .needsYou: AgentActivityStyle.needsYou
-        case .running: AgentActivityStyle.running
-        case .failed: AgentActivityStyle.failed
-        case .done: AgentActivityStyle.done
-        }
-    }
-
-    var label: String {
-        switch self {
-        case .needsYou: "Needs you"
-        case .running: "Working"
-        case .failed: "Failed"
-        case .done: "Done"
-        }
-    }
-}
-
 extension AgentActivityAttributes.ContentState {
-    var headline: String {
-        switch (runningCount, needsYouCount) {
-        case (0, 0): "All done"
-        case let (running, 0): "\(running) running"
-        case let (0, needsYou): "\(needsYou) needs you"
-        case let (running, needsYou): "\(running) running · \(needsYou) needs you"
-        }
-    }
-
-    /// The phase that colors the compact Dynamic Island.
-    var leadingPhase: AgentActivityRow.Phase {
-        if needsYouCount > 0 { return .needsYou }
-        if runningCount > 0 { return .running }
-        return rows.first?.phase ?? .done
-    }
+    var headline: String { "\(runningCount) running" }
 
     var firstLinkURL: URL? {
         rows.lazy.compactMap { $0.link?.url }.first
@@ -129,7 +90,7 @@ struct AgentActivityRowView: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: AgentActivityStyle.rowSpacing) {
             Circle()
-                .fill(row.phase.color)
+                .fill(AgentActivityStyle.running)
                 .frame(width: AgentActivityStyle.dotSize, height: AgentActivityStyle.dotSize)
                 .alignmentGuide(.firstTextBaseline) { $0[.bottom] - AgentActivityStyle.dotBaselineOffset }
             VStack(alignment: .leading, spacing: AgentActivityStyle.rowTextSpacing) {
@@ -143,11 +104,7 @@ struct AgentActivityRowView: View {
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: AgentActivityStyle.rowSpacing)
-            Text(row.phase.label)
-                .font(.caption.weight(row.phase == .needsYou ? .semibold : .regular))
-                .foregroundStyle(row.phase == .needsYou ? .primary : .secondary)
-                .fixedSize()
+            Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
     }
@@ -171,17 +128,9 @@ struct AgentActivityCompactCount: View {
     let state: AgentActivityAttributes.ContentState
 
     var body: some View {
-        let count = state.needsYouCount > 0 ? state.needsYouCount : state.runningCount
-        if count > 0 {
-            Text("\(count)")
-                .font(.subheadline.weight(.semibold).monospacedDigit())
-                .foregroundStyle(state.leadingPhase.color)
-        } else {
-            Image(systemName: "checkmark")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(AgentActivityRow.Phase.done.color)
-                .accessibilityLabel("All done")
-        }
+        Text("\(state.runningCount)")
+            .font(.subheadline.weight(.semibold).monospacedDigit())
+            .foregroundStyle(AgentActivityStyle.running)
     }
 }
 
@@ -191,7 +140,7 @@ struct AgentActivityExpandedHeadline: View {
 
     var body: some View {
         HStack(spacing: AgentActivityStyle.compactRowSpacing) {
-            AgentActivityMark(tint: state.leadingPhase.color)
+            AgentActivityMark(tint: AgentActivityStyle.running)
                 .frame(width: AgentActivityStyle.markSize, height: AgentActivityStyle.markSize)
             Text(state.headline)
                 .font(.subheadline.weight(.semibold))

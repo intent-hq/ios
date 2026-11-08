@@ -28,15 +28,15 @@ struct AgentLiveActivityWidget: Widget {
                 AgentActivityExpandedRows(state: state)
             }
         } compactLeading: {
-            AgentActivityMark(tint: state.leadingPhase.color)
+            AgentActivityMark(tint: AgentActivityStyle.running)
                 .frame(width: AgentActivityStyle.markSize, height: AgentActivityStyle.markSize)
         } compactTrailing: {
             AgentActivityCompactCount(state: state)
         } minimal: {
-            AgentActivityMark(tint: state.leadingPhase.color)
+            AgentActivityMark(tint: AgentActivityStyle.running)
                 .frame(width: AgentActivityStyle.minimalMarkSize, height: AgentActivityStyle.minimalMarkSize)
         }
         .widgetURL(state.firstLinkURL)
-        .keylineTint(state.leadingPhase.color)
+        .keylineTint(AgentActivityStyle.running)
     }
 }
