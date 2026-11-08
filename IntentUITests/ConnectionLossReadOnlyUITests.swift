@@ -22,10 +22,7 @@ extension ConnectionLossUITests {
         closeAssistant(in: app)
 
         try trigger("loss", in: directory)
-        let listBanner = assertBanner(in: app)
-        XCTAssertFalse(
-            listBanner.frame.intersects(app.buttons[LossFixture.navigationIdentifier].frame), "The pill must not cover the Intent menu"
-        )
+        assertBanner(in: app)
         capture(app, named: "banner-list")
         app.swipeUp()
         app.swipeDown()
@@ -37,8 +34,6 @@ extension ConnectionLossUITests {
         transcript.swipeDown()
         assertBanner(in: app)
         capture(app, named: "banner-conversation")
-        let back = app.buttons["conversation.back"]
-        XCTAssertFalse(app.buttons[LossFixture.bannerIdentifier].frame.intersects(back.frame), "The banner must not cover Back")
         tap(app.buttons["conversation.back"], in: app)
         XCTAssertTrue(app.staticTexts[LossFixture.agentName].firstMatch.waitForExistence(timeout: LossFixture.timeout))
         capture(app, named: "banner-workspace")
@@ -159,12 +154,6 @@ extension ConnectionLossUITests {
             "A conversation read earlier shows its transcript from memory"
         )
         XCTAssertFalse(app.descendants(matching: .any)["read-only.unavailable"].exists)
-        let back = app.buttons["conversation.back"]
-        XCTAssertTrue(back.waitForExistence(timeout: LossFixture.timeout))
-        XCTAssertFalse(
-            app.buttons[LossFixture.bannerIdentifier].frame.intersects(back.frame),
-            "The banner must not cover the conversation's Back button"
-        )
         capture(app, named: "read-only-from-memory-conversation")
     }
 

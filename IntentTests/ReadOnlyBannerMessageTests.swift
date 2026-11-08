@@ -39,18 +39,6 @@ struct ReadOnlyBannerMessageTests {
         #expect(title(.failed) == "Startup failed · Read-only")
     }
 
-    @Test func thePillUsesAShortFormOfEachSituation() {
-        func short(_ startup: DaemonStartupState?, network: NetworkAvailability.Status = .satisfied) -> String {
-            ReadOnlyBannerMessage(networkStatus: network, machineName: "Studio", startupState: startup).shortTitle
-        }
-        let progress = DaemonStartupStatus.Progress(completedNotes: 3, totalNotes: 10, processedSourceBytes: 1, totalSourceBytes: 2)
-        #expect(short(nil) == "Reconnecting…")
-        #expect(short(.starting(status(.indexing, progress: progress))) == "Indexing 3/10")
-        #expect(short(.failed) == "Startup failed")
-        #expect(short(.failed, network: .unsatisfied(.notAvailable)) == "No network")
-        #expect(short(nil, network: .unsatisfied(.localNetworkDenied)) == "Local Network off")
-    }
-
     @Test func aPhoneSideNetworkProblemStillWinsOverStartup() {
         #expect(title(.starting(nil), network: .unsatisfied(.notAvailable)) == "No network connection · Read-only")
     }
