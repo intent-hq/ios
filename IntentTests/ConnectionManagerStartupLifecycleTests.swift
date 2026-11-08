@@ -96,7 +96,7 @@ extension ConnectionManagerTests {
         defer { connecting.cancel() }
         try await waitUntil("poll in flight") { server.heldStartupCount == 1 }
         manager.setStartupSuspended(true)
-        try await waitUntil("bootstrap seat retired") { manager.startupCandidate == nil }
+        try await waitUntil("bootstrap seat retired") { manager.startupRun.candidate == nil }
         #expect(manager.startupState == .unavailable)
         let requests = server.methods.count
         try await Task.sleep(for: .milliseconds(1200))
@@ -153,6 +153,6 @@ extension ConnectionManagerTests {
         manager.disconnect()
         #expect(manager.currentPrincipal == nil)
         #expect(manager.startupState == nil)
-        #expect(manager.startupCandidate == nil)
+        #expect(manager.startupRun.candidate == nil)
     }
 }

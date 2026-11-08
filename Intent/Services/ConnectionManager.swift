@@ -65,13 +65,8 @@ import os
     @ObservationIgnored var authorityRefreshTask: Task<Void, Never>?
     @ObservationIgnored var pendingAuthorityRevision: Double = -1
     @ObservationIgnored var authorityBeforeRefresh: ConnectionPrincipal?
-
     var startupState: DaemonStartupState?
-    @ObservationIgnored var startupAdmissionID = UUID()
-    @ObservationIgnored var startupCandidate: RacedConnection?
-    @ObservationIgnored var startupSuspended = false
-    @ObservationIgnored var startupResumeWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
-    @ObservationIgnored var startupLifecycleObservers: [AnyCancellable] = []
+    @ObservationIgnored var startupRun = StartupAdmissionRun()
 
     var certMismatchDetected = false {
         didSet { certMismatchSubject.send(certMismatchDetected) }
@@ -272,9 +267,7 @@ extension ConnectionManager {
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * Self.millisecondsPerSecond))ms")
         let raced: AdmittedHostRace
         do {
-            raced = try await readyRace(token: target.token, fingerprint: target.certFingerprint) {
-                try await self.raceHosts(target)
-            }
+            raced = try await readyRace(token: target.token, fingerprint: target.certFingerprint) { try await self.raceHosts(target) }
         } catch {
             restoreCertMismatchesAfterFailedConnect(context)
             throw error
@@ -282,15 +275,12 @@ extension ConnectionManager {
         let winner = raced.winner
         var lateMismatchGeneration = context.generation
         defer { recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration) }
-        let handshake = raced.handshake
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
         AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(context.generation)")
-        do {
-            try Task.checkCancellation()
-        } catch {
+        guard !Task.isCancelled else {
             await winner.disconnect()
-            throw error
+            throw CancellationError()
         }
         guard connectionGeneration == context.generation, connectAttempt == context.attempt else {
             AppLog.connection.debug("[ConnectionManager] Superseded after race: generation current=\(connectionGeneration) mine=\(context.generation), attempt current=\(connectAttempt) mine=\(context.attempt)")
@@ -299,7 +289,7 @@ extension ConnectionManager {
         }
         lateMismatchGeneration = adoptConnectedWinner(
             winner,
-            handshake: handshake,
+            handshake: raced.handshake,
             target: target,
             preservesLiveConnection: context.preservesLiveConnection,
             initialGeneration: context.generation

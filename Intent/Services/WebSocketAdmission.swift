@@ -108,7 +108,7 @@ extension ConnectionManager {
         let data = try JSONSerialization.data(withJSONObject: [
             "jsonrpc": "2.0", "id": -1, "method": "client.hello", "params": PairingClientIdentity.parameters()
         ])
-        let attemptID = startupAdmissionID
+        let attemptID = startupRun.id
         let generation = connectionGeneration
         return try await withTaskCancellationHandler {
             try await winner.socket.admittedHandshake(helloRequest: data) { [weak self] state in

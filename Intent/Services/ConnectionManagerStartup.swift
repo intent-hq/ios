@@ -2,6 +2,15 @@ import Combine
 import Foundation
 import UIKit
 
+/// Bookkeeping for the one bootstrap admission a connection may run.
+struct StartupAdmissionRun {
+    var id = UUID()
+    var candidate: RacedConnection?
+    var suspended = false
+    var resumeWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
+    var lifecycleObservers: [AnyCancellable] = []
+}
+
 extension ConnectionManager {
     struct AdmittedHostRace {
         let winner: RacedConnection
@@ -17,14 +26,14 @@ extension ConnectionManager {
         race: () async throws -> WonHostRace
     ) async throws -> AdmittedHostRace {
         cancelStartupAdmission()
-        let attemptID = startupAdmissionID
+        let attemptID = startupRun.id
         let generation = connectionGeneration
         let credentialsRevision = reconnectCredentialsRevision
         var sawStartup = false
         defer {
-            if startupAdmissionID == attemptID {
-                let candidate = startupCandidate
-                startupCandidate = nil
+            if startupRun.id == attemptID {
+                let candidate = startupRun.candidate
+                startupRun.candidate = nil
                 Task { await candidate?.disconnect() }
                 if Task.isCancelled { startupState = nil }
             }
@@ -38,11 +47,11 @@ extension ConnectionManager {
                 let winner = raced.winner
                 do {
                     try checkStartupAttempt(attemptID, generation: generation)
-                    startupCandidate = winner
+                    startupRun.candidate = winner
                     let handshake = try await admit(winner, token: token, fingerprint: fingerprint)
                     try checkStartupAttempt(attemptID, generation: generation)
                     guard reconnectCredentialsRevision == credentialsRevision else { throw CancellationError() }
-                    startupCandidate = nil
+                    startupRun.candidate = nil
                     startupState = nil
                     return AdmittedHostRace(winner: winner, handshake: handshake, drain: raced.drain)
                 } catch {
@@ -52,7 +61,7 @@ extension ConnectionManager {
                 }
             } catch {
                 try checkStartupAttempt(attemptID, generation: generation)
-                startupCandidate = nil
+                startupRun.candidate = nil
                 if case DaemonStartupError.failed = error { throw error }
                 sawStartup = sawStartup || startupState != nil
                 guard sawStartup, Self.canRetryStartup(error) else { throw error }
@@ -75,7 +84,7 @@ extension ConnectionManager {
 
     func receiveStartup(_ state: DaemonStartupState, attemptID: UUID, generation: Int) throws {
         try checkStartupAttempt(attemptID, generation: generation)
-        guard !startupSuspended else {
+        guard !startupRun.suspended else {
             startupState = .unavailable
             throw DaemonStartupError.reconnect
         }
@@ -86,24 +95,24 @@ extension ConnectionManager {
 
     private func checkStartupAttempt(_ id: UUID, generation: Int) throws {
         try Task.checkCancellation()
-        guard startupAdmissionID == id, connectionGeneration == generation else { throw CancellationError() }
+        guard startupRun.id == id, connectionGeneration == generation else { throw CancellationError() }
     }
 
     func cancelStartupAdmission() {
-        startupAdmissionID = UUID()
-        let candidate = startupCandidate
-        startupCandidate = nil
+        startupRun.id = UUID()
+        let candidate = startupRun.candidate
+        startupRun.candidate = nil
         startupState = nil
         Task { await candidate?.disconnect() }
-        let waiters = startupResumeWaiters.values
-        startupResumeWaiters.removeAll()
+        let waiters = startupRun.resumeWaiters.values
+        startupRun.resumeWaiters.removeAll()
         for waiter in waiters { waiter.resume(throwing: CancellationError()) }
     }
 
     /// Process lifecycle (not a single iPad window) owns suspension, so one
     /// background scene cannot stop another window's active backend session.
     func observeStartupLifecycle() {
-        startupLifecycleObservers = [
+        startupRun.lifecycleObservers = [
             NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
                 .sink { [weak self] _ in Task { @MainActor in self?.setStartupSuspended(true) } },
             NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
@@ -112,31 +121,31 @@ extension ConnectionManager {
     }
 
     func setStartupSuspended(_ suspended: Bool) {
-        startupSuspended = suspended
+        startupRun.suspended = suspended
         if suspended {
             // A failure has no admission left to resume; keep it so Retry stays.
             guard startupState != nil, startupState != .failed else { return }
             startupState = .unavailable
-            let candidate = startupCandidate
+            let candidate = startupRun.candidate
             Task { await candidate?.disconnect() }
         } else {
-            let waiters = startupResumeWaiters.values
-            startupResumeWaiters.removeAll()
+            let waiters = startupRun.resumeWaiters.values
+            startupRun.resumeWaiters.removeAll()
             for waiter in waiters { waiter.resume() }
         }
     }
 
     private func waitForStartupForeground() async throws {
-        guard startupSuspended else { return }
+        guard startupRun.suspended else { return }
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
-                startupResumeWaiters[id] = continuation
+                startupRun.resumeWaiters[id] = continuation
             }
         } onCancel: {
             Task { @MainActor [weak self] in
-                self?.startupResumeWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
+                self?.startupRun.resumeWaiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
             }
         }
     }
