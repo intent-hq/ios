@@ -23,10 +23,11 @@ struct AgentActivityTrackerTests {
         if let displayStatus { dictionary["displayStatus"] = displayStatus }
         if let attention { dictionary["attention"] = attention }
         if let agent {
-            dictionary["agentSummary"] = ["agents": [[
+            let summary: [String: Any] = [
                 "id": agent.id, "name": agent.name, "status": "active",
                 "isStreaming": running, "isResponding": false
-            ]]]
+            ]
+            dictionary["agentSummary"] = ["agents": [summary]]
         }
         let workspace = try #require(WorkspaceStore.parseWorkspace(dictionary))
         return AgentActivityTracker.Entry(connectionId: connection, workspace: workspace)

@@ -75,8 +75,8 @@ struct AgentActivityTracker {
             .map(\.element)
         return AgentActivityAttributes.ContentState(
             rows: Array(ordered.prefix(Self.maxRows)),
-            runningCount: rows.count(where: { $0.phase == .running }),
-            needsYouCount: rows.count(where: { $0.phase == .needsYou }),
+            runningCount: rows.count { $0.phase == .running },
+            needsYouCount: rows.count { $0.phase == .needsYou },
             updatedAt: now
         )
     }
