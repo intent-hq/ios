@@ -29,6 +29,7 @@ struct WorkspaceBrowserView: View {
                 addressBar
                     .padding(.top, BrowserAppearance.rowSpacing)
                     .background(WorkspaceDetailStyle.background(for: colorScheme))
+                    .keepsReadOnlyPillAbove()
             }
             .background(WorkspaceDetailStyle.background(for: colorScheme))
             .navigationTitle(page.title.isEmpty ? "Browser" : page.title)

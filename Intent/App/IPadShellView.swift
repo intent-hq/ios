@@ -327,6 +327,7 @@ extension IPadShellView {
             radius: IPadShellLayout.shadowRadius,
             y: IPadShellLayout.shadowOffset
         )
+        .centersReadOnlyPill()
     }
 
     private var sidebars: some View {

@@ -38,6 +38,7 @@ struct AssistantLaunchButton: View {
         )
         .accessibilityLabel(isOpen ? "Close Intent menu" : "Intent menu")
         .accessibilityIdentifier(isOpen ? "intent.menu.close" : "intent.menu.open")
+        .keepsReadOnlyPillAbove()
         .padding(.horizontal, isInVerticalBar ? 0 : layout.horizontalInset)
     }
 

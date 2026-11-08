@@ -38,6 +38,7 @@ struct MobileTerminalView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             TerminalKeyBar(controls: controls, isEnabled: canInteract)
+                .keepsReadOnlyPillAbove()
         }
         .background(TerminalAppearance.background.ignoresSafeArea())
         .background(TerminalPresentationObserver { hasPresented = true })

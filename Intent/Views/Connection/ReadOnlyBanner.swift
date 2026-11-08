@@ -11,35 +11,59 @@ struct ReadOnlyBannerMessage {
 
     private var network: ConnectionNetworkMessage { ConnectionNetworkMessage(status: networkStatus) }
 
-    var title: String {
-        if case .unsatisfied(.localNetworkDenied) = networkStatus {
-            return String(localized: "Local Network access needed · Read-only")
-        }
-        if network.isUnavailable { return String(localized: "No network connection · Read-only") }
-        if let startup = startupTitle { return startup }
-        if let machineName { return String(localized: "Reconnecting to \(machineName)… · Read-only") }
-        return String(localized: "Reconnecting… · Read-only")
+    private enum Situation {
+        case localNetworkDenied, offline, startupFailed, starting, indexing(DaemonStartupStatus.Progress?), finalizing, securing, reconnecting
     }
 
-    /// Phase-specific one-liners; nil falls back to the generic reconnecting copy.
-    private var startupTitle: String? {
+    private var situation: Situation {
+        if case .unsatisfied(.localNetworkDenied) = networkStatus { return .localNetworkDenied }
+        if network.isUnavailable { return .offline }
         switch startupState {
-        case .failed: String(localized: "Startup failed · Read-only")
+        case .failed: return .startupFailed
         case .starting(let status):
             switch status?.phase {
-            case .indexing: indexingTitle(status?.progress)
-            case .finalizing: String(localized: "Desktop is finishing startup… · Read-only")
-            case .ready: String(localized: "Connecting securely… · Read-only")
-            case .failed: String(localized: "Startup failed · Read-only")
-            case .preparing, nil: String(localized: "Desktop is starting… · Read-only")
+            case .indexing: return .indexing(status?.progress)
+            case .finalizing: return .finalizing
+            case .ready: return .securing
+            case .failed: return .startupFailed
+            case .preparing, nil: return .starting
             }
-        case .unavailable, nil: nil
+        case .unavailable, nil: return .reconnecting
         }
     }
 
-    private func indexingTitle(_ progress: DaemonStartupStatus.Progress?) -> String {
-        guard let progress else { return String(localized: "Desktop is indexing notes… · Read-only") }
-        return String(localized: "Indexing notes (\(progress.completedNotes) of \(progress.totalNotes))… · Read-only")
+    /// Full sentence for the expanded card and VoiceOver.
+    var title: String {
+        switch situation {
+        case .localNetworkDenied: String(localized: "Local Network access needed · Read-only")
+        case .offline: String(localized: "No network connection · Read-only")
+        case .startupFailed: String(localized: "Startup failed · Read-only")
+        case .starting: String(localized: "Desktop is starting… · Read-only")
+        case .indexing(let progress?):
+            String(localized: "Indexing notes (\(progress.completedNotes) of \(progress.totalNotes))… · Read-only")
+        case .indexing(nil): String(localized: "Desktop is indexing notes… · Read-only")
+        case .finalizing: String(localized: "Desktop is finishing startup… · Read-only")
+        case .securing: String(localized: "Connecting securely… · Read-only")
+        case .reconnecting:
+            if let machineName { String(localized: "Reconnecting to \(machineName)… · Read-only") } else {
+                String(localized: "Reconnecting… · Read-only")
+            }
+        }
+    }
+
+    /// A few words for the collapsed pill.
+    var shortTitle: String {
+        switch situation {
+        case .localNetworkDenied: String(localized: "Local Network off")
+        case .offline: String(localized: "No network")
+        case .startupFailed: String(localized: "Startup failed")
+        case .starting: String(localized: "Desktop starting…")
+        case .indexing(let progress?): String(localized: "Indexing \(progress.completedNotes)/\(progress.totalNotes)")
+        case .indexing(nil): String(localized: "Indexing notes…")
+        case .finalizing: String(localized: "Finishing startup…")
+        case .securing: String(localized: "Connecting…")
+        case .reconnecting: String(localized: "Reconnecting…")
+        }
     }
 
     var guidance: String {
@@ -48,25 +72,39 @@ struct ReadOnlyBannerMessage {
     }
 }
 
-/// Slim, non-blocking banner shown while reconnection keeps trying. Tapping it
-/// reveals guidance, per-address certificate warnings and Back to Home.
+/// Floating, non-blocking pill shown while reconnection keeps trying. It sits at
+/// the bottom of the window, above any composer or floating button reported to
+/// `ReadOnlyPillClearance`, without reserving space; tapping it opens a card
+/// with guidance, certificate warnings, Retry and Back to Home.
 struct ReadOnlyBanner: View {
     private enum Layout {
-        static let maximumWidth: CGFloat = 480
+        static let collapsedMaximumWidth: CGFloat = 300
+        static let expandedMaximumWidth: CGFloat = 360
         static let spacing: CGFloat = 8
         static let detailSpacing: CGFloat = 12
-        static let horizontalPadding: CGFloat = 14
-        static let verticalPadding: CGFloat = 8
+        static let horizontalPadding: CGFloat = 16
+        static let verticalPadding: CGFloat = 11
         static let detailPadding: CGFloat = 16
-        static let cornerRadius: CGFloat = 18
+        static let expandedCornerRadius: CGFloat = 22
+        /// Larger than half the pill's height; the shape clamps it into a capsule.
+        static let capsuleCornerRadius: CGFloat = 100
         static let outerPadding: CGFloat = 8
+        /// Space between the pill and the safe area or the chrome below it.
+        static let bottomGap: CGFloat = 8
         static let actionHeight: CGFloat = 40
-        static let retryHeight: CGFloat = 28
+        static let actionCornerRadius: CGFloat = 12
+        static let shadowOpacity: Double = 0.15
+        static let shadowRadius: CGFloat = 8
+        static let shadowYOffset: CGFloat = 2
     }
 
     @ScaledMetric(relativeTo: .subheadline) private var iconSize: CGFloat = 16
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ReadOnlyPillClearance.self) private var clearance: ReadOnlyPillClearance?
+    @Environment(ComposerCoverage.self) private var coverage: ComposerCoverage?
     @State private var isExpanded = false
+    /// The safe area in window coordinates: it ends above the home indicator and keyboard.
+    @State private var safeArea = CGRect.zero
+    @State private var span: ClosedRange<CGFloat> = 0...0
     let message: ReadOnlyBannerMessage
     let mismatches: [HostCertMismatch]
     let onHome: () -> Void
@@ -76,6 +114,33 @@ struct ReadOnlyBanner: View {
     var onInteractiveFrameChange: (CGRect) -> Void = { _ in }
 
     var body: some View {
+        WidthCap(maxWidth: isExpanded ? Layout.expandedMaximumWidth : Layout.collapsedMaximumWidth) { content }
+            .background(.regularMaterial, in: shape)
+            .shadow(color: .black.opacity(Layout.shadowOpacity), radius: Layout.shadowRadius, y: Layout.shadowYOffset)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                span = frame.minX...max(frame.minX, frame.maxX)
+                onInteractiveFrameChange(frame)
+            }
+            .padding(.horizontal, Layout.outerPadding)
+            .padding(.leading, max(0, (anchor?.minX ?? safeArea.minX) - safeArea.minX))
+            .padding(.trailing, max(0, safeArea.maxX - (anchor?.maxX ?? safeArea.maxX)))
+            .padding(.bottom, bottomPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { safeArea = $0 }
+    }
+
+    /// Distance from the safe area's bottom to the pill's bottom edge.
+    private var bottomPadding: CGFloat {
+        let chromeTop = clearance?.top(under: span, windowBottom: safeArea.maxY, coverage: coverage) ?? safeArea.maxY
+        return max(0, safeArea.maxY - chromeTop) + Layout.bottomGap
+    }
+
+    /// The content panel the pill centres on, when the layout has one (the iPad shell).
+    private var anchor: CGRect? {
+        clearance?.anchor(coverage: coverage)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: Layout.detailSpacing) {
             HStack(spacing: Layout.spacing) {
                 Button {
@@ -84,9 +149,10 @@ struct ReadOnlyBanner: View {
                     summary
                 }
                 .buttonStyle(IntentContentButtonStyle())
+                .accessibilityLabel(message.title)
                 .accessibilityIdentifier("read-only-banner")
                 .accessibilityHint(isExpanded ? "Hides connection details." : "Shows connection details.")
-                if showsInlineRetry { retryButton }
+                if canRetry, !isExpanded { inlineRetryButton }
             }
             if isExpanded {
                 // Large type can outgrow the screen; the details then scroll.
@@ -98,26 +164,19 @@ struct ReadOnlyBanner: View {
         }
         .padding(.horizontal, isExpanded ? Layout.detailPadding : Layout.horizontalPadding)
         .padding(.vertical, isExpanded ? Layout.detailPadding : Layout.verticalPadding)
-        .background(.regularMaterial, in: .rect(cornerRadius: Layout.cornerRadius))
-        .frame(maxWidth: Layout.maximumWidth)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onInteractiveFrameChange($0) }
-        .padding(.horizontal, Layout.outerPadding)
-        .padding(.top, Layout.outerPadding)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: isExpanded ? Layout.expandedCornerRadius : Layout.capsuleCornerRadius, style: .continuous)
     }
 
     private var canRetry: Bool { message.startupState == .failed && onRetry != nil }
 
-    /// Beside the title only when it fits; otherwise Retry joins the details.
-    private var showsInlineRetry: Bool { canRetry && !isExpanded && !dynamicTypeSize.isAccessibilitySize }
-
-    private var retryButton: some View {
+    private var inlineRetryButton: some View {
         Button { onRetry?() } label: {
             Text("Retry")
                 .interFont(Constants.Typography.bodyXSEmphasized)
-                .padding(.horizontal, Layout.spacing)
-                .frame(maxWidth: showsInlineRetry ? nil : .infinity, minHeight: showsInlineRetry ? Layout.retryHeight : Layout.actionHeight)
-                .background(.quaternary, in: .rect(cornerRadius: Layout.cornerRadius / 2))
+                .foregroundStyle(.tint)
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityHint("Tries to connect to the desktop again.")
@@ -126,31 +185,39 @@ struct ReadOnlyBanner: View {
 
     private var summary: some View {
         HStack(spacing: Layout.spacing) {
-            if message.networkStatus.isUnsatisfied {
-                Image(.attentionCircleFill)
+            statusIcon
+            Text(isExpanded ? message.title : message.shortTitle)
+                .interFont(Constants.Typography.bodyXSEmphasized)
+                .lineLimit(isExpanded ? nil : 1)
+                .fixedSize(horizontal: false, vertical: isExpanded)
+                .accessibilityIdentifier("read-only-banner.title")
+            if isExpanded {
+                Spacer(minLength: 0)
+                Image(.chevronDown)
                     .resizable()
                     .scaledToFit()
                     .frame(width: iconSize, height: iconSize)
-                    .foregroundStyle(.orange)
-                    .accessibilityHidden(true)
-            } else {
-                ProgressView()
-                    .controlSize(.mini)
+                    .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             }
-            Text(message.title)
-                .interFont(Constants.Typography.bodyXSEmphasized)
-                .lineLimit(isExpanded ? nil : 1)
-                .accessibilityIdentifier("read-only-banner.title")
-            Spacer(minLength: 0)
-            Image(isExpanded ? .chevronUp : .chevronDown)
+        }
+        .contentShape(.rect)
+    }
+
+    @ViewBuilder private var statusIcon: some View {
+        if message.networkStatus.isUnsatisfied || message.startupState == .failed {
+            Image(.attentionCircleFill)
                 .resizable()
                 .scaledToFit()
                 .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.orange)
+                .accessibilityHidden(true)
+        } else {
+            ProgressView()
+                .controlSize(.mini)
+                .frame(width: iconSize, height: iconSize)
                 .accessibilityHidden(true)
         }
-        .contentShape(.rect)
     }
 
     private var details: some View {
@@ -167,25 +234,52 @@ struct ReadOnlyBanner: View {
             if !mismatches.isEmpty {
                 CertMismatchListView(mismatches: mismatches)
             }
-            if canRetry, !showsInlineRetry { retryButton }
-            Button(action: onHome) {
-                Text("Back to Home")
-                    .interFont(Constants.Typography.bodyXSEmphasized)
-                    .frame(maxWidth: .infinity, minHeight: Layout.actionHeight)
-                    .background(.quaternary, in: .rect(cornerRadius: Layout.cornerRadius / 2))
+            if canRetry {
+                actionButton("Retry", hint: "Tries to connect to the desktop again.", identifier: "read-only-banner.retry") {
+                    onRetry?()
+                }
             }
-            .buttonStyle(IntentContentButtonStyle())
-            .accessibilityHint("Return to your saved machines without forgetting this connection.")
-            .accessibilityIdentifier("read-only-banner.home")
+            actionButton(
+                "Back to Home",
+                hint: "Return to your saved machines without forgetting this connection.",
+                identifier: "read-only-banner.home",
+                action: onHome
+            )
         }
-        .transition(.opacity.combined(with: .move(edge: .top)))
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+    }
+
+    private func actionButton(
+        _ title: LocalizedStringKey,
+        hint: LocalizedStringKey,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .interFont(Constants.Typography.bodyXSEmphasized)
+                .frame(maxWidth: .infinity, minHeight: Layout.actionHeight)
+                .background(.quaternary, in: .rect(cornerRadius: Layout.actionCornerRadius, style: .continuous))
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .accessibilityHint(hint)
+        .accessibilityIdentifier(identifier)
     }
 }
 
-enum ReadOnlyBannerMetrics {
-    /// Collapsed banner (one line plus its padding) before Dynamic Type scaling;
-    /// the presenter reserves this much safe area at the top of the window.
-    static let collapsedHeight: CGFloat = 46
+/// Caps the proposed width but, unlike `frame(maxWidth:)`, takes its content's
+/// size, so the collapsed pill hugs short text and truncates long text.
+private struct WidthCap: Layout {
+    let maxWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let width = min(proposal.width ?? maxWidth, maxWidth)
+        return subviews.first?.sizeThatFits(ProposedViewSize(width: width, height: proposal.height)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
 }
 
 extension NetworkAvailability.Status {

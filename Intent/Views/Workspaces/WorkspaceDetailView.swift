@@ -186,6 +186,7 @@ struct WorkspaceDetailView: View {
         .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
             if titleEditor.isEditing {
                 WorkspaceTitleEditingControls(editor: titleEditor, onSave: saveTitle)
+                    .keepsReadOnlyPillAbove()
             }
         }
         .modifier(WorkspaceDetailPresentations(

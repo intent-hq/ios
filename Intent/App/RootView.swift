@@ -26,6 +26,7 @@ struct RootView: View {
     @State private var conversationIsPopping = false
     /// Modal layers open in this window; keeps only the foremost chat's composer.
     @State private var composerCoverage = ComposerCoverage()
+    @State private var readOnlyPillClearance = ReadOnlyPillClearance()
     @State private var connectionSwitcherOpen = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
@@ -358,6 +359,7 @@ struct RootView: View {
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
         .environment(composerCoverage)
+        .environment(readOnlyPillClearance)
         .background { WindowSceneReader(activator: sceneActivator).frame(width: 0, height: 0) }
     }
 }

@@ -174,6 +174,7 @@ struct WorkspaceListView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSearching {
                 searchInput
+                    .keepsReadOnlyPillAbove()
                     .transition(reduceMotion ? .identity : .move(edge: .bottom).combined(with: .opacity))
             }
         }

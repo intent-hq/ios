@@ -34,10 +34,6 @@ extension ConnectionLossUITests {
         transcript.swipeDown()
         assertBanner(in: app)
         capture(app, named: "banner-conversation")
-        let back = app.buttons["conversation.back"]
-        XCTAssertLessThanOrEqual(
-            app.buttons[LossFixture.bannerIdentifier].frame.maxY, back.frame.minY, "The banner must not cover Back"
-        )
         tap(app.buttons["conversation.back"], in: app)
         XCTAssertTrue(app.staticTexts[LossFixture.agentName].firstMatch.waitForExistence(timeout: LossFixture.timeout))
         capture(app, named: "banner-workspace")
@@ -158,14 +154,6 @@ extension ConnectionLossUITests {
             "A conversation read earlier shows its transcript from memory"
         )
         XCTAssertFalse(app.descendants(matching: .any)["read-only.unavailable"].exists)
-        let back = app.buttons["conversation.back"]
-        XCTAssertTrue(back.waitForExistence(timeout: LossFixture.timeout))
-        let bannerBottom = app.buttons[LossFixture.bannerIdentifier].frame.maxY
-        XCTAssertGreaterThanOrEqual(
-            back.frame.minY,
-            bannerBottom - LossFixture.layoutTolerance,
-            "The banner must not cover the conversation's Back button"
-        )
         capture(app, named: "read-only-from-memory-conversation")
     }
 

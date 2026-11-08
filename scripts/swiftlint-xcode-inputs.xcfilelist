@@ -418,6 +418,7 @@ $(SRCROOT)/Intent/Views/Connection/DisconnectedView.swift
 $(SRCROOT)/Intent/Views/Connection/LoadingView.swift
 $(SRCROOT)/Intent/Views/Connection/ReadOnlyBanner.swift
 $(SRCROOT)/Intent/Views/Connection/ReadOnlyBannerPresenter.swift
+$(SRCROOT)/Intent/Views/Connection/ReadOnlyPillClearance.swift
 $(SRCROOT)/Intent/Views/Connection/RemoteReadOnly.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionCard.swift
 $(SRCROOT)/Intent/Views/Connection/SavedConnectionDetails.swift
