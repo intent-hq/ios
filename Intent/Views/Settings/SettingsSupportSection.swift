@@ -6,6 +6,10 @@ struct SettingsSupportSection: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            #if os(iOS)
+            SettingsLiveActivityRow()
+            Divider()
+            #endif
             NavigationLink {
                 AcknowledgementsView()
                     .environment(\.colorScheme, colorScheme)
