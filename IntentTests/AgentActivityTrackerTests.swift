@@ -28,7 +28,7 @@ struct AgentActivityTrackerTests {
                 "isStreaming": running, "isResponding": false
             ]]]
         }
-        let workspace = try #require(WorkspaceParsing.parseWorkspace(dictionary))
+        let workspace = try #require(WorkspaceStore.parseWorkspace(dictionary))
         return AgentActivityTracker.Entry(connectionId: connection, workspace: workspace)
     }
 
