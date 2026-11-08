@@ -51,7 +51,7 @@ struct ReadOnlyBannerMessage {
         }
     }
 
-    /// A few words for the collapsed pill, short enough to clear the navigation bar's buttons.
+    /// A few words for the collapsed pill.
     var shortTitle: String {
         switch situation {
         case .localNetworkDenied: String(localized: "Local Network off")
@@ -72,26 +72,25 @@ struct ReadOnlyBannerMessage {
     }
 }
 
-/// Floating, non-blocking pill shown while reconnection keeps trying. It tucks
-/// under the status bar, above the navigation bar's title, without reserving
-/// space; tapping it opens a card with guidance, certificate warnings, Retry and Back to Home.
+/// Floating, non-blocking pill shown while reconnection keeps trying. It sits at
+/// the bottom of the window, above any composer or floating button reported to
+/// `ReadOnlyPillClearance`, without reserving space; tapping it opens a card
+/// with guidance, certificate warnings, Retry and Back to Home.
 struct ReadOnlyBanner: View {
     private enum Layout {
-        static let collapsedMaximumWidth: CGFloat = 220
+        static let collapsedMaximumWidth: CGFloat = 300
         static let expandedMaximumWidth: CGFloat = 360
-        static let spacing: CGFloat = 6
+        static let spacing: CGFloat = 8
         static let detailSpacing: CGFloat = 12
-        static let horizontalPadding: CGFloat = 12
-        static let verticalPadding: CGFloat = 5
+        static let horizontalPadding: CGFloat = 16
+        static let verticalPadding: CGFloat = 11
         static let detailPadding: CGFloat = 16
         static let expandedCornerRadius: CGFloat = 22
         /// Larger than half the pill's height; the shape clamps it into a capsule.
         static let capsuleCornerRadius: CGFloat = 100
         static let outerPadding: CGFloat = 8
-        /// How far the pill rises into the status bar band, so it sits just under
-        /// the Dynamic Island and above the navigation bar's title.
-        static let statusBarTuck: CGFloat = 9
-        static let minimumTop: CGFloat = 4
+        /// Space between the pill and the safe area or the chrome below it.
+        static let bottomGap: CGFloat = 8
         static let actionHeight: CGFloat = 40
         static let actionCornerRadius: CGFloat = 12
         static let shadowOpacity: Double = 0.15
@@ -99,9 +98,12 @@ struct ReadOnlyBanner: View {
         static let shadowYOffset: CGFloat = 2
     }
 
-    @ScaledMetric(relativeTo: .caption) private var iconSize: CGFloat = 13
+    @ScaledMetric(relativeTo: .subheadline) private var iconSize: CGFloat = 16
+    @Environment(ReadOnlyPillClearance.self) private var clearance: ReadOnlyPillClearance?
+    @Environment(ComposerCoverage.self) private var coverage: ComposerCoverage?
     @State private var isExpanded = false
-    @State private var safeAreaTop: CGFloat = 0
+    @State private var safeBottom: CGFloat = 0
+    @State private var span: ClosedRange<CGFloat> = 0...0
     let message: ReadOnlyBannerMessage
     let mismatches: [HostCertMismatch]
     let onHome: () -> Void
@@ -114,16 +116,21 @@ struct ReadOnlyBanner: View {
         WidthCap(maxWidth: isExpanded ? Layout.expandedMaximumWidth : Layout.collapsedMaximumWidth) { content }
             .background(.regularMaterial, in: shape)
             .shadow(color: .black.opacity(Layout.shadowOpacity), radius: Layout.shadowRadius, y: Layout.shadowYOffset)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onInteractiveFrameChange($0) }
-            .padding(.horizontal, Layout.outerPadding)
-            .padding(.top, max(Layout.minimumTop, safeAreaTop - Layout.statusBarTuck))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .ignoresSafeArea(.container, edges: .top)
-            .background {
-                Color.clear
-                    .ignoresSafeArea()
-                    .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { safeAreaTop = $0 }
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                span = frame.minX...max(frame.minX, frame.maxX)
+                onInteractiveFrameChange(frame)
             }
+            .padding(.horizontal, Layout.outerPadding)
+            .padding(.bottom, bottomPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            // The safe area ends above the home indicator and the keyboard.
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { safeBottom = $0 }
+    }
+
+    /// Distance from the safe area's bottom to the pill's bottom edge.
+    private var bottomPadding: CGFloat {
+        let chromeTop = clearance?.top(under: span, windowBottom: safeBottom, coverage: coverage) ?? safeBottom
+        return max(0, safeBottom - chromeTop) + Layout.bottomGap
     }
 
     private var content: some View {
@@ -161,7 +168,7 @@ struct ReadOnlyBanner: View {
     private var inlineRetryButton: some View {
         Button { onRetry?() } label: {
             Text("Retry")
-                .interFont(Constants.Typography.subtextXXS.withFace(.semibold))
+                .interFont(Constants.Typography.bodyXSEmphasized)
                 .foregroundStyle(.tint)
         }
         .buttonStyle(IntentContentButtonStyle())
@@ -173,13 +180,13 @@ struct ReadOnlyBanner: View {
         HStack(spacing: Layout.spacing) {
             statusIcon
             Text(isExpanded ? message.title : message.shortTitle)
-                .interFont(isExpanded ? Constants.Typography.bodyXSEmphasized : Constants.Typography.subtextXXS.withFace(.medium))
+                .interFont(Constants.Typography.bodyXSEmphasized)
                 .lineLimit(isExpanded ? nil : 1)
                 .fixedSize(horizontal: false, vertical: isExpanded)
                 .accessibilityIdentifier("read-only-banner.title")
             if isExpanded {
                 Spacer(minLength: 0)
-                Image(.chevronUp)
+                Image(.chevronDown)
                     .resizable()
                     .scaledToFit()
                     .frame(width: iconSize, height: iconSize)
@@ -232,7 +239,7 @@ struct ReadOnlyBanner: View {
                 action: onHome
             )
         }
-        .transition(.opacity.combined(with: .move(edge: .top)))
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
     private func actionButton(

@@ -209,7 +209,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertBannerTitle("No network connection · Read-only", in: app)
         XCTAssertTrue(detailsTitle.exists, "A drop must not dismiss or hide the open sheet")
         XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
-        XCTAssertLessThan(banner.frame.minY, detailsTitle.frame.minY, "The banner stays on top of the sheet")
         XCTAssertEqual(detailsTitle.frame.minY, titleBeforeLoss, accuracy: Fixture.layoutTolerance, "The floating pill must not move the sheet")
         capture(app, named: "sheet-offline-banner")
         banner.tap()

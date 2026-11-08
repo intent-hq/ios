@@ -178,6 +178,7 @@ struct ConversationColumnView: View {
                 }
             }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerInputTop = $0 }
+            .keepsReadOnlyPillAbove()
             .preference(key: WorkspaceActionMenuInputTop.self, value: composerInputTop)
         }
     }
@@ -358,6 +359,7 @@ extension ConversationColumnView {
         VStack(spacing: 0) {
             accessoryRows
         }
+        .keepsReadOnlyPillAbove()
         #if os(visionOS)
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { accessoryRowsTop = $0 }
         #endif

@@ -22,7 +22,10 @@ extension ConnectionLossUITests {
         closeAssistant(in: app)
 
         try trigger("loss", in: directory)
-        assertBanner(in: app)
+        let listBanner = assertBanner(in: app)
+        XCTAssertFalse(
+            listBanner.frame.intersects(app.buttons[LossFixture.navigationIdentifier].frame), "The pill must not cover the Intent menu"
+        )
         capture(app, named: "banner-list")
         app.swipeUp()
         app.swipeDown()

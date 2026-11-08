@@ -51,9 +51,11 @@ extension ConnectionLossUITests {
         let backBeforeLoss = back.frame.minY
         try trigger("loss", in: directory)
         let banner = assertBanner(in: app)
+        XCTAssertFalse(banner.frame.intersects(composer.frame), "The pill floats above the composer")
         composer.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: LossFixture.timeout))
         XCTAssertEqual(back.frame.minY, backBeforeLoss, accuracy: LossFixture.layoutTolerance, "The pill must not push the page down")
+        XCTAssertFalse(banner.frame.intersects(composer.frame), "The pill rides above the composer and keyboard")
         composer.typeText("Before ")
         banner.tap()
         XCTAssertTrue(app.buttons[LossFixture.bannerHomeIdentifier].waitForExistence(timeout: LossFixture.timeout), "The banner expanded")

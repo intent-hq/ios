@@ -74,6 +74,7 @@ struct WorkspaceListSidebar: View {
                     horizontalPadding: isFocusedSearch ? contentInset : Constants.WorkspaceSearch.contentSpacing,
                     focusesOnAppear: !isEmbedded
                 )
+                .keepsReadOnlyPillAbove()
             }
         }
         .refreshable {

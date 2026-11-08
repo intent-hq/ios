@@ -59,6 +59,7 @@ struct WorkspaceQuestionPresentation: ViewModifier {
                         )
                         .id(pending.messageId)
                         .opacity(isActive ? 1 : 0)
+                        .keepsReadOnlyPillAbove(isActive: isActive)
                         .accessibilityElement(children: .contain)
                         .accessibilityHidden(!isActive)
                         .accessibilityAddTraits(.isModal)
