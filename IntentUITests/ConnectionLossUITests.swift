@@ -18,7 +18,8 @@ enum ConnectionLossUITestFixture {
     static let lowerMiddle: CGFloat = 0.6
     static let bottomEdge: CGFloat = 0.95
     static let dragHold: TimeInterval = 0.1
-    static let readOnlyTapPoint = CGVector(dx: horizontalCenter, dy: upperArea)
+    /// Off-centre so it misses the read-only pill, which floats mid-screen above the keyboard.
+    static let readOnlyTapPoint = CGVector(dx: leadingEdge, dy: upperArea)
     static let menuDismissPoint = CGVector(dx: leadingEdge, dy: lowerMiddle)
     static let sheetDismissPoint = CGVector(dx: horizontalCenter, dy: bottomEdge)
     static let backNavigationAttempts = 3
