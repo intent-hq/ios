@@ -89,8 +89,8 @@ final class AgentLiveActivityController {
         publishTask = Task { [weak self] in
             try? await Task.sleep(for: Self.publishDelay)
             guard let self, !Task.isCancelled else { return }
-            self.publishTask = nil
-            await self.publish()
+            publishTask = nil
+            await publish()
         }
     }
 
@@ -113,7 +113,7 @@ final class AgentLiveActivityController {
             start(content)
             return
         }
-        if state.runningCount == 0 && state.needsYouCount == 0 {
+        if state.runningCount == 0, state.needsYouCount == 0 {
             guard isSettled else { return }
             activityID = nil
             tracker.reset()
@@ -128,18 +128,18 @@ final class AgentLiveActivityController {
 
     // Activities are not Sendable: each helper looks one up and uses it
     // without leaving its own isolation domain.
-    private nonisolated static func state(id: String) -> ActivityState? {
+    nonisolated private static func state(id: String) -> ActivityState? {
         Activity<AgentActivityAttributes>.activities.first { $0.id == id }?.activityState
     }
 
-    private nonisolated static func update(
+    nonisolated private static func update(
         id: String,
         content: ActivityContent<AgentActivityAttributes.ContentState>
     ) async {
         await Activity<AgentActivityAttributes>.activities.first { $0.id == id }?.update(content)
     }
 
-    private nonisolated static func end(
+    nonisolated private static func end(
         id: String,
         content: ActivityContent<AgentActivityAttributes.ContentState>?,
         policy: ActivityUIDismissalPolicy
