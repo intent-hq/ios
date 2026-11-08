@@ -6,6 +6,11 @@ extension ConnectionManager {
     private static let connectionClosedErrorCode = -3
     private static let notConnectedErrorCode = -4
 
+    /// The error a request gets when no admitted connection can answer it.
+    static func notConnectedRequestError() -> NSError {
+        localRequestError(code: notConnectedErrorCode, message: "Not connected", classification: .notConnected)
+    }
+
     // MARK: - Public API
 
     /// Default per-request RPC timeout. Individual calls may pass a longer
@@ -28,11 +33,7 @@ extension ConnectionManager {
     ) async throws -> Any {
         if let requestTransport { return try await requestTransport.response(for: method, params: params, on: self) }
         guard let currentSocket = socket else {
-            let error = Self.localRequestError(
-                code: Self.notConnectedErrorCode,
-                message: "Not connected",
-                classification: .notConnected
-            )
+            let error = Self.notConnectedRequestError()
             recordRequestFailure(error)
             throw error
         }

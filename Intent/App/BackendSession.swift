@@ -13,6 +13,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     var connectionState: ConnectionState { get set }
     /// Per-host certificate mismatches observed by the current race.
     var certMismatches: [HostCertMismatch] { get }
+    var startupState: DaemonStartupState? { get }
     /// Raised when a pinned certificate changed; the coordinator clears it
     /// once it has routed to the failure screen.
     var certMismatchDetected: Bool { get set }
@@ -53,6 +54,8 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
 }
 
 extension SessionConnectionManaging {
+    var startupState: DaemonStartupState? { nil }
+
     func makeBrowserProxy() throws -> any BrowserProxySession {
         throw BrowserTunnelError.unavailable
     }

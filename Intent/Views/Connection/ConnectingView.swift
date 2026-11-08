@@ -19,6 +19,14 @@ struct ConnectingView: View {
     var body: some View {
         VStack {
             Spacer()
+            if let startup = session.connection.startupState {
+                ScrollView {
+                    DaemonStartupProgressView(state: startup, onRetry: coordinator.restartConnectionAttempt)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+            }
             #if DEBUG
             if DemoConnectionLoss.initialDataGate != nil {
                 Text(verbatim: String(describing: session.connection.connectionState))
@@ -44,7 +52,7 @@ struct ConnectingView: View {
         .padding(.bottom, Layout.contentBottomPadding)
         .frame(maxWidth: .infinity)
         .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
-            if !coordinator.connectingStartedByLaunch {
+            if !coordinator.connectingStartedByLaunch || session.connection.startupState != nil {
                 ConnectionBackButton(action: coordinator.onReturnToSavedMachines)
                     .accessibilityIdentifier("connecting.home")
                     .padding(.horizontal, Constants.ConnectionSheet.inset)
@@ -61,7 +69,7 @@ struct ConnectingView: View {
     private func attemptConnection() async {
         guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
         let attemptID = coordinator.connectionAttemptId
-        if DemoMode.pretendPaired {
+        if DemoMode.pretendPaired, !DemoStartupConnection.isEnabled {
             // Demo/screenshot mode: no daemon. Mark the connection live so the
             // stores run their normal on-connected fetches (served from
             // DemoFixtures under --demo-data) and go straight to the app.
@@ -96,6 +104,7 @@ struct ConnectingView: View {
                 // replacement: the superseded attempt's failure must not stomp
                 // the screen the restarted attempt (or the connected UI) owns.
                 guard !Task.isCancelled else { return }
+                if case DaemonStartupError.failed = error { return }
                 coordinator.onConnectionFailed(error: error.localizedDescription)
                 return
             }

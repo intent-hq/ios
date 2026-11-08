@@ -6,6 +6,8 @@ import UIKit
 /// Visibility is set synchronously, outside SwiftUI's transition machinery.
 struct ConnectionLossPresenter: UIViewRepresentable {
     let isPresented: Bool
+    var startupState: DaemonStartupState?
+    var onRetry: (() -> Void)?
     let mismatches: [HostCertMismatch]
     var networkStatus: NetworkAvailability.Status = .unknown
     let onHome: () -> Void
@@ -29,6 +31,8 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         #endif
         let coordinator = context.coordinator
         let content = ConnectionLossOverlay(
+            startupState: startupState,
+            onRetry: onRetry,
             mismatches: mismatches,
             networkStatus: networkStatus,
             sourceColorScheme: context.environment.colorScheme,

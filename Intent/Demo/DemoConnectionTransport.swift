@@ -19,7 +19,8 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
         return DemoMode.isEnabled ? DemoConnectionTransport(scriptMonitors: nil) : nil
     }
 
-    var principal: ConnectionPrincipal? { DemoMode.isEnabled ? .demoOwner : nil }
+    /// Startup UI tests admit the real loopback daemon's principal instead.
+    var principal: ConnectionPrincipal? { DemoMode.isEnabled && !DemoStartupConnection.isEnabled ? .demoOwner : nil }
 
     var capabilities: ConnectionCapabilities {
         guard scriptMonitors?.supportsMonitors == true else { return .unknown }
@@ -33,6 +34,10 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
     }
 
     func response(for method: String, params: [String: Any], on connection: ConnectionManager) async throws -> Any {
+        // Startup UI tests serve fixtures only after a fresh daemon hello.
+        if DemoStartupConnection.isEnabled, connection.connectionState != .connected {
+            throw ConnectionManager.notConnectedRequestError()
+        }
         scriptMonitors?.startEvents(for: method, params: params) { [weak connection] event in
             guard let connection else { return }
             for handler in Array(connection.eventHandlers.values) { handler("event", event) }

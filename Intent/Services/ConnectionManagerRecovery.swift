@@ -356,17 +356,12 @@ extension ConnectionManager {
     ) async throws -> Bool {
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * Self.millisecondsPerSecond))ms")
-        let raced = try await raceHosts(
-            parameters.hosts,
-            port: parameters.port,
-            token: parameters.token,
-            certFingerprint: parameters.certFingerprint,
-            tcAddress: parameters.tcAddress
-        )
+        let raced = try await readyRace(token: parameters.token, fingerprint: parameters.certFingerprint) {
+            try await self.raceHosts(parameters.hosts, port: parameters.port, token: parameters.token, certFingerprint: parameters.certFingerprint, tcAddress: parameters.tcAddress)
+        }
         let winner = raced.winner
         recordLateCertMismatches(from: raced.drain, generation: generation)
-        let handshake = try await admit(winner, token: parameters.token, fingerprint: parameters.certFingerprint)
-        guard !Task.isCancelled, adoptReconnectWinner(winner, handshake: handshake, parameters: parameters, attempt: attempt, generation: generation) else {
+        guard !Task.isCancelled, adoptReconnectWinner(winner, handshake: raced.handshake, parameters: parameters, attempt: attempt, generation: generation) else {
             await winner.disconnect()
             return true
         }
@@ -399,6 +394,7 @@ extension ConnectionManager {
     }
 
     private func handleReconnectFailure(_ error: Error, attempt: Int, generation: Int) -> Bool {
+        if case DaemonStartupError.failed = error { return true }
         if stopAfterIdentityFailure(error, generation: generation) { return true }
         if !Task.isCancelled, !(error is CancellationError), connectionGeneration == generation {
             let failure = TransportDiagnosticFailure.classify(error)

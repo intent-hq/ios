@@ -9,6 +9,7 @@ struct IntentApp: App {
         #if DEBUG
         DemoConnectionLoss.seedSavedMachineIfNeeded()
         DemoSettings.seedConnectionsIfNeeded()
+        DemoStartupConnection.seedSavedMachineIfNeeded()
         #endif
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
@@ -222,8 +223,8 @@ struct BackendWindowRoot: View {
         .onAppear {
             windowSession.updateNetworkObservation(for: scenePhase)
             #if DEBUG
-            if let demoBackendID = DemoSettings.consumeStartupBackendID() {
-                // Settings demos start from this process's fresh fixtures,
+            if let demoBackendID = DemoSettings.consumeStartupBackendID() ?? DemoStartupConnection.consumeStartupBackendID() {
+                // Connection and settings demos use this process's fresh fixtures,
                 // not an obsolete native scene value or restored Home state.
                 restoresSavedMachines = false
                 backendID = demoBackendID

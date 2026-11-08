@@ -33,6 +33,8 @@ extension ConnectionManagerTests {
         var heldReplies: [HeldReply] = []
         var systemStatus = Data("{}".utf8)
         var hello: Data?
+        var startup: Data?
+        var methods: [String] = []
     }
 
     nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
@@ -48,8 +50,24 @@ extension ConnectionManagerTests {
         var heldStatusCount: Int { state.withLock { $0.heldReplies.filter { $0.method == "host.status" }.count } }
         var heldSystemStatusCount: Int { state.withLock { $0.heldReplies.filter { $0.method == "system.status" }.count } }
 
+        var methods: [String] { state.withLock { $0.methods } }
+
+        func clearStartup() { state.withLock { $0.startup = nil } }
+
+        func setStartup(_ snapshot: [String: Any]) throws {
+            let data = try JSONSerialization.data(withJSONObject: snapshot)
+            state.withLock { $0.startup = data }
+        }
+
+        func holdStartupStatus() { hold("system.startupStatus") }
+        func releaseStartupStatus() { release("system.startupStatus") }
+
+        var heldStartupCount: Int { state.withLock { $0.heldReplies.filter { $0.method == "system.startupStatus" }.count } }
+
         func holdHostStatus() { hold("host.status") }
         func holdSystemStatus() { hold("system.status") }
+        func holdNoteSubscription() { hold("note.subscribe") }
+        func releaseNoteSubscription() { release("note.subscribe") }
         func holdNewConnections() { state.withLock { $0.isOpen = false } }
         private func hold(_ method: String) { state.withLock { _ = $0.heldMethods.insert(method) } }
 
@@ -194,17 +212,39 @@ extension ConnectionManagerTests {
             return ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": snapshot.1 ? ["hostMembership": 1] : [String: Int]()]]
         }
 
+        private func startupResponse(to json: [String: Any], id: Any) -> [String: Any] {
+            let method = json["method"] as? String ?? ""
+            let startupData = state.withLock { state in
+                state.methods.append(method)
+                return state.startup
+            }
+            let startup = startupData.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            var response: [String: Any] = ["jsonrpc": "2.0", "id": id]
+            if let startup {
+                if method == "system.startupStatus" {
+                    if startup["phase"] as? String == "ready" { state.withLock { $0.startup = nil } }
+                    response["result"] = startup
+                } else {
+                    let errorCode = -32_012
+                    let retry = 1000
+                    response["error"] = [
+                        "code": errorCode, "message": "Daemon not ready",
+                        "data": ["code": "daemon-not-ready", "retryable": true, "retryAfterMs": retry, "startup": startup]
+                    ]
+                }
+            } else {
+                response["result"] = self.response(to: json)
+            }
+            return response
+        }
+
         private func receiveNext(on connection: NWConnection) {
             connection.receiveMessage { [weak self] data, _, _, error in
                 guard let self, error == nil else { return }
                 if let data,
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let id = json["id"] {
-                    let response: [String: Any] = [
-                        "jsonrpc": "2.0",
-                        "id": id,
-                        "result": response(to: json)
-                    ]
+                    let response = startupResponse(to: json, id: id)
                     if let payload = try? JSONSerialization.data(withJSONObject: response) {
                         let method = json["method"] as? String ?? ""
                         let held = state.withLock { state in
