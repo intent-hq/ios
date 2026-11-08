@@ -10,6 +10,8 @@ import UIKit
 @MainActor
 final class AgentLiveActivityController {
     static let shared = AgentLiveActivityController()
+    /// User preference, written by the Settings toggle. Defaults to on.
+    static let enabledKey = "liveActivitiesEnabled"
 
     private static let publishDelay: Duration = .seconds(1)
     private static let staleAfter: TimeInterval = 30 * 60
@@ -30,6 +32,7 @@ final class AgentLiveActivityController {
             let id = extra.id
             Task { await Self.end(id: id, content: nil, policy: .immediate) }
         }
+        if !isEnabled { setEnabled(false) }
         activeObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
@@ -44,6 +47,24 @@ final class AgentLiveActivityController {
         stores[backendID] = session.workspaceStore
         observe(session.workspaceStore, for: backendID)
         schedulePublish()
+    }
+
+    /// Turning off ends the current activity at once; turning on starts one
+    /// when an agent is running.
+    func setEnabled(_ enabled: Bool) {
+        guard !enabled else {
+            schedulePublish()
+            return
+        }
+        tracker.reset()
+        dismissedRunningKeys = []
+        guard let id = activityID else { return }
+        activityID = nil
+        Task { await Self.end(id: id, content: nil, policy: .immediate) }
+    }
+
+    private var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true
     }
 
     func detach(_ backendID: BackendID) {
@@ -74,6 +95,7 @@ final class AgentLiveActivityController {
     }
 
     private func publish() async {
+        guard isEnabled else { return }
         let entries = stores
             .sorted { $0.key.connectionID.uuidString < $1.key.connectionID.uuidString }
             .flatMap { backendID, store in
