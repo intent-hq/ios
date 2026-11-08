@@ -198,11 +198,8 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
                 let id = ObjectIdentifier(controller)
                 if !(controller is UIAlertController), !(controller.presentationController is UIPopoverPresentationController) {
                     seen.insert(id)
-                    var owner = insetOwners[id]
-                    if owner?.controller !== controller {
-                        owner = InsetOwner(controller: controller, previousTop: controller.additionalSafeAreaInsets.top, applied: 0)
-                    }
-                    guard var owner else { continue }
+                    var owner = insetOwners[id].flatMap { $0.controller === controller ? $0 : nil }
+                        ?? InsetOwner(controller: controller, previousTop: controller.additionalSafeAreaInsets.top, applied: 0)
                     let naturalSafeTop = max(0, controller.view.safeAreaInsets.top - owner.applied)
                     let contentTop = topInWindow(of: controller, root: root) + naturalSafeTop
                     let needed = max(0, bannerBottom - contentTop)
