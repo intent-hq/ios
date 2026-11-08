@@ -105,9 +105,18 @@ extension AppCoordinator {
         if iPadNavigation.mainTool != nil { iPadNavigation.revealSidebar() }
     }
 
+    func canPlaceIPadTool(_ tool: IPadWorkspaceTool) -> Bool {
+        usesIPadShell && selectedWorkspaceId == tool.workspaceId && iPadNavigation.canPlaceTool
+    }
+
+    func isShowingIPadTerminal(workspaceId: String) -> Bool {
+        if case let .terminal(terminal) = iPadNavigation.mainTool { return terminal.workspaceId == workspaceId }
+        return false
+    }
+
     @discardableResult
     func placeIPadTool(_ tool: IPadWorkspaceTool) -> Bool {
-        guard usesIPadShell, selectedWorkspaceId == tool.workspaceId else { return false }
+        guard canPlaceIPadTool(tool) else { return false }
         workspaceChange = nil
         return iPadNavigation.placeTool(tool)
     }

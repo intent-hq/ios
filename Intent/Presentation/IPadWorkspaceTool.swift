@@ -13,6 +13,11 @@ nonisolated enum IPadWorkspaceTool: Equatable, Identifiable {
         }
     }
 
+    var browserID: String? {
+        if case let .browser(browser) = self { return browser.id }
+        return nil
+    }
+
     var workspaceId: String {
         switch self {
         case let .browser(browser): browser.workspaceId

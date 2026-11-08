@@ -2,10 +2,12 @@ import SwiftUI
 
 struct NativeBrowserPresenter: ViewModifier {
     @Environment(BackendSession.self) private var session
+    @Environment(AppCoordinator.self) private var coordinator: AppCoordinator?
     @Environment(\.scenePhase) private var scenePhase
     @State private var windowID = UUID()
     @State private var demoRequested = false
     @State private var displayedID: String?
+    @State private var inlineID: String?
 
     private var navigation: NativeBrowserNavigation { session.browserNavigation }
 
@@ -14,8 +16,8 @@ struct NativeBrowserPresenter: ViewModifier {
             .onAppear { navigation.setWindow(windowID, active: scenePhase == .active) }
             .onChange(of: scenePhase) { _, phase in
                 navigation.setWindow(windowID, active: phase == .active)
-                if phase == .active, let displayedID {
-                    navigation.setDisplayed(displayedID, true)
+                if phase == .active, let id = displayedID ?? inlineID {
+                    navigation.setDisplayed(id, true)
                 }
             }
             .onDisappear {
@@ -33,8 +35,10 @@ struct NativeBrowserPresenter: ViewModifier {
                 ])
             }
             #endif
+            .onChange(of: navigation.presentation(window: windowID)?.id, initial: true) { placeInline() }
+            .onChange(of: coordinator?.iPadNavigation.mainTool?.id) { placeInline() }
             .fullScreenCover(item: Binding(
-                get: { navigation.presentation(window: windowID) },
+                get: { navigation.presentation(window: windowID).flatMap(coverBrowser) },
                 set: { if $0 == nil { navigation.dismiss(window: windowID) } }
             )) { browser in
                 WorkspaceBrowserView(browser: browser, connection: session.connection, onClose: nil) { url, title in
@@ -51,5 +55,22 @@ struct NativeBrowserPresenter: ViewModifier {
                 }
                 .coversConversationComposers()
             }
+    }
+
+    private func coverBrowser(_ browser: WorkspaceBrowser) -> WorkspaceBrowser? {
+        browser.id == inlineID || coordinator?.canPlaceIPadTool(.browser(browser)) == true ? nil : browser
+    }
+
+    private func placeInline() {
+        let presented = navigation.presentation(window: windowID)
+        let mainTool = coordinator?.iPadNavigation.mainTool
+        if let presented, presented.id != inlineID, mainTool?.browserID != presented.id,
+           coordinator?.placeIPadTool(.browser(presented)) == true {
+            inlineID = presented.id
+            return
+        }
+        guard let inlineID, mainTool?.browserID != inlineID else { return }
+        self.inlineID = nil
+        if presented?.id == inlineID { navigation.dismiss(window: windowID) }
     }
 }

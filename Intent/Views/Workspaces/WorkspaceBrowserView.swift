@@ -7,6 +7,7 @@ struct WorkspaceBrowserView: View {
     let connection: any SessionConnectionManaging
     var onClose: (() -> Void)?
     var onPageChange: (String, String) -> Void = { _, _ in }
+    var onFullScreen: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -193,9 +194,13 @@ struct WorkspaceBrowserView: View {
             usesConversationLayout: true,
             onBack: onClose
         ) {
-            Color.clear
-                .frame(width: Constants.Conversation.Design.Header.controlSize, height: Constants.Conversation.Design.Header.controlSize)
-                .accessibilityHidden(true)
+            if let onFullScreen {
+                WorkspaceToolFullScreenButton(identifier: "browser.main.fullScreen", action: onFullScreen)
+            } else {
+                Color.clear
+                    .frame(width: Constants.Conversation.Design.Header.controlSize, height: Constants.Conversation.Design.Header.controlSize)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
