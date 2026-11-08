@@ -17,7 +17,6 @@ final class AgentLiveActivityController {
     private static let staleAfter: TimeInterval = 1800 // 30 minutes
 
     private var stores: [BackendID: WorkspaceStore] = [:]
-    private var tracker = AgentActivityTracker()
     private var activityID: String?
     private var publishTask: Task<Void, Never>?
     /// Running workspaces when the user dismissed the activity; a new one
@@ -56,7 +55,6 @@ final class AgentLiveActivityController {
             schedulePublish()
             return
         }
-        tracker.reset()
         dismissedRunningKeys = []
         guard let id = activityID else { return }
         activityID = nil
@@ -99,28 +97,24 @@ final class AgentLiveActivityController {
         let entries = stores
             .sorted { $0.key.connectionID.uuidString < $1.key.connectionID.uuidString }
             .flatMap { backendID, store in
-                store.workspaces.map { AgentActivityTracker.Entry(connectionId: backendID.connectionID, workspace: $0) }
+                store.workspaces.map { AgentActivityContent.Entry(connectionId: backendID.connectionID, workspace: $0) }
             }
-        let state = tracker.content(for: entries, now: .now)
-        let content = ActivityContent(state: state, staleDate: .now.addingTimeInterval(Self.staleAfter))
+        let result = AgentActivityContent.make(from: entries, now: .now)
+        let content = ActivityContent(state: result.state, staleDate: .now.addingTimeInterval(Self.staleAfter))
 
         let activityState = activityID.flatMap(Self.state(id:))
         if activityState == .dismissed {
-            dismissedRunningKeys = tracker.runningKeys
+            dismissedRunningKeys = result.runningKeys
         }
         guard let id = activityID, activityState == .active || activityState == .stale else {
             activityID = nil
-            start(content)
+            start(content, running: result.runningKeys)
             return
         }
-        if state.runningCount == 0, state.needsYouCount == 0 {
+        if result.runningKeys.isEmpty {
             guard isSettled else { return }
             activityID = nil
-            tracker.reset()
-            let policy: ActivityUIDismissalPolicy = state.rows.isEmpty
-                ? .immediate
-                : .after(.now.addingTimeInterval(AgentActivityTracker.settledRetention))
-            await Self.end(id: id, content: content, policy: policy)
+            await Self.end(id: id, content: nil, policy: .immediate)
             return
         }
         await Self.update(id: id, content: content)
@@ -148,8 +142,7 @@ final class AgentLiveActivityController {
             .end(content, dismissalPolicy: policy)
     }
 
-    private func start(_ content: ActivityContent<AgentActivityAttributes.ContentState>) {
-        let running = tracker.runningKeys
+    private func start(_ content: ActivityContent<AgentActivityAttributes.ContentState>, running: Set<String>) {
         dismissedRunningKeys.formIntersection(running)
         guard !running.isEmpty, !running.isSubset(of: dismissedRunningKeys),
               UIApplication.shared.applicationState == .active,

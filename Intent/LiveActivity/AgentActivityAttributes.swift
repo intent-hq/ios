@@ -3,24 +3,13 @@ import Foundation
 import ActivityKit
 #endif
 
-/// One workspace shown in the agent Live Activity. Shared by the app, which
+/// One running workspace shown in the agent Live Activity. Shared by the app, which
 /// publishes it, and the widget extension, which renders it.
 nonisolated struct AgentActivityRow: Codable, Hashable, Identifiable, Sendable {
-    /// Ordered by display priority: rows that need the user come first.
-    enum Phase: Int, Codable, Comparable, Sendable {
-        case needsYou
-        case running
-        case failed
-        case done
-
-        static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
-    }
-
     let connectionId: UUID
     let workspaceId: String
     let title: String
     let detail: String?
-    let phase: Phase
     /// The agent a tap opens; nil when no agent was reported.
     let agentId: String?
     let agentName: String?
@@ -91,10 +80,9 @@ nonisolated struct AgentActivityLink: Equatable, Sendable {
 #if os(iOS)
 nonisolated struct AgentActivityAttributes: ActivityAttributes, Sendable {
     struct ContentState: Codable, Hashable, Sendable {
-        /// The highest-priority rows, capped so the payload stays small.
+        /// The first running workspaces, capped so the payload stays small.
         var rows: [AgentActivityRow]
         var runningCount: Int
-        var needsYouCount: Int
         var updatedAt: Date
     }
 }
