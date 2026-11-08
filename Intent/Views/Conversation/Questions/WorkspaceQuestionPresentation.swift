@@ -33,6 +33,14 @@ struct WorkspaceQuestionPresentation: ViewModifier {
             : Design.Question.transitionAnimation
     }
 
+    private var backdrop: some View {
+        (reduceTransparency ? Design.Palette.surface(for: colorScheme) : Color.black.opacity(Design.Question.backdropOpacity))
+            .ignoresSafeArea()
+            .contentShape(.rect)
+            .opacity(isActive ? 1 : 0)
+            .accessibilityHidden(true)
+    }
+
     func body(content: Content) -> some View {
         content
             .blur(radius: isActive && !reduceTransparency ? Design.Question.backdropBlur : 0)
@@ -42,11 +50,7 @@ struct WorkspaceQuestionPresentation: ViewModifier {
             .overlay {
                 if isEnabled, let pending = presentedQuestions {
                     ZStack(alignment: .bottom) {
-                        (reduceTransparency ? Design.Palette.surface(for: colorScheme) : Color.black.opacity(Design.Question.backdropOpacity))
-                            .ignoresSafeArea()
-                            .contentShape(.rect)
-                            .opacity(isActive ? 1 : 0)
-                            .accessibilityHidden(true)
+                        backdrop
                         QuestionWizardView(
                             questions: pending.questions,
                             collapsed: collapsed,
