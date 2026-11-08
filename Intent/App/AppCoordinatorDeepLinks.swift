@@ -27,7 +27,8 @@ struct DeepLinkRequest: Identifiable, Equatable {
 extension AppCoordinator {
     // MARK: - Deep links (intent:// URLs)
 
-    /// Entry point for `intent://` URLs (IntentApp.onOpenURL). Two kinds are
+    /// Entry point for `intent://` URLs (IntentApp.onOpenURL routes Live
+    /// Activity `intent://agent` links before this). Two kinds are
     /// actionable, each behind a confirmation before anything is sent:
     /// `intent://pair` (DeepLinkPairingView) and `intent://invite`, a shared
     /// workspace (InviteJoinView). Every other or malformed `intent://` URL is
