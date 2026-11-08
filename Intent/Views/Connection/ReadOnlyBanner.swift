@@ -72,9 +72,9 @@ struct ReadOnlyBannerMessage {
     }
 }
 
-/// Floating, non-blocking pill shown while reconnection keeps trying. It sits
-/// over the centre of the navigation bar without reserving space; tapping it
-/// opens a card with guidance, certificate warnings, Retry and Back to Home.
+/// Floating, non-blocking pill shown while reconnection keeps trying. It tucks
+/// under the status bar, above the navigation bar's title, without reserving
+/// space; tapping it opens a card with guidance, certificate warnings, Retry and Back to Home.
 struct ReadOnlyBanner: View {
     private enum Layout {
         static let collapsedMaximumWidth: CGFloat = 220
@@ -82,14 +82,16 @@ struct ReadOnlyBanner: View {
         static let spacing: CGFloat = 6
         static let detailSpacing: CGFloat = 12
         static let horizontalPadding: CGFloat = 12
-        static let verticalPadding: CGFloat = 7
+        static let verticalPadding: CGFloat = 5
         static let detailPadding: CGFloat = 16
         static let expandedCornerRadius: CGFloat = 22
         /// Larger than half the pill's height; the shape clamps it into a capsule.
         static let capsuleCornerRadius: CGFloat = 100
         static let outerPadding: CGFloat = 8
-        /// Centres the pill in a standard 44pt navigation bar row.
-        static let topPadding: CGFloat = 7
+        /// How far the pill rises into the status bar band, so it sits just under
+        /// the Dynamic Island and above the navigation bar's title.
+        static let statusBarTuck: CGFloat = 9
+        static let minimumTop: CGFloat = 4
         static let actionHeight: CGFloat = 40
         static let actionCornerRadius: CGFloat = 12
         static let shadowOpacity: Double = 0.15
@@ -99,6 +101,7 @@ struct ReadOnlyBanner: View {
 
     @ScaledMetric(relativeTo: .caption) private var iconSize: CGFloat = 13
     @State private var isExpanded = false
+    @State private var safeAreaTop: CGFloat = 0
     let message: ReadOnlyBannerMessage
     let mismatches: [HostCertMismatch]
     let onHome: () -> Void
@@ -108,6 +111,22 @@ struct ReadOnlyBanner: View {
     var onInteractiveFrameChange: (CGRect) -> Void = { _ in }
 
     var body: some View {
+        WidthCap(maxWidth: isExpanded ? Layout.expandedMaximumWidth : Layout.collapsedMaximumWidth) { content }
+            .background(.regularMaterial, in: shape)
+            .shadow(color: .black.opacity(Layout.shadowOpacity), radius: Layout.shadowRadius, y: Layout.shadowYOffset)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onInteractiveFrameChange($0) }
+            .padding(.horizontal, Layout.outerPadding)
+            .padding(.top, max(Layout.minimumTop, safeAreaTop - Layout.statusBarTuck))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(.container, edges: .top)
+            .background {
+                Color.clear
+                    .ignoresSafeArea()
+                    .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { safeAreaTop = $0 }
+            }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: Layout.detailSpacing) {
             HStack(spacing: Layout.spacing) {
                 Button {
@@ -131,13 +150,6 @@ struct ReadOnlyBanner: View {
         }
         .padding(.horizontal, isExpanded ? Layout.detailPadding : Layout.horizontalPadding)
         .padding(.vertical, isExpanded ? Layout.detailPadding : Layout.verticalPadding)
-        .frame(maxWidth: isExpanded ? Layout.expandedMaximumWidth : Layout.collapsedMaximumWidth)
-        .background(.regularMaterial, in: shape)
-        .shadow(color: .black.opacity(Layout.shadowOpacity), radius: Layout.shadowRadius, y: Layout.shadowYOffset)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onInteractiveFrameChange($0) }
-        .padding(.horizontal, Layout.outerPadding)
-        .padding(.top, Layout.topPadding)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var shape: RoundedRectangle {
@@ -238,6 +250,21 @@ struct ReadOnlyBanner: View {
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityHint(hint)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Caps the proposed width but, unlike `frame(maxWidth:)`, takes its content's
+/// size, so the collapsed pill hugs short text and truncates long text.
+private struct WidthCap: Layout {
+    let maxWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = min(proposal.width ?? maxWidth, maxWidth)
+        return subviews.first?.sizeThatFits(ProposedViewSize(width: width, height: proposal.height)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }
 
