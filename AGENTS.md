@@ -8,6 +8,7 @@
 
 - `GeometryReader` is banned in `Intent/`, `IntentTests/`, and `IntentUITests/`; never suppress `geometry_reader_usage`. [LayoutPolicyTests](IntentTests/LayoutPolicyTests.swift) also enforces this.
 - Use `onGeometryChange`, `containerRelativeFrame`, `Shape.path(in:)`, or a custom `Layout`.
+- Apply `copyContextMenuPassthrough()` inside the label of every `Button` in a transcript row, or the row's Copy overlay swallows its taps; [CopyContextMenuPassthroughPolicyTests](IntentTests/CopyContextMenuPassthroughPolicyTests.swift) enforces this.
 
 ## State modeling
 

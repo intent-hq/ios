@@ -2,7 +2,8 @@ import Foundation
 import Testing
 
 /// Repository files that the source-backed suites (InfoPlistSyncTests,
-/// PlatformGuardAllowlistTests, LayoutPolicyTests) inspect at runtime.
+/// PlatformGuardAllowlistTests, LayoutPolicyTests,
+/// CopyContextMenuPassthroughPolicyTests) inspect at runtime.
 ///
 /// The IntentTests target packages them into IntentTests.xctest through its
 /// "Copy Test Source Inputs" Copy Files phase — folder references for
