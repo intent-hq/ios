@@ -24,7 +24,10 @@ extension DemoFixtures {
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: proposal),
               let json = String(data: data, encoding: .utf8) else { return [] }
-        return [["type": "resource", "resource": ["mimeType": "application/vnd.intent.proposal+json", "text": json]]]
+        return [
+            ["type": "text", "text": "I can open a follow-up workspace for the Mermaid failures."],
+            ["type": "resource", "resource": ["mimeType": "application/vnd.intent.proposal+json", "text": json]]
+        ]
     }
 
     static func workspaceProposalResponse(for method: String, params: [String: Any]) -> Any? {

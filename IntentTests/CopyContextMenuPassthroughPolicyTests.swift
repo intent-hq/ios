@@ -123,6 +123,32 @@ struct CopyContextMenuPassthroughPolicyTests {
         #expect(CopyContextMenuButtonScanner.unmarkedButtons(in: source).count == expectedFindings)
     }
 
+    @Test(arguments: [
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 0),
+        ("Button { go() } label: { Text(\"Go\") }\n    .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))", 0),
+        ("Button(\"Go\") { go() }\n    .disabled(busy)\n    .overlay { Text(\"x\") }\n    .buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 0),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: false))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(variant: .secondary))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentContentButtonStyle(passesThroughCopyMenu: true))", 1),
+        ("Button(\"Go\") { go() }.background(IntentButtonStyle(passesThroughCopyMenu: true))", 1),
+        ("VStack { Button(\"Go\") { go() } }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(variant: pick(passesThroughCopyMenu: true)))", 1)
+    ])
+    func passthroughButtonStyleCountsOnTheButtonsOwnChain(source: String, expectedFindings: Int) {
+        #expect(CopyContextMenuButtonScanner.unmarkedButtons(in: source).count == expectedFindings)
+    }
+
+    @Test func passthroughButtonStyleCoversOnlyTheButtonItFollows() {
+        let source = """
+        HStack {
+            Button("A") { a() }
+            Button("B") { b() }
+                .buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))
+        }
+        """
+        #expect(CopyContextMenuButtonScanner.unmarkedButtons(in: source).map(\.line) == [2])
+    }
+
     @Test func markerOnButtonModifierChainDoesNotCount() {
         let source = "Button { go() } label: { Text(\"Go\") }\n    .copyContextMenuPassthrough()"
         #expect(CopyContextMenuButtonScanner.unmarkedButtons(in: source).map(\.line) == [1])

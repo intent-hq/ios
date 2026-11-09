@@ -97,6 +97,58 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         XCTAssertTrue(app.buttons["proposal.openWorkspace"].exists)
     }
 
+    /// Taps land on the pill padding, outside the label glyphs, where the
+    /// message's copy overlay used to claim them.
+    @MainActor
+    func testProposalButtonPaddingReceivesTaps() {
+        let app = openAssistant(arguments: ["--demo-assistant-proposal"])
+        let dismiss = app.buttons["proposal.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: Self.timeout))
+        tapPadding(of: dismiss)
+        XCTAssertTrue(app.buttons["Dismiss proposal"].waitForExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    func testWorkspaceProposalButtonPaddingReceivesTaps() {
+        let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
+        let message = app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "follow-up workspace for the Mermaid failures")
+        ).firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: Self.timeout))
+        message.press(forDuration: 1)
+        let copy = app.menuItems["Copy"].firstMatch
+        XCTAssertTrue(copy.waitForExistence(timeout: Self.timeout), "Message text must keep its Copy menu")
+        copy.tap()
+
+        let dismiss = app.buttons["proposal.dismiss"]
+        XCTAssertTrue(dismiss.waitForExistence(timeout: Self.timeout))
+        tapPadding(of: dismiss)
+        let cancel = app.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: Self.timeout))
+        cancel.tap()
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: Self.timeout))
+
+        let apply = app.buttons["proposal.apply"]
+        tapPadding(of: apply)
+        let outcome = app.staticTexts["proposal.outcome"]
+        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(outcome.label, "Workspace created")
+        let open = app.buttons["proposal.openWorkspace"]
+        XCTAssertTrue(open.exists)
+        tapPadding(of: open)
+        XCTAssertTrue(open.waitForNonExistence(timeout: Self.timeout))
+    }
+
+    /// Taps 8pt inside the leading edge at mid-height: within the 20pt
+    /// horizontal padding and the pill's rounded shape.
+    @MainActor
+    private func tapPadding(of button: XCUIElement) {
+        XCTAssertTrue(button.isHittable)
+        button.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: 8, dy: button.frame.height / 2))
+            .tap()
+    }
+
     @MainActor
     private func captureSwitches(in app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
