@@ -28,6 +28,7 @@ struct ScriptMonitorWakeAttributionView: View {
             }
             .tracking(Design.Typography.smallTracking)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var scriptName: String {

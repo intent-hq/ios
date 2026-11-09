@@ -26,6 +26,7 @@ struct HookWakeAttributionView: View {
             }
             .tracking(Design.Typography.smallTracking)
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var displayName: String {

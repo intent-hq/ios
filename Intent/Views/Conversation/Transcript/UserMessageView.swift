@@ -16,6 +16,12 @@ struct UserMessageView: View {
         get { disclosure.binding(for: .agentMessage, default: false).wrappedValue }
         nonmutating set { disclosure.binding(for: .agentMessage, default: false).wrappedValue = newValue }
     }
+    /// Hook, PR and script wake cards also start collapsed (FE parity:
+    /// ChatMessage.svelte `isAutomatedWakeExpanded`).
+    private var isAutomatedWakeExpanded: Bool {
+        get { disclosure.binding(for: .automatedWake, default: false).wrappedValue }
+        nonmutating set { disclosure.binding(for: .automatedWake, default: false).wrappedValue = newValue }
+    }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
@@ -98,7 +104,7 @@ struct UserMessageView: View {
         VStack(alignment: .leading, spacing: isWatcherWake
             ? Design.Watcher.sectionSpacing : Layout.contentSpacing) {
             attributionHeader
-            if agentMessage == nil || isAgentMessageExpanded {
+            if showsMessageContents {
                 messageContents
             }
         }
@@ -115,14 +121,8 @@ struct UserMessageView: View {
         ))
     }
 
-    private var agentMessageExpansion: Binding<Bool> {
-        Binding(
-            get: { isAgentMessageExpanded },
-            set: { expanded in
-                onLayoutChange?()
-                isAgentMessageExpanded = expanded
-            }
-        )
+    private var showsMessageContents: Bool {
+        (agentMessage == nil || isAgentMessageExpanded) && (!isWatcherWake || isAutomatedWakeExpanded)
     }
 
     private var isWatcherWake: Bool {
@@ -132,11 +132,17 @@ struct UserMessageView: View {
     @ViewBuilder
     private var attributionHeader: some View {
         if let scriptWake {
-            ScriptMonitorWakeAttributionView(attribution: scriptWake)
+            WakeCardDisclosureHeader(isExpanded: automatedWakeExpansion) {
+                ScriptMonitorWakeAttributionView(attribution: scriptWake)
+            }
         } else if let hookWake {
-            HookWakeAttributionView(attribution: hookWake)
+            WakeCardDisclosureHeader(isExpanded: automatedWakeExpansion) {
+                HookWakeAttributionView(attribution: hookWake)
+            }
         } else if let prWake {
-            PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
+            WakeCardDisclosureHeader(isExpanded: automatedWakeExpansion, headerHasControls: true) {
+                PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
+            }
         } else if let agentMessage {
             AgentMessageAttributionView(
                 attribution: agentMessage,
@@ -309,6 +315,26 @@ struct UserMessageView: View {
 }
 
 extension UserMessageView {
+    private var automatedWakeExpansion: Binding<Bool> {
+        Binding(
+            get: { isAutomatedWakeExpanded },
+            set: { expanded in
+                onLayoutChange?()
+                isAutomatedWakeExpanded = expanded
+            }
+        )
+    }
+
+    private var agentMessageExpansion: Binding<Bool> {
+        Binding(
+            get: { isAgentMessageExpanded },
+            set: { expanded in
+                onLayoutChange?()
+                isAgentMessageExpanded = expanded
+            }
+        )
+    }
+
     private func fileAttachmentChip(_ block: ContentBlock) -> some View {
         HStack(spacing: Layout.fileChipSpacing) {
             Image(.file)
