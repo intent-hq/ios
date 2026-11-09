@@ -41,6 +41,8 @@ nonisolated final class AutomatedMessageUITests: XCTestCase {
         attachScreenshot(app, name: "Automated messages agent expanded")
 
         XCTAssertEqual(scriptHeader.value as? String, "Collapsed")
+        // The transcript re-anchors while the agent card grows; tap once it settles.
+        XCTAssertTrue(scriptHeader.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         scriptHeader.tap()
         XCTAssertTrue(scriptBody.waitForExistence(timeout: Self.timeout), "Tapping the header row shows the wake body")
         XCTAssertEqual(scriptHeader.value as? String, "Expanded")
