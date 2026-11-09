@@ -30,6 +30,10 @@
 #   4. Read the result bundle (merging the wrapper's crash re-run bundle, if
 #      any) and write the summary: verdict, exit code, per-suite counts,
 #      failing tests with their first failure message, and a rerun command.
+#      With KEEP_UI_EVIDENCE=1, first copy the bundles' allowlisted UI
+#      screenshots out with the commit's scripts/export_ui_evidence.py (its
+#      CAPTURES table) and list each file, with its size, in the summary, so a
+#      UI pull request gets its screenshots from one run, passing or failing.
 #   5. Delete the temporary checkout (KEEP_CHECKOUT=1 keeps it).
 #
 # Files, under INTENT_IOS_TEST_RUN_DIR (default
@@ -39,7 +43,10 @@
 #                        FAILED, INTERRUPTED or ERROR. RUNNING with a PID that
 #                        no longer exists means the run was killed: rerun it.
 #   runs/<stamp>-<sha>.*/ Each run's xcodebuild.log and summary.md, plus the
-#                        result bundle of a failed run. The newest 10 are kept.
+#                        result bundle of a failed run and, with
+#                        KEEP_UI_EVIDENCE=1, ui-evidence/ (the exported PNGs
+#                        and manifests) and ui-evidence.log. The newest 10 are
+#                        kept.
 #   tailcatkit/<tree>/   TailcatKit.xcframework builds keyed by the git tree
 #                        of TailcatKit/, so a new checkout skips the slow Go
 #                        build. Only complete builds the wrapper made in a
@@ -57,8 +64,8 @@
 # rerun command: DEVELOPER_DIR (when the caller sets it), BUILD_CONFIGURATION,
 # SIM_UDID, SPM_CLONE_DIR,
 # TEST_CRASH_RETRY, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR, TAILCATKIT_AUTOBUILD,
-# KEEP_CHECKOUT, RUN_KILL_GRACE, INTENT_IOS_TEST_RUN_DIR and every TEST_RUNNER_*
-# variable.
+# KEEP_CHECKOUT, KEEP_UI_EVIDENCE, RUN_KILL_GRACE, INTENT_IOS_TEST_RUN_DIR and
+# every TEST_RUNNER_* variable.
 #
 # Interrupts: a TERM, INT or HUP stops the whole test run (xcodebuild
 # included) with TERM; a second signal, or RUN_KILL_GRACE seconds (default
@@ -75,7 +82,7 @@
 # timeout long enough for a build plus the tests.
 set -euo pipefail
 
-RECORDED_ENV="DEVELOPER_DIR BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR TAILCATKIT_AUTOBUILD KEEP_CHECKOUT RUN_KILL_GRACE INTENT_IOS_TEST_RUN_DIR"
+RECORDED_ENV="DEVELOPER_DIR BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR TAILCATKIT_AUTOBUILD KEEP_CHECKOUT KEEP_UI_EVIDENCE RUN_KILL_GRACE INTENT_IOS_TEST_RUN_DIR"
 KEEP_RUNS=10
 KEEP_TAILCATKIT=3
 
@@ -96,6 +103,9 @@ scripts/xcodebuild.sh and writes the result to
 
 Example:
   scripts/run_commit_tests.sh 0123abcd... 'IntentTests/AgentListPagingTests'
+
+KEEP_UI_EVIDENCE=1 keeps the allowlisted UI screenshots (CAPTURES in
+scripts/export_ui_evidence.py) and lists them in the summary.
 
 Run it in the foreground. See the script header for details.
 EOF
@@ -696,6 +706,77 @@ if status != 0:
 with open(out_path, "w") as f:
     f.write("\n".join(lines) + "\n")
 PY
+
+# KEEP_UI_EVIDENCE=1: copy the allowlisted screenshots out before the bundle
+# and the checkout are deleted. The commit's own exporter runs, so its
+# allowlist matches that commit's tests.
+if [ "${KEEP_UI_EVIDENCE:-0}" = 1 ]; then
+  evidence=$run_dir/ui-evidence
+  evidence_log=$run_dir/ui-evidence.log
+  if [ -f "$checkout/scripts/export_ui_evidence.py" ]; then
+    evidence_status=0
+    (
+      cd "$checkout"
+      unset GITHUB_OUTPUT
+      exec python3 scripts/export_ui_evidence.py --output-root "$evidence" --bundles "$bundle"
+    ) > "$evidence_log" 2>&1 < /dev/null || evidence_status=$?
+  else
+    evidence_status=missing
+  fi
+  python3 - "$evidence_status" "$evidence" "$evidence_log" "$bundle" >> "$report" <<'PY' || echo "warning: could not list the UI evidence; see $evidence" >&2
+import json
+import os
+import sys
+
+status, root, log_path, bundle = sys.argv[1:5]
+lines = ["", "## UI evidence", ""]
+if status == "missing":
+    lines.append("Not exported: this commit has no scripts/export_ui_evidence.py.")
+elif status != "0":
+    lines.append("The export failed (exit %s); see %s." % (status, log_path))
+else:
+    files, missing = [], []
+    for kind in sorted(os.listdir(root)):
+        manifest_path = os.path.join(root, kind, "manifest.json")
+        if not os.path.isfile(manifest_path):
+            continue
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        for entry in manifest.get("files", []):
+            path = os.path.join(root, kind, entry["file"])
+            size = os.path.getsize(path) if os.path.isfile(path) else 0
+            files.append((path, size))
+        for entry in manifest.get("missingCaptures", []):
+            retry = " (crash re-run)" if entry.get("retry") else ""
+            missing.append("- `%s`%s: %s" % (entry.get("testIdentifier"), retry, ", ".join(entry.get("captures", []))))
+    if files:
+        lines.append("%d file%s kept:" % (len(files), "" if len(files) == 1 else "s"))
+        lines.append("")
+        for path, size in files:
+            lines.append("- `%s` (%d bytes%s)" % (path, size, ", EMPTY" if size == 0 else ""))
+    elif not os.path.isdir(bundle):
+        lines.append("No result bundle, so there was nothing to export.")
+    else:
+        lines.append("No allowlisted screenshots: CAPTURES in scripts/export_ui_evidence.py lists the tests that have them.")
+    if missing:
+        lines.append("")
+        lines.append("Missing captures (a test can fail before it reaches them):")
+        lines.append("")
+        lines.extend(missing)
+    warnings = []
+    with open(log_path, errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("::warning::") and "Missing fixture captures" not in line:
+                warnings.append("- " + line[len("::warning::"):][:300])
+    if warnings:
+        lines.append("")
+        lines.append("Exporter warnings (full output: %s):" % log_path)
+        lines.append("")
+        lines.extend(warnings[:10])
+print("\n".join(lines))
+PY
+fi
 
 if [ "$status" -eq 0 ]; then
   state=PASSED

@@ -19,7 +19,7 @@ work=$(mktemp -d "${tmp_root%/}/run-commit-tests-selftest.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 export TMPDIR=$work
 unset BUILD_CONFIGURATION SIM_UDID SPM_CLONE_DIR TEST_CRASH_RETRY SIM_LOCK_TIMEOUT SIM_LOCK_DIR
-unset TAILCATKIT_AUTOBUILD KEEP_CHECKOUT ONLY_TESTING RESULT_BUNDLE DERIVED_DATA_DIR
+unset TAILCATKIT_AUTOBUILD KEEP_CHECKOUT KEEP_UI_EVIDENCE ONLY_TESTING RESULT_BUNDLE DERIVED_DATA_DIR
 for name in $(env | sed -n 's/^\(TEST_RUNNER_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$name"; done
 export GIT_AUTHOR_NAME=selftest GIT_AUTHOR_EMAIL=selftest@example.invalid
 export GIT_COMMITTER_NAME=selftest GIT_COMMITTER_EMAIL=selftest@example.invalid
@@ -28,8 +28,9 @@ mkdir -p "$HOME"
 git config --global init.defaultBranch main
 git config --global advice.detachedHead false
 
-# xcrun prints <bundle>/tests.json for an xcresulttool query; xcodebuild only
-# answers -version.
+# xcrun prints <bundle>/tests.json for an xcresulttool query and exports
+# <bundle>/attachments (an empty manifest when there is none; fails under
+# STUB_EXPORT_FAIL=1); xcodebuild only answers -version.
 stubs=$work/bin
 mkdir -p "$stubs"
 cat > "$stubs/xcrun" <<'EOF'
@@ -38,6 +39,18 @@ case " $* " in
   *" xcresulttool get test-results tests --path "*)
     for last in "$@"; do :; done
     cat "$last/tests.json" ;;
+  *" xcresulttool export attachments "*)
+    [ -z "${STUB_EXPORT_FAIL:-}" ] || exit 1
+    path= out=
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --path) path=$2; shift ;;
+        --output-path) out=$2; shift ;;
+      esac
+      shift
+    done
+    mkdir -p "$out"
+    if [ -d "$path/attachments" ]; then cp -R "$path/attachments/." "$out/"; else echo '[]' > "$out/manifest.json"; fi ;;
 esac
 EOF
 cat > "$stubs/xcodebuild" <<'EOF'
@@ -51,7 +64,8 @@ export PATH="$stubs:$PATH"
 # The fake wrapper writes what it saw to $STUB_RECORD, builds a stand-in
 # TailcatKit.xcframework when none exists (without its final LICENSE.tailcat
 # under STUB_TAILCAT_PARTIAL=1), then acts out $STUB_OUTCOME: pass/fail copy
-# $STUB_RESULTS into the result bundle (fail exits 65 with an error line),
+# $STUB_RESULTS (and the $STUB_ATTACHMENTS directory, when set) into the
+# result bundle (fail exits 65 with an error line),
 # buildfail exits 65 without a bundle, crash also writes $STUB_RETRY_RESULTS
 # to the re-run bundle and exits 0, and sleep waits on a foreground pipeline
 # like the real wrapper's xcodebuild call: it writes the sleeping process's PID
@@ -109,11 +123,14 @@ if [ -n "${STUB_LOCKED:-}" ]; then
   mkdir -p locked && : > locked/file && chmod 555 locked
 fi
 case "${STUB_OUTCOME:-pass}" in
-  pass)
+  pass|fail)
     mkdir -p "$RESULT_BUNDLE"; cp "$STUB_RESULTS" "$RESULT_BUNDLE/tests.json"
+    [ -z "${STUB_ATTACHMENTS:-}" ] || cp -R "$STUB_ATTACHMENTS" "$RESULT_BUNDLE/attachments" ;;
+esac
+case "${STUB_OUTCOME:-pass}" in
+  pass)
     echo "** TEST SUCCEEDED **" ;;
   fail)
-    mkdir -p "$RESULT_BUNDLE"; cp "$STUB_RESULTS" "$RESULT_BUNDLE/tests.json"
     echo "/repo/IntentTests/FooTests.swift:12: error: -[IntentTests.FooTests testBar] : XCTAssertEqual failed"
     echo "** TEST FAILED **"
     exit 65 ;;
@@ -137,6 +154,8 @@ esac
 EOF
 chmod +x "$origin/scripts/xcodebuild.sh"
 echo "module tailcatkit" > "$origin/TailcatKit/go.mod"
+# The real exporter, so KEEP_UI_EVIDENCE runs the commit's own allowlist.
+cp scripts/export_ui_evidence.py "$origin/scripts/"
 git -C "$origin" init --quiet
 git -C "$origin" config uploadpack.allowAnySHA1InWant true
 echo A > "$origin/marker.txt"
@@ -172,6 +191,10 @@ YAML
 git -C "$origin" add -A
 git -C "$origin" commit --quiet -m "commit E"
 sha_e=$(git -C "$origin" rev-parse HEAD)
+git -C "$origin" checkout --quiet -b noexporter main
+git -C "$origin" rm --quiet scripts/export_ui_evidence.py
+git -C "$origin" commit --quiet -m "commit F"
+sha_f=$(git -C "$origin" rev-parse HEAD)
 git -C "$origin" checkout --quiet main
 
 # make_results <file> <Target/Suite/test=Result[=failure message]>...
@@ -350,6 +373,89 @@ assert_contains "recovered crash is called out" "$(summary)" "re-ran the interru
 status=$(run ui -- "$sha_b" 'IntentTests/FooTests' 'IntentUITests/WorkspaceChangesUITests')
 assert_eq "UI run exits 0" "$status" 0
 assert_eq "a UI selector runs test-ios" "$(record argv)" "test-ios"
+
+# KEEP_UI_EVIDENCE=1 keeps the allowlisted screenshots through the commit's
+# exporter and lists them; nothing else from the bundle is kept.
+# make_attachments <dir> <capture>...: an xcresulttool attachment export for
+# AutomatedMessageUITests holding the given captures, plus one screenshot the
+# allowlist does not name.
+make_attachments() {
+  python3 - "$@" <<'EOF'
+import json, os, sys
+out, captures = sys.argv[1], sys.argv[2:] + ["Unlisted screenshot"]
+os.makedirs(out)
+attachments = []
+for index, capture in enumerate(captures):
+    name = "shot%d.png" % index
+    with open(os.path.join(out, name), "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n" + capture.encode() * 20)
+    attachments.append({
+        "exportedFileName": name,
+        "suggestedHumanReadableName": "%s_0_0123ABCD-0123-4567-89AB-0123456789AB.png" % capture,
+    })
+record = {"testIdentifier": "AutomatedMessageUITests/testAgentMessageCollapsesAndScriptWakeRendersAsACard()",
+          "attachments": attachments}
+with open(os.path.join(out, "manifest.json"), "w") as f:
+    json.dump([record], f)
+EOF
+}
+make_attachments "$work/attachments-full" \
+  "Automated messages collapsed" "Automated messages agent expanded" "Automated messages final state"
+make_attachments "$work/attachments-partial" \
+  "Automated messages collapsed" "Automated messages agent expanded"
+make_results "$work/ui-pass.json" \
+  "IntentUITests/AutomatedMessageUITests/testAgentMessageCollapsesAndScriptWakeRendersAsACard()=Passed"
+make_results "$work/ui-fail.json" \
+  "IntentUITests/AutomatedMessageUITests/testAgentMessageCollapsesAndScriptWakeRendersAsACard()=Failed=timed out"
+ui_selector='IntentUITests/AutomatedMessageUITests'
+# kept_files: the screenshot paths the summary lists.
+kept_files() { summary | sed -n 's/^- `\(.*\.png\)` ([0-9]* bytes.*)$/\1/p'; }
+
+status=$(run evidence KEEP_UI_EVIDENCE=1 STUB_RESULTS="$work/ui-pass.json" STUB_ATTACHMENTS="$work/attachments-full" -- "$sha_a" "$ui_selector")
+assert_eq "a passing run with KEEP_UI_EVIDENCE exits 0" "$status" 0
+assert_contains "the summary has a UI evidence section" "$(summary)" "## UI evidence"
+assert_contains "the summary counts the kept screenshots" "$(summary)" "3 files kept:"
+assert_eq "the summary lists three screenshots" "$(kept_files | wc -l | tr -d ' ')" 3
+evidence_ok=yes
+for file in $(kept_files); do
+  if [ ! -s "$file" ] || [ "$(head -c 4 "$file" | tail -c 3)" != PNG ]; then evidence_ok="no: $file"; fi
+done
+assert_eq "every listed screenshot is a non-empty PNG on disk" "$evidence_ok" yes
+for capture in collapsed agent_expanded final_state; do
+  assert_contains "the $capture capture is kept" "$(kept_files)" "Automated_messages_$capture-"
+done
+evidence_dir=$(dirname "$(summary_field Log)")/ui-evidence
+assert_eq "only allowlisted screenshots are kept" "$(find "$evidence_dir" -name '*.png' | wc -l | tr -d ' ')" 3
+assert_lacks "an unlisted screenshot is not kept" "$(summary)" "Unlisted"
+assert_lacks "a complete run reports no missing captures" "$(summary)" "Missing captures"
+assert_eq "the commit's exporter ran in the checkout" \
+  "$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["revision"])' "$evidence_dir/review/manifest.json")" "$sha_a"
+if [ -e "$(record bundle)" ]; then fail "the passing run's bundle is still deleted"; else pass "the passing run's bundle is still deleted"; fi
+assert_contains "rerun records KEEP_UI_EVIDENCE" "$(summary_field Rerun)" "KEEP_UI_EVIDENCE='1' "
+
+status=$(run evidencefail KEEP_UI_EVIDENCE=1 STUB_OUTCOME=fail STUB_RESULTS="$work/ui-fail.json" STUB_ATTACHMENTS="$work/attachments-partial" -- "$sha_a" "$ui_selector")
+assert_eq "a failing run with KEEP_UI_EVIDENCE keeps exit 65" "$status" 65
+assert_contains "a failing run keeps the screenshots it reached" "$(summary)" "2 files kept:"
+assert_contains "a failing run names the missing capture" "$(summary)" \
+  '- `AutomatedMessageUITests/testAgentMessageCollapsesAndScriptWakeRendersAsACard()`: Automated messages final state'
+
+status=$(run noevidence STUB_RESULTS="$work/ui-pass.json" STUB_ATTACHMENTS="$work/attachments-full" -- "$sha_a" "$ui_selector")
+assert_eq "a run without KEEP_UI_EVIDENCE exits 0" "$status" 0
+assert_lacks "without KEEP_UI_EVIDENCE the summary has no UI evidence" "$(summary)" "UI evidence"
+if [ -e "$(dirname "$(summary_field Log)")/ui-evidence" ]; then fail "without KEEP_UI_EVIDENCE nothing is exported"; else pass "without KEEP_UI_EVIDENCE nothing is exported"; fi
+
+status=$(run evidencenoexporter KEEP_UI_EVIDENCE=1 STUB_RESULTS="$work/ui-pass.json" STUB_ATTACHMENTS="$work/attachments-full" -- "$sha_f" "$ui_selector")
+assert_eq "a commit without the exporter still exits 0" "$status" 0
+assert_contains "a commit without the exporter is explained" "$(summary)" "Not exported: this commit has no scripts/export_ui_evidence.py."
+
+status=$(run evidenceexportfail KEEP_UI_EVIDENCE=1 STUB_EXPORT_FAIL=1 STUB_RESULTS="$work/ui-pass.json" STUB_ATTACHMENTS="$work/attachments-full" -- "$sha_a" "$ui_selector")
+assert_eq "a failed attachment export keeps exit 0" "$status" 0
+assert_contains "a failed attachment export keeps nothing" "$(summary)" "No allowlisted screenshots"
+assert_contains "a failed attachment export quotes the exporter warning" "$(summary)" "Could not export attachments from"
+
+status=$(run evidencebuildfail KEEP_UI_EVIDENCE=1 STUB_OUTCOME=buildfail -- "$sha_a" "$ui_selector")
+assert_eq "a build failure with KEEP_UI_EVIDENCE keeps exit 65" "$status" 65
+assert_contains "a build failure has no bundle to export" "$(summary)" "No result bundle, so there was nothing to export."
 
 # Recorded environment reaches the wrapper and the rerun command.
 status=$(run env BUILD_CONFIGURATION=Release TEST_RUNNER_FOO=1 -- "$sha_b" 'IntentTests/FooTests')

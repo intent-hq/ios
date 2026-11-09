@@ -44,7 +44,7 @@
 - `ONLY_TESTING` accepts whitespace-separated runnable `Target[/Suite[/test]]` identifiers; filenames are not selectors. Inspect executed/skipped counts before claiming coverage; all-skipped selections can pass.
 - For Release split runs, set `BUILD_CONFIGURATION=Release` on both commands; Debug results and Debug-only fixtures are not Release coverage.
 - After adding, removing, splitting, or moving Swift files, run `scripts/update-source-lists.sh`; it regenerates both Xcode input lists (test sources and SwiftLint) from the working tree.
-- Linux agents cannot compile Swift, so a Mac helper agent runs iOS tests. Give it one command: `scripts/run_commit_tests.sh <full-sha> 'IntentTests/<Suite>' ...` (single-quote each selector). It tests that commit in a clean temporary checkout through the wrapper and writes `~/Library/Caches/intent-ios-test-run/summary.md`: verdict, per-suite counts, failing tests, and the rerun command. Run it in the foreground; a restarted agent reads the summary instead of asking for the steps again.
+- Linux agents cannot compile Swift, so a Mac helper agent runs iOS tests. Give it one command: `scripts/run_commit_tests.sh <full-sha> 'IntentTests/<Suite>' ...` (single-quote each selector). It tests that commit in a clean temporary checkout through the wrapper and writes `~/Library/Caches/intent-ios-test-run/summary.md`: verdict, per-suite counts, failing tests, and the rerun command. Run it in the foreground; a restarted agent reads the summary instead of asking for the steps again. For UI pull requests, prefix `KEEP_UI_EVIDENCE=1`: the run keeps the allowlisted screenshots, passing or failing, and the summary lists each PNG with its size.
 - Read the [wrapper header](scripts/xcodebuild.sh) for locks, crash retries, the launch watchdog (exit 84: the app aborted before `main`; never retried), and exit codes; use [prerequisites](README.md#clean-checkout-prerequisites), [wrapper commands](README.md#xcode-wrapper-commands), and [SwiftLint setup](README.md#strict-lint-on-linux) for toolchain details.
 
 ## CI and UI evidence
@@ -65,12 +65,12 @@ Run the matching checks after changing tooling:
 | Changed area | Checks |
 | --- | --- |
 | Xcode wrapper | `scripts/test_xcodebuild.sh` |
-| Mac commit test runner | `scripts/test_run_commit_tests.sh` |
+| Mac commit test runner (including `KEEP_UI_EVIDENCE`) | `scripts/test_run_commit_tests.sh` |
 | Source-input generator | `scripts/test-generate-test-inputs.sh` |
 | Source-list updater / shared enumeration (`scripts/source-lists.sh`) | `scripts/test-update-source-lists.sh`; `scripts/test-check-swiftlint-inputs.sh`; `scripts/test-generate-test-inputs.sh` |
 | CI / test selection | `python3 scripts/test_ci_simulator.py`; `python3 scripts/test_ui_smoke_tests.py`; `python3 scripts/test_ui_full_tests.py` |
 | Runner / capture selection | `python3 scripts/test_select_macos_runner.py`; `python3 scripts/test_select_fixture_capture_repetitions.py` |
-| Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`) |
+| Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`); `scripts/test_run_commit_tests.sh` (the runner calls its command line) |
 | SwiftLint wrapper / input checker | `scripts/test-swiftlint.sh`; `scripts/test-check-swiftlint-inputs.sh`; Linux setup/runtime checks are in the [lint guide](README.md#strict-lint-on-linux) |
 | Xcode Cloud preparation | `scripts/test-ci-post-clone.sh` |
 | UI attachment lifecycle check | `python3 scripts/check_ui_attachment_lifecycle.py`; `python3 scripts/test_check_ui_attachment_lifecycle.py` |
