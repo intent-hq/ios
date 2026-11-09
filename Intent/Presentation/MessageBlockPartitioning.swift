@@ -15,9 +15,12 @@ enum MessageBlockPartitioning {
     static func plainTextContent(
         from blocks: [ContentBlock],
         hookWake: HookWakeAttribution? = nil,
-        prWake: PrMonitorWakeAttribution? = nil
+        prWake: PrMonitorWakeAttribution? = nil,
+        agentMessage: AgentMessageAttribution? = nil
     ) -> String {
-        blocks.compactMap { block -> String? in
+        let firstTextIndex = blocks.firstIndex { $0.type == .text }
+        return blocks.indices.compactMap { index -> String? in
+            let block = blocks[index]
             switch block.type {
             case .text:
                 guard var text = block.resolvedText else { return nil }
@@ -25,6 +28,8 @@ enum MessageBlockPartitioning {
                     text = HookWakeAttribution.displayText(text, attribution: hookWake)
                 } else if prWake != nil {
                     text = PrMonitorWakeAttribution.displayText(text)
+                } else if let agentMessage, index == firstTextIndex {
+                    text = AgentMessageAttribution.stripSenderHeader(text, attribution: agentMessage)
                 }
                 let plain = ContextMention.replacingTokensWithTitles(
                     in: stripSupervisorTags(text)
@@ -42,17 +47,22 @@ enum MessageBlockPartitioning {
     static func userCopyText(
         from blocks: [ContentBlock],
         hookWake: HookWakeAttribution? = nil,
-        prWake: PrMonitorWakeAttribution? = nil
+        prWake: PrMonitorWakeAttribution? = nil,
+        agentMessage: AgentMessageAttribution? = nil
     ) -> String {
         plainTextContent(
             from: partitionUserBlocks(blocks).text,
             hookWake: hookWake,
-            prWake: prWake
+            prWake: prWake,
+            agentMessage: agentMessage
         )
     }
 
-    static func agentMessagePreview(from blocks: [ContentBlock]) -> String {
-        userCopyText(from: blocks)
+    static func agentMessagePreview(
+        from blocks: [ContentBlock],
+        agentMessage: AgentMessageAttribution? = nil
+    ) -> String {
+        userCopyText(from: blocks, agentMessage: agentMessage)
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
@@ -294,17 +304,22 @@ extension MessageView {
     static func userCopyText(
         from blocks: [ContentBlock],
         hookWake: HookWakeAttribution? = nil,
-        prWake: PrMonitorWakeAttribution? = nil
+        prWake: PrMonitorWakeAttribution? = nil,
+        agentMessage: AgentMessageAttribution? = nil
     ) -> String {
         MessageBlockPartitioning.userCopyText(
             from: blocks,
             hookWake: hookWake,
-            prWake: prWake
+            prWake: prWake,
+            agentMessage: agentMessage
         )
     }
 
-    static func agentMessagePreview(from blocks: [ContentBlock]) -> String {
-        MessageBlockPartitioning.agentMessagePreview(from: blocks)
+    static func agentMessagePreview(
+        from blocks: [ContentBlock],
+        agentMessage: AgentMessageAttribution? = nil
+    ) -> String {
+        MessageBlockPartitioning.agentMessagePreview(from: blocks, agentMessage: agentMessage)
     }
 
     static func assistantCopyText(from blocks: [ContentBlock]) -> String {
