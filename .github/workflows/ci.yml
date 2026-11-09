@@ -690,6 +690,31 @@ jobs:
             scripts/xcodebuild.sh test-without-building
           fi
 
+      # Release runtime check (intent-hq/ios#468, #963): build and run
+      # ReleaseConfigurationTests in the Release configuration. It uses its own
+      # derived-data directory so the Debug build products above are not
+      # reused or clobbered, and the job's owned simulator (steps run in
+      # order, and the wrapper's simulator lock serializes them anyway). The
+      # wrapper already fails a selector that matched or ran nothing (exit
+      # 82); this step also fails when its tests were all skipped, so the
+      # check never passes without executing.
+      - name: Release unit-test check
+        if: ${{ env.FULL_PRE_PR_GATE != '1' && (github.event_name != 'workflow_dispatch' || inputs.only_testing == '') }}
+        env:
+          BUILD_CONFIGURATION: Release
+          RESULT_BUNDLE: TestResults-release
+          ONLY_TESTING: IntentTests/ReleaseConfigurationTests
+        run: |
+          set -o pipefail
+          export DERIVED_DATA_DIR="$DERIVED_DATA_DIR-release"
+          scripts/xcodebuild.sh test-ios-unit 2>&1 | tee release-unit-tests.log
+          executed=$(awk -v s="$ONLY_TESTING" '$1 == s { n = $3 } END { print n + 0 }' release-unit-tests.log)
+          if [ "$executed" -eq 0 ]; then
+            echo "::error::$ONLY_TESTING executed no tests in Release" >&2
+            exit 1
+          fi
+          echo "Release unit-test check: $executed test(s) executed"
+
       - name: Export terminal screenshots
         if: ${{ !cancelled() && contains(inputs.only_testing, 'MobileTerminalUITests') }}
         run: |
@@ -742,7 +767,10 @@ jobs:
             TestResults-retry
             TestResults-source-moved
             TestResults-keychain
+            TestResults-release
+            TestResults-release-retry
             unit-tests.log
+            release-unit-tests.log
             pre-pr-gate.log
 
       # See the job comment: turns a go-test or swiftlint failure into a

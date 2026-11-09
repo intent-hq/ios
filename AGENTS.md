@@ -38,7 +38,7 @@
 | Focused unit iteration | `ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-ios-unit` |
 | Split mixed/unit run | `scripts/xcodebuild.sh build-for-testing`, then `scripts/xcodebuild.sh test-without-building` or `scripts/xcodebuild.sh test-without-building-unit` |
 | Split UI-only run | `scripts/xcodebuild.sh build-for-testing-ui`, then `scripts/xcodebuild.sh test-without-building-ui` |
-| Release runtime check | `BUILD_CONFIGURATION=Release ONLY_TESTING='IntentTests/ReleaseConfigurationTests' scripts/xcodebuild.sh test-ios-unit` |
+| Release runtime check (also gated in the `iOS Build & Test` CI lane) | `BUILD_CONFIGURATION=Release ONLY_TESTING='IntentTests/ReleaseConfigurationTests' scripts/xcodebuild.sh test-ios-unit` |
 
 - Build before test-without-building runs and rebuild after source/configuration changes; keep `SIM_UDID`, `DERIVED_DATA_DIR`, and `BUILD_CONFIGURATION` consistent across each pair.
 - Use separate derived-data directories and simulators for concurrent runs; the wrapper serializes tests on a shared simulator.
