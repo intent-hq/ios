@@ -140,7 +140,7 @@ struct UserMessageView: View {
                 HookWakeAttributionView(attribution: hookWake)
             }
         } else if let prWake {
-            WakeCardDisclosureHeader(isExpanded: automatedWakeExpansion) {
+            WakeCardDisclosureHeader(isExpanded: automatedWakeExpansion, headerHasControls: true) {
                 PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
             }
         } else if let agentMessage {

@@ -18,15 +18,15 @@ nonisolated final class WatcherMessageUITests: XCTestCase {
         let agent = app.staticTexts["Continue Spec Writer"].firstMatch
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
         agent.tap()
-        let expand = app.buttons["Expand section"]
-        XCTAssertTrue(expand.waitForExistence(timeout: Self.timeout), "Wake cards start collapsed")
-        XCTAssertEqual(expand.value as? String, "Collapsed")
+        let header = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Watch iOS Mermaid validation")).firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: Self.timeout), "The wake header row is one button")
+        XCTAssertEqual(header.value as? String, "Collapsed", "Wake cards start collapsed")
         XCTAssertFalse(app.staticTexts["Build report"].exists, "A collapsed wake card hides its report")
         attachScreenshot(app, name: "Watcher collapsed")
-        expand.tap()
+        header.tap()
         let show = app.buttons["Show details"]
-        XCTAssertTrue(show.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["Collapse section"].exists)
+        XCTAssertTrue(show.waitForExistence(timeout: Self.timeout), "Tapping the header row expands the card")
+        XCTAssertEqual(header.value as? String, "Expanded")
         XCTAssertTrue(app.staticTexts["Build report"].exists, "Watcher prose must decode context mentions")
         let rawDetails = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Lint sources")).firstMatch
         XCTAssertFalse(rawDetails.exists, "The report must start collapsed")
