@@ -9,13 +9,7 @@ struct ScriptMonitorWakeAttributionView: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Design.Watcher.rowSpacing) {
-            Image(.terminal)
-                .resizable()
-                .scaledToFit()
-                .frame(width: Design.toolIconSize, height: Design.toolIconSize)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .accessibilityHidden(true)
+        WakeCardHeaderRow(icon: .terminal) {
             VStack(alignment: .leading, spacing: Design.Watcher.attributionSpacing) {
                 Text(scriptName)
                     .interFont(Constants.Typography.bodyXSEmphasized)

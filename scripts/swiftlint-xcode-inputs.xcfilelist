@@ -472,6 +472,7 @@ $(SRCROOT)/Intent/Views/Conversation/ConversationConnectionStatusBlock.swift
 $(SRCROOT)/Intent/Views/Conversation/IPadAssistantSidebar.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AttentionNoticeView.swift
+$(SRCROOT)/Intent/Views/Conversation/Notices/CapHeightIconSlot.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/EventWakeBannerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/HookWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/ModelChangeNoticeView.swift
