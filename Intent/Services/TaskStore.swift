@@ -15,10 +15,8 @@ import Observation
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
     // Live-state tracking
-    @ObservationIgnored private var tasksLive = false
-    @ObservationIgnored private var taskSubscriptionId: String?
+    @ObservationIgnored private var liveSubscription = LiveSubscription.idle
     @ObservationIgnored private var taskReconciler: DeltaReconciler<WorkspaceTask>?
-    @ObservationIgnored private var resnapshotInProgress = false // swiftlint:disable:this state_phase_flag
     /// Reads the rest of a paged `task.subscribe` snapshot (§6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
 
@@ -38,26 +36,23 @@ import Observation
 
     isolated deinit {
         // Remove handlers directly while deinit is isolated to MainActor.
-        guard eventHandlerId != nil || taskSubscriptionId != nil else { return }
+        guard eventHandlerId != nil || liveSubscription.id != nil else { return }
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)
         }
-        if let subscriptionId = taskSubscriptionId {
+        if let subscriptionId = liveSubscription.id {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }
     }
 
     private func onConnected() async {
-        // Reset live-state tracking on new connection
-        tasksLive = false
-        // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
-        if let oldId = taskSubscriptionId {
+        // Reset live-state tracking on new connection. Unregister the old
+        // handler if reconnecting (defensive: subscription is invalid after disconnect)
+        if let oldId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
-        taskSubscriptionId = nil
         taskReconciler = nil
         snapshotFiller.cancel()
-        resnapshotInProgress = false
 
         await fetchAll()
         subscribeToEvents()
@@ -123,10 +118,9 @@ import Observation
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
                 // Unregister old handler if we had one
-                if let oldId = taskSubscriptionId {
+                if let oldId = liveSubscription.acknowledge(subId) {
                     connectionManager.unregisterSubscriptionHandler(id: oldId)
                 }
-                taskSubscriptionId = subId
                 // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
                 connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
@@ -135,12 +129,12 @@ import Observation
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
                 taskReconciler = nil
-                taskSubscriptionId = nil
+                liveSubscription.clearId()
             }
         } catch {
             // Subscribe failed - clean up reconciler and fall back to legacy
             taskReconciler = nil
-            taskSubscriptionId = nil
+            liveSubscription.clearId()
             AppLog.tasks.error("[TaskStore] task.subscribe failed: \(error), falling back to legacy")
         }
     }
@@ -174,7 +168,7 @@ import Observation
         // arrive via the subscription push and a refetch would double-apply.
         switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
         case .refetch:
-            if !tasksLive {
+            if !liveSubscription.isLive {
                 Task { await fetchAll() }
             }
         case .patchInPlace, .ignore, nil:
@@ -256,7 +250,7 @@ import Observation
         switch push.kind {
         case .snapshot:
             guard let rawItems = push.snapshot else { return }
-            tasksLive = true
+            liveSubscription.applySnapshot()
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             AppLog.tasks.debug("[TaskStore] Applied snapshot with \(rawItems.count) tasks, seq=\(push.seq)")
             if let token = push.nextToken {
@@ -278,8 +272,7 @@ import Observation
                 AppLog.tasks.debug("[TaskStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
-                if !resnapshotInProgress {
-                    resnapshotInProgress = true
+                if liveSubscription.requestResnapshot() {
                     AppLog.tasks.warning("[TaskStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshot() }
                 }
@@ -307,21 +300,20 @@ import Observation
                 lastUpdated = Date()
             },
             resubscribe: { [weak self] in
-                guard let self, !resnapshotInProgress else { return }
+                guard let self, !liveSubscription.isResnapshotting else { return }
                 await resnapshot()
             }
         ))
     }
 
     private func resnapshot() async {
-        resnapshotInProgress = true
-        defer { resnapshotInProgress = false }
+        liveSubscription.beginResnapshot()
+        defer { liveSubscription.endResnapshot() }
 
-        tasksLive = false
         taskReconciler?.reset()
         snapshotFiller.cancel()
 
-        if let subId = taskSubscriptionId {
+        if let subId = liveSubscription.id {
             // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
@@ -333,7 +325,7 @@ import Observation
             }
         }
 
-        taskSubscriptionId = nil
+        liveSubscription.clearId()
         await subscribeLiveState()
         // Baseline refetch to bridge the gap during resnapshot
         await fetchAll()
