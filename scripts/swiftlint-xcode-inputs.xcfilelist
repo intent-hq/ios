@@ -821,6 +821,8 @@ $(SRCROOT)/IntentTests/ConversationWatchedAgentsLifetimeTests.swift
 $(SRCROOT)/IntentTests/ConversationWatchedAgentsSummaryTests.swift
 $(SRCROOT)/IntentTests/ConversationWatchedAgentsTests.swift
 $(SRCROOT)/IntentTests/ConversationWatchedAgentsTransportTests.swift
+$(SRCROOT)/IntentTests/CopyContextMenuButtonScanner.swift
+$(SRCROOT)/IntentTests/CopyContextMenuPassthroughPolicyTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceBranchTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCatalogTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCreationGateTests.swift
@@ -1005,6 +1007,7 @@ $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsEscapedTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParityTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift
+$(SRCROOT)/IntentTests/SwiftSourceLexer.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionMergeTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionTombstoneTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendIdentityTests.swift
