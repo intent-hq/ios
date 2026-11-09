@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// Collapsible header for hook, PR-monitor and script-monitor wake cards: the
-/// body stays hidden until the chevron is tapped (FE parity:
+/// body stays hidden until the row is tapped (FE parity:
 /// `AutomatedWakeCardHeader`, collapsed by default). Buttons inside `header`,
-/// such as the PR chip, keep their own taps.
+/// such as the PR chip, keep their own taps; the chevron is the labeled
+/// control for assistive technologies.
 struct WakeCardDisclosureHeader<Header: View>: View {
     private typealias Design = Constants.Conversation.Design
 
@@ -16,6 +17,10 @@ struct WakeCardDisclosureHeader<Header: View>: View {
         HStack(alignment: .center, spacing: Design.Watcher.rowSpacing) {
             header
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: toggle)
+                .accessibilityAddTraits(.isButton)
+                .copyContextMenuPassthrough()
             Button(action: toggle) {
                 Image(isExpanded ? .chevronDown : .chevronRight)
                     .resizable()

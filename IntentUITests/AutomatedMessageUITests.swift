@@ -39,10 +39,10 @@ nonisolated final class AutomatedMessageUITests: XCTestCase {
         XCTAssertFalse(header.exists, "The daemon sender header is display-stripped")
         attachScreenshot(app, name: "Automated messages agent expanded")
 
-        let expandScript = app.buttons["Expand section"].firstMatch
-        XCTAssertTrue(expandScript.exists)
-        expandScript.tap()
-        XCTAssertTrue(scriptBody.waitForExistence(timeout: Self.timeout), "Expanding shows the wake body")
+        XCTAssertTrue(app.buttons["Expand section"].firstMatch.exists)
+        app.staticTexts["make check"].firstMatch.tap()
+        XCTAssertTrue(scriptBody.waitForExistence(timeout: Self.timeout), "Tapping the header row shows the wake body")
+        XCTAssertTrue(app.buttons["Collapse section"].firstMatch.exists)
     }
 
     @MainActor
