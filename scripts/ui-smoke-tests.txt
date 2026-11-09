@@ -47,6 +47,7 @@ IntentUITests/WorkspaceStatusImageUITests/testStatusImageIsAbsentFromListAndOpen
 IntentUITests/ScriptMonitorsUITests/testOwnedWatchDetailsUpdateAndRemovalWithoutRestart # shard: 1
 # Mermaid fullscreen/pinch/pan is quarantined (ios#735); see README.md#mermaid-ui-quarantine.
 IntentUITests/InlineResponseImageUITests/testPDFCardAndLinkOpenViewerAndShare # shard: 2
+IntentUITests/AutomatedMessageUITests/testAgentMessageCollapsesAndScriptWakeRendersAsACard # shard: 1
 IntentUITests/WatcherMessageUITests/testWatcherDetailsExpandAndCollapseWithoutLosingTheReport # shard: 2
 IntentUITests/WorkspaceComposerUITests/testNativePasteKeepsTextAndImageDraft # shard: 2
 IntentUITests/WorkspaceComposerUITests/testMultilineSendAndStopPreserveAnInProgressDraft # shard: 2

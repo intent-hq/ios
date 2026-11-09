@@ -64,6 +64,9 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         let role: MessageRole
         let timestamp: String?
         let streamingComplete: Bool
+        /// The persisted row's metadata, carried only by re-read and terminal
+        /// entities (PROTOCOL 07 §7.1); empty when the entity has none.
+        let metadata: [String: AnyCodable]
 
         /// Nil when the entity is not block-shaped or its block does not decode.
         init?(entity: [String: Any]) {
@@ -83,6 +86,14 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
             role = MessageRole(rawValue: shaped.entity["role"] as? String ?? "assistant") ?? .system
             timestamp = shaped.entity["timestamp"] as? String
             streamingComplete = shaped.entity["streamingComplete"] as? Bool ?? false
+            metadata = Self.decodeMetadata(shaped.entity["metadata"])
+        }
+
+        private static func decodeMetadata(_ value: Any?) -> [String: AnyCodable] {
+            guard let dictionary = value as? [String: Any], !dictionary.isEmpty,
+                  JSONSerialization.isValidJSONObject(dictionary),
+                  let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return [:] }
+            return (try? JSONDecoder().decode([String: AnyCodable].self, from: data)) ?? [:]
         }
 
         /// Decodes every entity's block in one `ContentBlock.decodeBatch`

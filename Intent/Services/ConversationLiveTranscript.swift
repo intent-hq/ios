@@ -372,6 +372,9 @@ extension ConversationLiveTranscript {
         if let appMessageId = entity.appMessageId {
             messages[messageIndex].appMessageId = appMessageId
         }
+        if !entity.metadata.isEmpty, entity.metadata != messages[messageIndex].metadata {
+            messages[messageIndex].metadata = entity.metadata
+        }
         var blocks = messages[messageIndex].contentBlocks
         if let fragment = entity.textDelta {
             let prior = blocks.first { $0.id == block.id }

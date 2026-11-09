@@ -9,7 +9,13 @@ struct UserMessageView: View {
     let workspaceId: String
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
     var onLayoutChange: (() -> Void)?
-    @Binding var isAgentMessageExpanded: Bool
+    /// Agent-to-agent rows start collapsed (FE parity: ChatMessage.svelte
+    /// `isAgentMessageExpanded`). Owned here so this body tracks the state.
+    var disclosure = TranscriptDisclosure()
+    private var isAgentMessageExpanded: Bool {
+        get { disclosure.binding(for: .agentMessage, default: false).wrappedValue }
+        nonmutating set { disclosure.binding(for: .agentMessage, default: false).wrappedValue = newValue }
+    }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
@@ -24,6 +30,7 @@ struct UserMessageView: View {
     /// Derived once per message value in `init` rather than on every `body`
     /// evaluation (the body also re-runs on the expansion toggle): the wake /
     /// agent attributions, the partitioned blocks, and the copy-menu text.
+    private let scriptWake: ScriptMonitorWakeAttribution?
     private let hookWake: HookWakeAttribution?
     private let prWake: PrMonitorWakeAttribution?
     private let agentMessage: AgentMessageAttribution?
@@ -35,26 +42,32 @@ struct UserMessageView: View {
         message: ConversationMessage,
         workspaceId: String,
         onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?,
-        isAgentMessageExpanded: Binding<Bool>,
         onLayoutChange: (() -> Void)? = nil
     ) {
         self.message = message
         self.workspaceId = workspaceId
         self.onNavigateToAgent = onNavigateToAgent
         self.onLayoutChange = onLayoutChange
-        self._isAgentMessageExpanded = isAgentMessageExpanded
         let blocks = message.contentBlocks
-        let hookWake = message.hookWakeAttribution
-        let prWake = hookWake == nil ? message.prMonitorWakeAttribution : nil
+        let scriptWake = message.scriptMonitorWakeAttribution
+        let hookWake = scriptWake == nil ? message.hookWakeAttribution : nil
+        let prWake = scriptWake == nil && hookWake == nil ? message.prMonitorWakeAttribution : nil
+        let agentMessage = scriptWake == nil && hookWake == nil && prWake == nil
+            ? message.agentMessageAttribution : nil
+        self.scriptWake = scriptWake
         self.hookWake = hookWake
         self.prWake = prWake
-        self.agentMessage = hookWake == nil && prWake == nil ? message.agentMessageAttribution : nil
+        self.agentMessage = agentMessage
         self.partitioned = MessageBlockPartitioning.partitionUserBlocks(blocks)
-        self.agentMessagePreview = MessageBlockPartitioning.agentMessagePreview(from: blocks)
+        self.agentMessagePreview = MessageBlockPartitioning.agentMessagePreview(
+            from: blocks,
+            agentMessage: agentMessage
+        )
         self.copyText = MessageBlockPartitioning.userCopyText(
             from: blocks,
             hookWake: hookWake,
-            prWake: prWake
+            prWake: prWake,
+            agentMessage: agentMessage
         )
     }
 
@@ -70,7 +83,7 @@ struct UserMessageView: View {
             .modifier(MessageCopyContextMenu(text: copyText, userStyled: true, isStreaming: false))
         } else if workspaceDesign {
             WorkspaceUserBubbleLayout(
-                usesFullWidth: dynamicTypeSize.isAccessibilitySize || hookWake != nil || prWake != nil,
+                usesFullWidth: dynamicTypeSize.isAccessibilitySize || isWatcherWake,
                 layoutDirection: layoutDirection,
                 maximumWidth: presentation == .iPad && usesTrimmedMessageText ? iPadBubbleWidth : nil
             ) {
@@ -82,7 +95,7 @@ struct UserMessageView: View {
     }
 
     private var bubble: some View {
-        VStack(alignment: .leading, spacing: hookWake != nil || prWake != nil
+        VStack(alignment: .leading, spacing: isWatcherWake
             ? Design.Watcher.sectionSpacing : Layout.contentSpacing) {
             attributionHeader
             if agentMessage == nil || isAgentMessageExpanded {
@@ -102,9 +115,25 @@ struct UserMessageView: View {
         ))
     }
 
+    private var agentMessageExpansion: Binding<Bool> {
+        Binding(
+            get: { isAgentMessageExpanded },
+            set: { expanded in
+                onLayoutChange?()
+                isAgentMessageExpanded = expanded
+            }
+        )
+    }
+
+    private var isWatcherWake: Bool {
+        scriptWake != nil || hookWake != nil || prWake != nil
+    }
+
     @ViewBuilder
     private var attributionHeader: some View {
-        if let hookWake {
+        if let scriptWake {
+            ScriptMonitorWakeAttributionView(attribution: scriptWake)
+        } else if let hookWake {
             HookWakeAttributionView(attribution: hookWake)
         } else if let prWake {
             PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
@@ -112,8 +141,8 @@ struct UserMessageView: View {
             AgentMessageAttributionView(
                 attribution: agentMessage,
                 preview: agentMessagePreview,
-                isExpanded: $isAgentMessageExpanded,
-                onOpenAgent: onNavigateToAgent.map { navigate in
+                isExpanded: agentMessageExpansion,
+                onOpenAgent: agentMessage.kind == .chief ? nil : onNavigateToAgent.map { navigate in
                     { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
                 }
             )
@@ -126,9 +155,9 @@ struct UserMessageView: View {
 
     @ViewBuilder
     private var messageContents: some View {
-        ForEach(partitioned.text) { block in
+        ForEach(Array(partitioned.text.enumerated()), id: \.element.id) { index, block in
             if let text = block.resolvedText {
-                userTextBlock(text, hookWake: hookWake, prWake: prWake)
+                userTextBlock(index == 0 ? displayedFirstText(text) : text, hookWake: hookWake, prWake: prWake)
             }
         }
         if !partitioned.images.isEmpty {
@@ -140,6 +169,11 @@ struct UserMessageView: View {
         if !partitioned.files.isEmpty {
             fileAttachments(partitioned.files)
         }
+    }
+
+    private func displayedFirstText(_ text: String) -> String {
+        guard let agentMessage else { return text }
+        return AgentMessageAttribution.stripSenderHeader(text, attribution: agentMessage)
     }
 
     private func imageAttachments(_ images: [ContentBlock]) -> some View {
@@ -206,7 +240,7 @@ struct UserMessageView: View {
             }
             return MessageBlockPartitioning.stripSupervisorTags(text)
         }()
-        if hookWake != nil || prWake != nil {
+        if isWatcherWake {
             if !display.isEmpty {
                 WatcherMessageBodyView(text: display, onLayoutChange: onLayoutChange)
             }
@@ -239,7 +273,7 @@ struct UserMessageView: View {
     /// Keep native bounds between attributed headers, chips, attachments and multiple blocks.
     /// A plain bubble measures its existing padding from the cap top to the final baseline.
     private var usesTrimmedMessageText: Bool {
-        workspaceDesign && hookWake == nil && prWake == nil && agentMessage == nil
+        workspaceDesign && !isWatcherWake && agentMessage == nil
             && partitioned.text.count == 1 && partitioned.images.isEmpty
             && partitioned.videos.isEmpty && partitioned.files.isEmpty
     }
@@ -272,7 +306,9 @@ struct UserMessageView: View {
                 : Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
             .textSelection(.enabled)
     }
+}
 
+extension UserMessageView {
     private func fileAttachmentChip(_ block: ContentBlock) -> some View {
         HStack(spacing: Layout.fileChipSpacing) {
             Image(.file)

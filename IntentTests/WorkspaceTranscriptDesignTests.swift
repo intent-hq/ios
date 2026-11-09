@@ -87,8 +87,7 @@ struct WorkspaceTranscriptDesignTests {
         let user = UserMessageView(
             message: message,
             workspaceId: "workspace",
-            onNavigateToAgent: nil,
-            isAgentMessageExpanded: .constant(false)
+            onNavigateToAgent: nil
         )
         .environment(makeSession())
         .environment(\.workspaceTranscriptDesign, true)

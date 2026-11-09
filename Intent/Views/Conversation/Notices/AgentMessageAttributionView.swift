@@ -34,6 +34,7 @@ struct AgentMessageAttributionView: View {
                 identity
                     .frame(minHeight: Constants.Accessibility.minimumTapTarget)
                     .contentShape(Rectangle())
+                    .copyContextMenuPassthrough()
             }
                 .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Open \(attribution.rawName)'s conversation")
@@ -62,6 +63,7 @@ struct AgentMessageAttributionView: View {
             }
             .frame(minHeight: Constants.Accessibility.minimumTapTarget)
             .contentShape(Rectangle())
+            .copyContextMenuPassthrough()
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(preview.isEmpty ? "sent a message" : "sent a message: \(preview)")

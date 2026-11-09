@@ -121,6 +121,7 @@ $(SRCROOT)/Intent/Models/Question.swift
 $(SRCROOT)/Intent/Models/QuestionsDismissedNotice.swift
 $(SRCROOT)/Intent/Models/ScriptMonitor.swift
 $(SRCROOT)/Intent/Models/ScriptMonitorPage.swift
+$(SRCROOT)/Intent/Models/ScriptMonitorWakeAttribution.swift
 $(SRCROOT)/Intent/Models/SkillInfo.swift
 $(SRCROOT)/Intent/Models/WatchedAgentRow.swift
 $(SRCROOT)/Intent/Models/WorkspaceAction.swift
@@ -477,6 +478,7 @@ $(SRCROOT)/Intent/Views/Conversation/Notices/ModelChangeNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/NewMessagesDividerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/QuestionsDismissedNoticeView.swift
+$(SRCROOT)/Intent/Views/Conversation/Notices/ScriptMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/SystemNoticeBannerView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/WatcherMessageBodyView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionAttachmentLifecycle.swift
@@ -783,6 +785,7 @@ $(SRCROOT)/IntentTests/ConversationStoreHydrationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreIntegrationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreLiveActivityTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreLiveDeltaTests.swift
+$(SRCROOT)/IntentTests/ConversationStoreLiveMetadataTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreLiveStateTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreQuestionTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreQueueDecodingTests.swift
@@ -981,6 +984,7 @@ $(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorPresentationTests+Conversation.swift
 $(SRCROOT)/IntentTests/ScriptMonitorPresentationTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorTests.swift
+$(SRCROOT)/IntentTests/ScriptMonitorWakeAttributionTests.swift
 $(SRCROOT)/IntentTests/SessionCacheBoundsMeasurementTests.swift
 $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift
@@ -1140,6 +1144,7 @@ $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
 $(SRCROOT)/IntentUITests/AssistantStateUITests.swift
+$(SRCROOT)/IntentUITests/AutomatedMessageUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionFailureRecoveryUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossReadOnlyPresentationUITests.swift
