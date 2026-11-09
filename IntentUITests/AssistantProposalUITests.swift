@@ -109,8 +109,9 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkspaceProposalButtonPaddingReceivesTaps() {
+    func testWorkspaceProposalMessageTextKeepsCopyMenu() {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
+        XCTAssertTrue(app.buttons["proposal.dismiss"].waitForExistence(timeout: Self.timeout))
         let message = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "follow-up workspace for the Mermaid failures")
         ).firstMatch
@@ -119,7 +120,12 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let copy = app.menuItems["Copy"].firstMatch
         XCTAssertTrue(copy.waitForExistence(timeout: Self.timeout), "Message text must keep its Copy menu")
         copy.tap()
+        XCTAssertTrue(copy.waitForNonExistence(timeout: Self.timeout))
+    }
 
+    @MainActor
+    func testWorkspaceProposalButtonPaddingReceivesTaps() {
+        let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let dismiss = app.buttons["proposal.dismiss"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: Self.timeout))
         tapPadding(of: dismiss)
