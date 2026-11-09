@@ -533,6 +533,13 @@ self-hosted Mac; GitHub-hosted Macs handle overflow when the local pool is busy.
 Matrix fail-fast is
 disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
 Go tests, wrapper self-tests, and the strict SwiftLint gate run on Linux.
+The `iOS Build & Test` lane also runs the Release unit-test check
+(`BUILD_CONFIGURATION=Release ONLY_TESTING='IntentTests/ReleaseConfigurationTests'
+scripts/xcodebuild.sh test-ios-unit`) on pull requests, the merge queue, scheduled
+runs, and unfiltered dispatches. It builds into its own derived-data directory on
+the lane's owned simulator, fails unless at least one test executed, and keeps
+`TestResults-release` and `release-unit-tests.log` in `ios-unit-test-results` on
+failure. Filtered and `pre_pr_gate` dispatches skip it.
 The full UI bundle runs across two isolated iPhone shards, alongside the iPad regressions,
 on the default branch at **09:00 and 21:00 UTC** or on manual dispatch:
 
