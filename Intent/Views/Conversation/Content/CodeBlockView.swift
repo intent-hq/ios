@@ -58,6 +58,7 @@ struct CodeBlockView: View {
                 }
                 .font(.caption)
                 .foregroundStyle(Constants.Colors.CodeBlock.action)
+                .copyContextMenuPassthrough()
             }
             .buttonStyle(IntentContentButtonStyle())
         }

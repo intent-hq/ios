@@ -17,6 +17,7 @@ struct ContextMentionChipView: View {
                 openURL(url)
             } label: {
                 chipLabel
+                    .copyContextMenuPassthrough()
             }
             .buttonStyle(IntentContentButtonStyle())
         } else {

@@ -77,8 +77,12 @@ struct WorkspaceCreationProposalView: View {
             }
         } else if let error = store.loadError {
             Text(error)
-            Button("Retry") { Task { await store.refresh() } }
-                .buttonStyle(IntentButtonStyle(variant: .secondary))
+            Button {
+                Task { await store.refresh() }
+            } label: {
+                Text("Retry").copyContextMenuPassthrough()
+            }
+            .buttonStyle(IntentButtonStyle(variant: .secondary))
         } else {
             Text("Waiting for confirmation availability…")
         }
