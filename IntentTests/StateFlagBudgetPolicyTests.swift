@@ -24,7 +24,6 @@ struct StateFlagBudgetPolicyTests {
         "Intent/Services/ConversationStore.swift#ConversationStore": 7,
         "Intent/Services/CreationOptionsStore.swift#CreationOptionsStore": 8,
         "Intent/Services/GitHubRepoStore.swift#GitHubRepoStore": 9,
-        "Intent/Services/WorkspaceChangesStore.swift#WorkspaceChangesStore": 7,
         "Intent/ViewModels/ConversationViewModel.swift#ConversationViewModel": 8,
         "Intent/Views/Conversation/Questions/QuestionWizardView.swift#QuestionWizardView": 7,
         "Intent/Views/Conversation/Transcript/ConversationColumnView.swift#ConversationColumnView": 6,
