@@ -70,6 +70,7 @@ struct WakeCardDisclosureHeader<Header: View>: View {
 /// reads evenly, and the icon centres on the title's first line.
 struct WakeCardHeaderRow<Content: View>: View {
     private typealias Design = Constants.Conversation.Design
+
     private static var titleStyle: Constants.Typography.Style { Constants.Typography.bodyXSEmphasized }
 
     let icon: ImageResource
@@ -92,6 +93,7 @@ struct WakeCardHeaderRow<Content: View>: View {
                     .scaledToFit()
                     .frame(width: Design.toolIconSize, height: Design.toolIconSize)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
             }
             WorkspaceTextTrimLayout(
                 capHeight: Self.titleStyle.capHeight(size: fontSize, legibilityWeight: legibilityWeight)
