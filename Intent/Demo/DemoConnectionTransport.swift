@@ -1,6 +1,14 @@
 #if DEBUG
 import Foundation
 
+extension ConnectionManager {
+    /// Debug-only: demo sessions use fixture pushes instead of a socket's feed.
+    /// Keep readiness tied to the same connection transitions as their stores.
+    func connectDemo(serveFixtures: Bool) {
+        connectInProcess(using: Self.makeInProcessTransport(serveFixtures: serveFixtures))
+    }
+}
+
 /// Debug-only demo transport: fixture responses and scripted script-monitor
 /// events. Release builds compile this out with the rest of `Intent/Demo/`.
 final class DemoConnectionTransport: ConnectionRequestTransport {

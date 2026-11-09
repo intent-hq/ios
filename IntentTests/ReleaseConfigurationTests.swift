@@ -40,9 +40,9 @@ struct ReleaseConfigurationTests {
         let arguments = ["--demo-data", "--pretend-paired", "--demo-script-monitors=active"]
         #expect(ConnectionManager.makeInProcessTransport(serveFixtures: true, arguments: arguments) == nil)
         #expect(ConnectionManager.makeInProcessTransport(serveFixtures: false, arguments: arguments) == nil)
+        // `connectDemo` is Debug-only, so Release code cannot call it at all.
         let connection = ConnectionManager(persistence: .ephemeral())
         defer { connection.disconnect() }
-        connection.connectDemo(serveFixtures: true)
         #expect(connection.requestTransport == nil)
     }
 }

@@ -2,6 +2,13 @@ import Foundation
 
 /// Demo launches use fixture data and ephemeral persistence without pairing.
 /// Demo fixtures exist only in Debug builds; Release ignores the demo flags.
+///
+/// Rule: demo entry points (fixtures, `connectDemo`, launch probes) are
+/// Debug-only declarations, so Release callers fail to compile. Outside
+/// `Intent/Demo`, read these flags unguarded only to pick between production
+/// paths (ephemeral storage, skipping sync, routing), where Release's `false`
+/// is the production answer; any read that reaches demo code sits in that
+/// owner's single `#if DEBUG` seam.
 enum DemoMode {
     #if DEBUG
     static let isEnabled = demoDataRequested(by: LaunchOptions.current.arguments)

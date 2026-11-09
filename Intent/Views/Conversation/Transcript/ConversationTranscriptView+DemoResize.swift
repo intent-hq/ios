@@ -17,7 +17,11 @@ extension ConversationTranscriptView {
     /// releases the real hook.list response after the real recovery's page
     /// up has moved the live scroll view; it never changes recovery timing.
     private var demoRecoveryResizeEnabled: Bool {
+        #if DEBUG
         DemoMode.isEnabled && LaunchOptions.current.contains("--demo-hooks-row-during-recovery")
+        #else
+        false
+        #endif
     }
 
     #if DEBUG
