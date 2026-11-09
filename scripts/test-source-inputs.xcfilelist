@@ -753,6 +753,7 @@ $(SRCROOT)/Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/QuestionsDismissedNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/ScriptMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/SystemNoticeBannerView.swift
+$(SRCROOT)/Intent/Views/Conversation/Notices/WakeCardDisclosureHeader.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/WatcherMessageBodyView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionAttachmentLifecycle.swift

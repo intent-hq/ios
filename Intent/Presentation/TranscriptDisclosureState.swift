@@ -22,6 +22,7 @@ final class TranscriptDisclosureStore {
 final class TranscriptDisclosureState {
     enum DisclosureKey: Hashable {
         case agentMessage
+        case automatedWake
         case attentionNotice
         case tool(String)
         case toolInput(String)
