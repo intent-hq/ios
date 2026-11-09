@@ -473,6 +473,15 @@ first failure message, the log path, and a command that repeats the run. Any
 scripts/run_commit_tests.sh <full-sha> 'IntentTests/AgentListPagingTests'
 ```
 
+For UI pull requests, set `KEEP_UI_EVIDENCE=1`. Before the result bundle is
+deleted, the run copies the allowlisted screenshots out with that commit's
+`scripts/export_ui_evidence.py`, and the summary lists each PNG with its size and
+any capture a test did not reach:
+
+```bash
+KEEP_UI_EVIDENCE=1 scripts/run_commit_tests.sh <full-sha> 'IntentUITests/AutomatedMessageUITests'
+```
+
 The exit status is the wrapper's. Run it in the foreground. Without
 `DEVELOPER_DIR` it uses the Xcode that commit's CI selects (the newest non-beta
 match of the `Select Xcode` pattern), not the Mac's default Xcode, which can lack
