@@ -1371,6 +1371,7 @@ $(SRCROOT)/IntentTests/WorkspaceChangesModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesStoreRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceControlGazeTests.swift
 $(SRCROOT)/IntentTests/WorkspaceCreationDraftTests.swift
@@ -1419,6 +1420,7 @@ $(SRCROOT)/IntentTests/WorkspaceStatusMessageTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusTestSupport.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreAgentLifecycleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreEventAllowlistTests.swift
+$(SRCROOT)/IntentTests/WorkspaceStoreFetchCoalescingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStorePagingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStateTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStatusImageTests.swift

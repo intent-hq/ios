@@ -25,9 +25,12 @@ import Observation
     /// unique across daemons, so consumers need not know which daemon replied.
     var removedWorkspaceIds: AnyPublisher<String, Never> { removedWorkspaceSubject.eraseToAnyPublisher() }
     @ObservationIgnored private let removedWorkspaceSubject = PassthroughSubject<String, Never>()
-    @ObservationIgnored private var fetchTask: Task<Void, Never>?
-    @ObservationIgnored private var fetchRevision = 0
-    @ObservationIgnored private var fetchNeedsRefresh = false
+    /// `workspace.list` reads. Callers join the running read; an event while
+    /// it runs earns a trailing read, and one during that read a successor.
+    @ObservationIgnored let fetchReads = CoalescedRead()
+    /// The read revision the published list is current at. Nil while a read
+    /// runs or after it failed, so `fetchIfNeeded` reads again.
+    @ObservationIgnored private var fetchedRevision: Int? = 0
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var eventHandlerId: UUID?
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
@@ -91,8 +94,19 @@ import Observation
         await fetchAll()
     }
 
+    private var fetchNeedsRefresh: Bool { fetchedRevision != fetchReads.revision }
+
+    /// Joins the running read or starts one. Callers wait for that read only;
+    /// a successor it hands off to keeps `isLoading` set without them.
     func fetchAll() async {
-        await startFetch().value
+        let needsSuccessor = await fetchReads.run { true } pass: { [weak self] revision in
+            await self?.fetchPass(revision)
+        }
+        if needsSuccessor {
+            invalidateFetchForEvent()
+        } else if fetchReads.phase == .idle {
+            isLoading = false
+        }
     }
 
     func perform(_ action: WorkspaceAction, workspaceId: String) async throws {
@@ -120,52 +134,25 @@ import Observation
         await fetchAll()
     }
 
-    private func startFetch() -> Task<Void, Never> {
-        if let fetchTask { return fetchTask }
-        let task = Task { await self._fetchAll() }
-        fetchTask = task
-        return task
-    }
-
+    /// Marks the list stale and starts a read unless one is scheduled or running.
     private func invalidateFetchForEvent() {
-        fetchRevision &+= 1
-        fetchNeedsRefresh = true
-        _ = startFetch()
+        guard fetchReads.invalidate() else { return }
+        Task { await fetchAll() }
     }
 
-    private func _fetchAll() async {
-        fetchNeedsRefresh = true
+    /// One `workspace.list` read. A result invalidated mid-read is dropped for
+    /// the trailing read; a failure alone stays dirty without automatic retries.
+    private func fetchPass(_ revision: Int) async {
+        fetchedRevision = nil
         isLoading = true
-        var needsSuccessor = false
-        defer {
-            // Retire this owner before handing off or announcing idle. Passive
-            // callers join the successor; completion observers may start anew.
-            fetchTask = nil
-            if needsSuccessor {
-                _ = startFetch()
-            } else {
-                isLoading = false
-            }
-        }
-        // Passive callers share this owner. Events during a read invalidate
-        // its snapshot and coalesce into one trailing read. An event during
-        // that read belongs to one successor, keeping the list loading until
-        // events settle. Failure alone stays dirty without automatic retries.
-        for round in 0..<2 {
-            let revision = fetchRevision
-            do {
-                let summaryBoundary = agentSummaries?.beginRead()
-                let rows = try await requestAllWorkspaceRows()
-                if revision == fetchRevision {
-                    fetchNeedsRefresh = false
-                    publishFetchedWorkspaces(rows.compactMap { Self.parseWorkspace($0) }, summaryBoundary: summaryBoundary)
-                    return
-                }
-            } catch {
-                AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
-            }
-            guard revision != fetchRevision else { return }
-            needsSuccessor = round == 1
+        do {
+            let summaryBoundary = agentSummaries?.beginRead()
+            let rows = try await requestAllWorkspaceRows()
+            guard revision == fetchReads.revision else { return }
+            fetchedRevision = revision
+            publishFetchedWorkspaces(rows.compactMap { Self.parseWorkspace($0) }, summaryBoundary: summaryBoundary)
+        } catch {
+            AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
         }
     }
 

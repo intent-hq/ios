@@ -23,11 +23,11 @@ import Observation
     @ObservationIgnored private var workspaceId: String?
     @ObservationIgnored private var revision = 0
     @ObservationIgnored private var registration = 0
-    @ObservationIgnored private var isObserving = false
     @ObservationIgnored private var subscriptionId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
-    @ObservationIgnored private var refreshQueued = false // swiftlint:disable:this state_phase_flag
-    @ObservationIgnored private var eventRefreshTask: Task<Void, Never>?
+    /// Event-driven refreshes. An event while one runs earns a trailing
+    /// refresh, and one during that refresh another, until events settle.
+    @ObservationIgnored let eventRefreshes = CoalescedRead()
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
     let connectionManager: ConnectionManagerRouting
     private let replaceGroup = "ios-changes-\(UUID().uuidString)"
@@ -52,7 +52,7 @@ import Observation
     }
 
     isolated deinit {
-        eventRefreshTask?.cancel()
+        eventRefreshes.cancel()
         if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
     }
@@ -99,7 +99,8 @@ import Observation
         guard selectedRootId != id else { return }
         revision &+= 1
         selectedRootId = id
-        refreshQueued = false
+        // This refresh supersedes any event refresh; drop its trailing pass.
+        eventRefreshes.cancel()
         clearRows()
         await refresh(workspaceId: workspaceId)
     }
@@ -170,6 +171,9 @@ import Observation
         return commits.filter { hashes.insert($0.hash).inserted }
     }
 
+    /// The event handler is installed exactly while observing.
+    private var isObserving: Bool { eventHandlerId != nil }
+
     private func owns(_ requestRevision: Int) -> Bool {
         workspaceId != nil && revision == requestRevision
     }
@@ -184,10 +188,7 @@ import Observation
     func stopObserving(preservingSnapshot: Bool = false) {
         registration &+= 1
         revision &+= 1
-        isObserving = false
-        eventRefreshTask?.cancel()
-        eventRefreshTask = nil
-        refreshQueued = false
+        eventRefreshes.cancel()
         if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
         eventHandlerId = nil
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
@@ -223,12 +224,9 @@ extension WorkspaceChangesStore {
         registration &+= 1
         revision &+= 1
         let currentRegistration = registration
-        eventRefreshTask?.cancel()
-        eventRefreshTask = nil
-        refreshQueued = false
+        eventRefreshes.cancel()
         isLoading = true
         isLoadingMore = false
-        isObserving = true
         if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
         subscriptionId = nil
@@ -292,16 +290,15 @@ extension WorkspaceChangesStore {
     private func queueRefresh(workspaceId: String) {
         revision &+= 1
         isLoadingMore = false
-        refreshQueued = true
-        guard eventRefreshTask == nil else { return }
+        guard eventRefreshes.invalidate() else { return }
         let currentRegistration = registration
-        eventRefreshTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            while registration == currentRegistration, refreshQueued, !Task.isCancelled {
-                refreshQueued = false
-                await refresh(workspaceId: workspaceId)
-            }
-            if registration == currentRegistration { eventRefreshTask = nil }
+        Task { @MainActor [weak self] in
+            guard let self, registration == currentRegistration else { return }
+            while await eventRefreshes.run(isCurrent: { [weak self] in
+                self?.registration == currentRegistration
+            }, pass: { [weak self] _ in
+                await self?.refresh(workspaceId: workspaceId)
+            }) {}
         }
     }
 

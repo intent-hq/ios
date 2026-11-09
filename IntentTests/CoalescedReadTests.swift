@@ -63,6 +63,69 @@ struct CoalescedReadTests {
         #expect(observed == [before])
         #expect(read.phase == .idle)
     }
+
+    @Test func ownerLearnsOfAnInvalidationAfterItsTrailingPass() async {
+        let read = CoalescedRead()
+        var passes = 0
+        let needsFollowUp = await read.run(isCurrent: { true }, pass: { _ in
+            passes += 1
+            _ = read.invalidate()
+        })
+        #expect(passes == 2)
+        #expect(needsFollowUp)
+        #expect(read.phase == .idle)
+        let settled = await read.run(isCurrent: { true }, pass: { _ in passes += 1 })
+        #expect(passes == 3)
+        #expect(!settled)
+    }
+
+    @Test func joinerNeverOwnsTheFollowUp() async {
+        let read = CoalescedRead()
+        let gate = AsyncGate()
+        var passes = 0
+        let owner = Task {
+            await read.run(isCurrent: { true }, pass: { _ in
+                passes += 1
+                _ = read.invalidate()
+                await gate.wait()
+            })
+        }
+        while passes == 0 { await Task.yield() }
+        let joiner = Task { await read.run(isCurrent: { true }, pass: { _ in passes += 100 }) }
+        await Task.yield()
+        gate.open()
+        let ownerNeedsFollowUp = await owner.value
+        let joinerNeedsFollowUp = await joiner.value
+        #expect(ownerNeedsFollowUp)
+        #expect(!joinerNeedsFollowUp)
+        #expect(passes == 2)
+    }
+
+    @Test func cancelledOrRetiredReadOwesNoFollowUp() async {
+        let read = CoalescedRead()
+        let gate = AsyncGate()
+        var started = false
+        let cancelled = Task {
+            await read.run(isCurrent: { true }, pass: { _ in
+                started = true
+                _ = read.invalidate()
+                await gate.wait()
+            })
+        }
+        while !started { await Task.yield() }
+        read.cancel()
+        gate.open()
+        let cancelledNeedsFollowUp = await cancelled.value
+        #expect(!cancelledNeedsFollowUp)
+
+        var current = true
+        let retired = await read.run(isCurrent: { current }, pass: { _ in
+            current = false
+            _ = read.invalidate()
+        })
+        #expect(!retired)
+        #expect(read.phase == .idle)
+    }
 }
 
 @MainActor
