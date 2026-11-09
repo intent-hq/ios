@@ -92,13 +92,10 @@ struct ProposalCardView: View {
                 .accessibilityIdentifier("proposal.outcome")
         } else if let error = store.loadError {
             Text(error).font(font(Constants.Typography.bodyXS, fallback: .callout))
-            Button {
+            Button("Retry") {
                 Task { await store.refresh() }
-            } label: {
-                Text("Retry")
-                    .copyContextMenuPassthrough()
             }
-            .buttonStyle(IntentButtonStyle(variant: .secondary))
+            .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))
         } else {
             Text("Waiting for confirmation availability…").font(font(Constants.Typography.bodyXS, fallback: .callout))
         }
@@ -159,13 +156,10 @@ struct ProposalCardView: View {
 
     @ViewBuilder
     private func actionButtonContent(_ store: ProposalActionStore) -> some View {
-        Button {
+        Button("Not now") {
             confirmingDismiss = true
-        } label: {
-            Text("Not now")
-                .copyContextMenuPassthrough()
         }
-        .buttonStyle(IntentButtonStyle(variant: .secondary))
+        .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))
         .requiresLiveConnection()
         .accessibilityIdentifier("proposal.dismiss")
         if !usesWorkspaceDesign || !dynamicTypeSize.isAccessibilitySize { Spacer() }
@@ -174,9 +168,8 @@ struct ProposalCardView: View {
                 Task { await store.apply(proposal, messageId: messageId, selection: selection) }
             } label: {
                 Text(proposal.method == "workspace.delete" ? "Delete" : "Archive")
-                    .copyContextMenuPassthrough()
             }
-            .buttonStyle(IntentButtonStyle())
+            .buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))
             .disabled(selection.isEmpty)
             .requiresLiveConnection()
             .accessibilityIdentifier("proposal.apply")

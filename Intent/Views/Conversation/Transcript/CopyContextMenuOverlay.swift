@@ -278,8 +278,11 @@ extension View {
     /// gestures through an enclosing `MessageCopyContextMenu` overlay (see
     /// `CopyContextMenuPassthroughMarker`). Apply to the tappable content
     /// itself (e.g. a Button's label) so the Button and any `.contextMenu`
-    /// on it are ancestors of the marker. CopyContextMenuPassthroughPolicyTests
-    /// requires it on every Button in a transcript row.
+    /// on it are ancestors of the marker. Only touches inside the marker's
+    /// frame pass through, so cover the whole tap area; `IntentButtonStyle`
+    /// does this for its pill with `passesThroughCopyMenu`.
+    /// CopyContextMenuPassthroughPolicyTests requires it on every Button in a
+    /// transcript row.
     func copyContextMenuPassthrough() -> some View {
         background { CopyContextMenuPassthroughMarker() }
     }

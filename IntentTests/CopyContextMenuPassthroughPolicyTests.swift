@@ -67,8 +67,9 @@ struct CopyContextMenuPassthroughPolicyTests {
             """
             Buttons without copyContextMenuPassthrough() under \(Self.conversationRoot):
             \(violations.joined(separator: "\n"))
-            The transcript row's copy overlay swallows their taps. Apply .copyContextMenuPassthrough() \
-            inside the Button's label (not on the Button or its action); give title-only Buttons a label. \
+            The transcript row's copy overlay swallows their taps. Style the Button with \
+            IntentButtonStyle(passesThroughCopyMenu: true), or apply .copyContextMenuPassthrough() inside \
+            its label (not on the Button or its action); give other title-only Buttons a label. \
             If the Button never renders inside a MessageCopyContextMenu row, list its file in rowlessFiles.
             """
         )
