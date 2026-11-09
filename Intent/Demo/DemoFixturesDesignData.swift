@@ -174,7 +174,30 @@ extension DemoDesignFixtures {
             rows.append(Self.message(id: Self.questionMessageId, role: "assistant", blocks: questionBlocks))
         }
         if scenario == .watcher { rows.append(Self.watcherMessage) }
+        if scenario == .automatedMessages { rows += Self.automatedMessages }
         return rows
+    }
+
+    static let agentMessageBody = "Review the attachment flow on iPad and report back with screenshots."
+
+    private static var automatedMessages: [[String: Any]] {
+        let senderId = "agent-demo-coordinator"
+        var agent = message(id: "demo-design-agent-message", role: "user", blocks: [
+            DemoFixtures.textBlock("[MESSAGE FROM AGENT Coordinator (\(senderId))]\n\n\(agentMessageBody)")
+        ])
+        agent["metadata"] = ["type": "agent_message", "fromAgentId": senderId, "fromAgentName": "Coordinator"]
+        var script = message(id: "demo-design-script-wake", role: "user", blocks: [
+            DemoFixtures.textBlock(
+                "Script make check (demo-script) run demo-run: finished. Monitoring ended. "
+                    + "Read available output with ws.script.output(\"demo-script\")."
+            )
+        ])
+        script["metadata"] = [
+            "type": "script_monitor_wake", "source": "system", "monitorId": "demo-script-monitor",
+            "workspaceId": Self.workspaceId, "scriptId": "demo-script", "runId": "demo-run",
+            "scriptName": "make check", "reason": "finished"
+        ]
+        return [agent, script]
     }
 
     private static var watcherMessage: [String: Any] {

@@ -325,6 +325,11 @@ CAPTURES = {
             "Assistant chat sent message light", "Assistant chat sent message dark",
         ),
     },
+    "AutomatedMessageUITests": {
+        "testAgentMessageCollapsesAndScriptWakeRendersAsACard": (
+            "Automated messages collapsed", "Automated messages agent expanded", "Automated messages final state",
+        ),
+    },
     "WatcherMessageUITests": {
         "testWatcherDetailsExpandAndCollapseWithoutLosingTheReport": (
             "Watcher summary", "Watcher expanded details", "Watcher final state",

@@ -43,6 +43,12 @@ extension DemoFixturesTests {
             #expect(tools.contentBlocks.filter { $0.type == .toolResult }.count == 3)
         }
         #expect(viewModel.isStreaming == (scenario == .streaming || scenario == .queue))
+        if scenario == .automatedMessages {
+            let agent = try #require(viewModel.messages.first { $0.id == "demo-design-agent-message" })
+            #expect(agent.agentMessageAttribution?.rawName == "Coordinator")
+            let script = try #require(viewModel.messages.first { $0.id == "demo-design-script-wake" })
+            #expect(script.scriptMonitorWakeAttribution?.reason == .finished)
+        }
         if scenario == .blocker {
             let notice = try #require(viewModel.messages.last?.attentionNotice)
             #expect(notice.kind == .blockerReport)

@@ -14,6 +14,8 @@ enum DemoDesignScenario: String, CaseIterable {
     case agentGroupsRetry = "agent-groups-retry"
     /// Only the first top-level agent list succeeds, so later lists (the sidebar's) fail.
     case agentListUnavailable = "agent-list-unavailable"
+    /// An agent-to-agent message and a script-monitor wake.
+    case automatedMessages = "automated-messages"
     case blocker
     case claudeTools = "claude-tools"
     case composer

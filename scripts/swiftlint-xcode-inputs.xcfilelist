@@ -1144,6 +1144,7 @@ $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
 $(SRCROOT)/IntentUITests/AssistantStateUITests.swift
+$(SRCROOT)/IntentUITests/AutomatedMessageUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionFailureRecoveryUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossReadOnlyPresentationUITests.swift
