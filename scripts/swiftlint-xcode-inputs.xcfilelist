@@ -1007,6 +1007,7 @@ $(SRCROOT)/IntentTests/SuggestedPromptsDuplicateTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsEscapedTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParityTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsParsingTests.swift
+$(SRCROOT)/IntentTests/SwiftSourceLexer.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionMergeTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionTombstoneTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendIdentityTests.swift
