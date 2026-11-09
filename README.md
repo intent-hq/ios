@@ -2,6 +2,10 @@
 
 The **Intent companion app** is a native SwiftUI client for iPhone, iPad, and Apple Vision Pro that connects to the `intentd` daemon over **WSS/TLS with certificate fingerprint pinning**. It provides on-the-go access to workspaces, notes, tasks, and agent conversations over a direct network connection or, on iPhone and iPad, a Tailcat tunnel.
 
+<a href="https://apps.apple.com/app/intent-mobile/id6806514581"><img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" alt="Download on the App Store" height="40"></a>
+
+Available on the App Store as [Intent Mobile](https://apps.apple.com/app/intent-mobile/id6806514581) (free, iPhone and iPad, iOS 18.0+). The app pairs with the `intentd` daemon that runs alongside the Intent desktop app.
+
 ## What it is
 
 - **Native SwiftUI.** Built for iOS 18.0+ / visionOS 2.0+ with async/await, SwiftUI lifecycle, and `@MainActor` isolation. Supports iPhone, iPad, and Apple Vision Pro form factors — visionOS is a destination of the single `Intent` target, not a separate target.
@@ -11,6 +15,28 @@ The **Intent companion app** is a native SwiftUI client for iPhone, iPad, and Ap
 - **Workspace tools.** Create and transfer workspaces, review staged and unstaged changes and commit diffs, browse workspace files, run and monitor workspace scripts, use workspace terminals, and open browser previews served through the daemon.
 - **Pull requests.** Switch the workspace list to pull requests from its overflow menu (iPad: the Pull Requests sidebar section), filter and search them, and open a detail page with checks, reviews, and changed files.
 - **Rich content.** Render Markdown, tables, attachments, and offline Mermaid diagrams in notes and conversations. Messages, question answers, and new workspaces accept up to 10 images.
+
+## Screenshots
+
+<!--
+  These images are hotlinked from the App Store listing (Apple's mzstatic CDN); no image files are committed.
+  The URLs change when the listing's screenshots are updated. To refresh them, run:
+    curl -s 'https://itunes.apple.com/lookup?bundleId=dev.intentapp.ios&country=us'
+  and copy the matching entries from `screenshotUrls` (iPhone) and `ipadScreenshotUrls` (iPad),
+  replacing the trailing size segment (e.g. `320x480bb.jpg`) with `400x0w.jpg` for iPhone or `800x0w.jpg` for iPad.
+-->
+
+<p>
+  <img src="https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/a5/31/dc/a531dc89-a174-917a-6aa5-a773e87a8f7a/002.png/400x0w.jpg" width="200" alt="iPhone workspace list in dark mode, with Recent, Repo, and Status tabs and workspaces showing status dots and pull request badges">
+  <img src="https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/1f/68/33/1f68334e-deb8-b488-40d8-6a14b3ca34fe/003.png/400x0w.jpg" width="200" alt="iPhone quick-action menu over the blurred workspace list, offering Chat With Assistant and New Workspace">
+  <img src="https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/db/a8/9f/dba89f52-4a13-175a-fab2-0994d3bbc3e9/004.png/400x0w.jpg" width="200" alt="iPhone Connections sheet listing two paired devices, one connected, with options to pair a new device by QR code or manual connection">
+  <img src="https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/c9/ff/57/c9ff5707-a218-a87d-288c-44c4cc92a98d/006.png/400x0w.jpg" width="200" alt="iPhone agent conversation in light mode, showing a new workspace branch, the user's request, and the agent's file read and edit steps">
+</p>
+
+<p>
+  <img src="https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/f0/c1/df/f0c1df4f-8fd6-0539-9902-ac28a389fa18/002.jpg/800x0w.jpg" width="400" alt="iPad split view in dark mode, with the workspace sidebar beside an agent conversation">
+  <img src="https://is1-ssl.mzstatic.com/image/thumb/PurpleSource221/v4/98/a0/32/98a03221-d381-35a3-5b00-e241c41bc66b/004.jpg/800x0w.jpg" width="400" alt="iPad in light mode, with the Connections list beside an agent conversation that includes an attached image and expanded tool step">
+</p>
 
 ## Architecture
 
