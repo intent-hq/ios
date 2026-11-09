@@ -64,12 +64,11 @@ extension ConversationViewModel {
     }
 
     func latchNewMessagesDividerAnchorIfNeeded() {
-        guard !hasLatchedNewMessagesDividerAnchor else { return }
-        hasLatchedNewMessagesDividerAnchor = true
-        latchedNewMessagesDividerAnchorId = NewMessagesDivider.resolveAnchor(
+        guard newMessagesDividerLatch == .unlatched else { return }
+        newMessagesDividerLatch = .latched(anchorId: NewMessagesDivider.resolveAnchor(
             messageIds: store.messages.map(\.id),
             lastSeenMessageId: store.lastSeenMessageId
-        )
+        ))
     }
 
     // MARK: - Seen-marker lifecycle

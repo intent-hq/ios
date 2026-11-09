@@ -1,5 +1,12 @@
 import Foundation
 
+/// One membership refresh: the request task and the principal it must keep.
+/// The principal fences a later event while `currentPrincipal` is cleared.
+struct AuthorityRefresh {
+    let previous: ConnectionPrincipal?
+    let task: Task<Void, Never>
+}
+
 extension ConnectionManager {
     func finishIdentityAdmission(_ handshake: ConnectionHandshake, token: String, fingerprint: String?) {
         let principal = handshake.principal
@@ -17,10 +24,9 @@ extension ConnectionManager {
         admission = nil
         capabilities = .unknown
         scriptMonitorsDisabledForConnection = false
-        authorityRefreshTask?.cancel()
-        authorityRefreshTask = nil
+        authorityRefresh?.task.cancel()
+        authorityRefresh = nil
         pendingAuthorityRevision = -1
-        authorityBeforeRefresh = nil
     }
 
     func disableScriptMonitors() {
@@ -70,8 +76,7 @@ extension ConnectionManager {
         let revision = ConnectionPrincipal.number(data["revision"]) ?? 0
         guard revision > max(currentPrincipal?.revision ?? -1, pendingAuthorityRevision) else { return }
         pendingAuthorityRevision = revision
-        let previous = currentPrincipal ?? authorityBeforeRefresh
-        authorityBeforeRefresh = previous
+        let previous = currentPrincipal ?? authorityRefresh?.previous
         if let previous, let removed = data["principalId"] as? String,
            data["action"] as? String == "removed", ConnectionPrincipal.samePerson(removed, previous.id) {
             rememberCurrentPersonRevoked()
@@ -85,10 +90,10 @@ extension ConnectionManager {
         currentPrincipal = nil
         lastConnectedPrincipal = nil
         capabilities = .unknown
-        authorityRefreshTask?.cancel()
+        authorityRefresh?.task.cancel()
         let generation = connectionGeneration
         let currentSocket = socket
-        authorityRefreshTask = Task { [weak self] in
+        let task = Task { [weak self] in
             guard let self else { return }
             do {
                 let hello = try await request("client.hello", params: PairingClientIdentity.parameters())
@@ -106,7 +111,7 @@ extension ConnectionManager {
                 let negotiated = ConnectionCapabilities(hello: hello)
                 capabilities = scriptMonitorsDisabledForConnection ? negotiated.disablingScriptMonitors() : negotiated
                 pendingAuthorityRevision = -1
-                authorityBeforeRefresh = nil
+                authorityRefresh = nil
                 bindSavedIdentity(principal)
             } catch {
                 guard !Task.isCancelled, connectionGeneration == generation, socket === currentSocket else { return }
@@ -114,6 +119,7 @@ extension ConnectionManager {
                 disconnect()
             }
         }
+        authorityRefresh = AuthorityRefresh(previous: previous, task: task)
     }
 
     func handleAuthoritativeSocketFailure(_ error: Error) -> Bool {

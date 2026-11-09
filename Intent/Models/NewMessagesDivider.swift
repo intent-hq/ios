@@ -74,3 +74,15 @@ enum NewMessagesDivider {
         return distanceToBottom > atBottomThreshold
     }
 }
+
+/// Whether this view model has taken its one entry-time anchor. A latched
+/// `nil` anchor means "entered, no divider", which differs from unlatched.
+enum NewMessagesDividerLatch: Equatable {
+    case latched(anchorId: String?)
+    case unlatched
+
+    var anchorId: String? {
+        if case .latched(let anchorId) = self { return anchorId }
+        return nil
+    }
+}

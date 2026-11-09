@@ -61,9 +61,8 @@ import os
         set { admittedPrincipal = newValue }
     }
     @ObservationIgnored var lastConnectedPrincipal: ConnectionPrincipal?
-    @ObservationIgnored var authorityRefreshTask: Task<Void, Never>?
+    @ObservationIgnored var authorityRefresh: AuthorityRefresh?
     @ObservationIgnored var pendingAuthorityRevision: Double = -1
-    @ObservationIgnored var authorityBeforeRefresh: ConnectionPrincipal?
     var startupState: DaemonStartupState?
     @ObservationIgnored var startupRun = StartupAdmissionRun()
 
@@ -170,7 +169,7 @@ import os
 
     isolated deinit {
         requestTransport?.stop()
-        authorityRefreshTask?.cancel()
+        authorityRefresh?.task.cancel()
         stopPathMonitor()
     }
 }

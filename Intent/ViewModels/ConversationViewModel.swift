@@ -7,8 +7,7 @@ import SwiftUI
     var store: ConversationStore {
         didSet {
             if store !== oldValue {
-                hasLatchedNewMessagesDividerAnchor = false
-                latchedNewMessagesDividerAnchorId = nil
+                newMessagesDividerLatch = .unlatched
             }
             if let streamingObserverId { oldValue.streamingObservers[streamingObserverId] = nil }
             oldValue.entryObservers[conversationConsumer] = nil
@@ -53,12 +52,12 @@ import SwiftUI
     var newMessagesDividerAnchorId: String? {
         NewMessagesDivider.resolveLatchedAnchor(
             messageIds: store.messages.map(\.id),
-            latchedAnchorId: latchedNewMessagesDividerAnchorId
+            latchedAnchorId: newMessagesDividerLatch.anchorId
         )
     }
 
-    var latchedNewMessagesDividerAnchorId: String?
-    var hasLatchedNewMessagesDividerAnchor = false
+    var newMessagesDividerLatch = NewMessagesDividerLatch.unlatched
+    var hasLatchedNewMessagesDividerAnchor: Bool { newMessagesDividerLatch != .unlatched }
 
     var messageText = "" {
         didSet {
