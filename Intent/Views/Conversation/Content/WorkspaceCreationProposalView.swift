@@ -38,12 +38,10 @@ struct WorkspaceCreationProposalView: View {
         VStack(alignment: .leading, spacing: Layout.spacing) {
             statusContent
             if let workspace {
-                Button {
+                Button("Open workspace") {
                     coordinator.onSelectWorkspace(workspace.id)
-                } label: {
-                    Text("Open workspace").copyContextMenuPassthrough()
                 }
-                .buttonStyle(IntentButtonStyle(variant: .secondary))
+                .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))
                 .accessibilityIdentifier("proposal.openWorkspace")
             }
         }
@@ -77,12 +75,10 @@ struct WorkspaceCreationProposalView: View {
             }
         } else if let error = store.loadError {
             Text(error)
-            Button {
+            Button("Retry") {
                 Task { await store.refresh() }
-            } label: {
-                Text("Retry").copyContextMenuPassthrough()
             }
-            .buttonStyle(IntentButtonStyle(variant: .secondary))
+            .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))
         } else {
             Text("Waiting for confirmation availability…")
         }
@@ -115,12 +111,10 @@ struct WorkspaceCreationProposalView: View {
         let layout = dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())
         return layout {
             if !hasAttempt || activeCreationAction == .create {
-                Button {
+                Button("Not now") {
                     confirmingDismiss = true
-                } label: {
-                    Text("Not now").copyContextMenuPassthrough()
                 }
-                .buttonStyle(IntentButtonStyle(variant: .secondary))
+                .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))
                 .requiresLiveConnection()
                 .accessibilityIdentifier("proposal.dismiss")
             }
@@ -133,13 +127,12 @@ struct WorkspaceCreationProposalView: View {
                 }
             } label: {
                 Text(actionTitle)
-                    .copyContextMenuPassthrough()
                     .opacity(activeCreationAction == nil ? 1 : 0)
                     .overlay {
                         if activeCreationAction != nil { ProgressView().accessibilityHidden(true) }
                     }
             }
-            .buttonStyle(IntentButtonStyle())
+            .buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))
             .disabled(!store.canCreateWorkspace)
             .requiresLiveConnection()
             .accessibilityLabel(activeCreationAction != nil ? "Creating workspace" : actionTitle)

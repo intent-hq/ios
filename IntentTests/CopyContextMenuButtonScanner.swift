@@ -9,7 +9,10 @@ import Foundation
 /// `Button(action:)`; a title-only Button has none. A marker on the action,
 /// on a nested Button, or on the Button's own modifier chain does not count:
 /// it must sit inside the label so the Button is its SwiftUI ancestor (see
-/// `CopyContextMenuPassthroughMarker`).
+/// `CopyContextMenuPassthroughMarker`). The one exception is
+/// `.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))` directly on
+/// the Button's own modifier chain: that style puts the marker behind the
+/// whole styled pill, inside the Button.
 /// Buttons inside menus, dialogs, toolbars, and presented or pushed screens
 /// are skipped because they never render under the row's overlay.
 ///
@@ -26,6 +29,11 @@ enum CopyContextMenuButtonScanner {
     }
 
     static let marker = "copyContextMenuPassthrough"
+
+    /// `.buttonStyle` argument (parentheses included) whose style applies the
+    /// marker: a literal `true` argument. Arguments with nested calls do not match.
+    private static let passthroughStyle =
+        #"^\(\s*IntentButtonStyle\s*\((?:[^()]*,\s*)?passesThroughCopyMenu\s*:\s*true\s*(?:,[^()]*)?\)\s*\)$"#
 
     /// Callees whose closures render outside the row's view hierarchy.
     static let detachedContainers: Set<String> = [
@@ -59,7 +67,7 @@ enum CopyContextMenuButtonScanner {
             guard !detached else { return nil }
             let marked = call.labels.contains { label in
                 reachesMarker(labelText(label, excluding: calls, in: code), helpers: helpers)
-            }
+            } || hasPassthroughStyle(after: call.end, in: code, brackets: brackets)
             guard !marked else { return nil }
             let line = code[..<call.start].count { $0 == Byte.newline } + 1
             return Finding(line: line, source: lines[line - 1].trimmingCharacters(in: .whitespaces))
@@ -145,6 +153,41 @@ enum CopyContextMenuButtonScanner {
         return nil
     }
 
+    private static func hasPassthroughStyle(after end: Int, in code: [UInt8], brackets: SwiftSourceLexer.Brackets) -> Bool {
+        // The style closest to the Button wins, so only the first one counts.
+        guard let style = chainedModifiers(after: end, in: code, brackets: brackets).first(where: { $0.name == "buttonStyle" }),
+              let arguments = style.arguments else { return false }
+        return SwiftSourceLexer.text(code[arguments]).range(of: passthroughStyle, options: .regularExpression) != nil
+    }
+
+    /// `.name(…) { … }` modifiers chained directly onto the expression that
+    /// ends at `end`, with each one's argument list (parentheses included).
+    private static func chainedModifiers(
+        after end: Int,
+        in code: [UInt8],
+        brackets: SwiftSourceLexer.Brackets
+    ) -> [(name: String, arguments: Range<Int>?)] {
+        var modifiers: [(name: String, arguments: Range<Int>?)] = []
+        var cursor = end
+        while true {
+            let dot = SwiftSourceLexer.skipWhitespace(from: cursor, in: code)
+            guard dot < code.count, code[dot] == Byte.dot else { break }
+            var nameEnd = dot + 1
+            while nameEnd < code.count, Byte.isIdentifier(code[nameEnd]) { nameEnd += 1 }
+            guard nameEnd > dot + 1 else { break }
+            cursor = nameEnd
+            var arguments: Range<Int>?
+            let paren = SwiftSourceLexer.skipWhitespace(from: cursor, in: code)
+            if paren < code.count, code[paren] == Byte.openParen, let closer = brackets.closer[paren] {
+                arguments = paren..<(closer + 1)
+                cursor = closer + 1
+            }
+            cursor = trailingClosures(from: cursor, in: code, brackets: brackets).end
+            modifiers.append((SwiftSourceLexer.text(code[(dot + 1)..<nameEnd]), arguments))
+        }
+        return modifiers
+    }
+
     // MARK: - Button calls
 
     private static let buttonName = Array("Button".utf8)
@@ -180,15 +223,35 @@ enum CopyContextMenuButtonScanner {
 
     private static func parseCall(from start: Int, in code: [UInt8], brackets: SwiftSourceLexer.Brackets) -> ButtonCall {
         var end = start + buttonName.count
-        var cursor = SwiftSourceLexer.skipWhitespace(from: end, in: code)
+        let cursor = SwiftSourceLexer.skipWhitespace(from: end, in: code)
         var argumentRange: Range<Int>?
         if cursor < code.count, code[cursor] == Byte.openParen, let closer = brackets.closer[cursor] {
             argumentRange = cursor..<(closer + 1)
             end = closer + 1
         }
+        let (closures, closuresEnd) = trailingClosures(from: end, in: code, brackets: brackets)
+
+        var labels = closures.filter { $0.label == "label" }.map(\.range)
+        let label = argumentRange.flatMap { argumentValue("label", in: $0, code: code, brackets: brackets) }
+        if let label { labels.append(label) }
+        let hasAction = argumentRange.flatMap { argumentValue("action", in: $0, code: code, brackets: brackets) } != nil
+        if labels.isEmpty, hasAction, let first = closures.first, first.label == nil {
+            labels.append(first.range)
+        }
+        return ButtonCall(start: start, end: closuresEnd, labels: labels)
+    }
+
+    /// Plain and labeled (`label: {`) trailing closures from `start`, and the
+    /// offset just past the last one.
+    private static func trailingClosures(
+        from start: Int,
+        in code: [UInt8],
+        brackets: SwiftSourceLexer.Brackets
+    ) -> (closures: [(label: String?, range: Range<Int>)], end: Int) {
         var closures: [(label: String?, range: Range<Int>)] = []
+        var end = start
         while true {
-            cursor = SwiftSourceLexer.skipWhitespace(from: end, in: code)
+            var cursor = SwiftSourceLexer.skipWhitespace(from: end, in: code)
             var labelEnd = cursor
             while labelEnd < code.count, Byte.isIdentifier(code[labelEnd]) { labelEnd += 1 }
             var label: String?
@@ -202,15 +265,7 @@ enum CopyContextMenuButtonScanner {
             closures.append((label, cursor..<(closer + 1)))
             end = closer + 1
         }
-
-        var labels = closures.filter { $0.label == "label" }.map(\.range)
-        let label = argumentRange.flatMap { argumentValue("label", in: $0, code: code, brackets: brackets) }
-        if let label { labels.append(label) }
-        let hasAction = argumentRange.flatMap { argumentValue("action", in: $0, code: code, brackets: brackets) } != nil
-        if labels.isEmpty, hasAction, let first = closures.first, first.label == nil {
-            labels.append(first.range)
-        }
-        return ButtonCall(start: start, end: end, labels: labels)
+        return (closures, end)
     }
 
     /// Value range of the top-level `name:` argument in the argument list

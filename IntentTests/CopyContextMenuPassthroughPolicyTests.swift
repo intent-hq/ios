@@ -67,8 +67,9 @@ struct CopyContextMenuPassthroughPolicyTests {
             """
             Buttons without copyContextMenuPassthrough() under \(Self.conversationRoot):
             \(violations.joined(separator: "\n"))
-            The transcript row's copy overlay swallows their taps. Apply .copyContextMenuPassthrough() \
-            inside the Button's label (not on the Button or its action); give title-only Buttons a label. \
+            The transcript row's copy overlay swallows their taps. Style the Button with \
+            IntentButtonStyle(passesThroughCopyMenu: true), or apply .copyContextMenuPassthrough() inside \
+            its label (not on the Button or its action); give other title-only Buttons a label. \
             If the Button never renders inside a MessageCopyContextMenu row, list its file in rowlessFiles.
             """
         )
@@ -121,6 +122,35 @@ struct CopyContextMenuPassthroughPolicyTests {
     ])
     func scanChecksButtonCallForms(source: String, expectedFindings: Int) {
         #expect(CopyContextMenuButtonScanner.unmarkedButtons(in: source).count == expectedFindings)
+    }
+
+    @Test(arguments: [
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 0),
+        ("Button { go() } label: { Text(\"Go\") }\n    .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))", 0),
+        ("Button(\"Go\") { go() }\n    .disabled(busy)\n    .overlay { Text(\"x\") }\n    .buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 0),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: false))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(variant: .secondary))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentContentButtonStyle(passesThroughCopyMenu: true))", 1),
+        ("Button(\"Go\") { go() }.background(IntentButtonStyle(passesThroughCopyMenu: true))", 1),
+        ("VStack { Button(\"Go\") { go() } }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(variant: pick(passesThroughCopyMenu: true)))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true && flag))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: trueish))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(.plain).buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 1)
+    ])
+    func passthroughButtonStyleCountsOnTheButtonsOwnChain(source: String, expectedFindings: Int) {
+        #expect(CopyContextMenuButtonScanner.unmarkedButtons(in: source).count == expectedFindings)
+    }
+
+    @Test func passthroughButtonStyleCoversOnlyTheButtonItFollows() {
+        let source = """
+        HStack {
+            Button("A") { a() }
+            Button("B") { b() }
+                .buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))
+        }
+        """
+        #expect(CopyContextMenuButtonScanner.unmarkedButtons(in: source).map(\.line) == [2])
     }
 
     @Test func markerOnButtonModifierChainDoesNotCount() {
