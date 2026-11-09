@@ -124,17 +124,24 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     }
 
     @MainActor
-    func testWorkspaceProposalButtonPaddingReceivesTaps() {
+    func testWorkspaceProposalDismissPaddingReceivesTaps() {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let dismiss = app.buttons["proposal.dismiss"]
         XCTAssertTrue(dismiss.waitForExistence(timeout: Self.timeout))
         tapPadding(of: dismiss)
-        let cancel = app.buttons["Cancel"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: Self.timeout))
-        cancel.tap()
-        XCTAssertTrue(cancel.waitForNonExistence(timeout: Self.timeout))
+        let confirm = app.buttons["Dismiss proposal"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: Self.timeout))
+        confirm.tap()
+        let outcome = app.staticTexts["proposal.outcome"]
+        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(outcome.label, "Dismissed")
+    }
 
+    @MainActor
+    func testWorkspaceProposalCreateAndOpenPaddingReceiveTaps() {
+        let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let apply = app.buttons["proposal.apply"]
+        XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
         tapPadding(of: apply)
         let outcome = app.staticTexts["proposal.outcome"]
         XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
