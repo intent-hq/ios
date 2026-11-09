@@ -23,6 +23,8 @@ nonisolated final class AutomatedMessageUITests: XCTestCase {
         let scriptStatus = app.staticTexts["Run finished; agent notified"].firstMatch
         XCTAssertTrue(scriptStatus.waitForExistence(timeout: Self.timeout), "Script wakes render a wake card header")
         XCTAssertTrue(app.staticTexts["make check"].exists)
+        let scriptBody = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Monitoring ended")).firstMatch
+        XCTAssertFalse(scriptBody.exists, "Script wake cards start collapsed")
 
         let disclosure = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "sent a message")).firstMatch
         XCTAssertTrue(disclosure.waitForExistence(timeout: Self.timeout))
@@ -36,6 +38,11 @@ nonisolated final class AutomatedMessageUITests: XCTestCase {
         let header = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "[MESSAGE FROM AGENT")).firstMatch
         XCTAssertFalse(header.exists, "The daemon sender header is display-stripped")
         attachScreenshot(app, name: "Automated messages agent expanded")
+
+        let expandScript = app.buttons["Expand section"].firstMatch
+        XCTAssertTrue(expandScript.exists)
+        expandScript.tap()
+        XCTAssertTrue(scriptBody.waitForExistence(timeout: Self.timeout), "Expanding shows the wake body")
     }
 
     @MainActor

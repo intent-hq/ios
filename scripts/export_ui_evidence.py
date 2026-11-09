@@ -332,7 +332,7 @@ CAPTURES = {
     },
     "WatcherMessageUITests": {
         "testWatcherDetailsExpandAndCollapseWithoutLosingTheReport": (
-            "Watcher summary", "Watcher expanded details", "Watcher final state",
+            "Watcher collapsed", "Watcher summary", "Watcher expanded details", "Watcher final state",
         ),
     },
     "WorkspaceTitleEditingUITests": {
