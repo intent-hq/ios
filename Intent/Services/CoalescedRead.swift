@@ -1,8 +1,11 @@
 import Foundation
 
-/// A single-flight read. Invalidating while it runs earns exactly one trailing
-/// pass; later invalidations stay dirty for the next explicit read, event or
-/// reconnect, so a noisy feed can never loop.
+/// A single-flight read. Invalidating while it runs earns at most one trailing
+/// pass per `run`; later invalidations stay dirty, and `run` returns true to
+/// its owner. Callers that ignore the result wait for the next explicit read,
+/// event or reconnect, so a noisy feed cannot loop them. Callers that run
+/// again on true opt into "repeat until settled" and own that loop: only an
+/// invalidation during the last pass earns another run, and `cancel()` ends it.
 @MainActor
 final class CoalescedRead {
     enum Phase: Equatable {
