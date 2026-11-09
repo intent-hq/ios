@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 /// Collapsible header for hook, PR-monitor and script-monitor wake cards; the
@@ -62,5 +63,51 @@ struct WakeCardDisclosureHeader<Header: View>: View {
         )) {
             isExpanded.toggle()
         }
+    }
+}
+
+/// Icon plus title and status lines for a wake card header. The text is
+/// measured from the title's cap top to the last baseline so the card padding
+/// reads evenly, and the icon centres on the title's first line.
+struct WakeCardHeaderRow<Content: View>: View {
+    private typealias Design = Constants.Conversation.Design
+    private static var titleStyle: Constants.Typography.Style { Constants.Typography.bodyXSEmphasized }
+
+    let icon: ImageResource
+    let content: Content
+    @ScaledMetric private var fontSize: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.legibilityWeight) private var legibilityWeight
+
+    init(icon: ImageResource, @ViewBuilder content: () -> Content) {
+        self.icon = icon
+        self.content = content()
+        _fontSize = ScaledMetric(wrappedValue: Self.titleStyle.size, relativeTo: Self.titleStyle.relativeTo)
+    }
+
+    var body: some View {
+        let capHeight = titleCapHeight
+        HStack(alignment: .top, spacing: Design.Watcher.rowSpacing) {
+            Color.clear
+                .frame(width: Design.toolIconSize, height: capHeight)
+                .overlay {
+                    Image(icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+                .accessibilityHidden(true)
+            WorkspaceTextTrimLayout(capHeight: capHeight) {
+                content
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var titleCapHeight: CGFloat {
+        let style = Self.titleStyle
+        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
+        return CTFontGetCapHeight(CTFontCreateWithName(face.rawValue as CFString, fontSize, nil))
     }
 }

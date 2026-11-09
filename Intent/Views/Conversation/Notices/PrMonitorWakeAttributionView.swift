@@ -17,13 +17,7 @@ struct PrMonitorWakeAttributionView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Design.Watcher.rowSpacing) {
-            Image(.gitPr)
-                .resizable()
-                .scaledToFit()
-                .frame(width: Design.toolIconSize, height: Design.toolIconSize)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .accessibilityHidden(true)
+        WakeCardHeaderRow(icon: .gitPr) {
             VStack(alignment: .leading, spacing: Design.Watcher.attributionSpacing) {
                 prLink
                 Text("woke the agent")

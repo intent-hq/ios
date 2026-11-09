@@ -7,13 +7,7 @@ struct HookWakeAttributionView: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Design.Watcher.rowSpacing) {
-            Image(.bolt1)
-                .resizable()
-                .scaledToFit()
-                .frame(width: Design.toolIconSize, height: Design.toolIconSize)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .accessibilityHidden(true)
+        WakeCardHeaderRow(icon: .bolt1) {
             VStack(alignment: .leading, spacing: Design.Watcher.attributionSpacing) {
                 Text(displayName)
                     .interFont(Constants.Typography.bodyXSEmphasized)
