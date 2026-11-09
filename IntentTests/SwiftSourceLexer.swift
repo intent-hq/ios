@@ -191,6 +191,7 @@ enum SwiftSourceLexer {
         static let dot = UInt8(ascii: ".")
         static let slash = UInt8(ascii: "/")
         static let colon = UInt8(ascii: ":")
+        static let comma = UInt8(ascii: ",")
         static let equals = UInt8(ascii: "=")
         static let openParen = UInt8(ascii: "(")
         static let closeParen = UInt8(ascii: ")")

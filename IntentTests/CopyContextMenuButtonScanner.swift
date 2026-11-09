@@ -181,11 +181,9 @@ enum CopyContextMenuButtonScanner {
     private static func parseCall(from start: Int, in code: [UInt8], brackets: SwiftSourceLexer.Brackets) -> ButtonCall {
         var end = start + buttonName.count
         var cursor = SwiftSourceLexer.skipWhitespace(from: end, in: code)
-        var arguments = ""
         var argumentRange: Range<Int>?
         if cursor < code.count, code[cursor] == Byte.openParen, let closer = brackets.closer[cursor] {
             argumentRange = cursor..<(closer + 1)
-            arguments = SwiftSourceLexer.text(code[cursor...closer])
             end = closer + 1
         }
         var closures: [(label: String?, range: Range<Int>)] = []
@@ -206,15 +204,47 @@ enum CopyContextMenuButtonScanner {
         }
 
         var labels = closures.filter { $0.label == "label" }.map(\.range)
-        if let argumentRange, hasArgument("label", in: arguments) { labels.append(argumentRange) }
-        if labels.isEmpty, hasArgument("action", in: arguments), let first = closures.first, first.label == nil {
+        let label = argumentRange.flatMap { argumentValue("label", in: $0, code: code, brackets: brackets) }
+        if let label { labels.append(label) }
+        let hasAction = argumentRange.flatMap { argumentValue("action", in: $0, code: code, brackets: brackets) } != nil
+        if labels.isEmpty, hasAction, let first = closures.first, first.label == nil {
             labels.append(first.range)
         }
         return ButtonCall(start: start, end: end, labels: labels)
     }
 
-    private static func hasArgument(_ name: String, in arguments: String) -> Bool {
-        arguments.range(of: #"\b"# + name + #"\s*:"#, options: .regularExpression) != nil
+    /// Value range of the top-level `name:` argument in the argument list
+    /// `arguments` (parentheses included); nested calls and closures are skipped.
+    private static func argumentValue(
+        _ name: String,
+        in arguments: Range<Int>,
+        code: [UInt8],
+        brackets: SwiftSourceLexer.Brackets
+    ) -> Range<Int>? {
+        let closeParen = arguments.upperBound - 1
+        var segmentStart = arguments.lowerBound + 1
+        var cursor = segmentStart
+        while cursor <= closeParen {
+            if cursor == closeParen || code[cursor] == Byte.comma {
+                if let value = labeledValue(name, in: segmentStart..<cursor, code: code) { return value }
+                segmentStart = cursor + 1
+            } else if let closer = brackets.closer[cursor] {
+                cursor = closer
+            }
+            cursor += 1
+        }
+        return nil
+    }
+
+    private static func labeledValue(_ name: String, in segment: Range<Int>, code: [UInt8]) -> Range<Int>? {
+        let nameBytes = Array(name.utf8)
+        let start = SwiftSourceLexer.skipWhitespace(from: segment.lowerBound, in: code)
+        let nameEnd = start + nameBytes.count
+        guard nameEnd <= segment.upperBound, code[start..<nameEnd].elementsEqual(nameBytes),
+              nameEnd == segment.upperBound || !Byte.isIdentifier(code[nameEnd]) else { return nil }
+        let colon = SwiftSourceLexer.skipWhitespace(from: nameEnd, in: code)
+        guard colon < segment.upperBound, code[colon] == Byte.colon else { return nil }
+        return (colon + 1)..<segment.upperBound
     }
 
     /// Name of the call or modifier that owns `opener`: `alert` for both

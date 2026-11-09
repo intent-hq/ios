@@ -113,6 +113,8 @@ struct CopyContextMenuPassthroughPolicyTests {
         ("Button { go() } label: { Text(\"Go\").copyContextMenuPassthrough() }", 0),
         ("Button(action: go) {\n  Text(\"Go\")\n    .copyContextMenuPassthrough()\n}", 0),
         ("Button(action: go, label: { Text(\"Go\").copyContextMenuPassthrough() })", 0),
+        ("Button(action: { _ = Text(\"Hidden\").copyContextMenuPassthrough() }, label: { Text(\"Go\") })", 1),
+        ("Button(action: { go(label: x.copyContextMenuPassthrough()) }) { Text(\"Go\") }", 1),
         ("SwiftUI.Button(\"Go\") { go() }", 1),
         ("SwiftUI.Button { go() } label: { Text(\"Go\").copyContextMenuPassthrough() }", 0),
         ("Other.Button(\"Go\") { go() }", 0)
