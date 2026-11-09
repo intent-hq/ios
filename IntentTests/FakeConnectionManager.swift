@@ -464,7 +464,11 @@ class FakeConnectionManager: SessionConnectionManaging {
         }
     }
 
+    /// Every `unregisterSubscriptionHandler` id, in call order.
+    private(set) var unregisteredSubscriptionIds: [String] = []
+
     func unregisterSubscriptionHandler(id: String) {
+        unregisteredSubscriptionIds.append(id)
         subscriptionHandlers.removeValue(forKey: id)
     }
 
@@ -526,25 +530,25 @@ class FakeConnectionManager: SessionConnectionManaging {
         }
     }
 
-    /// Check if a handler is registered for a given subscriptionId.
-    func hasSubscriptionHandler(id: String) -> Bool {
-        subscriptionHandlers[id] != nil
-    }
-
     var eventHandlerIDs: Set<UUID> { Set(eventHandlers.keys) }
 
     /// Count of registered event handlers.
     var eventHandlerCount: Int {
         eventHandlers.count
     }
+}
+
+extension FakeConnectionManager {
+    /// Check if a handler is registered for a given subscriptionId.
+    func hasSubscriptionHandler(id: String) -> Bool {
+        subscriptionHandlers[id] != nil
+    }
 
     /// Count of registered subscription handlers.
     var subscriptionHandlerCount: Int {
         subscriptionHandlers.count
     }
-}
 
-extension FakeConnectionManager {
     /// Check if a specific request method was called.
     func didCallMethod(_ method: String) -> Bool {
         requestLog.contains { $0.method == method }

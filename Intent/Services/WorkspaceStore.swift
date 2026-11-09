@@ -33,11 +33,9 @@ import Observation
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
     // Live-state subscription tracking
-    @ObservationIgnored private var workspaceSubscriptionId: String?
+    @ObservationIgnored private var liveSubscription = LiveSubscription.idle
     /// Read-only outside this file so local patches can reseed it.
     @ObservationIgnored private(set) var workspaceReconciler: DeltaReconciler<Workspace>?
-    @ObservationIgnored private var workspaceLive = false
-    @ObservationIgnored private var resnapshotInProgress = false // swiftlint:disable:this state_phase_flag
     /// Reads the rest of a paged `workspace.subscribe` snapshot (protocol §6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
 
@@ -73,16 +71,13 @@ import Observation
     }
 
     private func onConnected() async {
-        // Reset live-state tracking on new connection
-        workspaceLive = false
-        // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
-        if let oldId = workspaceSubscriptionId {
+        // Reset live-state tracking on new connection. Unregister the old
+        // handler if reconnecting (defensive: subscription is invalid after disconnect)
+        if let oldId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
-        workspaceSubscriptionId = nil
         workspaceReconciler = nil
         snapshotFiller.cancel()
-        resnapshotInProgress = false
 
         await fetchAll()
         subscribeToEvents()
@@ -271,10 +266,9 @@ extension WorkspaceStore {
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
                 // Unregister old handler if we had one
-                if let oldId = workspaceSubscriptionId {
+                if let oldId = liveSubscription.acknowledge(subId) {
                     connectionManager.unregisterSubscriptionHandler(id: oldId)
                 }
-                workspaceSubscriptionId = subId
                 // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
                 connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
@@ -322,7 +316,7 @@ extension WorkspaceStore {
 
         switch Self.classify(type: eventType, data: data) {
         case .refetch:
-            if !workspaceLive || eventType == "host:members-changed" {
+            if !liveSubscription.isLive || eventType == "host:members-changed" {
                 invalidateFetchForEvent()
             }
         case .patchInPlace, .ignore:
@@ -353,7 +347,7 @@ extension WorkspaceStore {
         switch push.kind {
         case .snapshot:
             guard let rawItems = push.snapshot else { return }
-            workspaceLive = true
+            liveSubscription.applySnapshot()
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             AppLog.workspace.debug("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
             if let token = push.nextToken {
@@ -371,8 +365,7 @@ extension WorkspaceStore {
                 AppLog.workspace.debug("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
-                if !resnapshotInProgress {
-                    resnapshotInProgress = true
+                if liveSubscription.requestResnapshot() {
                     AppLog.workspace.warning("[WorkspaceStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshot() }
                 }
@@ -394,21 +387,20 @@ extension WorkspaceStore {
                 if complete { self?.publishFetchedWorkspaces(reconciler.values()) }
             },
             resubscribe: { [weak self] in
-                guard let self, !resnapshotInProgress else { return }
+                guard let self, !liveSubscription.isResnapshotting else { return }
                 await resnapshot()
             }
         ))
     }
 
     private func resnapshot() async {
-        resnapshotInProgress = true
-        defer { resnapshotInProgress = false }
+        liveSubscription.beginResnapshot()
+        defer { liveSubscription.endResnapshot() }
 
-        workspaceLive = false
         workspaceReconciler?.reset()
         snapshotFiller.cancel()
 
-        if let subId = workspaceSubscriptionId {
+        if let subId = liveSubscription.id {
             // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
@@ -420,7 +412,7 @@ extension WorkspaceStore {
             }
         }
 
-        workspaceSubscriptionId = nil
+        liveSubscription.clearId()
 
         // Re-subscribe and refetch to bridge
         await subscribeLiveState()
