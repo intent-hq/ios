@@ -88,16 +88,27 @@ struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
 }
 
 extension ToolbarContent {
+    func intentToolbarSurface() -> IntentToolbarSurface<Self> {
+        IntentToolbarSurface(content: self)
+    }
+}
+
+/// A named wrapper keeps SwiftUI's emit-into-client `buildLimitedAvailability`
+/// opaque type inside this module. Optimized `@testable` clients otherwise see
+/// through an opaque return type and fail to link that unexported symbol (#963).
+struct IntentToolbarSurface<Content: ToolbarContent>: ToolbarContent {
+    let content: Content
+
     @ToolbarContentBuilder
-    func intentToolbarSurface() -> some ToolbarContent {
+    var body: some ToolbarContent {
         #if os(iOS)
         if #available(iOS 26.0, *) {
-            sharedBackgroundVisibility(.hidden)
+            content.sharedBackgroundVisibility(.hidden)
         } else {
-            self
+            content
         }
         #else
-        self
+        content
         #endif
     }
 }
