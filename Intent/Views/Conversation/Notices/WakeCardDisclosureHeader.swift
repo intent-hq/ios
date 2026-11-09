@@ -1,4 +1,3 @@
-import CoreText
 import SwiftUI
 
 /// Collapsible header for hook, PR-monitor and script-monitor wake cards; the
@@ -86,28 +85,20 @@ struct WakeCardHeaderRow<Content: View>: View {
     }
 
     var body: some View {
-        let capHeight = titleCapHeight
         HStack(alignment: .top, spacing: Design.Watcher.rowSpacing) {
-            Color.clear
-                .frame(width: Design.toolIconSize, height: capHeight)
-                .overlay {
-                    Image(icon)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: Design.toolIconSize, height: Design.toolIconSize)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-                .accessibilityHidden(true)
-            WorkspaceTextTrimLayout(capHeight: capHeight) {
+            CapHeightIconSlot(style: Self.titleStyle, width: Design.toolIconSize) {
+                Image(icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: Design.toolIconSize, height: Design.toolIconSize)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
+            WorkspaceTextTrimLayout(
+                capHeight: Self.titleStyle.capHeight(size: fontSize, legibilityWeight: legibilityWeight)
+            ) {
                 content
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-    }
-
-    private var titleCapHeight: CGFloat {
-        let style = Self.titleStyle
-        let face = legibilityWeight == .bold ? style.face.legibleFace : style.face
-        return CTFontGetCapHeight(CTFontCreateWithName(face.rawValue as CFString, fontSize, nil))
     }
 }

@@ -71,11 +71,12 @@ struct WatcherMessageBodyView: View {
 
     private func checkRow(_ check: WatcherMessagePresentation.Check) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Design.Watcher.rowSpacing) {
-            checkIcon(check)
-                .foregroundStyle(check.needsAttention
-                    ? Theme.destructive(for: colorScheme)
-                    : Theme.mutedForeground(for: colorScheme))
-                .accessibilityHidden(true)
+            CapHeightIconSlot(style: Constants.Typography.bodyS, width: Design.toolIconSize) {
+                checkIcon(check)
+                    .foregroundStyle(check.needsAttention
+                        ? Theme.destructive(for: colorScheme)
+                        : Theme.mutedForeground(for: colorScheme))
+            }
             Text("\(check.name) · \(check.label)")
                 .interFont(Constants.Typography.bodyS)
                 .tracking(Design.Typography.bodyTracking)
