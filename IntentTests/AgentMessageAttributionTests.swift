@@ -13,7 +13,8 @@ struct AgentMessageAttributionTests {
         #expect(attribution == AgentMessageAttribution(
             fromAgentId: "agent-1",
             rawName: "Coordinator",
-            displayName: "Coordinator"
+            displayName: "Coordinator",
+            headerName: "Coordinator"
         ))
     }
 
@@ -116,5 +117,100 @@ struct AgentMessageAttributionTests {
             timestamp: "2025-01-01T00:00:00Z"
         )
         #expect(plain.agentMessageAttribution == nil)
+    }
+}
+
+// MARK: - Chief messages and the daemon sender header
+
+struct AgentMessageSenderHeaderTests {
+    private func attribution(name: String?, id: String = "agent-1") -> AgentMessageAttribution? {
+        var metadata: [String: AnyCodable] = [
+            "type": AnyCodable("agent_message"),
+            "fromAgentId": AnyCodable(id)
+        ]
+        if let name { metadata["fromAgentName"] = AnyCodable(name) }
+        return AgentMessageAttribution.from(metadata)
+    }
+
+    @Test func chiefMessageIsAttributedWithoutAgentNavigation() {
+        let chief = AgentMessageAttribution.from([
+            "type": AnyCodable("chief_message"),
+            "fromAgentId": AnyCodable("agent-chief"),
+            "fromAgentName": AnyCodable("Assistant"),
+            "fromWorkspaceId": AnyCodable("chief")
+        ])
+        #expect(chief?.kind == .chief)
+        #expect(chief?.fromAgentId == "agent-chief")
+        #expect(chief?.rawName == "Assistant")
+        #expect(attribution(name: "Coordinator")?.kind == .agent)
+    }
+
+    @Test func stripsTheExactHeaderBuiltFromMetadata() {
+        let name = " Fix (v2) [beta] "
+        let attribution = attribution(name: name)
+        #expect(attribution?.headerName == name)
+        let text = "[MESSAGE FROM AGENT \(name) (agent-1)]\n\nDo the thing\n\nThen report."
+        #expect(AgentMessageAttribution.stripSenderHeader(text, attribution: attribution)
+            == "Do the thing\n\nThen report.")
+    }
+
+    @Test func stripsTheNameAbsentHeaderShape() {
+        let attribution = attribution(name: nil)
+        #expect(attribution?.headerName == nil)
+        #expect(AgentMessageAttribution.stripSenderHeader(
+            "[MESSAGE FROM AGENT (agent-1)]\n\nBody",
+            attribution: attribution
+        ) == "Body")
+    }
+
+    @Test func consumesOnlyTheSeparatorLine() {
+        let attribution = attribution(name: "Coordinator")
+        #expect(AgentMessageAttribution.stripSenderHeader(
+            "[MESSAGE FROM AGENT Coordinator (agent-1)]\n\n  indented body",
+            attribution: attribution
+        ) == "  indented body")
+        #expect(AgentMessageAttribution.stripSenderHeader(
+            "[MESSAGE FROM AGENT Coordinator (agent-1)]\nBody",
+            attribution: attribution
+        ) == "Body")
+        #expect(AgentMessageAttribution.stripSenderHeader(
+            "[MESSAGE FROM AGENT Coordinator (agent-1)]",
+            attribution: attribution
+        ).isEmpty)
+    }
+
+    @Test func fallsBackToTheDaemonShapeWithoutAttribution() {
+        #expect(AgentMessageAttribution.stripSenderHeader(
+            "[MESSAGE FROM AGENT Coordinator (agent-0a1b-2c3d)]\n\nBody",
+            attribution: nil
+        ) == "Body")
+        #expect(AgentMessageAttribution.stripSenderHeader(
+            "[MESSAGE FROM AGENT (agent-0a1b-2c3d)]\n\nBody",
+            attribution: nil
+        ) == "Body")
+    }
+
+    @Test func leavesLookalikeFirstLinesUnchanged() {
+        let attribution = attribution(name: "Coordinator")
+        for text in [
+            "[MESSAGE FROM AGENT someone]\n\nBody",
+            "[MESSAGE FROM AGENT Coordinator (agent-1)] trailing text",
+            "Body\n[MESSAGE FROM AGENT Coordinator (agent-1)]",
+            "[MESSAGE FROM AGENT Other (agent-zz)]\n\nBody"
+        ] {
+            #expect(AgentMessageAttribution.stripSenderHeader(text, attribution: attribution) == text)
+        }
+    }
+
+    @Test func previewAndCopyTextOmitTheHeader() {
+        let attribution = attribution(name: "Coordinator")
+        let blocks = [
+            ContentBlock(type: .text, text: "[MESSAGE FROM AGENT Coordinator (agent-1)]\n\nDo the thing\nnow"),
+            ContentBlock(type: .text, text: "[MESSAGE FROM AGENT Coordinator (agent-1)]\n\nkept")
+        ]
+        #expect(MessageView.agentMessagePreview(from: blocks, agentMessage: attribution)
+            == "Do the thing now [MESSAGE FROM AGENT Coordinator (agent-1)] kept")
+        #expect(MessageView.userCopyText(from: blocks, agentMessage: attribution)
+            == "Do the thing\nnow\n\n[MESSAGE FROM AGENT Coordinator (agent-1)]\n\nkept")
     }
 }
