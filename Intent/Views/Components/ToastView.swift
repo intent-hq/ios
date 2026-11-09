@@ -28,25 +28,14 @@ struct ToastView: View {
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
 
-                Spacer()
-
-                Text("Done")
-                    .interFont(Constants.Typography.subtextXXS.withFace(.medium))
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, Constants.Toast.horizontalPadding)
             .padding(.vertical, Constants.Toast.verticalPadding)
             .contentShape(Rectangle())
         }
-        .buttonStyle(IntentContentButtonStyle())
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
-        .shadow(
-            color: .black.opacity(Constants.Toast.shadowOpacity),
-            radius: Constants.Toast.shadowRadius,
-            x: 0,
-            y: Constants.Toast.shadowYOffset
-        )
+        .buttonStyle(ToastButtonStyle(dimsOnPress: colorScheme == .dark))
+        .toastBackground()
         .frame(maxWidth: Constants.Toast.maximumWidth)
         .padding(.horizontal, Constants.Toast.outerHorizontalPadding)
         .offset(y: min(dragOffset, 0)) // Only allow upward drag
@@ -76,7 +65,7 @@ struct ToastView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
-    /// Light material washes out the lime outline, so light mode uses the completed-task fill.
+    /// Light glass washes out the lime outline, so light mode uses the completed-task fill.
     @ViewBuilder private var completionIcon: some View {
         if colorScheme == .light {
             Circle()

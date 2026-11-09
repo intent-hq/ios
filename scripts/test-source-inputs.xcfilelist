@@ -665,6 +665,7 @@ $(SRCROOT)/Intent/Views/Components/PaneSwipeGesture.swift
 $(SRCROOT)/Intent/Views/Components/RepoOwnerAvatarView.swift
 $(SRCROOT)/Intent/Views/Components/TaskProgressRingView.swift
 $(SRCROOT)/Intent/Views/Components/TaskStatusIconView.swift
+$(SRCROOT)/Intent/Views/Components/ToastBackground.swift
 $(SRCROOT)/Intent/Views/Components/ToastView.swift
 $(SRCROOT)/Intent/Views/Components/WindowFeedbackSoundEmitter.swift
 $(SRCROOT)/Intent/Views/Connection
