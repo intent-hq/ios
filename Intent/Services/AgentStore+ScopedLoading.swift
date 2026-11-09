@@ -11,9 +11,10 @@ extension AgentStore {
         let epoch = list.epoch
         let sequence = list.beginRead()
         list.topLevelRequest = sequence
-        if agents.isEmpty { isLoading = true }
+        // Only the first read shows loading; refreshes keep the list as is.
+        if !hasLoaded { setLoadPhase(loadPhase.beginning()) }
         defer {
-            if list.epoch == epoch, list.topLevelRequest == sequence, isLoading { isLoading = false }
+            if list.epoch == epoch, list.topLevelRequest == sequence { setLoadPhase(loadPhase.settled()) }
         }
         do {
             var params: [String: Any] = ["workspaceId": workspaceId]
@@ -29,15 +30,18 @@ extension AgentStore {
             list.readMetadata(response, sequence: sequence)
             invalidateLegacyGroupReads(through: sequence)
             replaceRows(rows, group: nil, sequence: sequence)
-            if !hasLoaded { hasLoaded = true }
-            hasFailedToLoad = false
+            if !hasLoaded { setLoadPhase(.loaded(Date())) }
             await refreshRequestedGroups(workspaceId: workspaceId, epoch: epoch, sequence: sequence)
         } catch is CancellationError {
             // A disappearing view must not publish a late response.
         } catch {
             AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
-            if list.epoch == epoch, list.topLevelRequest == sequence, !hasLoaded { hasFailedToLoad = true }
+            if list.epoch == epoch, list.topLevelRequest == sequence { setLoadPhase(loadPhase.failing(error)) }
         }
+    }
+
+    private func setLoadPhase(_ next: LoadPhase) {
+        if next != loadPhase { loadPhase = next }
     }
 
     private func invalidateLegacyGroupReads(through sequence: Int) {

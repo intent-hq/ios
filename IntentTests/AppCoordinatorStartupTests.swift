@@ -14,7 +14,7 @@ extension AppCoordinatorTests {
         let screens: [AppScreen] = [.loading, .connecting, .pairing, .connectionFailed(error: "timeout"), .disconnected]
         for screen in screens {
             coordinator.currentScreen = screen
-            store.isLoading = true
+            store.setLoading(true)
             let states: [ConnectionState] = [.disconnected, .connecting, .connected, .reconnecting(attempt: 1), .connected]
             for state in states {
                 fake.connectionState = state
@@ -23,7 +23,7 @@ extension AppCoordinatorTests {
                 #expect(!coordinator.showsConnectionLossOverlay)
                 #expect(!coordinator.lifecycleState.hasEnteredRemoteUI)
             }
-            store.isLoading = false
+            store.setLoading(false)
             await Self.drainStartupCallbacks()
         }
         #expect(callbacks.withLock { $0 } == 0, "Startup must not register recovery observations")
@@ -91,17 +91,17 @@ extension AppCoordinatorTests {
             await Self.drainStartupCallbacks()
             store.publishFetchedWorkspaces([])
             coordinator.onConnectionSuccess()
-            store.lastUpdated = nil // Exercise a recovery that must await a fresh snapshot.
+            store.setLastUpdated(nil) // Exercise a recovery that must await a fresh snapshot.
             fake.simulateStoppedReconnection()
             await Self.drainStartupCallbacks()
             #expect(coordinator.showsConnectionLossOverlay)
             fake.simulateConnect()
             await Self.drainStartupCallbacks()
-            store.isLoading = true // Queues a recovery callback that must not re-arm in the next flow.
+            store.setLoading(true) // Queues a recovery callback that must not re-arm in the next flow.
             coordinator.currentScreen = screen
             await Self.drainStartupCallbacks()
             let baseline = callbacks.withLock { $0 }
-            store.isLoading = false
+            store.setLoading(false)
             await Self.drainStartupCallbacks()
             #expect(callbacks.withLock { $0 } == baseline)
             #expect(!coordinator.isDisconnected)

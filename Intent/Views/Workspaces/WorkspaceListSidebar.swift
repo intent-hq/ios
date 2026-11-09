@@ -138,7 +138,11 @@ extension WorkspaceListSidebar {
                 }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if viewModel.filteredWorkspaces.isEmpty {
-                if viewModel.hasSearchQuery {
+                if let message = viewModel.loadFailureMessage {
+                    LoadFailureView(subject: "Workspaces", message: message, identifier: "workspaceList") {
+                        await viewModel.retryLoad()
+                    }
+                } else if viewModel.hasSearchQuery {
                     WorkspaceSearchEmptyState()
                 } else {
                     emptyState

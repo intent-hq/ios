@@ -57,7 +57,7 @@ struct WorkspaceListViewModelTests {
     @MainActor
     private func tearDown() {
         WorkspaceStore.shared.workspaces = []
-        WorkspaceStore.shared.isLoading = false
+        WorkspaceStore.shared.setLoading(false)
     }
 
     // MARK: - Observation forwarding
@@ -81,7 +81,7 @@ struct WorkspaceListViewModelTests {
             } onChange: {
                 continuation.resume()
             }
-            WorkspaceStore.shared.isLoading = true
+            WorkspaceStore.shared.setLoading(true)
         }
 
         #expect(viewModel.workspaces.map(\.id) == ["updated"])

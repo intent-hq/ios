@@ -92,12 +92,12 @@ extension AppCoordinatorTests {
     /// Seed WorkspaceStore.shared as if a previous daemon's list had loaded.
     @MainActor static func seedWorkspaceStore() {
         WorkspaceStore.shared.workspaces = [makeWorkspace(id: "stale-ws")]
-        WorkspaceStore.shared.lastUpdated = Date()
+        WorkspaceStore.shared.setLastUpdated(Date())
     }
 
     @MainActor static func resetWorkspaceStore() {
         WorkspaceStore.shared.workspaces = []
-        WorkspaceStore.shared.lastUpdated = nil
+        WorkspaceStore.shared.setLastUpdated(nil)
     }
 
     @Test @MainActor func onLoadComplete_routesToConnectingWhenWindowIsBound() {

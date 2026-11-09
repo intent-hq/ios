@@ -11,8 +11,12 @@ import Observation
     }
     /// Invalidates derived lists for replacements and in-place array mutations.
     private(set) var workspacesRevision: UInt64 = 0
-    var lastUpdated: Date?
-    var isLoading = false
+    /// The `workspace.list` read. A failure before any success shows an
+    /// error with Retry instead of "No Workspaces".
+    var loadPhase = LoadPhase.idle
+    /// When the shown list was last published; nil before the first one.
+    var lastUpdated: Date? { loadPhase.lastLoadedAt }
+    var isLoading: Bool { loadPhase.isLoading }
     var showArchived = false
     private(set) var updatingWorkspaceIDs: Set<String> = []
     var agentSummaries: AgentSummaryStore? {
@@ -99,14 +103,23 @@ import Observation
     /// Joins the running read or starts one. Callers wait for that read only;
     /// a successor it hands off to keeps `isLoading` set without them.
     func fetchAll() async {
+        let lastPass = FetchPassOutcome()
         let needsSuccessor = await fetchReads.run { true } pass: { [weak self] revision in
-            await self?.fetchPass(revision)
+            lastPass.error = await self?.fetchPass(revision)
         }
         if needsSuccessor {
             invalidateFetchForEvent()
         } else if fetchReads.phase == .idle {
-            isLoading = false
+            // A failure ends loading only with the read, so a caller woken by
+            // `isLoading` starts a new read instead of joining this one.
+            let next = lastPass.error.map { loadPhase.failing($0) } ?? loadPhase.settled()
+            if next != loadPhase { loadPhase = next }
         }
+    }
+
+    /// The owner's view of its read's last pass.
+    @MainActor private final class FetchPassOutcome {
+        var error: Error?
     }
 
     func perform(_ action: WorkspaceAction, workspaceId: String) async throws {
@@ -142,18 +155,29 @@ import Observation
 
     /// One `workspace.list` read. A result invalidated mid-read is dropped for
     /// the trailing read; a failure alone stays dirty without automatic retries.
-    private func fetchPass(_ revision: Int) async {
+    /// Returns the failure of a current pass.
+    private func fetchPass(_ revision: Int) async -> Error? {
         fetchedRevision = nil
-        isLoading = true
+        if !isLoading { loadPhase = loadPhase.beginning() }
         do {
             let summaryBoundary = agentSummaries?.beginRead()
             let rows = try await requestAllWorkspaceRows()
-            guard revision == fetchReads.revision else { return }
+            guard revision == fetchReads.revision else { return nil }
             fetchedRevision = revision
             publishFetchedWorkspaces(rows.compactMap { Self.parseWorkspace($0) }, summaryBoundary: summaryBoundary)
+            return nil
         } catch {
             AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
+            // An invalidated read is followed by another pass; stay loading.
+            return revision == fetchReads.revision ? error : nil
         }
+    }
+
+    /// Drops the published list so the next screen waits for a fresh read;
+    /// a read still running keeps `isLoading` set.
+    func forgetPublishedWorkspaces() {
+        workspaces = []
+        loadPhase = isLoading ? .loading(lastLoadedAt: nil) : .idle
     }
 
     /// Every `workspace.list` page (protocol "Paged workspace lists": `limit`
@@ -172,7 +196,8 @@ import Observation
         }
     }
 
-    /// Publishes a fetched workspace list. `lastUpdated` is set **before** `workspaces`
+    /// Publishes a fetched workspace list, keeping a running read's loading
+    /// state until it settles. `lastUpdated` is set **before** `workspaces`
     /// so observers that gate on "fetched at least once" (e.g. AppCoordinator's
     /// missing-workspace validation) see a non-nil `lastUpdated` on the very first
     /// post-fetch change.
@@ -185,7 +210,7 @@ import Observation
             }
             agentSummaries.seedWorkspaces(changed, since: summaryBoundary ?? agentSummaries.beginRead())
         }
-        lastUpdated = Date()
+        loadPhase = isLoading ? .loading(lastLoadedAt: Date()) : .loaded(Date())
         workspaces = parsed
     }
 

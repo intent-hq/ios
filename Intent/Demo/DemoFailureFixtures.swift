@@ -2,8 +2,9 @@
 import Foundation
 
 /// Debug-only failure seams for the hands-on check of error states:
-/// `--demo-failures=pr-search,pr-load-more,pr-detail,file-preview` with
-/// `--demo-data`. Each failure fires once per launch, so Retry recovers.
+/// `--demo-failures=pr-search,pr-load-more,pr-detail,file-preview` (and the
+/// first-read lists `workspace-list,agent-list,note-list`, ios#462) with
+/// `--demo-data`. Each failure fires a fixed number of times per launch, so Retry recovers.
 enum DemoFailureFixtures {
     private static let argumentPrefix = "--demo-failures="
     private static let nextToken = "demo-failure-page-2"
@@ -14,6 +15,8 @@ enum DemoFailureFixtures {
     private static let garbledFile = "docs/Garbled reply.png"
     private static let webMFile = "docs/Screen recording.webm"
     private static var fired: Set<String> = []
+    /// Reads failed so far per first-read fixture.
+    private static var failedReads: [String: Int] = [:]
     /// Matches the wording of the live connection's request timeout.
     private static let requestTimedOut = NSError(
         domain: "DemoFailureFixtures", code: 0, userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
@@ -34,6 +37,11 @@ enum DemoFailureFixtures {
     }
 
     static func response(for method: String, params: [String: Any]) throws -> Any? {
+        if let (list, reads) = firstReadFailure(for: method, params: params), enabled.contains(list),
+           failedReads[list, default: 0] < reads {
+            failedReads[list, default: 0] += 1
+            throw requestTimedOut
+        }
         switch method {
         case "github.pulls.search":
             return try searchResponse(params: params)
@@ -45,6 +53,19 @@ enum DemoFailureFixtures {
             return try fileResponse(path: params["path"] as? String, params: params)
         default:
             return nil
+        }
+    }
+
+    /// A list fixture and how many reads it fails: the workspace stores read
+    /// once on open and again on seeing the live connection, so both fail and
+    /// only Retry recovers. Agent group and assistant reads are left alone.
+    private static func firstReadFailure(for method: String, params: [String: Any]) -> (String, Int)? {
+        switch method {
+        case "workspace.list": ("workspace-list", 1)
+        case "note.list": ("note-list", 2)
+        case "agent.list" where params["workspaceId"] as? String != Workspace.chiefWorkspaceId
+            && [nil, "topLevel"].contains(params["scope"] as? String): ("agent-list", 2)
+        default: nil
         }
     }
 
