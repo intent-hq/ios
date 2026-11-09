@@ -41,14 +41,6 @@ struct MessageRowContent: View, Equatable {
     var hydratingBlockIds: Set<String>
     var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
-    /// Agent-to-agent rows render as a collapsed disclosure card; the body
-    /// is hidden until the header is tapped (FE parity: ChatMessage.svelte
-    /// `isAgentMessageExpanded`, collapsed by default).
-    var disclosure = TranscriptDisclosure()
-    private var isAgentMessageExpanded: Bool {
-        get { disclosure.binding(for: .agentMessage, default: false).wrappedValue }
-        nonmutating set { disclosure.binding(for: .agentMessage, default: false).wrappedValue = newValue }
-    }
 
     /// Manual `==`: closures are excluded on purpose — the transcript builds
     /// new ones per evaluation, and they only capture stable identifiers.
@@ -106,18 +98,7 @@ struct MessageRowContent: View, Equatable {
             message: message,
             workspaceId: workspaceId,
             onNavigateToAgent: onNavigateToAgent,
-            isAgentMessageExpanded: agentMessageExpansion,
             onLayoutChange: onLayoutChange
-        )
-    }
-
-    private var agentMessageExpansion: Binding<Bool> {
-        Binding(
-            get: { isAgentMessageExpanded },
-            set: { expanded in
-                onLayoutChange?()
-                isAgentMessageExpanded = expanded
-            }
         )
     }
 

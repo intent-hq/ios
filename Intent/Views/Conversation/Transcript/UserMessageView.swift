@@ -9,7 +9,13 @@ struct UserMessageView: View {
     let workspaceId: String
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
     var onLayoutChange: (() -> Void)?
-    @Binding var isAgentMessageExpanded: Bool
+    /// Agent-to-agent rows start collapsed (FE parity: ChatMessage.svelte
+    /// `isAgentMessageExpanded`). Owned here so this body tracks the state.
+    var disclosure = TranscriptDisclosure()
+    private var isAgentMessageExpanded: Bool {
+        get { disclosure.binding(for: .agentMessage, default: false).wrappedValue }
+        nonmutating set { disclosure.binding(for: .agentMessage, default: false).wrappedValue = newValue }
+    }
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
@@ -36,14 +42,12 @@ struct UserMessageView: View {
         message: ConversationMessage,
         workspaceId: String,
         onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?,
-        isAgentMessageExpanded: Binding<Bool>,
         onLayoutChange: (() -> Void)? = nil
     ) {
         self.message = message
         self.workspaceId = workspaceId
         self.onNavigateToAgent = onNavigateToAgent
         self.onLayoutChange = onLayoutChange
-        self._isAgentMessageExpanded = isAgentMessageExpanded
         let blocks = message.contentBlocks
         let scriptWake = message.scriptMonitorWakeAttribution
         let hookWake = scriptWake == nil ? message.hookWakeAttribution : nil
@@ -111,6 +115,16 @@ struct UserMessageView: View {
         ))
     }
 
+    private var agentMessageExpansion: Binding<Bool> {
+        Binding(
+            get: { isAgentMessageExpanded },
+            set: { expanded in
+                onLayoutChange?()
+                isAgentMessageExpanded = expanded
+            }
+        )
+    }
+
     private var isWatcherWake: Bool {
         scriptWake != nil || hookWake != nil || prWake != nil
     }
@@ -127,7 +141,7 @@ struct UserMessageView: View {
             AgentMessageAttributionView(
                 attribution: agentMessage,
                 preview: agentMessagePreview,
-                isExpanded: $isAgentMessageExpanded,
+                isExpanded: agentMessageExpansion,
                 onOpenAgent: agentMessage.kind == .chief ? nil : onNavigateToAgent.map { navigate in
                     { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
                 }
@@ -292,7 +306,9 @@ struct UserMessageView: View {
                 : Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
             .textSelection(.enabled)
     }
+}
 
+extension UserMessageView {
     private func fileAttachmentChip(_ block: ContentBlock) -> some View {
         HStack(spacing: Layout.fileChipSpacing) {
             Image(.file)
