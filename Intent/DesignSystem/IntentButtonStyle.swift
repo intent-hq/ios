@@ -48,7 +48,9 @@ struct IntentButtonStyle: ButtonStyle {
     var variant: Variant = .primary
     /// Puts a copy passthrough marker behind the whole pill, so taps on its
     /// padding reach the Button inside a transcript row's copy overlay (see
-    /// `copyContextMenuPassthrough()`). Use it on every Button in a row.
+    /// `copyContextMenuPassthrough()`). Set it on every `IntentButtonStyle`
+    /// Button in a transcript row. The marker is rectangular: taps in the
+    /// corners outside the rounded pill reach neither the Button nor Copy.
     var passesThroughCopyMenu = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isEnabled) private var isEnabled

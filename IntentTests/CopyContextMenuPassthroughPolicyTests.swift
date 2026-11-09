@@ -133,7 +133,10 @@ struct CopyContextMenuPassthroughPolicyTests {
         ("Button(\"Go\") { go() }.buttonStyle(IntentContentButtonStyle(passesThroughCopyMenu: true))", 1),
         ("Button(\"Go\") { go() }.background(IntentButtonStyle(passesThroughCopyMenu: true))", 1),
         ("VStack { Button(\"Go\") { go() } }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 1),
-        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(variant: pick(passesThroughCopyMenu: true)))", 1)
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(variant: pick(passesThroughCopyMenu: true)))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true && flag))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: trueish))", 1),
+        ("Button(\"Go\") { go() }.buttonStyle(.plain).buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))", 1)
     ])
     func passthroughButtonStyleCountsOnTheButtonsOwnChain(source: String, expectedFindings: Int) {
         #expect(CopyContextMenuButtonScanner.unmarkedButtons(in: source).count == expectedFindings)

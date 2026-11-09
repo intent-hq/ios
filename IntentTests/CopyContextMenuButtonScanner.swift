@@ -31,9 +31,9 @@ enum CopyContextMenuButtonScanner {
     static let marker = "copyContextMenuPassthrough"
 
     /// `.buttonStyle` argument (parentheses included) whose style applies the
-    /// marker. Arguments with nested calls do not match.
+    /// marker: a literal `true` argument. Arguments with nested calls do not match.
     private static let passthroughStyle =
-        #"^\(\s*IntentButtonStyle\s*\([^()]*(?<![.\w])passesThroughCopyMenu\s*:\s*true\b[^()]*\)\s*\)$"#
+        #"^\(\s*IntentButtonStyle\s*\((?:[^()]*,\s*)?passesThroughCopyMenu\s*:\s*true\s*(?:,[^()]*)?\)\s*\)$"#
 
     /// Callees whose closures render outside the row's view hierarchy.
     static let detachedContainers: Set<String> = [
@@ -154,10 +154,10 @@ enum CopyContextMenuButtonScanner {
     }
 
     private static func hasPassthroughStyle(after end: Int, in code: [UInt8], brackets: SwiftSourceLexer.Brackets) -> Bool {
-        chainedModifiers(after: end, in: code, brackets: brackets).contains { modifier in
-            guard modifier.name == "buttonStyle", let arguments = modifier.arguments else { return false }
-            return SwiftSourceLexer.text(code[arguments]).range(of: passthroughStyle, options: .regularExpression) != nil
-        }
+        // The style closest to the Button wins, so only the first one counts.
+        guard let style = chainedModifiers(after: end, in: code, brackets: brackets).first(where: { $0.name == "buttonStyle" }),
+              let arguments = style.arguments else { return false }
+        return SwiftSourceLexer.text(code[arguments]).range(of: passthroughStyle, options: .regularExpression) != nil
     }
 
     /// `.name(…) { … }` modifiers chained directly onto the expression that
