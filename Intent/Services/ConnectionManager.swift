@@ -176,12 +176,6 @@ import os
 }
 
 extension ConnectionManager {
-    /// Demo sessions use fixture pushes instead of a socket's remote feed.
-    /// Keep readiness tied to the same connection transitions as their stores.
-    func connectDemo(serveFixtures: Bool) {
-        connectInProcess(using: Self.makeInProcessTransport(serveFixtures: serveFixtures))
-    }
-
     /// Marks the connection live without a socket; requests go to `transport`.
     func connectInProcess(using transport: (any ConnectionRequestTransport)?) {
         if !isInProcessConnection { disconnect() }

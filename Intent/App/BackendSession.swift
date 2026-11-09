@@ -54,7 +54,10 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
         tcAddress: String?
     )
     func refreshHostRoutes() async
+    #if DEBUG
+    /// Debug-only: Release callers fail to compile.
     func connectDemo(serveFixtures: Bool)
+    #endif
     func disconnect()
 }
 

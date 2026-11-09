@@ -126,11 +126,15 @@ extension View {
     /// state behind it is not a body dependency) nor applied.
     @ViewBuilder
     func demoAccessibilityValue(_ value: @autoclosure () -> String) -> some View {
+        #if DEBUG
         if DemoMode.isEnabled {
             accessibilityValue(value())
         } else {
             self
         }
+        #else
+        self
+        #endif
     }
 
     #if DEBUG

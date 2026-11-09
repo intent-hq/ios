@@ -66,51 +66,65 @@ struct ConnectingView: View {
         }
     }
 
+    /// The view's single Debug seam: demo/screenshot launches have no daemon,
+    /// so mark the connection live and let the stores fetch from fixtures.
+    private func connectDemoSessionIfRequested() -> Bool {
+        #if DEBUG
+        guard DemoMode.pretendPaired, !DemoStartupConnection.isEnabled else { return false }
+        session.connection.connectDemo(serveFixtures: DemoMode.isEnabled)
+        return true
+        #else
+        false
+        #endif
+    }
+
+    /// Connects to the window's saved machine; false when the attempt ended
+    /// (failure routed, superseded, or no saved connection).
+    private func connectSavedMachine() async -> Bool {
+        guard let connection = coordinator.windowConnection else {
+            if coordinator.backendID != nil {
+                // The bound backend's saved connection was deleted out from
+                // under this window; the window root's removal observation
+                // closes or rebinds it.
+                coordinator.onConnectionFailed(
+                    error: String(localized: "This connection is no longer saved.")
+                )
+            } else {
+                coordinator.currentScreen = .pairing
+            }
+            return false
+        }
+
+        do {
+            try await DiagnosticConnectContext.$origin.withValue(.saved) {
+                try await session.connection.connect(
+                    hosts: connection.server.hosts,
+                    port: connection.server.port,
+                    token: connection.token,
+                    certFingerprint: connection.server.certFingerprint,
+                    tcAddress: connection.server.tcAddress
+                )
+            }
+        } catch {
+            // A bumped connectionAttemptId cancels this task and starts a
+            // replacement: the superseded attempt's failure must not stomp
+            // the screen the restarted attempt (or the connected UI) owns.
+            guard !Task.isCancelled else { return false }
+            if case DaemonStartupError.failed = error { return false }
+            coordinator.onConnectionFailed(error: error.localizedDescription)
+            return false
+        }
+        if !PersistenceManager.shared.touchLastConnected(id: connection.id) {
+            AppLog.connection.warning("[ConnectingView] Could not persist last-connected timestamp")
+        }
+        return true
+    }
+
     private func attemptConnection() async {
         guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
         let attemptID = coordinator.connectionAttemptId
-        if DemoMode.pretendPaired, !DemoStartupConnection.isEnabled {
-            // Demo/screenshot mode: no daemon. Mark the connection live so the
-            // stores run their normal on-connected fetches (served from
-            // DemoFixtures under --demo-data) and go straight to the app.
-            session.connection.connectDemo(serveFixtures: DemoMode.isEnabled)
-        } else {
-            guard let connection = coordinator.windowConnection else {
-                if coordinator.backendID != nil {
-                    // The bound backend's saved connection was deleted out from
-                    // under this window; the window root's removal observation
-                    // closes or rebinds it.
-                    coordinator.onConnectionFailed(
-                        error: String(localized: "This connection is no longer saved.")
-                    )
-                } else {
-                    coordinator.currentScreen = .pairing
-                }
-                return
-            }
-
-            do {
-                try await DiagnosticConnectContext.$origin.withValue(.saved) {
-                    try await session.connection.connect(
-                        hosts: connection.server.hosts,
-                        port: connection.server.port,
-                        token: connection.token,
-                        certFingerprint: connection.server.certFingerprint,
-                        tcAddress: connection.server.tcAddress
-                    )
-                }
-            } catch {
-                // A bumped connectionAttemptId cancels this task and starts a
-                // replacement: the superseded attempt's failure must not stomp
-                // the screen the restarted attempt (or the connected UI) owns.
-                guard !Task.isCancelled else { return }
-                if case DaemonStartupError.failed = error { return }
-                coordinator.onConnectionFailed(error: error.localizedDescription)
-                return
-            }
-            if !PersistenceManager.shared.touchLastConnected(id: connection.id) {
-                AppLog.connection.warning("[ConnectingView] Could not persist last-connected timestamp")
-            }
+        if !connectDemoSessionIfRequested() {
+            guard await connectSavedMachine() else { return }
         }
 
         // Wait for WorkspaceStore to finish fetching workspace data before

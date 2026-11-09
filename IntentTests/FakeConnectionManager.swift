@@ -234,10 +234,12 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     func retryConnection() { retryConnectionCallCount += 1 }
 
+    #if DEBUG
     func connectDemo(serveFixtures _: Bool) {
         globalSubscriptionState = .subscribed
         connectionState = .connected
     }
+    #endif
 
     func connect(
         hosts: [String],
