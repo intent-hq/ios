@@ -30,7 +30,8 @@ git config --global advice.detachedHead false
 
 # xcrun prints <bundle>/tests.json for an xcresulttool query and exports
 # <bundle>/attachments (an empty manifest when there is none; fails under
-# STUB_EXPORT_FAIL=1); xcodebuild only answers -version.
+# STUB_EXPORT_FAIL=1; with STUB_EXPORT_STARTED=<pidfile> it writes its PID
+# there and sleeps instead); xcodebuild only answers -version.
 stubs=$work/bin
 mkdir -p "$stubs"
 cat > "$stubs/xcrun" <<'EOF'
@@ -41,6 +42,7 @@ case " $* " in
     cat "$last/tests.json" ;;
   *" xcresulttool export attachments "*)
     [ -z "${STUB_EXPORT_FAIL:-}" ] || exit 1
+    if [ -n "${STUB_EXPORT_STARTED:-}" ]; then echo $$ > "$STUB_EXPORT_STARTED"; exec sleep 30; fi
     path= out=
     while [ $# -gt 0 ]; do
       case "$1" in
@@ -456,6 +458,29 @@ assert_contains "a failed attachment export quotes the exporter warning" "$(summ
 status=$(run evidencebuildfail KEEP_UI_EVIDENCE=1 STUB_OUTCOME=buildfail -- "$sha_a" "$ui_selector")
 assert_eq "a build failure with KEEP_UI_EVIDENCE keeps exit 65" "$status" 65
 assert_contains "a build failure has no bundle to export" "$(summary)" "No result bundle, so there was nothing to export."
+
+# A TERM during the export stops it promptly, like a TERM during the tests.
+rm -f "$STUB_RECORD" "$work/export.pid"
+env KEEP_UI_EVIDENCE=1 STUB_EXPORT_STARTED="$work/export.pid" STUB_RESULTS="$work/ui-pass.json" \
+  STUB_ATTACHMENTS="$work/attachments-full" "$SCRIPT" --repo "$src" "$sha_a" "$ui_selector" > "$work/evidenceterm.out" 2>&1 &
+pid=$!
+tries=0
+while [ ! -s "$work/export.pid" ] && [ "$tries" -lt 300 ]; do sleep 0.1; tries=$((tries + 1)); done
+kill -TERM "$pid"
+started=$(date +%s)
+status=0
+wait "$pid" || status=$?
+elapsed=$(( $(date +%s) - started ))
+assert_eq "a run interrupted during the export exits 143" "$status" 143
+assert_contains "a run interrupted during the export says INTERRUPTED" "$(summary)" "# iOS test run: INTERRUPTED (exit 143)"
+if [ "$elapsed" -lt 10 ]; then pass "TERM stops the export promptly"; else fail "TERM stops the export promptly (took ${elapsed}s)"; fi
+if kill -0 "$(cat "$work/export.pid")" 2>/dev/null; then
+  fail "the export's processes are stopped"
+  kill -KILL "$(cat "$work/export.pid")" 2>/dev/null || true
+else
+  pass "the export's processes are stopped"
+fi
+if [ -e "$(record pwd)" ]; then fail "a run interrupted during the export removes its checkout"; else pass "a run interrupted during the export removes its checkout"; fi
 
 # Recorded environment reaches the wrapper and the rerun command.
 status=$(run env BUILD_CONFIGURATION=Release TEST_RUNNER_FOO=1 -- "$sha_b" 'IntentTests/FooTests')

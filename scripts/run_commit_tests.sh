@@ -714,12 +714,23 @@ if [ "${KEEP_UI_EVIDENCE:-0}" = 1 ]; then
   evidence=$run_dir/ui-evidence
   evidence_log=$run_dir/ui-evidence.log
   if [ -f "$checkout/scripts/export_ui_evidence.py" ]; then
-    evidence_status=0
+    # In its own process group, like step 3, so a signal stops it promptly.
+    set -m
     (
       cd "$checkout"
       unset GITHUB_OUTPUT
       exec python3 scripts/export_ui_evidence.py --output-root "$evidence" --bundles "$bundle"
-    ) > "$evidence_log" 2>&1 < /dev/null || evidence_status=$?
+    ) > "$evidence_log" 2>&1 < /dev/null &
+    child=$!
+    set +m
+    evidence_status=0
+    wait "$child" || evidence_status=$?
+    if [ -n "$interrupted" ]; then
+      wait_for_child_exit
+      child=
+      finish_interrupted "$interrupted"
+    fi
+    child=
   else
     evidence_status=missing
   fi
