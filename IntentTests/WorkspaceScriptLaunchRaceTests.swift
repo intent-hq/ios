@@ -34,22 +34,31 @@ struct WorkspaceScriptLaunchRaceTests {
     }
 
     @Test func oldStartCleanupCannotRemoveNewStartAfterReconnect() async throws {
-        let fixture = WorkspaceScriptFixture()
+        let fake = StartReplyHoldingConnection()
+        let fixture = WorkspaceScriptFixture(fake: fake)
         let script = try await fixture.idleScript()
         fixture.fake.responseMap["script.status"] = fixture.runtime(status: "idle")
         fixture.fake.pendingMethods.insert("script.start")
+        defer { fake.startReplyGate.open() }
         let oldLaunch = Task { await fixture.store.launch(script) }
         try await fixture.fake.waitForPendingRequests("script.start")
+        // Hold a delivered reply across reconnect: the normal fake removes
+        // parked requests on cancellation, which cannot create this overlap.
+        fixture.fake.resolvePending("script.start", with: ["ok": true])
+        try await waitUntil("first start reply held before cleanup") { fake.holdsFirstStartReply }
         fixture.store.suspendObservation()
         fixture.store.resumeObservation()
         fixture.fake.connectionState = .disconnected
         fixture.fake.connectionState = .connected
         await fixture.store.refresh(workspaceId: "workspace")
         let newLaunch = Task { await fixture.store.launch(script) }
-        try await fixture.fake.waitForPendingRequests("script.start", count: 2)
-        fixture.fake.resolvePending("script.start", with: ["ok": true])
+        try await fixture.fake.waitForPendingRequests("script.start")
+        #expect(fixture.fake.paramsForMethod("script.start").count == 2)
+        let key = WorkspaceScriptStore.ScriptKey(workspaceId: script.workspaceId, scriptId: script.id)
+        let newStartId = try #require(fixture.store.startTasks[key]?.id)
+        fake.startReplyGate.open()
         await oldLaunch.value
-        #expect(fixture.store.startTasks.count == 1)
+        #expect(fixture.store.startTasks[key]?.id == newStartId)
         #expect(fixture.store.isLaunching(script))
         fixture.fake.resolvePending("script.start", with: ["ok": true])
         await newLaunch.value
@@ -260,5 +269,24 @@ struct WorkspaceScriptLaunchRaceTests {
         await oldRefresh.value
         await fixture.store.refresh(workspaceId: "workspace")
         #expect(fixture.store.scripts(workspaceId: "workspace").map(\.id) == ["new"])
+    }
+}
+
+@MainActor
+private final class StartReplyHoldingConnection: FakeConnectionManager {
+    let startReplyGate = TestGate()
+    private(set) var holdsFirstStartReply = false
+
+    override func request(
+        _ method: String,
+        params: [String: Any] = [:],
+        timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
+    ) async throws -> Any {
+        let response = try await super.request(method, params: params, timeout: timeout)
+        if method == "script.start", !holdsFirstStartReply {
+            holdsFirstStartReply = true
+            await startReplyGate.wait()
+        }
+        return response
     }
 }

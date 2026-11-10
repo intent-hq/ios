@@ -7,8 +7,8 @@ struct WorkspaceScriptFixture {
     let fake: FakeConnectionManager
     let store: WorkspaceScriptStore
 
-    init() {
-        fake = FakeConnectionManager()
+    init(fake: FakeConnectionManager = FakeConnectionManager()) {
+        self.fake = fake
         fake.connectionState = .connected
         fake.responseMap["events.subscribe"] = ["subscriptionId": "scripts-sub"]
         fake.responseMap["events.unsubscribe"] = ["ok": true]
