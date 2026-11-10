@@ -349,7 +349,7 @@ extension ConversationViewModelTests {
         // Regression: a suggested-prompt send must not clear the persisted
         // composer draft or the on-screen draft text.
         let (viewModel, _) = makeFakeBackedVM()
-        PersistenceManager.shared.saveDraft(
+        viewModel.persistence.saveDraft(
             "half-typed draft",
             workspaceId: viewModel.workspaceId,
             agentId: viewModel.agentId
@@ -359,18 +359,18 @@ extension ConversationViewModelTests {
         await viewModel.sendSuggestedPrompt("Run the tests")
 
         #expect(viewModel.messageText == "half-typed draft")
-        #expect(PersistenceManager.shared.loadDraft(
+        #expect(viewModel.persistence.loadDraft(
             workspaceId: viewModel.workspaceId,
             agentId: viewModel.agentId
         ) == "half-typed draft")
-        PersistenceManager.shared.clearDraft(workspaceId: viewModel.workspaceId, agentId: viewModel.agentId)
+        viewModel.persistence.clearDraft(workspaceId: viewModel.workspaceId, agentId: viewModel.agentId)
     }
 
     @Test func sendMessageStillClearsDraftAndUsesExplicitImages() async throws {
         // The normal composer path is unchanged: explicit images are sent and
         // the persisted draft is cleared after a successful send.
         let (viewModel, fake) = makeFakeBackedVM()
-        PersistenceManager.shared.saveDraft(
+        viewModel.persistence.saveDraft(
             "outgoing",
             workspaceId: viewModel.workspaceId,
             agentId: viewModel.agentId
@@ -380,7 +380,7 @@ extension ConversationViewModelTests {
 
         let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
         #expect(sent.params["imageBlocks"] != nil)
-        #expect(PersistenceManager.shared.loadDraft(
+        #expect(viewModel.persistence.loadDraft(
             workspaceId: viewModel.workspaceId,
             agentId: viewModel.agentId
         ).isEmpty)

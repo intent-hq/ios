@@ -359,4 +359,31 @@ extension NoteStoreIntegrationTests {
         #expect(store.hasLoaded == false)
         #expect(store.notes.isEmpty)
     }
+
+    @Test func overlappingSameWorkspaceFetchDropsOlderReplyAndKeepsIsLoadingUntilLatestFinishes() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.pendingMethods.insert("note.list")
+
+        let older = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("note.list", count: 1)
+        let newer = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("note.list", count: 2)
+        #expect(store.isLoading)
+
+        // Older request resolves first, while newer is still in flight: must not publish or clear isLoading.
+        fake.resolvePending("note.list", with: [
+            "notes": [["id": "stale", "title": "Stale", "content": "", "createdAt": "", "updatedAt": ""]]
+        ])
+        await older.value
+        #expect(store.notes.isEmpty)
+        #expect(store.isLoading, "isLoading must stay true until the latest fetch finishes")
+
+        fake.resolvePending("note.list", with: [
+            "notes": [["id": "fresh", "title": "Fresh", "content": "", "createdAt": "", "updatedAt": ""]]
+        ])
+        await newer.value
+        #expect(store.notes.map(\.id) == ["fresh"])
+        #expect(!store.isLoading)
+    }
 }

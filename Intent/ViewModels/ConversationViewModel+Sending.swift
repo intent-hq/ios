@@ -60,7 +60,7 @@ extension ConversationViewModel {
                 pendingImages.removeAll()
             }
             if composerTextRevision == textRevision {
-                PersistenceManager.shared.clearDraft(workspaceId: workspaceId, agentId: agentId)
+                persistence.clearDraft(workspaceId: workspaceId, agentId: agentId, backendID: backendID)
             }
             scheduleDebouncedMarkSeen()
         } catch let error as OutgoingImagePayload.RequestError {

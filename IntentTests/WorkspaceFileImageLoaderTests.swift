@@ -117,6 +117,24 @@ struct WorkspaceFileImageLoaderTests {
         #expect(fake.paramsForMethod("file.readChunk").count == 1)
     }
 
+    @Test func transientConnectionDropDoesNotPoisonNegativeCache() async throws {
+        let png = Self.pngBytes()
+        let fake = FakeConnectionManager()
+        fake.errorMap["file.readChunk"] = ConnectionManager.notConnectedRequestError()
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        await #expect(throws: (any Error).self) {
+            _ = try await loader.image(workspaceId: "ws-1", path: "reconnect.png")
+        }
+        #expect(loader.failedKeys.isEmpty, "Read-only / transient disconnect errors must not poison failedKeys")
+
+        fake.errorMap["file.readChunk"] = nil
+        fake.responseMap["file.readChunk"] = Self.chunkResponse(png, size: png.count)
+        let image = try await loader.image(workspaceId: "ws-1", path: "reconnect.png")
+        #expect(image.size.width > 0)
+        #expect(fake.paramsForMethod("file.readChunk").count == 2)
+    }
+
     @Test func secondRequestForSameFileIsServedFromCache() async throws {
         let png = Self.pngBytes()
         let fake = FakeConnectionManager()

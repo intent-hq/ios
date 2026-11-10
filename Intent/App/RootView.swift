@@ -29,45 +29,13 @@ struct RootView: View {
     @State private var readOnlyPillClearance = ReadOnlyPillClearance()
     @State private var connectionSwitcherOpen = false
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var showingConversation = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var conversationAgentId: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var conversationWorkspaceId: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var conversationAgentName: String = "" // swiftlint:disable:this private_swiftui_state
-    // Compact (iPhone) note detail navigation — uses isPresented instead of noteStack
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var showingNoteDetail = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var noteDetailNoteId: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var noteDetailWorkspaceId: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var noteDetailNoteTitle: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var pendingConversationPush = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var pendingNoteDetailPush = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    /// True while syncNavigationState() tears down the conversation for the iPad
-    /// re-push dance, so the user-back onChange handler doesn't misfire.
-    @State var programmaticConversationDismiss = false // swiftlint:disable:this private_swiftui_state
-    @State var handledConversationRequestId = 0 // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
+    @State var navigation = RootNavigationState() // swiftlint:disable:this private_swiftui_state
     // The unfolded Duo divides the window at its midpoint, including the trailing rail.
     @State private var duoSidebarWidth = Constants.Root.sidebarIdealWidth
 
     var conversationDestination: some View {
         ConversationDestinationView(
-            fallback: conversationAgentId.isEmpty ? nil : ConversationDestinationView.Target(
-                agentId: conversationAgentId,
-                workspaceId: conversationWorkspaceId,
-                agentName: conversationAgentName
-            ),
+            fallback: navigation.conversationTarget,
             session: session
         )
         .background {
@@ -154,7 +122,7 @@ struct RootView: View {
             // iPhone: standard NavigationStack with push/pop
             if usesVerticalBar {
                 compactNavigationView
-                    .modifier(WorkspaceCompactActionLauncher(showsWorkspaceDetail: showingWorkspaceDetail))
+                    .modifier(WorkspaceCompactActionLauncher(showsWorkspaceDetail: navigation.showingWorkspaceDetail))
             } else {
                 compactNavigationView
             }

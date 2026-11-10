@@ -4,7 +4,7 @@ extension RootView {
     @ViewBuilder
     var detailContent: some View {
         if let workspaceId = coordinator.selectedWorkspaceId {
-            NavigationStack(path: $noteStack) {
+            NavigationStack(path: $navigation.noteStack) {
                 WorkspaceDetailView(
                     workspaceId: workspaceId,
                     session: session,
@@ -12,7 +12,7 @@ extension RootView {
                     isSidebarVisible: usesVerticalBar
                 )
                     .pullRequestLinkRouting()
-                    .navigationDestination(isPresented: $showingConversation) {
+                    .navigationDestination(isPresented: $navigation.isShowingConversation) {
                         conversationDestination
                             .pullRequestLinkRouting()
                     }
@@ -23,7 +23,7 @@ extension RootView {
                             noteTitle: dest.noteTitle,
                             session: session
                         ) { noteId, workspaceId, title in
-                            noteStack.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
+                            navigation.noteStack.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
                         }
                     }
             }
@@ -36,31 +36,23 @@ extension RootView {
             .onChange(of: coordinator.conversationRequestId) {
                 syncNavigationState()
             }
-            .onChange(of: showingWorkspaceDetail) { _, newValue in
-                if newValue {
-                    if pendingConversationPush {
-                        DispatchQueue.main.async {
-                            showingConversation = true
-                            pendingConversationPush = false
+            .onChange(of: navigation.showingWorkspaceDetail) { _, newValue in
+                if newValue, navigation.conversationPhase == .pendingAfterWorkspaceDetail {
+                    DispatchQueue.main.async {
+                        if navigation.conversationPhase == .pendingAfterWorkspaceDetail {
+                            navigation.conversationPhase = .presented
                         }
                     }
                 }
             }
-            .onChange(of: showingConversation) { _, newValue in
-                // When user taps the back button, sync coordinator. Skip when the
-                // dismissal is the programmatic iPad tear-down/re-push, which is
-                // not a user-initiated back navigation. Consume the flag here so
-                // it only ever suppresses the single tear-down dismissal; the
-                // deferred re-push block clears it again as a backstop.
-                if !newValue, programmaticConversationDismiss {
-                    programmaticConversationDismiss = false
-                    return
-                }
-                if !newValue, case .agentConversation = coordinator.currentScreen {
+            .onChange(of: navigation.conversationPhase) { oldPhase, newPhase in
+                // Only user-initiated back transitions `.presented` -> `.hidden` while
+                // `currentScreen` is `.agentConversation`; programmatic re-push uses `.repushing`.
+                if oldPhase == .presented, newPhase == .hidden, case .agentConversation = coordinator.currentScreen {
                     coordinator.onBackToWorkspaceDetail()
                 }
             }
-            .onChange(of: noteStack) { _, newStack in
+            .onChange(of: navigation.noteStack) { _, newStack in
                 if newStack.isEmpty, case .noteDetail = coordinator.currentScreen {
                     coordinator.onBackFromNote()
                 }

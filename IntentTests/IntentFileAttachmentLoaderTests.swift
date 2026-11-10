@@ -192,6 +192,29 @@ struct IntentFileAttachmentLoaderTests {
         #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "failed")
     }
 
+    @Test func failedIntentFileImageSupportsPrepareRetry() async throws {
+        let fake = FakeConnectionManager()
+        fake.errorMap["file.readChunk"] = NSError(domain: "test", code: -1)
+        let fileLoader = WorkspaceFileImageLoader(connection: fake)
+        var loader = IntentFileAttachmentLoader(workspaceId: "ws-1", fallback: .image())
+        loader.fileImage = { workspaceId, path in
+            try await fileLoader.image(workspaceId: workspaceId, path: path)
+        }
+
+        let attachment = try await loader.resolvedAttachment(
+            for: URL(string: "intent://local/file/pic.png")!,
+            text: "failed"
+        ) {
+            Issue.record("intent-file links must not consult the fallback loader")
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        let failure = try #require(attachment.base as? IntentFileFailureAttachment)
+        #expect(fileLoader.failedKeys.count == 1)
+        #expect(failure.prepareRetry(using: fileLoader))
+        #expect(fileLoader.failedKeys.isEmpty)
+    }
+
     // MARK: - Remote attachment path
 
     private static let remoteURL = URL(string: "https://example.com/pic.png")!

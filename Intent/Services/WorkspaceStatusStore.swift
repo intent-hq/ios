@@ -8,20 +8,34 @@ import Observation
 @Observable final class WorkspaceStatusStore<Row> {
     typealias Fold = ([Row], String, [String: Any]) -> (rows: [Row], needsRefetch: Bool)
 
+    enum BucketLoadStatus: Equatable {
+        case loading
+        case settled
+        case unattempted
+    }
+
+    enum BucketFailureOrigin: Equatable {
+        case accessBlocked
+        case nextPage
+        case none
+    }
+
     @Observable final class Bucket {
         var rows: [Row] = []
-        var isLoading = false
+        var loadStatus: BucketLoadStatus = .unattempted
+        var isLoading: Bool { loadStatus == .loading }
         var isStale = true
         var error: String?
         var nextCursor: String?
-        var failedNextPage = false
-        var accessBlocked = false
+        var failureOrigin: BucketFailureOrigin = .none
+        var failedNextPage: Bool { failureOrigin == .nextPage }
+        var accessBlocked: Bool { failureOrigin == .accessBlocked }
         @ObservationIgnored var recoveryExhausted = false
         @ObservationIgnored var journalOverflow = false
         @ObservationIgnored var tombstones: [String: (String, [String: Any])] = [:]
         @ObservationIgnored var consumers: Set<UUID> = []
         @ObservationIgnored var generation = 0
-        @ObservationIgnored var attempted = false
+        var attempted: Bool { loadStatus != .unattempted }
         @ObservationIgnored var loadTask: Task<Void, Never>?
         @ObservationIgnored var loadCompletion: WorkspaceStatusWaiters<Void>?
         @ObservationIgnored var events: [(String, [String: Any])] = []
@@ -149,8 +163,8 @@ import Observation
     func denyAccess(workspaceId: String, message: String) {
         guard let bucket = buckets[workspaceId], pageAdapter != nil else { return }
         invalidate(bucket)
-        bucket.accessBlocked = true
-        bucket.attempted = true
+        bucket.failureOrigin = .accessBlocked
+        bucket.loadStatus = .settled
         bucket.error = message
     }
 
@@ -167,13 +181,11 @@ import Observation
         bucket.tombstones = [:]
         bucket.journalOverflow = false
         bucket.nextCursor = nil
-        bucket.failedNextPage = false
-        bucket.accessBlocked = false
+        bucket.failureOrigin = .none
         bucket.recoveryExhausted = false
         if pageAdapter != nil { bucket.rows = []; bucket.error = nil }
 
-        bucket.attempted = false
-        bucket.isLoading = false
+        bucket.loadStatus = .unattempted
         bucket.isStale = true
     }
 

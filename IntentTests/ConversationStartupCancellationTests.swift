@@ -73,4 +73,18 @@ struct ConversationStartupCancellationTests {
         }
         #expect(connection.subscriptionHandlerCount == 0)
     }
+
+    @Test func cancellingSnapshotWaiterResumesImmediatelyWithoutWaitingForTimeout() async throws {
+        let connection = FakeConnectionManager()
+        let transcript = ConversationLiveTranscript(connectionManager: connection)
+        transcript.snapshotTimeout = .seconds(30)
+        transcript.snapshotPending = true
+
+        let waiter = Task { await transcript.awaitSnapshot() }
+        try await waitUntil("waiter parked") { transcript.snapshotWaiters.count == 1 }
+
+        waiter.cancel()
+        await waiter.value
+        #expect(transcript.snapshotWaiters.isEmpty, "Cancelled awaitSnapshot caller must remove and resume its continuation immediately")
+    }
 }

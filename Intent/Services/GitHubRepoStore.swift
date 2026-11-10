@@ -24,7 +24,27 @@ enum GitHubRepoSearchOutcome {
 /// survive a connection flap.
 @MainActor
 @Observable class GitHubRepoStore {
-    var isConfigured = false
+    enum AuthState: Equatable {
+        case configured
+        case unconfigured
+        case unknown
+    }
+
+    enum CacheState: Equatable {
+        case cold
+        case failedCold
+        case loaded(Date)
+        case loadingCold
+    }
+
+    private(set) var authState: AuthState = .unknown
+    private(set) var cacheState: CacheState = .cold
+    private var activeSearchCount = 0
+
+    var isConfigured: Bool {
+        get { authState == .configured }
+        set { authState = newValue ? .configured : (hasCheckedAuth ? .unconfigured : .unknown) }
+    }
     var recentRepos: [GitHubRepo] = []
     var ownRepos: [GitHubRepo] = []
     /// Branch-step state keyed by `owner/repo`: the authoritative listing
@@ -32,27 +52,34 @@ enum GitHubRepoSearchOutcome {
     /// visited renders synchronously on the next visit), the cached-first
     /// paint and the cold-load error. Store-owned so no sheet keeps a local
     /// snapshot that a reconnect clear or another sheet's load cannot reach.
-    private(set) var branchStates: [String: GitHubBranchLoadState] = [:]
-    /// True only while a cold (uncached) load is in flight, or during a
-    /// search; background revalidation never sets it.
-    var isLoading = false
+    var branchStates: [String: GitHubBranchLoadState] = [:]
+    /// True while a cold (uncached) load is in flight, or during a search;
+    /// background revalidation never sets it, and finishing a search never
+    /// clears a concurrent cold load.
+    var isLoading: Bool { cacheState == .loadingCold || activeSearchCount > 0 }
     var lastError: String?
     /// True once a `github.authStatus` read succeeded, so the picker doesn't
     /// flash not-connected guidance while auth is unknown; a transport error
     /// never sets it (nor clears a cached value).
-    private(set) var hasCheckedAuth = false
+    var hasCheckedAuth: Bool { authState != .unknown }
     /// True once a load completed without a transport error; a failed load
     /// leaves it false so the next `loadIfNeeded()` retries as a cold load
     /// (FE parity: an errored load is retried explicitly, not skipped).
-    private(set) var hasLoaded = false
-    private(set) var lastLoadedAt: Date?
+    var hasLoaded: Bool {
+        if case .loaded = cacheState { return true }
+        return false
+    }
+    var lastLoadedAt: Date? {
+        if case let .loaded(date) = cacheState { return date }
+        return nil
+    }
 
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     /// Test-visible completion handles, kept after `invalidate()` so a test
     /// can await superseded work's real completion. Never read by the store.
     @ObservationIgnored private(set) var latestLoadTask: Task<Void, Never>?
     @ObservationIgnored private(set) var latestConnectionTask: Task<Void, Never>?
-    @ObservationIgnored private(set) var latestBranchPaintTask: Task<Void, Never>?
+    @ObservationIgnored var latestBranchPaintTask: Task<Void, Never>?
     /// Bumped by `invalidate()`: a load captures it on start and every
     /// write after an await is dropped once it no longer matches, so a
     /// completion from before an invalidation cannot repopulate the cache.
@@ -63,12 +90,14 @@ enum GitHubRepoSearchOutcome {
     /// `invalidate()`, whether that load is in flight, succeeded or failed —
     /// a reconnect hard-clears and re-warms only a cache the picker has
     /// asked for.
-    @ObservationIgnored private var hasAttemptedLoad = false
+    private var hasAttemptedLoad: Bool {
+        cacheState != .cold || !branchStates.isEmpty || !branchLoadTasks.isEmpty
+    }
     /// Single-flight per repo: a branch load already in flight is joined.
-    @ObservationIgnored private var branchLoadTasks: [String: Task<GitHubBranchListing, Error>] = [:]
+    @ObservationIgnored var branchLoadTasks: [String: Task<GitHubBranchListing, Error>] = [:]
     /// Repos already warmed this session (FE `RepoCacheWarmer` parity: each
     /// repo fires `repo.warmCache` at most once per warmer lifetime).
-    @ObservationIgnored private var warmedRepos: Set<String> = []
+    @ObservationIgnored var warmedRepos: Set<String> = []
     @ObservationIgnored private var connectionObserver: AnyCancellable?
 
     /// Page size for `github.repos.search` (§5.27 default 50, max 200).
@@ -80,7 +109,7 @@ enum GitHubRepoSearchOutcome {
     /// the default branch on top and prefix search covers the rest.
     static let branchesLimit = 50
 
-    private let connectionManager: ConnectionManagerRouting
+    let connectionManager: ConnectionManagerRouting
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
@@ -126,21 +155,17 @@ enum GitHubRepoSearchOutcome {
         loadTask = nil
         branchLoadTasks = [:]
         warmedRepos = []
-        hasAttemptedLoad = false
-        isLoading = false
+        cacheState = .cold
+        authState = .unknown
         recentRepos = []
         ownRepos = []
         branchStates = [:]
-        isConfigured = false
         lastError = nil
-        hasCheckedAuth = false
-        hasLoaded = false
-        lastLoadedAt = nil
     }
 
     /// Single-flight: a load already in flight is joined, not duplicated.
     private func startLoad(silent: Bool) {
-        hasAttemptedLoad = true
+        if cacheState == .cold { cacheState = .failedCold }
         guard loadTask == nil else { return }
         let generation = loadGeneration
         loadTask = Task { [weak self] in
@@ -155,7 +180,7 @@ enum GitHubRepoSearchOutcome {
         // The task may first run after an invalidate() that superseded it:
         // touch nothing (an `isLoading` set here would never be cleared).
         guard generation == loadGeneration else { return }
-        if !silent { isLoading = true }
+        if !silent { cacheState = .loadingCold }
         lastError = nil
         // Recents come from the daemon registry (no GitHub round-trip), so
         // fetch them concurrently with the auth-gated GitHub list.
@@ -165,17 +190,16 @@ enum GitHubRepoSearchOutcome {
         // A transport error on the auth read fails the load: cached auth and
         // lists stay as they were, and a cold load is retried next time.
         var succeeded = configured != nil
-        if configured != nil { hasCheckedAuth = true }
         if configured == true {
             succeeded = await fetchOwnRepos(generation: generation)
         }
         await recents
         guard generation == loadGeneration else { return }
         if succeeded {
-            hasLoaded = true
-            lastLoadedAt = Date()
+            cacheState = .loaded(Date())
+        } else if !silent {
+            cacheState = .failedCold
         }
-        if !silent { isLoading = false }
     }
 
     /// A reconnect hard-clears the cache (the daemon may have changed
@@ -210,7 +234,7 @@ enum GitHubRepoSearchOutcome {
             let result = try await connectionManager.request("github.authStatus")
             guard generation == loadGeneration else { return nil }
             let configured = (result as? [String: Any])?["isConfigured"] as? Bool ?? false
-            isConfigured = configured
+            authState = configured ? .configured : .unconfigured
             return configured
         } catch {
             AppLog.github.error("[GitHubRepoStore] github.authStatus failed: \(error)")
@@ -283,9 +307,9 @@ enum GitHubRepoSearchOutcome {
     func searchRepos(query: String) async -> GitHubRepoSearchOutcome {
         let rewritten = Self.rewriteSearchQuery(query)
         guard !rewritten.isEmpty else { return .results([]) }
-        isLoading = true
+        activeSearchCount += 1
         lastError = nil
-        defer { isLoading = false }
+        defer { activeSearchCount -= 1 }
         do {
             let result = try await connectionManager.request("github.repos.search", params: [
                 "query": rewritten,
@@ -314,173 +338,6 @@ enum GitHubRepoSearchOutcome {
         } catch {
             AppLog.github.error("[GitHubRepoStore] github.repos.get failed: \(error)")
             return nil
-        }
-    }
-
-    // MARK: - Branches
-
-    /// The branch step's state for `owner/repo`; empty (loading) until a
-    /// load has been asked for.
-    func branchState(owner: String, repo: String) -> GitHubBranchLoadState {
-        branchStates[Self.branchKey(owner: owner, repo: repo)] ?? GitHubBranchLoadState()
-    }
-
-    /// The authoritative listing cached for `owner/repo`, if this session
-    /// has loaded one; nil means the branch step must load.
-    func cachedBranchListing(owner: String, repo: String) -> GitHubBranchListing? {
-        branchStates[Self.branchKey(owner: owner, repo: repo)]?.listing
-    }
-
-    /// Loads the authoritative listing for one repo — the repo's default
-    /// branch (`defaultBranch` when the picker already knows it, else
-    /// `github.repos.get`) plus the first page of `github.branches.list` —
-    /// and publishes it in `branchStates`. Single-flight per repo; a
-    /// completion from before an `invalidate()` is returned but not
-    /// published. Cold (no listing yet): clears the error, paints the
-    /// daemon's local cache (`github.branches.listCached`) as soon as it
-    /// answers, and on failure publishes the error for every consumer. A
-    /// failed refresh keeps the cached listing and stays silent. Throws so a
-    /// direct caller can react too.
-    @discardableResult
-    func loadBranchListing(
-        owner: String, repo: String, defaultBranch: String? = nil
-    ) async throws -> GitHubBranchListing {
-        let key = Self.branchKey(owner: owner, repo: repo)
-        hasAttemptedLoad = true
-        if let inFlight = branchLoadTasks[key] {
-            return try await inFlight.value
-        }
-        let generation = loadGeneration
-        if branchStates[key]?.listing == nil {
-            branchStates[key] = GitHubBranchLoadState(paint: branchStates[key]?.paint)
-            paintCachedBranches(owner: owner, repo: repo, key: key, generation: generation)
-        }
-        let task = Task<GitHubBranchListing, Error> { [self] in
-            var resolvedDefault = defaultBranch
-            if resolvedDefault == nil {
-                resolvedDefault = await fetchDefaultBranch(owner: owner, repo: repo)
-            }
-            let branches = try await fetchRemoteBranches(owner: owner, repo: repo)
-            return GitHubBranchListing(branches: branches, defaultBranch: resolvedDefault)
-        }
-        branchLoadTasks[key] = task
-        defer {
-            if generation == loadGeneration, branchLoadTasks[key] == task {
-                branchLoadTasks[key] = nil
-            }
-        }
-        do {
-            let listing = try await task.value
-            if generation == loadGeneration {
-                branchStates[key] = GitHubBranchLoadState(listing: listing)
-            }
-            return listing
-        } catch {
-            if generation == loadGeneration, branchStates[key]?.listing == nil {
-                branchStates[key] = GitHubBranchLoadState(error: error.localizedDescription)
-            }
-            throw error
-        }
-    }
-
-    /// The cached-first paint for a cold load: published only while the
-    /// same generation is still waiting on the authoritative read (no
-    /// listing, no error yet), so a late answer from before a reconnect or
-    /// after the authoritative outcome cannot land.
-    private func paintCachedBranches(owner: String, repo: String, key: String, generation: Int) {
-        latestBranchPaintTask = Task { [self] in
-            guard let paint = await fetchCachedBranches(owner: owner, repo: repo),
-                  generation == loadGeneration,
-                  let state = branchStates[key], state.listing == nil, state.error == nil
-            else { return }
-            branchStates[key]?.paint = paint
-        }
-    }
-
-    /// `github.branches.listCached` — the daemon's local repo cache (or its
-    /// one-shot `ls-remote` fallback), for a first paint before the
-    /// authoritative read lands. Never an error authority: a transport
-    /// failure, a `-32601` from an older daemon, or an empty listing all
-    /// read as a cache miss (nil). Never promoted to `listing`.
-    func fetchCachedBranches(owner: String, repo: String) async -> GitHubBranchListing? {
-        do {
-            let result = try await connectionManager.request("github.branches.listCached", params: [
-                "owner": owner,
-                "repo": repo
-            ])
-            guard let branches = (result as? [String: Any])?["branches"] as? [String],
-                  !branches.isEmpty else { return nil }
-            let defaultBranch = (result as? [String: Any])?["defaultBranch"] as? String
-            return GitHubBranchListing(
-                branches: branches,
-                defaultBranch: defaultBranch.flatMap { $0.isEmpty ? nil : $0 }
-            )
-        } catch {
-            AppLog.github.info("[GitHubRepoStore] github.branches.listCached miss: \(error)")
-            return nil
-        }
-    }
-
-    /// `repo.warmCache` — fire-and-forget refresh of the daemon's repo cache
-    /// so the later `workspace.create` hydrates from a fresh cache (PROTOCOL
-    /// §5.11). Best-effort: every failure (warm already in flight, `-32601`
-    /// on an older daemon, offline) is logged only. At most one request per
-    /// repo per session. Returns the request's task (nil when deduplicated)
-    /// so tests can await its completion; callers need not keep it.
-    @discardableResult
-    func warmRepoCache(owner: String, repo: String) -> Task<Void, Never>? {
-        guard warmedRepos.insert(Self.branchKey(owner: owner, repo: repo)).inserted else { return nil }
-        return Task { [self] in
-            do {
-                _ = try await connectionManager.request("repo.warmCache", params: [
-                    "githubUrl": "https://github.com/\(owner)/\(repo)"
-                ])
-            } catch {
-                AppLog.github.info("[GitHubRepoStore] repo.warmCache failed (ignored): \(error)")
-            }
-        }
-    }
-
-    private static func branchKey(owner: String, repo: String) -> String {
-        "\(owner)/\(repo)"
-    }
-
-    /// `github.branches.list` — a single page (`branchesLimit`) of remote
-    /// branch names, optionally narrowed server-side by `prefix` (omitted
-    /// when nil/blank). Deliberately not paginated: the branch picker pins
-    /// the default branch on top and prefix search covers the rest. Throws
-    /// on transport failure so callers can distinguish "no branches" from
-    /// an error.
-    func fetchRemoteBranches(owner: String, repo: String, prefix: String? = nil) async throws -> [String] {
-        var params: [String: Any] = [
-            "owner": owner,
-            "repo": repo,
-            "limit": Self.branchesLimit
-        ]
-        if let prefix, !prefix.isEmpty {
-            params["prefix"] = prefix
-        }
-        let result = try await connectionManager.request("github.branches.list", params: params)
-        return (result as? [String: Any])?["branches"] as? [String] ?? []
-    }
-
-    // MARK: - Query rewrite
-
-    /// Rewrite raw repo-search input into GitHub `/search/repositories`
-    /// syntax (parity with the daemon/FE `build_repo_search_query`):
-    /// `owner/name` → `name user:owner`, `owner/` → `user:owner`,
-    /// `/name` → `name`, bare text → unchanged.
-    static func rewriteSearchQuery(_ input: String) -> String {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-        guard let slash = trimmed.firstIndex(of: "/") else { return trimmed }
-        let owner = trimmed[..<slash].trimmingCharacters(in: .whitespaces)
-        let name = trimmed[trimmed.index(after: slash)...].trimmingCharacters(in: .whitespaces)
-        switch (owner.isEmpty, name.isEmpty) {
-        case (false, false): return "\(name) user:\(owner)"
-        case (false, true): return "user:\(owner)"
-        case (true, false): return name
-        case (true, true): return ""
         }
     }
 }

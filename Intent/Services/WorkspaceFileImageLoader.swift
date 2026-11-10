@@ -20,14 +20,14 @@ final class WorkspaceFileImageLoader {
         case previouslyFailed
     }
 
-    private struct FileChunk: Sendable {
+    struct FileChunk: Sendable {
         let content: String
         let bytesRead: Int
         let size: Int
     }
 
     @MainActor
-    private final class ChunkRequester {
+    final class ChunkRequester {
         let connection: ConnectionManagerRouting
 
         init(connection: ConnectionManagerRouting) {
@@ -72,7 +72,7 @@ final class WorkspaceFileImageLoader {
     nonisolated static let chunkLength = 4 * 1024 * 1024
     /// ~350 KB base64 takes ~2.8 s at 1 Mbit/s, leaving headroom under the
     /// 10-second RPC timeout on remote Tailcat links. Other media is unchanged.
-    nonisolated private static let pdfChunkLength = 256 * 1024
+    nonisolated static let pdfChunkLength = 256 * 1024
     /// Refuse to assemble files past this size — transcript images should be
     /// far smaller, and this bounds memory on a pathological path.
     nonisolated static let maxFileBytes = 32 * 1024 * 1024
@@ -103,8 +103,8 @@ final class WorkspaceFileImageLoader {
     private(set) var failedKeys: Set<String> = []
     private var failedVideoKeys: Set<String> = []
     private var inFlight: [String: Task<WorkspaceFileMedia, Error>] = [:]
-    private let chunkRequester: ChunkRequester
-    private let diagnostics: DiagnosticStore
+    let chunkRequester: ChunkRequester
+    let diagnostics: DiagnosticStore
 
     init(connection: ConnectionManagerRouting = ConnectionManager.shared, diagnostics: DiagnosticStore = .shared) {
         chunkRequester = ChunkRequester(connection: connection)
@@ -143,22 +143,7 @@ final class WorkspaceFileImageLoader {
         }
     }
 
-    func video(workspaceId: String, path: String, mimeType: String? = nil) async throws -> WorkspaceVideo {
-        let key = "video\u{0}" + Self.fileKey(workspaceId: workspaceId, path: path)
-        let media = try await cachedMedia(key: key) { [chunkRequester] in
-            .video(try await Self.fetchVideo(
-                chunkRequester: chunkRequester,
-                workspaceId: workspaceId,
-                path: path,
-                mimeType: mimeType,
-                limit: ImportedPhotoVideo.maxBytes
-            ))
-        }
-        guard case .video(let video) = media else { throw LoadError.notAVideo }
-        return video
-    }
-
-    private static func fileKey(workspaceId: String, path: String) -> String {
+    static func fileKey(workspaceId: String, path: String) -> String {
         "\(workspaceId)\u{0}\(path)"
     }
 
@@ -174,7 +159,7 @@ final class WorkspaceFileImageLoader {
         return image
     }
 
-    private func cachedMedia(
+    func cachedMedia(
         key: String, fetch: @escaping @Sendable () async throws -> WorkspaceFileMedia
     ) async throws -> WorkspaceFileMedia {
         // NSString is the concrete reference key required by NSCache.
@@ -201,14 +186,19 @@ final class WorkspaceFileImageLoader {
         do {
             return try await task.value
         } catch {
-            // Remember the failure for the session (skip cancellation — the
-            // fetch itself didn't fail) so broken links don't refetch forever.
-            if !(error is CancellationError) {
+            // Remember permanent/daemon failures for the session so broken links
+            // don't refetch forever, while skipping cancellation and transient
+            // connection-drop/offline errors (e.g. read-only reconnecting mode).
+            if Self.shouldNegativelyCache(error) {
                 failedKeys.insert(key)
                 if error as? LoadError == .notAVideo { failedVideoKeys.insert(key) }
             }
             throw error
         }
+    }
+
+    static func shouldNegativelyCache(_ error: any Error) -> Bool {
+        !(error is CancellationError) && !DiagnosticErrorOwnership.isConnectionLoss(error)
     }
 
     private func store(_ media: WorkspaceFileMedia, forKey key: String) {
@@ -293,30 +283,9 @@ final class WorkspaceFileImageLoader {
         }
     }
 
-    /// Stream videos to disk on the global executor; only one decoded chunk is
-    /// held in memory. Image and saved-asset assembly keep their smaller cap.
-    @concurrent
-    nonisolated private static func fetchVideo(
-        chunkRequester: ChunkRequester, workspaceId: String, path: String, mimeType: String?, limit: Int
-    ) async throws -> WorkspaceVideo {
-        let url = try WorkspaceVideo.temporaryURL(path: path, mimeType: mimeType)
-        var retained = false
-        defer { if !retained { try? FileManager.default.removeItem(at: url) } }
-        try Data().write(to: url, options: .atomic)
-        let handle = try FileHandle(forWritingTo: url)
-        defer { try? handle.close() }
-        let byteCount = try await writeFileBytes(
-            chunkRequester: chunkRequester, workspaceId: workspaceId, path: path, to: handle, limit: limit
-        )
-        try handle.close()
-        let video = try await WorkspaceVideo.prepare(fileURL: url, byteCount: byteCount)
-        retained = true
-        return video
-    }
-
     /// Videos and PDFs share the same bounded, validated chunk-to-disk path.
     @concurrent
-    nonisolated private static func writeFileBytes(
+    nonisolated static func writeFileBytes(
         chunkRequester: ChunkRequester,
         workspaceId: String,
         path: String,
@@ -389,111 +358,5 @@ final class WorkspaceFileImageLoader {
             return nil
         }
         return UIImage(cgImage: cgImage)
-    }
-}
-
-extension WorkspaceFileImageLoader {
-    static func cost(of media: WorkspaceFileMedia) -> Int {
-        switch media {
-        case .image(let image): decodedCost(of: image)
-        case .video(let video): decodedCost(of: video.poster)
-        case .pdf(let pdf): decodedCost(of: pdf.thumbnail)
-        case .text(let file): file.byteCount * 2
-        }
-    }
-
-    func text(workspaceId: String, path: String) async throws -> WorkspaceTextFile {
-        let key = "text\u{0}" + Self.fileKey(workspaceId: workspaceId, path: path)
-        let media = try await cachedMedia(key: key) { [chunkRequester] in
-            .text(try await WorkspaceTextFile.load(path: path) { handle in
-                try await Self.writeFileBytes(
-                    chunkRequester: chunkRequester,
-                    workspaceId: workspaceId,
-                    path: path,
-                    to: handle,
-                    limit: WorkspaceTextFile.maxBytes,
-                    length: Self.pdfChunkLength
-                )
-            })
-        }
-        guard case .text(let file) = media else { throw LoadError.notUTF8Text }
-        return file
-    }
-
-    func pdf(workspaceId: String, path: String) async throws -> WorkspacePDF {
-        let key = "pdf\u{0}" + Self.fileKey(workspaceId: workspaceId, path: path)
-        let media = try await cachedMedia(key: key) { [chunkRequester, diagnostics] in
-            let owner = DiagnosticRequestContext.Owner(operation: .pdfLoad, site: .attachmentPipeline, recording: .deferred)
-            do {
-                return try await DiagnosticRequestContext.$owner.withValue(owner) {
-                    .pdf(try await Self.fetchPDF(chunkRequester: chunkRequester, workspaceId: workspaceId, path: path))
-                }
-            } catch {
-                Self.recordPDFFailure(error, store: diagnostics)
-                throw error
-            }
-        }
-        guard case .pdf(let pdf) = media else { throw LoadError.notAPDF }
-        return pdf
-    }
-
-    /// Closed categories only: never persist a workspace, filename, URL or
-    /// foreign error description. One record per fetch, not per cached failure.
-    nonisolated private static func recordPDFFailure(_ error: any Error, store: DiagnosticStore) {
-        var failure = DiagnosticErrorOwnership.failure(for: error)
-        var stage: DiagnosticEvent.Stage = .request
-        if let error = error as? LoadError {
-            let classification: DiagnosticFailure.Classification
-            switch error {
-            case .fileTooLarge: classification = .tooLarge
-            case .malformedResponse: classification = .malformedResponse
-            case .pdfPasswordRequired: classification = .passwordRequired
-            case .notAPDF: classification = .unreadable
-            default: classification = .unknown
-            }
-            stage = error == .notAPDF || error == .pdfPasswordRequired ? .decode : .response
-            failure = DiagnosticFailure(origin: .localOperation, classification: classification)
-        } else if failure.origin == .unknown {
-            stage = .read
-        }
-        DiagnosticErrorOwnership.record(
-            error,
-            event: DiagnosticEvent(
-                kind: .operationFailed,
-                operation: .pdfLoad,
-                site: .attachmentPipeline,
-                stage: stage,
-                outcome: .failed,
-                failure: failure,
-                effect: failure.origin == .remoteRPC ? .remoteRejected : .unknown
-            ),
-            store: store
-        )
-    }
-
-    @concurrent
-    nonisolated private static func fetchPDF(
-        chunkRequester: ChunkRequester, workspaceId: String, path: String
-    ) async throws -> WorkspacePDF {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("chat-pdf-\(UUID()).pdf")
-        var retained = false
-        defer { if !retained { try? FileManager.default.removeItem(at: url) } }
-        try Data().write(to: url, options: .atomic)
-        let handle = try FileHandle(forWritingTo: url)
-        defer { try? handle.close() }
-        let byteCount = try await writeFileBytes(
-            chunkRequester: chunkRequester,
-            workspaceId: workspaceId,
-            path: path,
-            to: handle,
-            limit: WorkspacePDF.maxBytes,
-            length: pdfChunkLength
-        )
-        try handle.close()
-        let pdf = try await WorkspacePDF.prepare(
-            fileURL: url, name: URL(fileURLWithPath: path).lastPathComponent, byteCount: byteCount
-        )
-        retained = true
-        return pdf
     }
 }

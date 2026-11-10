@@ -25,6 +25,8 @@ import SwiftUI
     var scriptMonitorConsumer: UUID?
     var selectedScriptMonitor: ScriptMonitorSelection?
     @ObservationIgnored let connection: any ConnectionManagerRouting
+    @ObservationIgnored let backendID: BackendID?
+    @ObservationIgnored let persistence: PersistenceManager
 
     let agentId: String
     let workspaceId: String
@@ -142,12 +144,16 @@ import SwiftUI
         conversations: ConversationStorePool? = nil,
         hooks: WorkspaceStatusStore<BackgroundHook>? = nil,
         monitors: WorkspacePrMonitorsStore? = nil,
-        scriptMonitors: WorkspaceScriptMonitorsStore? = nil
+        scriptMonitors: WorkspaceScriptMonitorsStore? = nil,
+        backendID: BackendID? = nil,
+        persistence: PersistenceManager = .shared
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.agentName = AgentSession.displayName(for: agentName)
         self.connection = connection
+        self.backendID = backendID
+        self.persistence = persistence
         self.optionsStore = optionsStore
         let sharedStore = conversations?.store(agentId: agentId)
         let details = sharedStore?.commands.agentDetails ?? agentDetails ?? AgentDetailStore(connection: connection)
@@ -160,9 +166,10 @@ import SwiftUI
             uploadService: uploadService,
             maximumPhotoImageCount: Constants.Conversation.Composer.maximumImageSelectionCount
         )
-        self.messageText = PersistenceManager.shared.loadDraft(
+        self.messageText = persistence.loadDraft(
             workspaceId: workspaceId,
-            agentId: agentId
+            agentId: agentId,
+            backendID: backendID
         )
 
         draftSaveCancellable = draftTextSubject
@@ -172,10 +179,11 @@ import SwiftUI
             )
             .sink { [weak self] text in
                 guard let self else { return }
-                PersistenceManager.shared.saveDraft(
+                self.persistence.saveDraft(
                     text,
                     workspaceId: self.workspaceId,
-                    agentId: self.agentId
+                    agentId: self.agentId,
+                    backendID: self.backendID
                 )
             }
 

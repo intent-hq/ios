@@ -76,4 +76,81 @@ struct PullRequestDetailTests {
         #expect(store.detail == nil)
         #expect(store.errors[.detail] != nil)
     }
+
+    @Test func loadAllPopulatesAllFourSectionsAndPreservesExistingItemMetadata() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["github.pulls.get"] = [
+            "pull": [
+                "number": 7,
+                "title": "feat: add audit",
+                "state": "open",
+                "body": "Summary body",
+                "headRefName": "feat/audit",
+                "baseRefName": "main"
+            ] as [String: Any]
+        ]
+        connection.responseMap["github.pulls.checks"] = [
+            "checks": [["name": "CI", "state": "SUCCESS"]],
+            "requestedReviewers": ["stale-from-checks"]
+        ]
+        connection.responseMap["github.pulls.reviews"] = [
+            "reviews": [["author": "mona", "state": "APPROVED"]],
+            "requestedReviewers": ["octocat"]
+        ]
+        connection.responseMap["github.pulls.files"] = [
+            "files": [["filename": "Intent/App.swift", "status": "modified", "additions": 10, "deletions": 2]],
+            "nextToken": "page-2"
+        ]
+        let initial = PullRequestListItem(
+            owner: "acme",
+            repo: "app",
+            number: 7,
+            title: "",
+            author: "sambreed"
+        )
+        let store = PullRequestDetailStore(item: initial, connection: connection)
+
+        await store.loadAll()
+
+        #expect(store.loading.isEmpty)
+        #expect(store.errors.isEmpty)
+        #expect(store.item.title == "feat: add audit")
+        #expect(store.item.author == "sambreed", "filling(from:) must preserve list-level fields absent from pulls.get")
+        #expect(store.detail?.body == "Summary body")
+        #expect(store.checks.map(\.name) == ["CI"])
+        #expect(store.reviewers.map(\.login) == ["mona", "octocat"], "reviews requestedReviewers wins over checks fallback")
+        #expect(store.files.map(\.path) == ["Intent/App.swift"])
+        #expect(store.filesTruncated)
+    }
+
+    @Test func partialSectionFailureIsolatesErrorAndAllowsIndependentRetry() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["github.pulls.get"] = [
+            "pull": ["number": 7, "title": "Fix", "state": "open", "body": "Body"]
+        ]
+        connection.errorMap["github.pulls.checks"] = URLError(.timedOut)
+        connection.responseMap["github.pulls.reviews"] = ["reviews": []]
+        connection.responseMap["github.pulls.files"] = ["files": [], "truncated": false]
+        let store = PullRequestDetailStore(
+            item: PullRequestListItem(owner: "acme", repo: "app", number: 7, title: "Fix"),
+            connection: connection
+        )
+
+        await store.loadAll()
+
+        #expect(store.detail?.body == "Body")
+        #expect(store.errors[.checks] != nil)
+        #expect(store.errors[.detail] == nil)
+        #expect(store.errors[.files] == nil)
+        #expect(!store.filesTruncated)
+
+        connection.errorMap.removeValue(forKey: "github.pulls.checks")
+        connection.responseMap["github.pulls.checks"] = [
+            "checks": [["name": "lint", "state": "SUCCESS"]]
+        ]
+        await store.load(.checks)
+
+        #expect(store.errors[.checks] == nil)
+        #expect(store.checks.map(\.name) == ["lint"])
+    }
 }

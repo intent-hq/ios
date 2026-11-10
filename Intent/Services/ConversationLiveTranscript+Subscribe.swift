@@ -246,7 +246,7 @@ extension ConversationLiveTranscript {
     /// serves the snapshot within the bound. Returns at once when no snapshot
     /// is owed.
     func awaitSnapshot() async {
-        guard snapshotPending else { return }
+        guard snapshotPending, !Task.isCancelled else { return }
         let interval = ConversationTrace.begin("ChatSnapshotWait", traceContext)
         defer { ConversationTrace.end("ChatSnapshotWait", interval, "\(traceContext) seeded=\(chatSeeded) pending=\(snapshotPending)") }
         let id = UUID()
@@ -257,10 +257,20 @@ extension ConversationLiveTranscript {
             self?.traceEvent("ChatSnapshotWaitExpired", "")
             self?.snapshotWaiters.removeValue(forKey: id)?.resume()
         }
-        await withCheckedContinuation { continuation in
-            snapshotWaiters[id] = continuation
+        defer { deadline.cancel() }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume()
+                    return
+                }
+                snapshotWaiters[id] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.snapshotWaiters.removeValue(forKey: id)?.resume()
+            }
         }
-        deadline.cancel()
     }
 
     func resumeSnapshotWaiters() {

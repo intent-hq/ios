@@ -38,7 +38,8 @@ struct ConversationView: View {
             conversations: session.conversations,
             hooks: session.hooksStore,
             monitors: session.prMonitorsStore,
-            scriptMonitors: session.scriptMonitorsStore
+            scriptMonitors: session.scriptMonitorsStore,
+            backendID: session.backendID
         ))
     }
 

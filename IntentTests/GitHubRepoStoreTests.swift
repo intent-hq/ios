@@ -289,6 +289,28 @@ extension GitHubRepoStoreTests {
         #expect(store.isLoading == false)
     }
 
+    @Test func searchFinishingDuringColdLoadKeepsIsLoadingTrue() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods = ["github.authStatus"]
+        fake.responseMap["repo.list"] = ["repos": []]
+        fake.responseMap["github.repos.list"] = ["repos": []]
+        fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "searched")]]
+        let store = GitHubRepoStore(connectionManager: fake)
+
+        let coldLoad = Task { await store.loadIfNeeded() }
+        try await waitFor("cold load started") { fake.pendingRequestCount("github.authStatus") == 1 }
+        #expect(store.isLoading)
+
+        let searchOutcome = repoResult(await store.searchRepos(query: "searched"))
+        #expect(searchOutcome.repos.map(\.name) == ["searched"])
+        #expect(store.isLoading, "Completing a search must not clear isLoading while a cold load is still running")
+
+        fake.pendingMethods = []
+        fake.resolvePending("github.authStatus", with: ["isConfigured": true])
+        await coldLoad.value
+        #expect(!store.isLoading)
+    }
+
     // MARK: - fetchDefaultBranch
 
     @Test func fetchDefaultBranchReadsRepoGet() async {

@@ -10,9 +10,8 @@ extension WorkspaceStatusStore {
         guard !nextPage || bucket.nextCursor != nil else { return }
         if pageAdapter != nil { bucket.tombstones = [:] }
         bucket.recoveryExhausted = false
-        bucket.accessBlocked = false
-        bucket.attempted = true
-        bucket.isLoading = true
+        bucket.failureOrigin = .none
+        bucket.loadStatus = .loading
         let generation = bucket.generation
         let completion = WorkspaceStatusWaiters<Void>()
         bucket.loadCompletion = completion
@@ -33,7 +32,7 @@ extension WorkspaceStatusStore {
                 bucket.recoveryExhausted = pageAdapter != nil
             }
             guard owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
-            bucket.isLoading = false
+            bucket.loadStatus = .settled
             bucket.loadTask = nil
             bucket.loadCompletion = nil
         }

@@ -15,6 +15,7 @@ import Observation
 
     // Live-state subscription tracking
     @ObservationIgnored private var liveSubscription = LiveSubscription.idle
+    @ObservationIgnored private var liveSubscriptionGeneration = 0
     @ObservationIgnored private var commentReconciler: DeltaReconciler<CommentThread>?
     /// Reads the rest of a paged `comment.subscribe` snapshot (protocol §6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
@@ -63,6 +64,7 @@ import Observation
     private func onConnected() async {
         // Reset live-state tracking on new connection. Unregister the old
         // handler if reconnecting (defensive: subscription is invalid after disconnect)
+        liveSubscriptionGeneration &+= 1
         if let oldId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
@@ -79,9 +81,12 @@ import Observation
 
     func subscribeToNote(workspaceId: String, noteId: String) async {
         // Unsubscribe from previous note if different
-        if let prevSubId = liveSubscription.id, currentNoteId != noteId {
-            connectionManager.unregisterSubscriptionHandler(id: prevSubId)
-            await unsubscribe(subscriptionId: prevSubId)
+        if currentNoteId != noteId {
+            liveSubscriptionGeneration &+= 1
+            if let prevSubId = liveSubscription.reset() {
+                connectionManager.unregisterSubscriptionHandler(id: prevSubId)
+                await unsubscribe(subscriptionId: prevSubId)
+            }
         }
 
         self.workspaceId = workspaceId
@@ -96,11 +101,12 @@ import Observation
             }
         }
 
-        await subscribeLiveState(workspaceId: workspaceId, noteId: noteId)
+        await subscribeLiveState(workspaceId: workspaceId, noteId: noteId, generation: liveSubscriptionGeneration)
     }
 
     func unsubscribeFromCurrentNote() async {
-        if let subId = liveSubscription.id {
+        liveSubscriptionGeneration &+= 1
+        if let subId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: subId)
             await unsubscribe(subscriptionId: subId)
         }
@@ -109,7 +115,6 @@ import Observation
             connectionManager.removeEventHandler(id: handlerId)
             eventHandlerId = nil
         }
-        liveSubscription.reset()
         commentReconciler = nil
         snapshotFiller.cancel()
         currentNoteId = nil
@@ -118,7 +123,7 @@ import Observation
 
     // MARK: - Subscription
 
-    private func subscribeLiveState(workspaceId: String, noteId: String) async {
+    private func subscribeLiveState(workspaceId: String, noteId: String, generation: Int) async {
         // Initialize comment reconciler SYNCHRONOUSLY before RPC
         commentReconciler = DeltaReconciler<CommentThread>(
             getId: { dict in dict["threadId"] as? String },
@@ -132,6 +137,12 @@ import Observation
                 "limit": PagedReads.commentPageLimit,
                 "replaceGroup": "ios-comments-\(noteId)"
             ])
+            guard generation == liveSubscriptionGeneration, currentNoteId == noteId else {
+                if let dict = result as? [String: Any], let subId = dict["subscriptionId"] as? String {
+                    await unsubscribe(subscriptionId: subId)
+                }
+                return
+            }
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
                 // Unregister old handler if we had one
@@ -149,6 +160,7 @@ import Observation
                 liveSubscription.subscribeFailed()
             }
         } catch {
+            guard generation == liveSubscriptionGeneration else { return }
             // Subscribe failed - clean up reconciler and fall back to legacy
             commentReconciler = nil
             liveSubscription.subscribeFailed()
@@ -254,8 +266,13 @@ import Observation
     }
 
     private func resnapshot() async {
+        let generation = liveSubscriptionGeneration
         liveSubscription.beginResnapshot()
-        defer { liveSubscription.endResnapshot() }
+        defer {
+            if generation == liveSubscriptionGeneration {
+                liveSubscription.endResnapshot()
+            }
+        }
 
         commentReconciler?.reset()
         snapshotFiller.cancel()
@@ -266,11 +283,12 @@ import Observation
             await unsubscribe(subscriptionId: subId)
         }
 
+        guard generation == liveSubscriptionGeneration else { return }
         liveSubscription.clearId()
 
         // Re-subscribe
         if let wsId = workspaceId, let noteId = currentNoteId {
-            await subscribeLiveState(workspaceId: wsId, noteId: noteId)
+            await subscribeLiveState(workspaceId: wsId, noteId: noteId, generation: generation)
         }
     }
 }

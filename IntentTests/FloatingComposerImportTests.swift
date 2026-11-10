@@ -5,10 +5,11 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// The visionOS floating composer's lifecycle against a real photo import.
-/// A modal merely covering the chat must not cancel a picked photo/video
-/// import (it finishes and its attachment is waiting on dismissal); only a
-/// genuine withdrawal — navigation, loading, the question slot — cancels it.
+/// The visionOS floating composer's lifecycle (`FloatingComposerLifecycle`)
+/// against a real photo import. A modal merely covering the chat must not
+/// cancel a picked photo/video import (it finishes and its attachment is
+/// waiting on dismissal); only a genuine withdrawal — navigation, loading,
+/// disappearance, or the question slot — cancels it, and at most once.
 @MainActor
 struct FloatingComposerImportTests {
     private static let workspaceId = "demo-ws-dashboard"
@@ -34,37 +35,17 @@ struct FloatingComposerImportTests {
         return (task, release)
     }
 
-    /// The floating host's contract (FloatingComposerOrnament): it cancels
-    /// the chat's photo import (`onWithdraw`) exactly when a presentation
-    /// change ends it, and never through the composer merely unmounting.
-    @discardableResult
-    private func applyFloatingHost(
-        from old: FloatingComposerPresentation,
-        isActiveChat: Bool,
-        isForemost: Bool,
-        to pipeline: ConversationAttachmentPipeline
-    ) -> FloatingComposerPresentation {
-        let new = FloatingComposerPolicy.presentation(
-            isActiveChat: isActiveChat,
-            isForemost: isForemost,
-            showsLoadingState: false,
-            composerVisible: true
-        )
-        if FloatingComposerPolicy.cancelsPhotoImport(from: old, to: new) {
-            pipeline.cancelPhotoImport()
-        }
-        return new
-    }
-
     @Test func coveringModalKeepsAnInFlightPhotoImport() async throws {
-        // Regression: the Assistant sheet, an auto-presented question sheet,
-        // the model picker or a note sheet covering the chat silently
-        // cancelled a photo/video import the user had just picked.
         let pipeline = ConversationAttachmentPipeline()
         let (task, release) = try await startGatedImport(in: pipeline)
+        var lifecycle = FloatingComposerLifecycle()
+        lifecycle.appear(isForemost: true, showsLoadingState: false, composerVisible: true)
+        #expect(lifecycle.presentation == .shown)
 
-        let covered = applyFloatingHost(from: .shown, isActiveChat: true, isForemost: false, to: pipeline)
-        #expect(covered == .covered)
+        if lifecycle.sync(isForemost: false, showsLoadingState: false, composerVisible: true) {
+            pipeline.cancelPhotoImport()
+        }
+        #expect(lifecycle.presentation == .covered)
         release.yield()
         release.finish()
         await task.value
@@ -72,17 +53,22 @@ struct FloatingComposerImportTests {
         #expect(pipeline.pendingImages.count == 1, "the import must finish under the covering modal")
         #expect(!pipeline.isLoadingPhotos)
 
-        // Dismissal reveals the composer with the completed attachment.
-        let revealed = applyFloatingHost(from: covered, isActiveChat: true, isForemost: true, to: pipeline)
-        #expect(revealed == .shown)
+        if lifecycle.sync(isForemost: true, showsLoadingState: false, composerVisible: true) {
+            pipeline.cancelPhotoImport()
+        }
+        #expect(lifecycle.presentation == .shown)
         #expect(pipeline.pendingImages.count == 1)
     }
 
     @Test func navigatingAwayStillCancelsAnInFlightPhotoImport() async throws {
         let pipeline = ConversationAttachmentPipeline()
         let (task, release) = try await startGatedImport(in: pipeline)
+        var lifecycle = FloatingComposerLifecycle()
+        lifecycle.appear(isForemost: true, showsLoadingState: false, composerVisible: true)
 
-        applyFloatingHost(from: .shown, isActiveChat: false, isForemost: true, to: pipeline)
+        if lifecycle.updateActiveChat(false, isForemost: true, showsLoadingState: false, composerVisible: true) {
+            pipeline.cancelPhotoImport()
+        }
         release.yield()
         release.finish()
         await task.value
@@ -92,17 +78,33 @@ struct FloatingComposerImportTests {
     }
 
     @Test func navigatingAwayWhileCoveredCancelsTheImport() async throws {
-        // Covered, then the chat itself goes away (e.g. a child agent opens
-        // from the Assistant): that is a genuine withdrawal.
         let pipeline = ConversationAttachmentPipeline()
         let (task, release) = try await startGatedImport(in: pipeline)
+        var lifecycle = FloatingComposerLifecycle()
+        lifecycle.appear(isForemost: false, showsLoadingState: false, composerVisible: true)
+        #expect(lifecycle.presentation == .covered)
 
-        applyFloatingHost(from: .covered, isActiveChat: false, isForemost: false, to: pipeline)
+        if lifecycle.updateActiveChat(false, isForemost: false, showsLoadingState: false, composerVisible: true) {
+            pipeline.cancelPhotoImport()
+        }
         release.yield()
         release.finish()
         await task.value
 
         #expect(pipeline.pendingImages.isEmpty)
+    }
+
+    @Test func disappearFollowedByTrailingPresentationChangeWithdrawsOnce() {
+        var lifecycle = FloatingComposerLifecycle()
+        lifecycle.appear(isForemost: true, showsLoadingState: false, composerVisible: true)
+        var withdrawals = 0
+
+        if lifecycle.disappear() { withdrawals += 1 }
+        if lifecycle.applyPresentation(.withdrawn) { withdrawals += 1 }
+
+        #expect(withdrawals == 1, "Disappear followed by onChange(.withdrawn) must not withdraw twice")
+        #expect(!lifecycle.isActiveChat)
+        #expect(lifecycle.presentation == .withdrawn)
     }
 
     @Test func revealingOrCoveringNeverCancels() {

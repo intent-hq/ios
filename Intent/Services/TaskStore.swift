@@ -10,12 +10,15 @@ import Observation
     var lastUpdated: Date?
 
     @ObservationIgnored private var workspaceId: String
+    @ObservationIgnored private var fetchRevision = 0
+    @ObservationIgnored let eventRefreshes = CoalescedRead()
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
     @ObservationIgnored private var eventHandlerId: UUID?
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
     // Live-state tracking
     @ObservationIgnored private var liveSubscription = LiveSubscription.idle
+    @ObservationIgnored private var liveSubscriptionGeneration = 0
     @ObservationIgnored private var taskReconciler: DeltaReconciler<WorkspaceTask>?
     /// Reads the rest of a paged `task.subscribe` snapshot (§6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
@@ -35,6 +38,7 @@ import Observation
     }
 
     isolated deinit {
+        eventRefreshes.cancel()
         // Remove handlers directly while deinit is isolated to MainActor.
         guard eventHandlerId != nil || liveSubscription.id != nil else { return }
         if let handlerId = eventHandlerId {
@@ -48,15 +52,18 @@ import Observation
     private func onConnected() async {
         // Reset live-state tracking on new connection. Unregister the old
         // handler if reconnecting (defensive: subscription is invalid after disconnect)
+        liveSubscriptionGeneration &+= 1
         if let oldId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
         taskReconciler = nil
         snapshotFiller.cancel()
 
+        let generation = liveSubscriptionGeneration
         await fetchAll()
         subscribeToEvents()
-        await subscribeLiveState()
+        guard generation == liveSubscriptionGeneration else { return }
+        await subscribeLiveState(generation: generation)
     }
 
     // MARK: - Fetch
@@ -69,21 +76,29 @@ import Observation
     /// reply carries `nextToken` anyway, every page is read before publishing,
     /// and a failed page keeps the previous list (bounded reads).
     private func _fetchAll() async {
+        guard !Task.isCancelled else { return }
+        fetchRevision &+= 1
+        let requestRevision = fetchRevision
         isLoading = true
+        defer {
+            if fetchRevision == requestRevision { isLoading = false }
+        }
         do {
             let params: [String: Any] = ["workspaceId": workspaceId]
             let result = try await PagedReads.requestWholeReply(params: params, field: "tasks") { [connectionManager] page in
                 try await connectionManager.request("task.list", params: page)
             }
+            guard fetchRevision == requestRevision else { return }
+            try Task.checkCancellation()
             if let dict = result as? [String: Any],
                let tasksArray = dict["tasks"] as? [[String: Any]] {
                 tasks = tasksArray.compactMap { WorkspaceTask.parseTask($0) }
                 lastUpdated = Date()
             }
+        } catch is CancellationError {
         } catch {
             AppLog.tasks.error("[TaskStore] Failed to fetch tasks: \(error)")
         }
-        isLoading = false
     }
 
     // MARK: - Event subscription
@@ -102,7 +117,7 @@ import Observation
         }
     }
 
-    private func subscribeLiveState() async {
+    private func subscribeLiveState(generation: Int) async {
         // Initialize task reconciler
         taskReconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
@@ -115,6 +130,13 @@ import Observation
                 "workspaceId": workspaceId,
                 "replaceGroup": "ios-tasks-\(workspaceId)"
             ])
+            guard generation == liveSubscriptionGeneration else {
+                if let dict = result as? [String: Any], let subId = dict["subscriptionId"] as? String,
+                   connectionManager.connectionState == .connected {
+                    _ = try? await connectionManager.request("task.unsubscribe", params: ["subscriptionId": subId])
+                }
+                return
+            }
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
                 // Unregister old handler if we had one
@@ -132,6 +154,7 @@ import Observation
                 liveSubscription.clearId()
             }
         } catch {
+            guard generation == liveSubscriptionGeneration else { return }
             // Subscribe failed - clean up reconciler and fall back to legacy
             taskReconciler = nil
             liveSubscription.clearId()
@@ -169,10 +192,21 @@ import Observation
         switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
         case .refetch:
             if !liveSubscription.isLive {
-                Task { await fetchAll() }
+                queueEventRefresh()
             }
         case .patchInPlace, .ignore, nil:
             break
+        }
+    }
+
+    private func queueEventRefresh() {
+        guard eventRefreshes.invalidate() else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            while await eventRefreshes.run(
+                isCurrent: { [weak self] in self?.liveSubscription.isLive == false },
+                pass: { [weak self] _ in await self?.fetchAll() }
+            ) {}
         }
     }
 
@@ -307,8 +341,13 @@ import Observation
     }
 
     private func resnapshot() async {
+        let generation = liveSubscriptionGeneration
         liveSubscription.beginResnapshot()
-        defer { liveSubscription.endResnapshot() }
+        defer {
+            if generation == liveSubscriptionGeneration {
+                liveSubscription.endResnapshot()
+            }
+        }
 
         taskReconciler?.reset()
         snapshotFiller.cancel()
@@ -325,8 +364,10 @@ import Observation
             }
         }
 
+        guard generation == liveSubscriptionGeneration else { return }
         liveSubscription.clearId()
-        await subscribeLiveState()
+        await subscribeLiveState(generation: generation)
+        guard generation == liveSubscriptionGeneration else { return }
         // Baseline refetch to bridge the gap during resnapshot
         await fetchAll()
     }
