@@ -41,9 +41,13 @@ struct NoteStoreLiveStateTests {
         #expect(store.notes.first?.title == "Returned")
         let delta = try #require(SubscriptionPush.parse(method: "subscription.push", params: [
             "subscriptionId": "returned-sub", "kind": "delta", "seq": 1,
-            "delta": ["added": [], "updated": [
-                ["id": "n-1", "title": "Edited later", "content": "", "createdAt": "", "updatedAt": "later"]
-            ], "removedIds": []]
+            "delta": [
+                "added": [],
+                "updated": [
+                    ["id": "n-1", "title": "Edited later", "content": "", "createdAt": "", "updatedAt": "later"]
+                ],
+                "removedIds": []
+            ]
         ]))
         fake.deliverSubscriptionPush(delta)
         #expect(store.notes.first?.title == "Edited later")
