@@ -25,6 +25,7 @@ import Observation
     @ObservationIgnored var liveSubscriptionGeneration = 0
     @ObservationIgnored var noteReconciler: DeltaReconciler<Note>?
     @ObservationIgnored var connectionObserver: AnyCancellable?
+    @ObservationIgnored private var connectionObservationID = UUID()
     /// Reads the rest of a paged `note.subscribe` snapshot (protocol §6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
     /// Test seam for the whole-note read's page retry backoff.
@@ -56,14 +57,31 @@ import Observation
 
     // MARK: - Connection observation
 
-    private func observeConnection() {
+    func observeConnection(dropInitialState: Bool = false) {
+        let observationID = UUID()
+        connectionObservationID = observationID
         connectionObserver = connectionManager.connectionStatePublisher
+            .dropFirst(dropInitialState ? 1 : 0)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
-                if state == .connected {
-                    Task { await self?.onConnected() }
-                }
+                guard let self, connectionObserver != nil,
+                      connectionObservationID == observationID, state == .connected else { return }
+                scheduleReconnect()
             }
+    }
+
+    /// Fence both queued delivery and execution: cancelling a Combine observer
+    /// cannot cancel a reconnect task it has already scheduled.
+    @discardableResult
+    func scheduleReconnect() -> Task<Void, Never> {
+        let observationID = connectionObservationID
+        let generation = liveSubscriptionGeneration
+        return Task { [weak self] in
+            guard let self, connectionObserver != nil,
+                  connectionObservationID == observationID,
+                  liveSubscriptionGeneration == generation else { return }
+            await onConnected()
+        }
     }
 
     func onConnected() async {

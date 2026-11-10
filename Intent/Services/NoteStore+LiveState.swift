@@ -97,14 +97,7 @@ extension NoteStore {
     func resumeObservation(workspaceId: String) {
         let wasSuspended = connectionObserver == nil
         if connectionObserver == nil {
-            connectionObserver = connectionManager.connectionStatePublisher
-                .dropFirst()
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] state in
-                    if state == .connected {
-                        Task { await self?.onConnected() }
-                    }
-                }
+            observeConnection(dropInitialState: true)
         }
         startObservingEvents(workspaceId: workspaceId)
         if wasSuspended, connectionManager.connectionState == .connected, liveSubscription == .idle {
