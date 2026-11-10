@@ -114,10 +114,32 @@ struct ConversationViewModelDividerLatchTests {
         let otherBackend = FakeConnectionManager()
         model.store = ConversationStore(connectionManager: otherBackend)
         #expect(!model.isEntryScrollReady)
-        #expect(model.latchedNewMessagesDividerAnchorId == nil)
+        #expect(model.newMessagesDividerLatch == .unlatched)
         model.store.messages = [message("other-seen"), message("other-unread")]
         model.store.lastSeenMessageId = "other-seen"
         model.latchNewMessagesDividerAnchorIfNeeded()
         #expect(model.newMessagesDividerAnchorId == "other-seen")
+    }
+
+    @Test func latchTakesOneAnchorAndOnlyAStoreChangeResetsIt() {
+        let model = makeViewModel()
+        model.store.messages = ["m1", "m2"].map { message($0) }
+        model.store.lastSeenMessageId = "m2"
+        #expect(model.newMessagesDividerLatch == .unlatched)
+        #expect(!model.isEntryScrollReady)
+        model.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(model.newMessagesDividerLatch == .latched(anchorId: nil), "a nil anchor still latches entry")
+        #expect(model.isEntryScrollReady)
+        model.store.messages.append(message("m3"))
+        model.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(model.newMessagesDividerLatch == .latched(anchorId: nil), "a second entry signal never re-derives")
+        model.store = ConversationStore(connectionManager: FakeConnectionManager())
+        #expect(model.newMessagesDividerLatch == .unlatched)
+        #expect(!model.isEntryScrollReady)
+        model.store.messages = ["n1", "n2"].map { message($0) }
+        model.store.lastSeenMessageId = "n1"
+        model.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(model.newMessagesDividerLatch == .latched(anchorId: "n1"))
+        #expect(model.newMessagesDividerAnchorId == "n1")
     }
 }
