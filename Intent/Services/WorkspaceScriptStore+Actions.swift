@@ -20,10 +20,10 @@ extension WorkspaceScriptStore {
         observedWorkspaces.insert(workspaceId)
         cancelActionLaunch(script)
         revisions[workspaceId, default: 0] += 1
-        defer { finishUpdate(key, token: token, generation: currentGeneration) }
+        defer { finishUpdate(key, token: token) }
         do {
             // A previously sent start must settle before stop/remove can win.
-            if let start = startTasks[key] { _ = try? await start.value }
+            if let start = startTasks[key] { _ = try? await start.task.value }
             guard isCurrent(currentGeneration) else { return }
             try await ensureSubscribed(generation: currentGeneration)
             guard isCurrent(currentGeneration) else { return }
@@ -44,8 +44,8 @@ extension WorkspaceScriptStore {
         }
     }
 
-    private func finishUpdate(_ key: ScriptKey, token: UUID, generation currentGeneration: Int) {
-        guard generation == currentGeneration, updates[key] == token else { return }
+    private func finishUpdate(_ key: ScriptKey, token: UUID) {
+        guard updates[key] == token else { return }
         updates[key] = nil
         revisions[key.workspaceId, default: 0] += 1
     }

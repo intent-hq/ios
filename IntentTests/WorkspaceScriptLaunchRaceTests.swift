@@ -4,6 +4,58 @@ import Testing
 
 @MainActor
 struct WorkspaceScriptLaunchRaceTests {
+    @Test func startsFinishingAfterSuspensionAreRetiredAndCanBeLaunchedAgain() async throws {
+        for succeeds in [true, false] {
+            let fixture = WorkspaceScriptFixture()
+            let script = try await fixture.idleScript()
+            fixture.fake.responseMap["script.status"] = fixture.runtime(status: "idle")
+            fixture.fake.pendingMethods.insert("script.start")
+            let oldLaunch = Task { await fixture.store.launch(script) }
+            try await fixture.fake.waitForPendingRequests("script.start")
+            fixture.store.suspendObservation()
+            #expect(!fixture.store.isLaunching(script))
+            if succeeds {
+                fixture.fake.resolvePending("script.start", with: ["ok": true])
+            } else {
+                fixture.fake.failPending("script.start", with: NSError(domain: "old start", code: 1))
+            }
+            await oldLaunch.value
+            #expect(fixture.store.startTasks.isEmpty)
+            #expect(fixture.store.errorMessage(workspaceId: "workspace") == nil)
+            #expect(fixture.store.browserToOpen(workspaceId: "workspace") == nil)
+            fixture.store.resumeObservation()
+            let newLaunch = Task { await fixture.store.launch(script) }
+            try await fixture.fake.waitForPendingRequests("script.start")
+            #expect(fixture.fake.paramsForMethod("script.start").count == 2)
+            fixture.fake.resolvePending("script.start", with: ["ok": true])
+            await newLaunch.value
+            #expect(fixture.store.startTasks.isEmpty)
+        }
+    }
+
+    @Test func oldStartCleanupCannotRemoveNewStartAfterReconnect() async throws {
+        let fixture = WorkspaceScriptFixture()
+        let script = try await fixture.idleScript()
+        fixture.fake.responseMap["script.status"] = fixture.runtime(status: "idle")
+        fixture.fake.pendingMethods.insert("script.start")
+        let oldLaunch = Task { await fixture.store.launch(script) }
+        try await fixture.fake.waitForPendingRequests("script.start")
+        fixture.store.suspendObservation()
+        fixture.store.resumeObservation()
+        fixture.fake.connectionState = .disconnected
+        fixture.fake.connectionState = .connected
+        await fixture.store.refresh(workspaceId: "workspace")
+        let newLaunch = Task { await fixture.store.launch(script) }
+        try await fixture.fake.waitForPendingRequests("script.start", count: 2)
+        fixture.fake.resolvePending("script.start", with: ["ok": true])
+        await oldLaunch.value
+        #expect(fixture.store.startTasks.count == 1)
+        #expect(fixture.store.isLaunching(script))
+        fixture.fake.resolvePending("script.start", with: ["ok": true])
+        await newLaunch.value
+        #expect(fixture.store.startTasks.isEmpty)
+    }
+
     @Test func concurrentRefreshesShareSubscriptionAndList() async throws {
         let fixture = WorkspaceScriptFixture()
         fixture.fake.pendingMethods = ["events.subscribe", "script.list"]

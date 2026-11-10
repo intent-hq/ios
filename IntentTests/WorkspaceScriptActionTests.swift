@@ -160,6 +160,72 @@ struct WorkspaceScriptActionTests {
 
 @MainActor
 struct WorkspaceScriptActionRaceTests {
+    @Test func suspensionRetiresActionsWithoutLettingOldRepliesClearNewActions() async throws {
+        for method in ["script.stop", "script.remove"] {
+            let (fixture, script) = try await scriptActionFixture()
+            fixture.fake.pendingMethods.insert(method)
+            let oldAction = Task { await performScriptAction(method, script: script, store: fixture.store) }
+            try await fixture.fake.waitForPendingRequests(method)
+            fixture.store.suspendObservation()
+            #expect(!fixture.store.isUpdating(script))
+            fixture.store.resumeObservation()
+            let newAction = Task { await performScriptAction(method, script: script, store: fixture.store) }
+            try await fixture.fake.waitForPendingRequests(method, count: 2)
+            fixture.fake.resolvePending(method, with: ["ok": true])
+            await oldAction.value
+            #expect(fixture.store.isUpdating(script))
+            #expect(fixture.store.scripts(workspaceId: "workspace") == [script])
+            #expect(fixture.store.errorMessage(workspaceId: "workspace") == nil)
+            fixture.fake.resolvePending(method, with: ["ok": true])
+            await newAction.value
+            #expect(!fixture.store.isUpdating(script))
+            if method == "script.remove" {
+                #expect(fixture.store.scripts(workspaceId: "workspace").isEmpty)
+            } else {
+                #expect(fixture.store.scripts(workspaceId: "workspace").first?.status == "idle")
+            }
+        }
+    }
+
+    @Test func suspensionDuringStopStatusReadReleasesControlsAndIgnoresLateStatus() async throws {
+        let (fixture, script) = try await scriptActionFixture()
+        fixture.fake.pendingMethods.insert("script.status")
+        let stop = Task { await fixture.store.stop(script) }
+        try await fixture.fake.waitForPendingRequests("script.status")
+        fixture.store.suspendObservation()
+        fixture.fake.resolvePending("script.status", with: fixture.runtime(status: "idle"))
+        await stop.value
+        #expect(!fixture.store.isUpdating(script))
+        #expect(fixture.store.scripts(workspaceId: "workspace") == [script])
+        fixture.store.resumeObservation()
+        await fixture.store.remove(script)
+        #expect(fixture.store.scripts(workspaceId: "workspace").isEmpty)
+    }
+
+    @Test func actionsAfterSuspensionStillWaitForAnAlreadySentStart() async throws {
+        for method in ["script.stop", "script.remove"] {
+            let (fixture, script) = try await scriptActionFixture(status: "idle")
+            fixture.fake.responseQueueMap["script.status"] = [fixture.runtime(status: "idle")]
+            fixture.fake.pendingMethods = ["script.start", method]
+            let launch = Task { await fixture.store.launch(script) }
+            try await fixture.fake.waitForPendingRequests("script.start")
+            fixture.store.suspendObservation()
+            fixture.store.resumeObservation()
+            let action = Task { await performScriptAction(method, script: script, store: fixture.store) }
+            try await waitUntil("resumed action waiting for start") { fixture.store.isUpdating(script) }
+            #expect(!fixture.fake.didCallMethod(method))
+            fixture.fake.resolvePending("script.start", with: ["ok": true])
+            try await fixture.fake.waitForPendingRequests(method)
+            fixture.fake.resolvePending(method, with: ["ok": true])
+            await launch.value
+            await action.value
+            #expect(fixture.store.startTasks.isEmpty)
+            #expect(!fixture.store.isUpdating(script))
+            #expect(fixture.store.browserToOpen(workspaceId: "workspace") == nil)
+            #expect(fixture.fake.paramsForMethod("script.start").count == 1)
+        }
+    }
+
     @Test func actionsWaitForAlreadySentStartAndPreventLatePresentation() async throws {
         for method in ["script.stop", "script.remove"] {
             let (fixture, script) = try await scriptActionFixture(status: "idle")

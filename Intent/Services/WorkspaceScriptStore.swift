@@ -17,6 +17,11 @@ final class WorkspaceScriptStore {
         let scriptId: String
     }
 
+    struct StartRequest {
+        let id = UUID()
+        let task: Task<Void, Error>
+    }
+
     private static let eventTypes = ["script:state", "script:changed"]
     private(set) var isConnected: Bool
     var definitions: [String: [WorkspaceScript]] = [:]
@@ -34,7 +39,7 @@ final class WorkspaceScriptStore {
     @ObservationIgnored private var subscriptionTask: Task<String, Error>?
     @ObservationIgnored private var subscriptionId: String?
     @ObservationIgnored private var refreshTasks: [String: Task<Void, Never>] = [:]
-    @ObservationIgnored var startTasks: [ScriptKey: Task<Void, Error>] = [:]
+    @ObservationIgnored var startTasks: [ScriptKey: StartRequest] = [:]
     @ObservationIgnored var revisions: [String: Int] = [:]
     @ObservationIgnored var observedWorkspaces: Set<String> = []
     @ObservationIgnored var generation = 0
@@ -54,7 +59,7 @@ final class WorkspaceScriptStore {
     isolated deinit {
         subscriptionTask?.cancel()
         for task in refreshTasks.values { task.cancel() }
-        for task in startTasks.values { task.cancel() }
+        for start in startTasks.values { start.task.cancel() }
         if let eventHandlerId { connection.removeEventHandler(id: eventHandlerId) }
         if let subscriptionId {
             Task { [connection] in
@@ -134,6 +139,11 @@ final class WorkspaceScriptStore {
         }
         for task in refreshTasks.values { task.cancel() }
         refreshTasks.removeAll()
+        // Retire view actions, but keep sent starts until they settle so a
+        // subsequent stop/remove still waits for them before sending its request.
+        updates.removeAll()
+        pending.removeAll()
+        presentations.removeAll()
         observedWorkspaces.removeAll()
         if let eventHandlerId {
             connection.removeEventHandler(id: eventHandlerId)
@@ -187,11 +197,11 @@ final class WorkspaceScriptStore {
         // Reselecting a script whose start is in flight shares that request.
         let key = ScriptKey(workspaceId: workspaceId, scriptId: script.id)
         let existingStart = startTasks[key]
-        if let existingStart { try await existingStart.value }
+        if let existingStart { try await existingStart.task.value }
         guard var current = try await currentScript(script, launch: launch, generation: currentGeneration) else { return }
         if existingStart == nil, !current.isActive {
             guard owns(launch, workspaceId: workspaceId, generation: currentGeneration) else { return }
-            try await start(current, generation: currentGeneration)
+            try await start(current)
             guard owns(launch, workspaceId: workspaceId, generation: currentGeneration) else { return }
             guard let started = try await currentScript(script, launch: launch, generation: currentGeneration) else { return }
             current = started
@@ -244,10 +254,10 @@ final class WorkspaceScriptStore {
         return nil
     }
 
-    private func start(_ script: WorkspaceScript, generation currentGeneration: Int) async throws {
+    private func start(_ script: WorkspaceScript) async throws {
         let key = ScriptKey(workspaceId: script.workspaceId, scriptId: script.id)
-        if let task = startTasks[key] {
-            try await task.value
+        if let start = startTasks[key] {
+            try await start.task.value
             return
         }
         revisions[script.workspaceId, default: 0] += 1
@@ -261,9 +271,10 @@ final class WorkspaceScriptStore {
                 throw WorkspaceScriptError.invalidResponse
             }
         }
-        startTasks[key] = task
+        let start = StartRequest(task: task)
+        startTasks[key] = start
         defer {
-            if generation == currentGeneration {
+            if startTasks[key]?.id == start.id {
                 startTasks[key] = nil
                 revisions[script.workspaceId, default: 0] += 1
             }
@@ -390,7 +401,7 @@ extension WorkspaceScriptStore {
         subscriptionTask = nil
         subscriptionId = nil
         for task in refreshTasks.values { task.cancel() }
-        for task in startTasks.values { task.cancel() }
+        for start in startTasks.values { start.task.cancel() }
         refreshTasks.removeAll()
         startTasks.removeAll()
         updates.removeAll()
