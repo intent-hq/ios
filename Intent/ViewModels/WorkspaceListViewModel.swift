@@ -208,6 +208,16 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         workspaceStore.isLoading
     }
 
+    /// The first `workspace.list` read failed and nothing is shown (ios#462).
+    var loadFailureMessage: String? {
+        guard workspaces.isEmpty else { return nil }
+        return workspaceStore.loadPhase.failureMessage
+    }
+
+    func retryLoad() async {
+        await workspaceStore.fetchAll()
+    }
+
     var hasSearchQuery: Bool {
         !normalizedSearchText.isEmpty
     }

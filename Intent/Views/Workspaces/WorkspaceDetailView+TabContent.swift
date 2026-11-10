@@ -3,9 +3,15 @@ import SwiftUI
 /// The selected tab's content: the agents and workspace resources, the changes, or the context.
 extension WorkspaceDetailView {
     private var showsAgentLoading: Bool {
-        (agentStore.isLoading || !agentStore.hasLoaded) && viewModel.agents.isEmpty && !hasWorkspaceResources
+        agentStore.loadPhase.isAwaitingFirstLoad && viewModel.agents.isEmpty && !hasWorkspaceResources
     }
-    var showsAgentList: Bool { !showsAgentLoading && (viewModel.hasAgentSections || hasWorkspaceResources) }
+    private var agentLoadFailure: String? {
+        guard viewModel.agents.isEmpty, !hasWorkspaceResources else { return nil }
+        return agentStore.loadPhase.failureMessage
+    }
+    var showsAgentList: Bool {
+        !showsAgentLoading && agentLoadFailure == nil && (viewModel.hasAgentSections || hasWorkspaceResources)
+    }
     var hasWorkspaceResources: Bool {
         !terminalStore.activeTerminals(workspaceId: workspaceId).isEmpty
             || !browserStore.browsers(workspaceId: workspaceId).isEmpty
@@ -22,6 +28,10 @@ extension WorkspaceDetailView {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .availableWhenReconnected(isMissing: true)
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
+            } else if let message = agentLoadFailure {
+                LoadFailureView(subject: "Agents", message: message, identifier: "workspace.agents") {
+                    await agentStore.fetchAgents(workspaceId: workspaceId)
+                }
             } else if !viewModel.hasAgentSections, !hasWorkspaceResources {
                 ContentUnavailableView {
                     Label { Text("No Agents").interFont(Constants.Typography.bodyM.withFace(.semibold)) } icon: {

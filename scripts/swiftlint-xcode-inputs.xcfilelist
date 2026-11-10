@@ -264,6 +264,7 @@ $(SRCROOT)/Intent/Services/InvitedSyncMerge.swift
 $(SRCROOT)/Intent/Services/InvitedSyncRecord.swift
 $(SRCROOT)/Intent/Services/LifecycleDiagnostics.swift
 $(SRCROOT)/Intent/Services/LiveSubscription.swift
+$(SRCROOT)/Intent/Services/LoadPhase.swift
 $(SRCROOT)/Intent/Services/MediaAudioSession.swift
 $(SRCROOT)/Intent/Services/MobileTerminalConnection.swift
 $(SRCROOT)/Intent/Services/MobileTerminalStore.swift
@@ -390,6 +391,7 @@ $(SRCROOT)/Intent/Views/Components/EdgeDrawer.swift
 $(SRCROOT)/Intent/Views/Components/EdgeDrawerGesture.swift
 $(SRCROOT)/Intent/Views/Components/ForEach+Snapshots.swift
 $(SRCROOT)/Intent/Views/Components/IntentLoadingIndicator.swift
+$(SRCROOT)/Intent/Views/Components/LoadFailureView.swift
 $(SRCROOT)/Intent/Views/Components/NavigationBackGesture.swift
 $(SRCROOT)/Intent/Views/Components/NavigationPopObserver.swift
 $(SRCROOT)/Intent/Views/Components/NavigationTitleSubtitleView.swift
@@ -903,6 +905,7 @@ $(SRCROOT)/IntentTests/InvitedSessionSyncTests.swift
 $(SRCROOT)/IntentTests/InvitedSessionTLSTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
 $(SRCROOT)/IntentTests/LayoutPolicyTests.swift
+$(SRCROOT)/IntentTests/ListLoadPhaseTests.swift
 $(SRCROOT)/IntentTests/LiveSubscriptionStoreTests.swift
 $(SRCROOT)/IntentTests/LiveSubscriptionTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
@@ -1135,6 +1138,7 @@ $(SRCROOT)/IntentTests/WorkspaceStatusTestSupport.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreAgentLifecycleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreEventAllowlistTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreFetchCoalescingTests.swift
+$(SRCROOT)/IntentTests/WorkspaceStoreLoadPhaseSupport.swift
 $(SRCROOT)/IntentTests/WorkspaceStorePagingTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStateTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreStatusImageTests.swift
@@ -1195,6 +1199,7 @@ $(SRCROOT)/IntentUITests/IPadWorkspaceSidebarUITests.swift
 $(SRCROOT)/IntentUITests/IPhoneAssistantHistoryUITests.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests+PDF.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
+$(SRCROOT)/IntentUITests/ListLoadFailureUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
 $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
