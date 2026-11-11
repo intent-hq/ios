@@ -61,16 +61,18 @@ extension ConnectionManagerTests {
         monitor.report(before)
         #expect(try await manager.request("system.status") is [String: Any])
         #expect(manager.socket === originalSocket)
-        monitor.report(after)
-        if !loopbackTunnel {
+        // Park the replacement's admission so "reconnecting" holds while asserted.
+        try await Self.awaitParkedReplacement(on: server) {
+            monitor.report(after)
+            guard !loopbackTunnel else { return }
             #expect(manager.connectionState == .connected)
             // A system VPN's general underlay change is not endpoint loss by itself.
             manager.socketPathObservation?.viabilityChanged(false)
-            try await Self.settle { disconnects.count == 1 }
         }
         #expect(Self.isReconnecting(manager.connectionState))
         #expect(disconnects.count == 1)
         #expect(monitor.cancelCount == 1)
+        server.releaseHandshakes()
         try await Self.settle { manager.connectionState == .connected }
         #expect(manager.socket !== originalSocket)
         #expect(monitors.monitors.count == 2)
