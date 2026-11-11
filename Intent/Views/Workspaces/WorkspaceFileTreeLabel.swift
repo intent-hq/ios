@@ -32,6 +32,8 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
             VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
                 nameLine
                 detail()
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if let count {

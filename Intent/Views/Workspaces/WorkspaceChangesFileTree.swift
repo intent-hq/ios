@@ -101,7 +101,6 @@ struct WorkspaceChangesFileTree: View {
         let label = ([status, file.agentName] + [file.isBinary ? "Binary" : nil]).compactMap { $0 }.joined(separator: " · ")
         if !label.isEmpty {
             Text(label)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
