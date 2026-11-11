@@ -160,17 +160,29 @@ struct WorkspaceBrowserPageTests {
         #expect(page.loadPhase == .idle)
     }
 
-    /// Kept on purpose: a failure reported while the main frame is still loading
-    /// (a cross-origin subframe) stays on screen when that frame finishes.
-    @Test func aFailureDuringALoadSurvivesTheFinish() async throws {
+    /// Kept on purpose: a cross-origin subframe reported while the main frame
+    /// loads shows its message and keeps the spinner until that frame finishes.
+    @Test func aSubframeFailureDuringALoadKeepsLoadingUntilTheFinish() async throws {
         let (page, webView) = try await openedPage()
         page.webView(webView, didStartProvisionalNavigation: nil)
-        page.webViewWebContentProcessDidTerminate(webView)
-        #expect(!page.isLoading && page.errorMessage != nil)
+
+        page.reportCrossOriginSubframe()
+        #expect(page.isLoading, "the spinner keeps running behind the message")
+        let message = try #require(page.errorMessage)
         page.webView(webView, didFinish: nil)
-        #expect(page.loadPhase.failureMessage == "The page stopped responding. Reload to try again.")
+        #expect(!page.isLoading && page.errorMessage == message)
         page.webView(webView, didStartProvisionalNavigation: nil)
         #expect(page.isLoading && page.errorMessage == nil, "a new navigation shows loading, not the old error")
+        page.stop()
+    }
+
+    @Test func aSubframeFailureAfterALoadShowsWithoutLoading() async throws {
+        let (page, webView) = try await openedPage()
+        page.webView(webView, didStartProvisionalNavigation: nil)
+        page.webView(webView, didFinish: nil)
+
+        page.reportCrossOriginSubframe()
+        #expect(!page.isLoading && page.errorMessage != nil)
         page.stop()
     }
 }

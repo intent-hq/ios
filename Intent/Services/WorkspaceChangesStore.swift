@@ -67,7 +67,8 @@ import Observation
         bind(workspaceId)
         revision &+= 1
         let requestRevision = revision
-        loadPhase = loadPhase.beginning()
+        // A shown failure stays through Retry and event refreshes until a read ends.
+        loadPhase = loadPhase.beginningKeepingFailure()
         isLoadingMore = false
         defer {
             if revision == requestRevision { loadPhase = loadPhase.settled() }
@@ -230,7 +231,7 @@ extension WorkspaceChangesStore {
         revision &+= 1
         let currentRegistration = registration
         eventRefreshes.cancel()
-        loadPhase = loadPhase.beginning()
+        loadPhase = loadPhase.beginningKeepingFailure()
         isLoadingMore = false
         if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }

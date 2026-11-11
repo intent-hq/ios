@@ -53,7 +53,7 @@ struct WorkspaceChangesLoadPhaseTests {
         #expect(!store.isLoading && !store.hasLoaded)
     }
 
-    @Test func aFailedRefreshKeepsRowsAndTheMessageUntilRetryStarts() async throws {
+    @Test func aFailedRefreshKeepsRowsAndTheMessageThroughRetry() async throws {
         let fake = makeFake()
         let store = WorkspaceChangesStore(connectionManager: fake)
         await store.refresh(workspaceId: "workspace-1")
@@ -68,12 +68,39 @@ struct WorkspaceChangesLoadPhaseTests {
         fake.pendingMethods = ["file-tracking.getChanges"]
         let retry = Task { await store.refresh(workspaceId: "workspace-1") }
         try await fake.waitForPendingRequests("file-tracking.getChanges")
-        #expect(store.loadPhase == .loading(lastLoadedAt: loadedAt), "Retry shows loading, not the old error")
-        #expect(store.errorMessage == nil && store.unstagedChanges.count == 1)
+        #expect(store.loadPhase == .loadingKeepingFailure("Request timed out", lastLoadedAt: loadedAt))
+        #expect(store.errorMessage == "Request timed out" && store.unstagedChanges.count == 1)
         fake.responseMap["git.status"] = ["files": [] as [[String: Any]]]
         fake.resolvePending("file-tracking.getChanges", with: WorkspaceChangesFixture.snapshot())
         await retry.value
         #expect(store.loadPhase.hasLoaded && store.errorMessage == nil && store.unstagedChanges.isEmpty)
+    }
+
+    /// Event refreshes after a failure keep the message instead of flickering it,
+    /// and keep WorkspaceChangesView's reconnect gate (`errorMessage != nil`) open.
+    @Test func anEventRefreshAfterAFailureKeepsTheMessageWhileItRuns() async throws {
+        let fake = makeFake()
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "changes-subscription"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.errorMap["file-tracking.getChanges"] = Self.offline
+        let store = WorkspaceChangesStore(connectionManager: fake)
+        await store.startObserving(workspaceId: "workspace-1")
+        #expect(store.loadPhase == .failed("Request timed out"))
+
+        fake.errorMap.removeValue(forKey: "file-tracking.getChanges")
+        fake.pendingMethods = ["file-tracking.getChanges"]
+        fake.deliverEvent(method: "events.event", params: [
+            "subscriptionId": "changes-subscription",
+            "event": ["type": "changes:tracked", "data": ["workspaceId": "workspace-1"]]
+        ])
+        try await fake.waitForPendingRequests("file-tracking.getChanges")
+        #expect(store.loadPhase == .loadingKeepingFailure("Request timed out", lastLoadedAt: nil))
+        #expect(store.isLoading && store.errorMessage != nil)
+
+        fake.failPending("file-tracking.getChanges", with: Self.offline)
+        try await waitUntil("event refresh settles") { !store.isLoading }
+        #expect(store.loadPhase == .failed("Request timed out"))
+        store.stopObserving()
     }
 
     @Test func aFailedPageIsAPageFailureThatARefreshClears() async {

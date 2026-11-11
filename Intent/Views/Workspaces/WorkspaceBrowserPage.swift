@@ -124,7 +124,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
             guard self.generation == generation, webView === self.webView else { return .cancel }
             if forwarded != url {
                 guard navigationAction.targetFrame?.isMainFrame != false else {
-                    fail("This embedded page uses a different local server. Open its address in a new browser.")
+                    reportCrossOriginSubframe()
                     return .cancel
                 }
                 var request = navigationAction.request
@@ -149,7 +149,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, didFinish _: WKNavigation?) {
         guard webView === self.webView else { return }
         // A failure reported mid-load (a cross-origin subframe) stays on screen.
-        if loadPhase.isLoading { loadPhase = .loaded(Date()) }
+        if case .loading = loadPhase { loadPhase = .loaded(Date()) } else { loadPhase = loadPhase.settled() }
         updateNavigation(webView)
     }
 
@@ -184,6 +184,13 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard error.domain != NSURLErrorDomain || error.code != NSURLErrorCancelled else { return }
         fail(error.localizedDescription)
         updateNavigation(webView)
+    }
+
+    /// A subframe asked for a different local server. A main frame still loading
+    /// keeps its spinner behind the message until `didFinish`.
+    func reportCrossOriginSubframe() {
+        let message = "This embedded page uses a different local server. Open its address in a new browser."
+        loadPhase = loadPhase.isLoading ? loadPhase.failingDuringRead(message) : loadPhase.failingVisibly(message)
     }
 
     private func fail(_ message: String) {

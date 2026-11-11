@@ -45,7 +45,7 @@ struct AssistantStoreLoadPhaseTests {
         #expect(!store.isLoading && !store.hasLoaded)
     }
 
-    @Test func aFailedRefreshKeepsRowsAndTheMessageUntilRetryStarts() async throws {
+    @Test func aFailedRefreshKeepsRowsAndTheMessageThroughRetry() async throws {
         let connection = FakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [thread("existing")]]
         let store = AssistantStore(connection: connection)
@@ -62,11 +62,52 @@ struct AssistantStoreLoadPhaseTests {
         connection.pendingMethods = ["agent.list"]
         let retry = Task { await store.refresh() }
         try await connection.waitForPendingRequests("agent.list")
-        #expect(store.loadPhase == .loading(lastLoadedAt: loadedAt), "Retry shows loading, not the old error")
-        #expect(store.errorMessage == nil && store.threads.map(\.id) == ["existing"])
+        #expect(store.loadPhase == .loadingKeepingFailure("Request timed out", lastLoadedAt: loadedAt))
+        #expect(store.isLoading && store.errorMessage == "Request timed out", "banner and spinner together, as before")
         connection.resolvePending("agent.list", with: ["agents": [thread("replacement")]])
         await retry.value
         #expect(store.threads.map(\.id) == ["replacement"] && store.errorMessage == nil)
+    }
+
+    /// AssistantView refreshes on reconnect when `!hasLoaded || errorMessage != nil`;
+    /// a read running after a failure must keep that gate open.
+    @Test func theReconnectGateStaysOpenWhileAReadRunsAfterAFailure() async throws {
+        let connection = FakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [thread("existing")]]
+        let store = AssistantStore(connection: connection)
+        await store.refresh()
+        connection.errorMap["agent.list"] = Self.offline
+        await store.refresh()
+        connection.errorMap.removeValue(forKey: "agent.list")
+        connection.pendingMethods = ["agent.list"]
+
+        let read = Task { await store.refresh() }
+        try await connection.waitForPendingRequests("agent.list")
+        #expect(store.hasLoaded)
+        #expect(!store.hasLoaded || store.errorMessage != nil)
+        connection.failPending("agent.list", with: Self.offline)
+        await read.value
+        #expect(store.errorMessage == "Request timed out" && !store.isLoading)
+    }
+
+    /// The coalesced loop stays loading from its first pass to its last, as on main.
+    @Test func loadingSpansEveryPassOfACoalescedRefresh() async throws {
+        let connection = FakeConnectionManager()
+        connection.pendingMethods = ["agent.list"]
+        let store = AssistantStore(connection: connection)
+        let load = Task { await store.refresh() }
+        try await connection.waitForPendingRequests("agent.list")
+        await store.refresh()
+        connection.resolvePending("agent.list", with: ["agents": [thread("stale")]])
+        try await waitUntil("trailing Assistant history request") {
+            connection.paramsForMethod("agent.list").count == 2
+        }
+        #expect(store.loadPhase == .loading(lastLoadedAt: nil), "still loading while the trailing pass runs")
+        #expect(store.threads.isEmpty, "the superseded first pass publishes nothing")
+
+        connection.resolvePending("agent.list", with: ["agents": [thread("fresh")]])
+        await load.value
+        #expect(!store.isLoading && store.loadPhase.hasLoaded && store.threads.map(\.id) == ["fresh"])
     }
 
     @Test func aFailedDeleteIsAnActionFailureThatAListReadClears() async {

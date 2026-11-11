@@ -44,6 +44,23 @@ struct ListLoadPhaseTests {
         #expect(LoadPhase.failed("Request timed out").clearingFailure() == .idle)
     }
 
+    @Test func aReadAfterAFailureCanKeepTheFailureOnScreenUntilItEnds() {
+        let loadedAt = Date(timeIntervalSince1970: 1)
+        let message = "Request timed out"
+        let afterRefresh = LoadPhase.refreshFailed(message, lastLoadedAt: loadedAt).beginningKeepingFailure()
+        #expect(afterRefresh == .loadingKeepingFailure(message, lastLoadedAt: loadedAt))
+        #expect(afterRefresh.isLoading && afterRefresh.hasLoaded && afterRefresh.anyFailureMessage == message)
+        #expect(afterRefresh.failureMessage == nil && afterRefresh.beginningKeepingFailure() == afterRefresh)
+        #expect(afterRefresh.settled() == .refreshFailed(message, lastLoadedAt: loadedAt), "a read without a result restores it")
+        #expect(afterRefresh.failingVisibly("Offline") == .refreshFailed("Offline", lastLoadedAt: loadedAt))
+        #expect(afterRefresh.clearingFailure() == .loading(lastLoadedAt: loadedAt))
+        let afterFirst = LoadPhase.failed(message).beginningKeepingFailure()
+        #expect(afterFirst == .loadingKeepingFailure(message, lastLoadedAt: nil) && afterFirst.settled() == .failed(message))
+        #expect(LoadPhase.loaded(loadedAt).beginningKeepingFailure() == .loading(lastLoadedAt: loadedAt))
+        #expect(LoadPhase.loading(lastLoadedAt: loadedAt).failingDuringRead(message) == afterRefresh)
+        #expect(LoadPhase.failed(message).beginning() == .loading(lastLoadedAt: nil), "plain beginning still drops it")
+    }
+
     // MARK: - NoteStore
 
     private func note(_ id: String) -> [String: Any] {

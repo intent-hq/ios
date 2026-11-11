@@ -60,7 +60,8 @@ final class AssistantStore {
             _ = refreshReads.invalidate()
             return
         }
-        setLoadPhase(loadPhase.beginning())
+        // A shown failure stays (banner and spinner together) until the read ends.
+        setLoadPhase(loadPhase.beginningKeepingFailure())
         defer { setLoadPhase(loadPhase.settled()) }
         while await refreshReads.run(isCurrent: { !Task.isCancelled }, pass: { [weak self] passRevision in
             await self?.runRefreshPass(passRevision)
@@ -72,8 +73,6 @@ final class AssistantStore {
     }
 
     private func runRefreshPass(_ passRevision: Int) async {
-        // A trailing pass after a failed one shows loading again, not the old error.
-        setLoadPhase(loadPhase.beginning())
         do {
             let summaryBoundary = summaries?.beginRead()
             // Every page: threads ascend by creation, so the newest are on the last page.
@@ -90,13 +89,14 @@ final class AssistantStore {
             threads = rows.compactMap(AgentSession.parseAgent)
                 .filter { $0.createdByAgentId == nil && $0.status.lowercased() != "deleted" }
                 .sorted { timestamp($0) > timestamp($1) }
-            setLoadPhase(.loaded(Date()))
+            // Still loading until the coalesced loop ends; `settled()` then marks it loaded.
+            setLoadPhase(.loading(lastLoadedAt: Date()))
             actionFailure = nil
         } catch is CancellationError {
             return
         } catch {
             guard passRevision == refreshReads.revision else { return }
-            setLoadPhase(loadPhase.failingVisibly(error.localizedDescription))
+            setLoadPhase(loadPhase.failingDuringRead(error.localizedDescription))
             actionFailure = nil
         }
     }
