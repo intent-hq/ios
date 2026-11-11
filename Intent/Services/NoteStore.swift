@@ -128,12 +128,12 @@ import Observation
     }
 
     /// Clears the previous workspace's list and live subscription. Returns the
-    /// new subscription generation when this replaced another workspace, so
-    /// the caller subscribes the new one (ios#996); nil when the workspace is
-    /// unchanged or is the store's first, which `onConnected` subscribes.
+    /// new subscription generation when the workspace changed (including the
+    /// store's first), so the caller subscribes it (ios#996): an `onConnected`
+    /// that ran before any workspace was set subscribed nothing. Nil when the
+    /// workspace is unchanged.
     private func resetForFetchIfWorkspaceChanged(to workspaceId: String) -> Int? {
         guard self.workspaceId != workspaceId else { return nil }
-        let replacesWorkspace = self.workspaceId != nil
         eventRefreshes.cancel()
         notes = []
         loadPhase = .idle
@@ -147,7 +147,7 @@ import Observation
         }
         noteReconciler = nil
         snapshotFiller.cancel()
-        return replacesWorkspace ? liveSubscriptionGeneration : nil
+        return liveSubscriptionGeneration
     }
 
     func fetchNotes(workspaceId: String) async {
@@ -155,7 +155,7 @@ import Observation
         let switchGeneration = resetForFetchIfWorkspaceChanged(to: workspaceId)
         await readNotes(workspaceId: workspaceId)
         // After the list, as onConnected does. A later switch, reconnect or
-        // suspension bumps the generation, so only the last switch subscribes.
+        // suspension bumps the generation, so only the last of them subscribes.
         if let switchGeneration {
             await subscribeAfterWorkspaceSwitch(workspaceId: workspaceId, generation: switchGeneration)
         }
@@ -202,8 +202,8 @@ import Observation
                 setLoadPhase(loadPhase.failing(error))
             }
         }
-        // Live-state subscription is owned by onConnected() and, after a
-        // workspace switch, by fetchNotes(workspaceId:).
+        // Live-state subscription is owned by onConnected() and, when the
+        // workspace changes, by fetchNotes(workspaceId:).
     }
 
     /// `note.list` with the slim projection (PROTOCOL §5.2 `projection:

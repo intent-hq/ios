@@ -213,4 +213,79 @@ struct LiveSubscriptionStoreTests {
             fake.paramsForMethod("note.subscribe").count > 2
         }
     }
+
+    /// ios#996: a store whose connect handler ran before it had a workspace
+    /// (NoteDetailView creates its store, then awaits loadNote() before
+    /// fetchNotes) subscribes its first workspace from fetchNotes.
+    @Test func noteStoreFirstWorkspaceAfterIdleConnectSubscribesOnce() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.list"] = ["notes": []]
+        fake.responseQueueMap["note.subscribe"] = [["subscriptionId": "sub-1"], ["subscriptionId": "unexpected"]]
+        fake.simulateConnect()
+        let store = NoteStore(connectionManager: fake)
+        // The queued connected delivery runs onConnected with no workspace; it only bumps the generation.
+        try await waitUntil("idle onConnected") { store.liveSubscriptionGeneration == 1 }
+        #expect(!fake.didCallMethod("note.subscribe"))
+
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(noteSubscribeWorkspaces(fake) == ["ws-1"])
+        #expect(store.liveSubscription == .subscribed(id: "sub-1"))
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
+        try await expectNever("a second subscribe", within: .milliseconds(100)) {
+            fake.paramsForMethod("note.subscribe").count > 1
+        }
+    }
+
+    /// The first fetch and a connect delivery queued in the same main-queue
+    /// window must not leave two handlers registered.
+    @Test func noteStoreFirstFetchWithQueuedConnectLeavesOneHandler() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.list"] = ["notes": []]
+        fake.responseQueueMap["note.subscribe"] = ["sub-1", "sub-2", "sub-3"].map { ["subscriptionId": $0] }
+        fake.simulateConnect()
+        let store = NoteStore(connectionManager: fake)
+        // The connected emission is still queued on the main queue here.
+        await store.fetchNotes(workspaceId: "ws-1")
+        try await waitUntil("queued connect handled") {
+            store.liveSubscriptionGeneration >= 2 && store.liveSubscription.id != nil
+        }
+        try await expectNever("a second registered handler", within: .milliseconds(150)) {
+            fake.subscriptionHandlerCount > 1
+        }
+        let current = try #require(store.liveSubscription.id)
+        #expect(fake.subscriptionHandlerCount == 1)
+        #expect(fake.hasSubscriptionHandler(id: current))
+        #expect(Set(noteSubscribeWorkspaces(fake)) == ["ws-1"])
+    }
+
+    /// Pins the generation fence on its own: in ws-2 -> ws-1 -> ws-2 the first
+    /// call ends with the same workspace current, connected and idle, so only
+    /// the generation stops it from subscribing next to the last call.
+    @Test func noteStoreSupersededSwitchToTheSameWorkspaceDoesNotSubscribe() async throws {
+        let (store, fake) = try await subscribedNoteStore(acks: ["sub-ws1", "sub-ws2", "unexpected"])
+        fake.responseMap["note.unsubscribe"] = [:] as [String: Any]
+        fake.pendingMethods = ["note.list"]
+
+        let first = Task { await store.fetchNotes(workspaceId: "ws-2") }
+        try await fake.waitForPendingRequests("note.list")
+        let second = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("note.list", count: 2)
+        let third = Task { await store.fetchNotes(workspaceId: "ws-2") }
+        try await fake.waitForPendingRequests("note.list", count: 3)
+        fake.pendingMethods = []
+
+        // Finish the superseded first call alone, while ws-2 is current and idle.
+        fake.resolvePending("note.list", with: ["notes": []])
+        await first.value
+        #expect(store.liveSubscription == .idle)
+        #expect(noteSubscribeWorkspaces(fake) == ["ws-1"])
+
+        fake.resolvePending("note.list", with: ["notes": []])
+        fake.resolvePending("note.list", with: ["notes": []])
+        await second.value
+        await third.value
+        #expect(noteSubscribeWorkspaces(fake) == ["ws-1", "ws-2"])
+        #expect(store.liveSubscription == .subscribed(id: "sub-ws2"))
+        #expect(fake.subscriptionHandlerCount == 1)
+    }
 }
