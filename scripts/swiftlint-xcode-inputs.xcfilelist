@@ -1211,6 +1211,7 @@ $(SRCROOT)/IntentUITests/ListLoadFailureUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
 $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
+$(SRCROOT)/IntentUITests/PathFileLinkUITests.swift
 $(SRCROOT)/IntentUITests/QuestionAttachmentUITests.swift
 $(SRCROOT)/IntentUITests/QuestionWizardUITests.swift
 $(SRCROOT)/IntentUITests/ScriptMonitorsUITests.swift

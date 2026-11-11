@@ -411,15 +411,20 @@ extension ContentBlockBody {
     }
 
     /// Shared by ordinary transcript markdown and the chief workspace's linked text.
+    /// Workspace file links open in the matching viewer whether they are written as
+    /// `intent://local/file/…` links or as paths (`report.html`, `/…/report.html`, `file://…`).
     static func textURLRoute(for url: URL, workspaceId: String) -> TextURLRoute {
-        if let link = IntentFileLink.parse(url), WorkspacePDF.isPDF(path: link.path) {
-            return .pdf(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
-        }
-        if let link = IntentFileLink.parse(url), ["html", "htm"].contains(URL(fileURLWithPath: link.path).pathExtension.lowercased()) {
-            return .html(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
-        }
-        if let link = IntentFileLink.parse(url), !link.isImage, !WorkspaceVideo.isVideo(path: link.path) {
-            return .text(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
+        if let link = IntentFileLink.parse(url) ?? IntentFileLink.parsePath(url) {
+            let target = link.workspaceId ?? workspaceId
+            if WorkspacePDF.isPDF(path: link.path) {
+                return .pdf(.init(workspaceId: target, path: link.path))
+            }
+            if ["html", "htm"].contains(URL(fileURLWithPath: link.path).pathExtension.lowercased()) {
+                return .html(.init(workspaceId: target, path: link.path))
+            }
+            if !link.isImage, !WorkspaceVideo.isVideo(path: link.path) {
+                return .text(.init(workspaceId: target, path: link.path))
+            }
         }
         if let link = NoteDetailView.parseIntentNoteLink(url) {
             return .note(id: link.id, workspaceId: link.workspaceId ?? workspaceId)

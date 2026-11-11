@@ -313,6 +313,11 @@ CAPTURES = {
             "Text viewer after toggling wrapping",
         ),
     },
+    "PathFileLinkUITests": {
+        "testRelativeHTMLPathLinkOpensHTMLViewer": (
+            "HTML viewer from relative path link light", "HTML viewer from relative path link dark",
+        ),
+    },
     "UnopenableLinkUITests": {
         "testUnopenableLinksShowMessageWithCopyLink": (
             "Unopenable link message light", "In-app browser failure message light",

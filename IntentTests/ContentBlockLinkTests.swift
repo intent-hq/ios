@@ -114,12 +114,79 @@ struct ContentBlockLinkTests {
         ("intent://local/settings", .unsupportedIntentLink),
         ("intent://local/file/../page.html", .unsupportedIntentLink),
         ("workspace-asset://current/notes.txt", .unsupportedLocation),
-        ("file:///tmp/report.pdf", .unsupportedLocation),
-        ("report.html", .unsupportedLocation),
-        ("/Users/me/report.html", .unsupportedLocation)
+        // Path links that can't be resolved to a workspace file keep the message.
+        ("../report.html", .unsupportedLocation),
+        ("reports/../../report.html", .unsupportedLocation),
+        ("./../report.html", .unsupportedLocation),
+        ("reports//report.html", .unsupportedLocation),
+        ("reports/", .unsupportedLocation),
+        ("reports%5Creport.html", .unsupportedLocation),
+        ("reports%2Freport.html", .unsupportedLocation),
+        ("/Users/me/../report.html", .unsupportedLocation),
+        ("/", .unsupportedLocation),
+        ("#summary", .unsupportedLocation),
+        ("C:/Users/me/report.html", .unsupportedLocation),
+        ("file://server/share/report.html", .unsupportedLocation),
+        ("file:report.html", .unsupportedLocation),
+        ("file:///tmp/../report.pdf", .unsupportedLocation),
+        ("reports/chart.png", .unsupportedLocation),
+        ("file:///Users/me/movie.mp4", .unsupportedLocation)
     ])
     func unopenableLinksShowAMessage(address: String, reason: UnopenableLink.Reason) throws {
         let url = try #require(URL(string: address))
         #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .unopenable(reason))
+    }
+
+    @Test(arguments: [
+        ("report.html", "report.html"),
+        ("./report.html", "report.html"),
+        (".intent/artifacts/report.html", ".intent/artifacts/report.html"),
+        ("reports/Demo%20report.HTM", "reports/Demo report.HTM"),
+        ("reports/report.html#summary", "reports/report.html"),
+        ("reports/report.html?view=full", "reports/report.html"),
+        ("/Users/me/project/report.html", "/Users/me/project/report.html"),
+        ("file:///Users/me/project/report.html", "/Users/me/project/report.html"),
+        ("FILE:///Users/me/project/report.html", "/Users/me/project/report.html"),
+        ("file://localhost/Users/me/project/Demo%20report.html", "/Users/me/project/Demo report.html")
+    ])
+    func htmlPathLinksOpenRenderedPage(address: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .html(
+            .init(workspaceId: "current", path: expectedPath)
+        ))
+    }
+
+    @Test(arguments: [
+        ("report.pdf", "report.pdf"),
+        (".intent/artifacts/Review%20notes.PDF", ".intent/artifacts/Review notes.PDF"),
+        ("/tmp/report.pdf", "/tmp/report.pdf"),
+        ("file:///tmp/report.pdf", "/tmp/report.pdf")
+    ])
+    func pdfPathLinksOpenInViewer(address: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .pdf(
+            .init(workspaceId: "current", path: expectedPath)
+        ))
+    }
+
+    @Test(arguments: [
+        ("README.md", "README.md"),
+        ("docs/notes.txt", "docs/notes.txt"),
+        ("./Sources/App.swift", "Sources/App.swift"),
+        ("/Users/me/project/output.log", "/Users/me/project/output.log"),
+        ("file:///Users/me/project/config.json", "/Users/me/project/config.json")
+    ])
+    func textPathLinksOpenInViewer(address: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .text(
+            .init(workspaceId: "current", path: expectedPath)
+        ))
+    }
+
+    @Test func chiefWorkspacePathLinkOpensInChiefWorkspace() throws {
+        let url = try #require(URL(string: "reports/report.html"))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: Workspace.chiefWorkspaceId) == .html(
+            .init(workspaceId: Workspace.chiefWorkspaceId, path: "reports/report.html")
+        ))
     }
 }
