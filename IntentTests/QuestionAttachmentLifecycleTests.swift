@@ -18,11 +18,11 @@ struct QuestionAttachmentLifecycleTests {
             attachments.addImage(try #require(UIImage(systemName: "star")))
             attachments.addFiles([URL(fileURLWithPath: "/tmp/question-answer.txt")])
             model.store.isStreaming = true
-            await settle(host)
+            try await expectNoRetirement(attachments, host: host, "retirement while streaming")
             #expect(attachments.pendingImages.count == 1)
             #expect(attachments.pendingFiles.count == 1)
             model.store.isStreaming = false
-            await settle(host)
+            try await expectNoRetirement(attachments, host: host, "retirement when streaming ends")
             #expect(attachments.hasPendingAttachments)
 
             switch retirement {
@@ -36,16 +36,27 @@ struct QuestionAttachmentLifecycleTests {
             default:
                 model.store.messages.append(ConversationViewModelTests().textMessage(role: .user, text: "New turn"))
             }
-            await settle(host)
+            try await waitUntil("\(retirement) question to discard its attachments") {
+                host.layoutIfNeeded()
+                return !attachments.hasPendingAttachments && model.questionAttachmentPipelines[question.id] == nil
+            }
             #expect(!attachments.hasPendingAttachments)
             #expect(model.questionAttachmentPipelines[question.id] == nil)
         }
     }
 
-    private func settle(_ host: UIView) async {
-        for _ in 0..<5 {
+    /// Negative window: the lifecycle must leave the selection alone, and
+    /// there is no event to await for something that should not happen, so
+    /// poll (with layout passes) through `expectNever`'s bounded window.
+    private func expectNoRetirement(
+        _ attachments: ConversationAttachmentPipeline,
+        host: UIView,
+        _ description: String,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        try await expectNever(description, sourceLocation: sourceLocation) {
             host.layoutIfNeeded()
-            try? await Task.sleep(for: .milliseconds(20))
+            return !attachments.hasPendingAttachments
         }
     }
 }

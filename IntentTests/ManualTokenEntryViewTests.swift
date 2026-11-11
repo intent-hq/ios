@@ -313,6 +313,20 @@ extension ManualTokenEntryViewTests {
         return listener
     }
 
+    /// Cancels `listener` and returns a flag that flips once it reaches a
+    /// terminal state, i.e. once its port is closed and connects are refused.
+    nonisolated private static func cancel(_ listener: NWListener) -> OSAllocatedUnfairLock<Bool> {
+        let released = OSAllocatedUnfairLock(initialState: false)
+        listener.stateUpdateHandler = { state in
+            switch state {
+            case .cancelled, .failed: released.withLock { $0 = true }
+            default: break
+            }
+        }
+        listener.cancel()
+        return released
+    }
+
     /// Full probe against a live local TLS handshake. Before probe was marked
     /// nonisolated this crashed instead of failing: the verify block inherited
     /// MainActor isolation and trapped when boringssl invoked it on the
@@ -365,8 +379,8 @@ extension ManualTokenEntryViewTests {
     @Test func probeReportsUnreachableWhenConnectionIsRefused() async throws {
         let listener = try await Self.startTCPListener { _ in }
         let port = try #require(listener.port?.rawValue)
-        listener.cancel()
-        try await Task.sleep(for: .milliseconds(100))
+        let released = Self.cancel(listener)
+        try await waitUntil("listener to release its port") { released.withLock { $0 } }
 
         let result = await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
         guard case let .unreachable(cause) = result else {
@@ -419,14 +433,17 @@ extension ManualTokenEntryViewTests {
     /// Cancelling the probing task (the user hit Cancel) reports `.cancelled`
     /// rather than a misleading timeout or certificate error.
     @Test func probeReportsCancellationWhenTaskIsCancelled() async throws {
-        let listener = try await Self.startTCPListener { _ in }
+        let accepted = OSAllocatedUnfairLock(initialState: false)
+        let listener = try await Self.startTCPListener { _ in accepted.withLock { $0 = true } }
         defer { listener.cancel() }
         let port = try #require(listener.port?.rawValue)
 
         let task = Task {
             await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
         }
-        try await Task.sleep(for: .milliseconds(200))
+        // Cancel mid-handshake: TCP is connected and the ClientHello is
+        // unanswered, so only cancellation can settle the probe.
+        try await waitUntil("probe TCP connection to be accepted") { accepted.withLock { $0 } }
         task.cancel()
         #expect(await task.value == .cancelled)
     }

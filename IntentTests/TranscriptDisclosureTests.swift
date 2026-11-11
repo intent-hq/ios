@@ -41,32 +41,45 @@ struct TranscriptDisclosureTests {
             window.isHidden = true
             controller.endAppearanceTransition()
         }
-        try await settle(controller)
+        try await settle(controller, until: "initial disclosure row") { state.height != nil && state.binding != nil }
         let collapsed = try #require(state.height)
         let binding = try #require(state.binding)
         binding.wrappedValue = true
-        try await settle(controller)
+        try await settle(controller, until: "disclosure to expand") { (state.height ?? 0) > collapsed }
         let expanded = try #require(state.height)
         #expect(expanded > collapsed)
 
         // Appending the thirteenth message moves row zero between ForEach parents.
         for count in [13, 12, 14] {
             let appearances = state.appearances
+            // Forget the old row's height so the checks below read the
+            // recreated row's own geometry report.
+            state.height = nil
             state.count = count
-            try await settle(controller)
+            try await settle(controller, until: "row recreated for count \(count)") {
+                state.appearances > appearances && state.height != nil
+            }
             #expect(state.appearances > appearances, "The row must actually have been recreated")
             #expect(state.binding?.wrappedValue == true)
             #expect(abs((state.height ?? 0) - expanded) < 1, "The real disclosure must remain expanded")
         }
         state.binding?.wrappedValue = false
-        try await settle(controller)
+        try await settle(controller, until: "disclosure to collapse") { (state.height ?? .infinity) < expanded - 1 }
         #expect(abs((state.height ?? 0) - collapsed) < 1)
     }
 
-    private func settle<Content: View>(_ controller: UIHostingController<Content>) async throws {
-        controller.view.setNeedsLayout()
-        controller.view.layoutIfNeeded()
-        try await Task.sleep(for: .milliseconds(200))
+    /// Lays out and polls (bounded) until the probe reports `condition`.
+    private func settle<Content: View>(
+        _ controller: UIHostingController<Content>,
+        until description: String,
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ condition: () -> Bool
+    ) async throws {
+        try await waitUntil(description, sourceLocation: sourceLocation) {
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
+            return condition()
+        }
     }
 
     @Observable final class ProbeState {

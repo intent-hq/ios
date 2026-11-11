@@ -11,19 +11,24 @@ struct LaunchPhaseTimelineTests {
     private final class Probe {
         var reached: [String] = []
         var polls = 0
+        var started = false
     }
 
     // MARK: - Cancellation
 
     /// LoadingView: cancelling the intro beat must not fall through to
     /// `onLoadComplete`.
-    @Test func cancelledDelayLeavesLaterStageUnreached() async {
+    @Test func cancelledDelayLeavesLaterStageUnreached() async throws {
         let probe = Probe()
         let task = Task {
+            probe.started = true
             try await LaunchPhaseTimeline.delay(for: .seconds(2))
             probe.reached.append("advance")
         }
-        try? await Task.sleep(for: .milliseconds(50))
+        // The task and the delay run on the main actor with this test and do
+        // not suspend between `started` and the delay's sleep, so observing
+        // `started` means the task is parked inside the delay.
+        try await waitUntil("timeline task to enter its delay") { probe.started }
         task.cancel()
         let start = ContinuousClock.now
         let result = await task.result
@@ -34,7 +39,7 @@ struct LaunchPhaseTimelineTests {
 
     /// ConnectingView: cancelling mid-poll must finish promptly, stop
     /// evaluating the condition, and never publish connection success.
-    @Test func cancelledPollStopsPromptlyAndLeavesLaterStageUnreached() async {
+    @Test func cancelledPollStopsPromptlyAndLeavesLaterStageUnreached() async throws {
         let probe = Probe()
         let task = Task {
             let ready = try await LaunchPhaseTimeline.poll(
@@ -47,7 +52,7 @@ struct LaunchPhaseTimelineTests {
             )
             probe.reached.append(ready ? "success" : "timeout")
         }
-        try? await Task.sleep(for: .milliseconds(50))
+        try await waitUntil("timeline poll to evaluate its condition") { probe.polls > 0 }
         task.cancel()
         let start = ContinuousClock.now
         let result = await task.result
