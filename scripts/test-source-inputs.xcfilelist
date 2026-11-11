@@ -2,6 +2,7 @@ $(SRCROOT)/Intent
 $(SRCROOT)/Intent/App
 $(SRCROOT)/Intent/App/AppCoordinator.swift
 $(SRCROOT)/Intent/App/AppCoordinatorAgentHistory.swift
+$(SRCROOT)/Intent/App/AppCoordinatorConnectionScreen.swift
 $(SRCROOT)/Intent/App/AppCoordinatorIPadNavigation.swift
 $(SRCROOT)/Intent/App/AppCoordinatorLifecycleState.swift
 $(SRCROOT)/Intent/App/AppCoordinatorNavigation.swift

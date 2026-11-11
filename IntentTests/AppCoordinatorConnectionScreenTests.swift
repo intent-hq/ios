@@ -95,7 +95,7 @@ extension AppCoordinatorTests {
         #expect(!coordinator.pairingShowsSavedConnections)
     }
 
-    @Test @MainActor func connectionLossOutlivesTheTransportUntilDataReloads() async throws {
+    @Test @MainActor func connectionLossOutlivesTheTransportUntilDataReloads() async {
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
