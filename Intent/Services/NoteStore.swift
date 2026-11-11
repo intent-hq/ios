@@ -127,20 +127,22 @@ import Observation
         self.workspaceId == workspaceId && fetchRevision == revision
     }
 
-    func fetchNotes(workspaceId: String) async {
-        let workspaceChanged = self.workspaceId != workspaceId
-        // If workspace changed, clear notes immediately to prevent stale data
-        if workspaceChanged {
-            eventRefreshes.cancel()
-            notes = []
-            loadPhase = .idle
-            liveSubscriptionGeneration &+= 1
-            if let oldId = liveSubscription.reset() {
-                connectionManager.unregisterSubscriptionHandler(id: oldId)
-            }
-            noteReconciler = nil
-            snapshotFiller.cancel()
+    private func resetForFetchIfWorkspaceChanged(to workspaceId: String) {
+        guard self.workspaceId != workspaceId else { return }
+        eventRefreshes.cancel()
+        notes = []
+        loadPhase = .idle
+        liveSubscriptionGeneration &+= 1
+        if let oldId = liveSubscription.reset() {
+            connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
+        noteReconciler = nil
+        snapshotFiller.cancel()
+    }
+
+    func fetchNotes(workspaceId: String) async {
+        // If workspace changed, clear notes immediately to prevent stale data.
+        resetForFetchIfWorkspaceChanged(to: workspaceId)
         self.workspaceId = workspaceId
         fetchRevision &+= 1
         let requestRevision = fetchRevision
