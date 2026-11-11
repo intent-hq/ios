@@ -11,9 +11,12 @@ import Observation
     let workspaceProviderOptions: WorkspaceProviderOptions
     var specialists: [SpecialistInfo] { specialistCatalog.value ?? [] }
     var providers: [ProviderInfo] = []
-    var isLoading = false
-    private(set) var hasLoaded = false
-    private(set) var lastLoadedAt: Date?
+    /// The explicit picker load. A silent revalidation of a loaded catalog
+    /// stays `.loaded`, so the picker never shows a spinner over cached lists.
+    private(set) var loadPhase = LoadPhase.idle
+    var isLoading: Bool { loadPhase.isLoading }
+    var hasLoaded: Bool { loadPhase.hasLoaded }
+    var lastLoadedAt: Date? { loadPhase.lastLoadedAt }
     /// Connection/reset identity only. Catalog events must not force agent.get.
     private(set) var loadGeneration = 0
 
@@ -91,16 +94,14 @@ import Observation
             loadRequiresInterest = consumer != nil
             loadTask = Task { [weak self] in
                 guard let self, generation == loadGeneration, identity == loadIdentity else { return }
-                if !silent { isLoading = true }
+                if !silent { loadPhase = loadPhase.beginning() }
                 async let specialistsSucceeded = specialistCatalog.ensure(force: true)
                 async let providersSucceeded = fetchProviders(generation: generation, identity: identity)
                 let succeeded = await (specialistsSucceeded, providersSucceeded)
                 guard generation == loadGeneration, identity == loadIdentity else { return }
-                if succeeded.0, succeeded.1 {
-                    hasLoaded = true
-                    lastLoadedAt = Date()
-                }
-                isLoading = false
+                loadPhase = succeeded.0 && succeeded.1
+                    ? .loaded(Date())
+                    : loadPhase.failing(CreationOptionsLoadError.catalogsUnavailable)
                 loadTask = nil
             }
             latestLoadTask = loadTask
@@ -115,7 +116,7 @@ import Observation
         loadIdentity = UUID()
         loadTask?.cancel()
         loadTask = nil
-        isLoading = false
+        loadPhase = loadPhase.settled()
     }
 
     func invalidateCatalogs(clear: Bool) {
@@ -123,10 +124,8 @@ import Observation
         loadGeneration &+= 1
         loadTask?.cancel()
         loadTask = nil
-        isLoading = false
+        loadPhase = .idle
         providers = []
-        hasLoaded = false
-        lastLoadedAt = nil
         specialistCatalog.reset(clear: clear)
         defaultModelProviderCatalog.reset()
         for catalog in modelCatalogs.values { catalog.reset(clear: clear) }
@@ -228,4 +227,10 @@ import Observation
         modelCatalogs[providerId] = catalog
         return catalog
     }
+}
+
+private enum CreationOptionsLoadError: LocalizedError {
+    case catalogsUnavailable
+
+    var errorDescription: String? { "Creation options could not be loaded." }
 }

@@ -7,11 +7,15 @@ import Observation
     private(set) var stagedChanges: [WorkspaceChange] = []
     private(set) var unstagedChanges: [WorkspaceChange] = []
     private(set) var commits: [WorkspaceCommit] = []
-    private(set) var isLoading = false
-    private(set) var hasLoaded = false
-    private(set) var errorMessage: String?
+    /// The snapshot read. A failed refresh keeps the rows and its message.
+    private(set) var loadPhase = LoadPhase.idle
     private(set) var isTruncated = false
     private(set) var isLoadingMore = false
+    /// The last Load More failure, independent of the snapshot read.
+    private(set) var pageFailure: String?
+    var isLoading: Bool { loadPhase.isLoading }
+    var hasLoaded: Bool { loadPhase.hasLoaded }
+    var errorMessage: String? { pageFailure ?? loadPhase.anyFailureMessage }
     private(set) var roots: [WorkspaceGitRoot] = []
     private(set) var selectedRootId: String?
     private(set) var repositoryErrorMessage: String?
@@ -63,10 +67,10 @@ import Observation
         bind(workspaceId)
         revision &+= 1
         let requestRevision = revision
-        isLoading = true
+        loadPhase = loadPhase.beginning()
         isLoadingMore = false
         defer {
-            if revision == requestRevision { isLoading = false }
+            if revision == requestRevision { loadPhase = loadPhase.settled() }
         }
         await refreshRoots(workspaceId: workspaceId, requestRevision: requestRevision)
         guard owns(requestRevision), !Task.isCancelled else { return }
@@ -82,11 +86,12 @@ import Observation
             commits = Self.uniqueCommits(page.commits)
             nextToken = page.nextToken
             boundarySha = page.boundarySha
-            errorMessage = nil
-            hasLoaded = true
+            pageFailure = nil
+            loadPhase = .loaded(Date())
         } catch {
             guard owns(requestRevision), !Task.isCancelled, !(error is CancellationError) else { return }
-            errorMessage = error.localizedDescription
+            pageFailure = nil
+            loadPhase = loadPhase.failingVisibly(error.localizedDescription)
         }
     }
 
@@ -106,7 +111,7 @@ import Observation
     }
 
     func loadMoreCommits() async {
-        guard !Task.isCancelled, !isLoading, !isLoadingMore,
+        guard !Task.isCancelled, !loadPhase.isLoading, !isLoadingMore,
               let workspaceId, let token = nextToken else { return }
         let requestRevision = revision
         isLoadingMore = true
@@ -124,10 +129,11 @@ import Observation
             guard page.nextToken != token else { throw WorkspaceChangesDecodingError.invalidCommits }
             commits = Self.uniqueCommits(commits + page.commits)
             nextToken = page.nextToken
-            errorMessage = nil
+            pageFailure = nil
+            loadPhase = loadPhase.clearingFailure()
         } catch {
             guard owns(requestRevision), !Task.isCancelled, !(error is CancellationError) else { return }
-            errorMessage = error.localizedDescription
+            pageFailure = error.localizedDescription
         }
     }
 
@@ -208,11 +214,10 @@ import Observation
         commits = []
         nextToken = nil
         boundarySha = nil
-        isLoading = false
+        loadPhase = .idle
         isLoadingMore = false
-        hasLoaded = false
         isTruncated = false
-        errorMessage = nil
+        pageFailure = nil
     }
 }
 
@@ -225,7 +230,7 @@ extension WorkspaceChangesStore {
         revision &+= 1
         let currentRegistration = registration
         eventRefreshes.cancel()
-        isLoading = true
+        loadPhase = loadPhase.beginning()
         isLoadingMore = false
         if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
@@ -323,7 +328,7 @@ extension WorkspaceChangesStore {
             if selectedRootId != nil, selectedRoot == nil {
                 selectedRootId = nil
                 clearRows()
-                isLoading = true
+                loadPhase = .loading(lastLoadedAt: nil)
             }
         } catch {
             guard owns(requestRevision), !Task.isCancelled, !(error is CancellationError) else { return }

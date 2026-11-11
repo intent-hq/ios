@@ -22,7 +22,7 @@ struct StateFlagBudgetPolicyTests {
         "Intent/Services/ConnectionManager.swift#ConnectionManager": 7,
         "Intent/Services/ConversationLiveTranscript.swift#ConversationLiveTranscript": 11,
         "Intent/Services/ConversationStore.swift#ConversationStore": 7,
-        "Intent/Services/CreationOptionsStore.swift#CreationOptionsStore": 8,
+        "Intent/Services/CreationOptionsStore.swift#CreationOptionsStore": 6,
         "Intent/ViewModels/ConversationViewModel.swift#ConversationViewModel": 7,
         "Intent/Views/Conversation/Questions/QuestionWizardView.swift#QuestionWizardView": 7,
         "Intent/Views/Conversation/Transcript/ConversationColumnView.swift#ConversationColumnView": 6,

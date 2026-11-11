@@ -6,10 +6,12 @@ import WebKit
 @Observable
 final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     private(set) var webView: WKWebView?
-    private(set) var isLoading = false
+    /// The main-frame load. A failure replaces the page until the next load or Reload.
+    private(set) var loadPhase = LoadPhase.idle
     private(set) var canGoBack = false
     private(set) var canGoForward = false
-    private(set) var errorMessage: String?
+    var isLoading: Bool { loadPhase.isLoading }
+    var errorMessage: String? { loadPhase.anyFailureMessage }
     private(set) var address = ""
     private(set) var title = ""
     @ObservationIgnored private var titleObserver: NSKeyValueObservation?
@@ -20,7 +22,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     func open(_ browser: WorkspaceBrowser, connection: any SessionConnectionManaging) async {
         stop()
         let generation = generation
-        isLoading = true
+        loadPhase = .loading(lastLoadedAt: nil)
         do {
             guard let url = URL(string: browser.url) else { throw URLError(.badURL) }
             let proxy = try await connection.makeBrowserProxy()
@@ -46,7 +48,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         } catch {
             guard self.generation == generation else { return }
             stop()
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) { fail(error.localizedDescription) }
         }
     }
 
@@ -59,8 +61,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         webView = nil
         canGoBack = false
         canGoForward = false
-        isLoading = false
-        errorMessage = nil
+        loadPhase = .idle
         address = ""
         title = ""
         originalOrigins.removeAll()
@@ -79,8 +80,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         generation = UUID()
         let generation = generation
         webView.stopLoading()
-        errorMessage = nil
-        isLoading = true
+        loadPhase = .loading(lastLoadedAt: loadPhase.lastLoadedAt)
         do {
             let forwarded = try await proxy.forward(url)
             try Task.checkCancellation()
@@ -90,8 +90,11 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
             webView.load(URLRequest(url: forwarded))
         } catch {
             guard self.generation == generation else { return }
-            isLoading = false
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if error is CancellationError {
+                loadPhase = loadPhase.settled()
+            } else {
+                fail(error.localizedDescription)
+            }
             throw error
         }
     }
@@ -106,7 +109,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func reload() {
-        errorMessage = nil
+        loadPhase = loadPhase.clearingFailure()
         webView?.reload()
     }
 
@@ -121,7 +124,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
             guard self.generation == generation, webView === self.webView else { return .cancel }
             if forwarded != url {
                 guard navigationAction.targetFrame?.isMainFrame != false else {
-                    errorMessage = "This embedded page uses a different local server. Open its address in a new browser."
+                    fail("This embedded page uses a different local server. Open its address in a new browser.")
                     return .cancel
                 }
                 var request = navigationAction.request
@@ -132,24 +135,21 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
             }
             return .allow
         } catch {
-            if self.generation == generation {
-                isLoading = false
-                errorMessage = error.localizedDescription
-            }
+            if self.generation == generation { fail(error.localizedDescription) }
             return .cancel
         }
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation?) {
         guard webView === self.webView else { return }
-        errorMessage = nil
-        isLoading = true
+        loadPhase = .loading(lastLoadedAt: loadPhase.lastLoadedAt)
         updateNavigation(webView)
     }
 
     func webView(_ webView: WKWebView, didFinish _: WKNavigation?) {
         guard webView === self.webView else { return }
-        isLoading = false
+        // A failure reported mid-load (a cross-origin subframe) stays on screen.
+        if loadPhase.isLoading { loadPhase = .loaded(Date()) }
         updateNavigation(webView)
     }
 
@@ -163,8 +163,7 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         guard webView === self.webView else { return }
-        isLoading = false
-        errorMessage = "The page stopped responding. Reload to try again."
+        fail("The page stopped responding. Reload to try again.")
     }
 
     func webView(
@@ -183,9 +182,12 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard webView === self.webView else { return }
         let error = error as NSError
         guard error.domain != NSURLErrorDomain || error.code != NSURLErrorCancelled else { return }
-        isLoading = false
-        errorMessage = error.localizedDescription
+        fail(error.localizedDescription)
         updateNavigation(webView)
+    }
+
+    private func fail(_ message: String) {
+        loadPhase = loadPhase.failingVisibly(message)
     }
 
     private func updateNavigation(_ webView: WKWebView) {

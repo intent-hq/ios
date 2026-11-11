@@ -6,11 +6,15 @@ import Observation
 @Observable
 final class AssistantStore {
     private(set) var threads: [AgentSession] = []
-    private(set) var isLoading = false
+    /// The history read. A failed refresh keeps the threads and its message.
+    private(set) var loadPhase = LoadPhase.idle
     private(set) var isCreating = false
     private(set) var deletingThreadIDs: Set<String> = []
-    private(set) var hasLoaded = false
-    private(set) var errorMessage: String?
+    /// The last create or delete failure, independent of the history read.
+    private(set) var actionFailure: String?
+    var isLoading: Bool { loadPhase.isLoading }
+    var hasLoaded: Bool { loadPhase.hasLoaded }
+    var errorMessage: String? { actionFailure ?? loadPhase.anyFailureMessage }
 
     @ObservationIgnored private let connection: any ConnectionManagerRouting
     private let summaries: AgentSummaryStore?
@@ -56,14 +60,20 @@ final class AssistantStore {
             _ = refreshReads.invalidate()
             return
         }
-        isLoading = true
-        defer { isLoading = false }
+        setLoadPhase(loadPhase.beginning())
+        defer { setLoadPhase(loadPhase.settled()) }
         while await refreshReads.run(isCurrent: { !Task.isCancelled }, pass: { [weak self] passRevision in
             await self?.runRefreshPass(passRevision)
         }) {}
     }
 
+    private func setLoadPhase(_ next: LoadPhase) {
+        if next != loadPhase { loadPhase = next }
+    }
+
     private func runRefreshPass(_ passRevision: Int) async {
+        // A trailing pass after a failed one shows loading again, not the old error.
+        setLoadPhase(loadPhase.beginning())
         do {
             let summaryBoundary = summaries?.beginRead()
             // Every page: threads ascend by creation, so the newest are on the last page.
@@ -80,13 +90,14 @@ final class AssistantStore {
             threads = rows.compactMap(AgentSession.parseAgent)
                 .filter { $0.createdByAgentId == nil && $0.status.lowercased() != "deleted" }
                 .sorted { timestamp($0) > timestamp($1) }
-            hasLoaded = true
-            errorMessage = nil
+            setLoadPhase(.loaded(Date()))
+            actionFailure = nil
         } catch is CancellationError {
             return
         } catch {
             guard passRevision == refreshReads.revision else { return }
-            errorMessage = error.localizedDescription
+            setLoadPhase(loadPhase.failingVisibly(error.localizedDescription))
+            actionFailure = nil
         }
     }
 
@@ -94,7 +105,8 @@ final class AssistantStore {
         startObservingIfNeeded()
         guard !isCreating else { return nil }
         isCreating = true
-        errorMessage = nil
+        actionFailure = nil
+        setLoadPhase(loadPhase.clearingFailure())
         defer { isCreating = false }
         let key = creationKey ?? UUID().uuidString
         creationKey = key
@@ -116,11 +128,13 @@ final class AssistantStore {
             creationKey = nil
             threads.removeAll { $0.id == agent.id }
             threads.insert(agent, at: 0)
-            hasLoaded = true
+            if !hasLoaded {
+                setLoadPhase(isLoading ? .loading(lastLoadedAt: Date()) : .loaded(Date()))
+            }
             if refreshReads.isRunning { _ = refreshReads.invalidate() }
             return agent.id
         } catch {
-            errorMessage = error.localizedDescription
+            actionFailure = error.localizedDescription
             return nil
         }
     }
@@ -134,10 +148,11 @@ final class AssistantStore {
                 "workspaceId": Workspace.chiefWorkspaceId
             ])
             removeThread(agentId)
-            errorMessage = nil
+            actionFailure = nil
+            setLoadPhase(loadPhase.clearingFailure())
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            actionFailure = error.localizedDescription
             return false
         }
     }

@@ -29,6 +29,21 @@ struct ListLoadPhaseTests {
         #expect(failed.settled() == failed)
     }
 
+    @Test func aVisibleRefreshFailureKeepsTheDataUntilTheNextRead() {
+        let loadedAt = Date(timeIntervalSince1970: 1)
+        let shown = LoadPhase.loaded(loadedAt).beginning().failingVisibly("Request timed out")
+        #expect(shown == .refreshFailed("Request timed out", lastLoadedAt: loadedAt))
+        #expect(shown.hasLoaded && !shown.isAwaitingFirstLoad && !shown.isLoading)
+        #expect(shown.failureMessage == nil, "LoadFailureView is only for a failed first read")
+        #expect(shown.refreshFailureMessage == "Request timed out" && shown.anyFailureMessage == "Request timed out")
+        #expect(shown.beginning() == .loading(lastLoadedAt: loadedAt), "the next read hides the old message")
+        #expect(shown.settled() == shown)
+        #expect(shown.clearingFailure() == .loaded(loadedAt))
+        #expect(shown.failing(Self.offline) == .loaded(loadedAt))
+        #expect(LoadPhase.idle.beginning().failingVisibly("Request timed out") == .failed("Request timed out"))
+        #expect(LoadPhase.failed("Request timed out").clearingFailure() == .idle)
+    }
+
     // MARK: - NoteStore
 
     private func note(_ id: String) -> [String: Any] {
