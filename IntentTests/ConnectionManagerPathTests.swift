@@ -204,12 +204,13 @@ extension ConnectionManagerTests {
         monitor.report(Self.cellularPath)
         #expect(manager.connectionState == .connected)
         // #328 requires actual endpoint loss, not absence from a general route list.
-        manager.socketPathObservation?.pathChanged(Self.deadPath)
-        await Task.yield()
-        try await Self.settle { disconnects.count == 1 }
+        // Park the replacement's admission so "reconnecting" holds while asserted.
+        try await Self.awaitParkedReplacement(on: server) { manager.socketPathObservation?.pathChanged(Self.deadPath) }
         #expect(Self.isReconnecting(manager.connectionState))
         #expect(disconnects.count == 1)
+        server.releaseHandshakes()
         try await Self.settle { manager.connectionState == .connected }
+        #expect(disconnects.count == 1)
 
         let replacement = try #require(monitors.monitors.last)
         replacement.report(vpnOverWifi)
@@ -217,12 +218,14 @@ extension ConnectionManagerTests {
         #expect(manager.connectionState == .connected)
         replacement.report(vpnOverCellular)
         #expect(manager.connectionState == .connected)
-        manager.socketPathObservation?.viabilityChanged(false)
-        await Task.yield()
-        try await Self.settle { disconnects.count == 2 }
+        try await Self.awaitParkedReplacement(on: server, timeout: .seconds(6)) {
+            manager.socketPathObservation?.viabilityChanged(false)
+        }
         #expect(Self.isReconnecting(manager.connectionState))
         #expect(disconnects.count == 2)
-        try await Self.settle(timeout: .seconds(6)) { manager.connectionState == .connected }
+        server.releaseHandshakes()
+        try await Self.settle { manager.connectionState == .connected }
+        #expect(disconnects.count == 2)
         #expect(monitors.monitors.count == 3)
     }
 

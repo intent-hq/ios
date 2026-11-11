@@ -14,11 +14,22 @@ nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
             case withheld
         }
 
+        /// Admission requests a reconnect candidate must answer before
+        /// `ConnectionManager` adopts it (`WebSocketAdmission`).
+        private static let handshakeMethods: Set<String> = ["client.hello", "principal.me"]
+
+        private struct HeldResponse {
+            let payload: Data
+            let connection: NWConnection
+        }
+
         private struct State {
             var accepted: [NWConnection] = []
             var pingsReceived = 0
             var requestCounts: [String: Int] = [:]
             var scriptedFailures: [String: Int] = [:]
+            var holdsHandshakes = false
+            var heldResponses: [HeldResponse] = []
         }
 
         private let listener: NWListener
@@ -76,6 +87,29 @@ nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
 
         func failNextRequests(_ count: Int, method: String) {
             state.withLock { $0.scriptedFailures[method] = count }
+        }
+
+        /// Admission replies parked by `holdHandshakes()`; a non-zero count
+        /// means a replacement connection reached this server and is waiting.
+        var heldHandshakeCount: Int { state.withLock { $0.heldResponses.count } }
+
+        /// Gate for asserting a transient reconnecting state: until
+        /// `releaseHandshakes()`, admission replies are parked, so no
+        /// replacement connection can be adopted however fast it dials.
+        func holdHandshakes() {
+            state.withLock { $0.holdsHandshakes = true }
+        }
+
+        /// Opens the gate and delivers every parked admission reply in order.
+        func releaseHandshakes() {
+            let held = state.withLock { state in
+                defer {
+                    state.holdsHandshakes = false
+                    state.heldResponses.removeAll()
+                }
+                return state.heldResponses
+            }
+            for response in held { send(response.payload, on: response.connection) }
         }
 
         func stop() {
@@ -152,6 +186,15 @@ nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
                 response["result"] = [String: Any]()
             }
             guard let payload = try? JSONSerialization.data(withJSONObject: response) else { return }
+            let held = state.withLock { state in
+                guard state.holdsHandshakes, Self.handshakeMethods.contains(method) else { return false }
+                state.heldResponses.append(HeldResponse(payload: payload, connection: connection))
+                return true
+            }
+            if !held { send(payload, on: connection) }
+        }
+
+        private func send(_ payload: Data, on connection: NWConnection) {
             let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
             let context = NWConnection.ContentContext(identifier: "response", metadata: [metadata])
             connection.send(content: payload, contentContext: context, completion: .idempotent)
@@ -273,6 +316,26 @@ extension ConnectionManagerTests {
                 wasReconnecting = reconnecting
             }
         }
+    }
+
+    /// Holds `server`'s admission replies, runs `trigger`, and returns once a
+    /// replacement connection is parked at admission. Until the caller's
+    /// `server.releaseHandshakes()`, the manager cannot adopt a replacement,
+    /// so an intermediate "reconnecting" assertion cannot race a fast
+    /// recovery (ios#261).
+    @MainActor static func awaitParkedReplacement(
+        on server: RecoveryWebSocketServer,
+        timeout: Duration = Self.defaultSettleTimeout,
+        sourceLocation: SourceLocation = #_sourceLocation,
+        after trigger: @MainActor () -> Void
+    ) async throws {
+        server.holdHandshakes()
+        trigger()
+        try await waitUntil(
+            "a replacement connection to wait at admission",
+            timeout: timeout,
+            sourceLocation: sourceLocation
+        ) { server.heldHandshakeCount > 0 }
     }
 
     static func isReconnecting(_ state: ConnectionState) -> Bool {
