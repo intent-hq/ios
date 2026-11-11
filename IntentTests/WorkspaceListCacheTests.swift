@@ -40,7 +40,7 @@ struct WorkspaceListCacheTests {
         let statuses = model.groupedByStatus
         #expect(filtered.map(\.id) == ["newer", "older"])
 
-        store.isLoading = true
+        store.setLoading(true)
         model.searchText = " \n "
         for mode in ViewMode.allCases {
             model.viewMode = mode

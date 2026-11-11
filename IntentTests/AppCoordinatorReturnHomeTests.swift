@@ -112,17 +112,17 @@ extension AppCoordinatorTests {
         await Self.drainReturnHomeCallbacks()
         store.publishFetchedWorkspaces([])
         coordinator.onConnectionSuccess()
-        store.lastUpdated = nil // Home must retire a pending fresh-data recovery.
+        store.setLastUpdated(nil) // Home must retire a pending fresh-data recovery.
         fake.simulateDisconnect()
         await Self.drainReturnHomeCallbacks()
         #expect(coordinator.isDisconnected)
         fake.simulateConnect()
         await Self.drainReturnHomeCallbacks()
-        store.isLoading = true
+        store.setLoading(true)
         coordinator.onReturnToSavedMachines()
         await Self.drainReturnHomeCallbacks()
         let baseline = callbacks.withLock { $0 }
-        store.isLoading = false
+        store.setLoading(false)
         await Self.drainReturnHomeCallbacks()
 
         #expect(callbacks.withLock { $0 } == baseline, "A queued recovery callback must not re-arm after Home")

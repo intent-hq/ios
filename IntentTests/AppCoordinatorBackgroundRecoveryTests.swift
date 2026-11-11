@@ -147,8 +147,8 @@ extension AppCoordinatorTests {
         coordinator.onScenePhaseBackground()
         fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
-        fixture.store.isLoading = true
-        fixture.store.lastUpdated = nil
+        fixture.store.setLoading(true)
+        fixture.store.setLastUpdated(nil)
         coordinator.onScenePhaseActive()
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
@@ -159,7 +159,7 @@ extension AppCoordinatorTests {
         #expect(coordinator.showsReadOnlyBanner, "The existing data-readiness rule still applies")
         #expect(!coordinator.showsConnectionLossOverlay)
         fixture.store.publishFetchedWorkspaces([])
-        fixture.store.isLoading = false
+        fixture.store.setLoading(false)
         await Self.drainBackgroundEvents()
         #expect(!coordinator.showsConnectionLossOverlay)
     }
@@ -189,13 +189,13 @@ extension AppCoordinatorTests {
         fixture.connection.simulateStoppedReconnection()
         coordinator.onScenePhaseActive()
         await Self.drainBackgroundEvents()
-        fixture.store.lastUpdated = nil
-        fixture.store.isLoading = true
+        fixture.store.setLastUpdated(nil)
+        fixture.store.setLoading(true)
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
         // Queue data completion ahead of a new loss delivery. The current
         // transport state must win even when the old observation runs first.
-        fixture.store.isLoading = false
+        fixture.store.setLoading(false)
         fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
         #expect(coordinator.isDisconnected)

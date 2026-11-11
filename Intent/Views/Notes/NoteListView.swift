@@ -11,7 +11,11 @@ struct NoteListView: View {
     @State private var collapsedIds: Set<String> = []
 
     var body: some View {
-        if noteStore.isLoading || !noteStore.hasLoaded, noteStore.notes.isEmpty {
+        if let message = noteStore.loadPhase.failureMessage, noteStore.notes.isEmpty {
+            LoadFailureView(subject: "Notes", message: message, identifier: "notes", isCompact: isEmbedded) {
+                await noteStore.fetchNotes(workspaceId: workspaceId)
+            }
+        } else if noteStore.loadPhase.isAwaitingFirstLoad, noteStore.notes.isEmpty {
             ProgressView {
                 Text("Loading notes...").interFont(Constants.Typography.bodyS)
             }

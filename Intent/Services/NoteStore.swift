@@ -8,11 +8,13 @@ import Observation
     private static let invalidParametersErrorCode = -32_602
 
     var notes: [Note] = []
-    var isLoading = false
-    /// True once a `note.list` for the current workspace has completed
-    /// successfully. Reset on workspace change; a failed fetch leaves it
-    /// false so views keep the loading placeholder instead of "No notes".
-    var hasLoaded = false
+    /// The `note.list` read for the current workspace. Reset on workspace
+    /// change; a failure before any success shows an error with Retry
+    /// instead of "No notes" or an endless loading placeholder.
+    var loadPhase = LoadPhase.idle
+    var isLoading: Bool { loadPhase.isLoading }
+    /// True once a `note.list` for the current workspace has succeeded.
+    var hasLoaded: Bool { loadPhase.hasLoaded }
 
     var workspaceId: String?
     @ObservationIgnored private var fetchRevision = 0
@@ -108,14 +110,17 @@ import Observation
     /// Synchronously reset the list and load gate for a workspace switch.
     /// Views call this from onChange(of: workspaceId) before scheduling the
     /// async fetch, so the empty state cannot render with the previous
-    /// workspace's hasLoaded while the fetch task has not started yet.
+    /// workspace's load phase while the fetch task has not started yet.
     func prepareForWorkspaceChange(to workspaceId: String) {
         guard self.workspaceId != workspaceId else { return }
         fetchRevision &+= 1
         eventRefreshes.cancel()
         notes = []
-        hasLoaded = false
-        isLoading = false
+        loadPhase = .idle
+    }
+
+    private func setLoadPhase(_ next: LoadPhase) {
+        if next != loadPhase { loadPhase = next }
     }
 
     func fetchNotes(workspaceId: String) async {
@@ -124,8 +129,7 @@ import Observation
         if workspaceChanged {
             eventRefreshes.cancel()
             notes = []
-            hasLoaded = false
-            isLoading = false
+            loadPhase = .idle
             liveSubscriptionGeneration &+= 1
             if let oldId = liveSubscription.reset() {
                 connectionManager.unregisterSubscriptionHandler(id: oldId)
@@ -136,13 +140,11 @@ import Observation
         self.workspaceId = workspaceId
         fetchRevision &+= 1
         let requestRevision = fetchRevision
-        // Only show loading indicator if we have no notes to display
-        if notes.isEmpty {
-            isLoading = true
-        }
+        // Only the first read shows loading; refreshes keep the list as is.
+        if !hasLoaded { setLoadPhase(loadPhase.beginning()) }
         defer {
-            if fetchRevision == requestRevision, isLoading {
-                isLoading = false
+            if self.workspaceId == workspaceId, fetchRevision == requestRevision {
+                setLoadPhase(loadPhase.settled())
             }
         }
         do {
@@ -156,9 +158,7 @@ import Observation
             if merged != notes {
                 notes = merged
             }
-            if !hasLoaded {
-                hasLoaded = true
-            }
+            if !hasLoaded { setLoadPhase(.loaded(Date())) }
             // Hydrate a stale spec because its content links task notes.
             if let specId = notes.first(where: { $0.isDefault && $0.isContentStale })?.id {
                 _ = await fetchNote(noteId: specId, workspaceId: workspaceId)
@@ -166,6 +166,9 @@ import Observation
         } catch is CancellationError {
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
+            if self.workspaceId == workspaceId, fetchRevision == requestRevision {
+                setLoadPhase(loadPhase.failing(error))
+            }
         }
         // Live-state subscription is owned by onConnected().
     }

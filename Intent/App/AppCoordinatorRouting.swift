@@ -382,8 +382,7 @@ extension AppCoordinator {
     /// after reconnecting, and so ConnectingView's waitForWorkspaceData
     /// (which polls lastUpdated == nil) genuinely waits for the new daemon.
     private func resetWorkspaceStore() {
-        dependencies.workspaceStore.workspaces = []
-        dependencies.workspaceStore.lastUpdated = nil
+        dependencies.workspaceStore.forgetPublishedWorkspaces()
     }
 
     /// Re-dial this window's own backend after its live session connection

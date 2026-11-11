@@ -198,7 +198,7 @@ extension WorkspaceDetailView {
         guard let agentId = sidebarAgentId, currentTab == .agents else { return nil }
         guard WorkspaceSidebarAgents.namesSelection(
             isListed: agentListRows.contains { $0.id == "workspace.agent.\(agentId)" },
-            isInitialLoadPending: !agentStore.hasLoaded && !agentStore.hasFailedToLoad,
+            isInitialLoadPending: agentStore.loadPhase.isAwaitingFirstLoad,
             isRevealPending: sidebarRevealKey.map { $0 != viewModel.completedReveal && !pendingAgentGroups.isEmpty } ?? false
         ) else { return nil }
         return .init(workspaceId: workspaceId, agentId: agentId, owner: ObjectIdentifier(viewModel))

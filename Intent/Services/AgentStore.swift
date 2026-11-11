@@ -80,13 +80,13 @@ extension SpecialistInfo {
 @MainActor
 @Observable class AgentStore {
     var agents: [AgentSession] = []
-    var isLoading = false
-    /// True once an `agent.list` for the current workspace has completed
-    /// successfully. Reset on workspace change; a failed fetch leaves it
-    /// false so views keep the loading placeholder instead of "No agents".
-    var hasLoaded = false
-    /// The latest top-level read failed before any succeeded for this workspace.
-    var hasFailedToLoad = false
+    /// The top-level `agent.list` read for the current workspace. Reset on
+    /// workspace change; a failure before any success shows an error with
+    /// Retry instead of "No agents" or an endless loading placeholder.
+    var loadPhase = LoadPhase.idle
+    var isLoading: Bool { loadPhase.isLoading }
+    /// True once an `agent.list` for the current workspace has succeeded.
+    var hasLoaded: Bool { loadPhase.hasLoaded }
 
     let connectionManager: ConnectionManagerRouting
     let summaries: AgentSummaryStore?
@@ -140,7 +140,7 @@ extension SpecialistInfo {
     /// Synchronously reset the list and load gate for a workspace switch.
     /// Views call this from onChange(of: workspaceId) before scheduling the
     /// async fetch, so the empty state cannot render with the previous
-    /// workspace's hasLoaded while the fetch task has not started yet.
+    /// workspace's load phase while the fetch task has not started yet.
     func prepareForWorkspaceChange(to workspaceId: String) {
         guard self.workspaceId != workspaceId else { return }
         // Advance the workspace id now, not when the fetch task starts:
@@ -150,9 +150,7 @@ extension SpecialistInfo {
         fetchDebounceTask?.cancel()
         list.reset()
         agents = []
-        hasLoaded = false
-        hasFailedToLoad = false
-        isLoading = false
+        loadPhase = .idle
     }
 
     func fetchAgents(workspaceId: String) async {

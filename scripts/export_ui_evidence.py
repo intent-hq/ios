@@ -99,6 +99,14 @@ CAPTURES = {
             for screen in ("workspace-context", "workspace-files", "workspace-file-preview")
         ),
     },
+    "ListLoadFailureUITests": {
+        "testFailedAgentAndNoteReadsShowRetryInBothThemes": tuple(
+            f"load-failure-{screen}-{appearance}"
+            for appearance in ("light", "dark")
+            for screen in ("agents", "notes")
+        ),
+        "testFailedWorkspaceListShowsRetryInsteadOfEmptyState": ("load-failure-workspaces-light",),
+    },
     "FixtureCaptureLifecycleUITests": {
         "testAssertionAbortRetainsFinalCapture": ("fixture-assertion-abort-final-state",),
         "testPassingFixtureRetainsRepeatedFinalCapture": ("fixture-passing-final-state",),

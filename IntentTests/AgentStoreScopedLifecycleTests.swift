@@ -64,17 +64,17 @@ extension AgentStoreTests {
         fake.errorMap["agent.list"] = NSError(domain: "test", code: 1)
         await store.fetchAgents(workspaceId: "ws-1")
         #expect(!store.hasLoaded)
-        #expect(store.hasFailedToLoad)
+        #expect(store.loadPhase.failureMessage != nil)
         #expect(!store.isLoading)
 
         fake.errorMap["agent.list"] = nil
         fake.responseMap["agent.list"] = scopedResponse([scopedRow("parent")])
         await store.fetchAgents(workspaceId: "ws-1")
         #expect(store.hasLoaded)
-        #expect(!store.hasFailedToLoad)
+        #expect(store.loadPhase.failureMessage == nil)
 
         store.prepareForWorkspaceChange(to: "ws-2")
-        #expect(!store.hasFailedToLoad)
+        #expect(store.loadPhase.failureMessage == nil)
     }
 
     @Test func cancelledLazyReadDoesNotPublishAndCanRetry() async throws {

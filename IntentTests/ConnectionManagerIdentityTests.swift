@@ -64,4 +64,36 @@ extension ConnectionManagerTests {
         manager.disconnect()
         #expect(manager.currentPrincipal == nil)
     }
+
+    @Test @MainActor func membershipRefreshKeepsItsPreviousPrincipalUntilItSettles() async throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
+        let server = try await LoopbackWebSocketServer.start()
+        let manager = ConnectionManager(persistence: .ephemeral())
+        defer { manager.disconnect(); server.stop() }
+        server.setPrincipal(["id": "B", "isAdministrator": false, "hostRole": "guest", "hostMembershipRevision": 1])
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "test-token")
+        #expect(manager.authorityRefresh == nil)
+        server.setPrincipal(["id": "B", "isAdministrator": false, "hostRole": "member", "hostMembershipRevision": 4])
+        func event(_ revision: Int) -> [String: Any] {
+            ["event": ["type": "host:members-changed", "data": ["revision": revision]]]
+        }
+        manager.invalidatePrincipalIfNeeded(method: "events.event", params: event(3))
+        let first = try #require(manager.authorityRefresh)
+        #expect(first.previous?.id == "B")
+        manager.invalidatePrincipalIfNeeded(method: "events.event", params: event(4))
+        let second = try #require(manager.authorityRefresh)
+        #expect(first.task.isCancelled, "a newer event cancels the older refresh")
+        #expect(second.previous?.id == "B", "the cleared principal still fences the newer refresh")
+        try await waitUntil("member authority refreshed") { manager.currentPrincipal?.revision == 4 }
+        #expect(manager.authorityRefresh == nil)
+
+        server.setPrincipal(["id": "B", "isAdministrator": false, "hostRole": "member", "hostMembershipRevision": 5])
+        manager.invalidatePrincipalIfNeeded(method: "events.event", params: event(5))
+        let pending = try #require(manager.authorityRefresh)
+        manager.disconnect()
+        #expect(pending.task.isCancelled)
+        #expect(manager.authorityRefresh == nil)
+        #expect(manager.pendingAuthorityRevision == -1)
+    }
 }
