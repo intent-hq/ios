@@ -14,9 +14,7 @@ struct WorkspaceListView: View {
     @Environment(\.workspaceVerticalBarEdge) private var verticalBarEdge
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
-    @State private var showingCreateWorkspace = false
-    @State private var showingConnections = false
-    @State private var showingConnectionSwitcher = false
+    @State private var presentation = WorkspaceChromePresentation.none
     @State private var revealedSwipeTarget: WorkspaceSwipeTarget?
     @State private var workspaceSwipeProgress: [String: CGFloat] = [:]
     @State private var pendingAction: PendingAction?
@@ -46,7 +44,7 @@ struct WorkspaceListView: View {
 
     private var canSwitchConnections: Bool {
         guard case .workspaceList = coordinator.currentScreen else { return false }
-        return !showingConnections && !showingCreateWorkspace && creationPullRequest == nil && detailPullRequest == nil && pendingAction == nil && actionError == nil
+        return !presentation.isPresenting(.connections) && !presentation.isPresenting(.createWorkspace) && creationPullRequest == nil && detailPullRequest == nil && pendingAction == nil && actionError == nil
             && !isAgentHistoryOpen
     }
 
@@ -54,7 +52,7 @@ struct WorkspaceListView: View {
 
     var body: some View {
         WorkspaceConnectionSwitcher(
-            isPresented: $showingConnectionSwitcher,
+            isPresented: $presentation.presenting(.switcher),
             isEnabled: canSwitchConnections,
             onReveal: prepareConnectionSwitcher
         ) {
@@ -80,18 +78,17 @@ struct WorkspaceListView: View {
             onPullRequests: showsPullRequests ? nil : { listContent = .pullRequests },
             onCreateWorkspace: createWorkspace
         ) {
-            showingConnectionSwitcher = false
-            showingConnections = true
+            presentation.setPresenting(.connections, true)
         })
         .navigationTitle("Workspaces")
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
             if shouldDismiss {
-                showingCreateWorkspace = false
+                presentation.dismissWorkspaceCreation()
                 creationPullRequest = nil
             }
         }
-        .sheet(isPresented: $showingCreateWorkspace) {
+        .sheet(isPresented: $presentation.presenting(.createWorkspace)) {
             CreateWorkspaceView(session: session, coordinator: coordinator)
                 .environment(coordinator)
         }
@@ -109,7 +106,7 @@ struct WorkspaceListView: View {
                 coordinator.onSelectWorkspace(workspaceId)
             }
         }
-        .sheet(isPresented: $showingConnections) {
+        .sheet(isPresented: $presentation.presenting(.connections)) {
             ConnectionsView()
                 .environment(coordinator)
         }
@@ -133,7 +130,7 @@ struct WorkspaceListView: View {
         .visionWorkspaceAttentionSound(viewModel.workspaces)
         .preference(
             key: ConnectionBackdropPreference.self,
-            value: showingConnections ? ConnectionBackdropPreference.savedOpacity : 0
+            value: presentation.isPresenting(.connections) ? ConnectionBackdropPreference.savedOpacity : 0
         )
     }
 
@@ -328,7 +325,7 @@ private extension WorkspaceListView {
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("workspaces.title")
                     .accessibilityAction(named: Text("Switch connection")) {
-                        showingConnectionSwitcher = true
+                        presentation.setPresenting(.switcher, true)
                     }
             }
             Spacer(minLength: 0)
@@ -349,8 +346,7 @@ private extension WorkspaceListView {
     }
 
     func createWorkspace() {
-        showingConnectionSwitcher = false
-        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
+        presentation.createWorkspace(canCreate: coordinator.canCreateWorkspace)
     }
 
     var pageMenu: some View {
@@ -364,7 +360,7 @@ private extension WorkspaceListView {
             },
             onRecentConnections: {
                 prepareConnectionSwitcher()
-                showingConnectionSwitcher = true
+                presentation.setPresenting(.switcher, true)
             },
             content: $listContent,
             showsClosedPullRequests: $showsClosedPullRequests,

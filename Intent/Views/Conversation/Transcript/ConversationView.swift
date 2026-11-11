@@ -75,17 +75,9 @@ private struct ConversationViewContent: View {
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var isInNavigation = false
     @State private var hasVisibleConversation = false
-    @State private var showModelPicker = false
-    @State private var showDeleteConfirmation = false
-    /// True while a deletion initiated from this view's own Delete button is in
-    /// flight — the `agent:deleted` fallback must not double-navigate on top of
-    /// the explicit dismiss().
-    @State private var selfInitiatedDelete = false
-    @State private var showRenameAlert = false
-    @State private var renameText = ""
-    @State private var presentedNote: NoteSheetInfo?
+    /// Sheets, alerts and the demo cover, plus a Delete confirmed here.
+    @State private var agentPresentation = AgentConversationPresentation()
     @State private var childAgent: AgentDestination?
-    @State private var showDemoCover = false
     @State private var answeringWorkspaceQuestions = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -99,8 +91,8 @@ private struct ConversationViewContent: View {
     /// Outermost layer: navigation destination + load/lifecycle handlers.
     private var conversationLifecycle: some View {
         conversationPresentation
-            .navigationDestination(isPresented: $showDemoCover) {
-                Button("Return to conversation") { showDemoCover = false }
+            .navigationDestination(isPresented: $agentPresentation.presenting(.demoCover)) {
+                Button("Return to conversation") { agentPresentation.dismiss(.demoCover) }
                     .buttonStyle(IntentButtonStyle(variant: .secondary))
                     .accessibilityIdentifier("demo.conversation.return")
                     .navigationTitle("Conversation cover")
@@ -150,15 +142,15 @@ private struct ConversationViewContent: View {
     /// Sheets and alerts; the delete confirmation is anchored to its menu.
     private var conversationPresentation: some View {
         conversationChrome
-            .sheet(isPresented: $showModelPicker) {
+            .sheet(isPresented: $agentPresentation.presenting(.modelPicker)) {
                 ModelPickerView(viewModel: viewModel)
                     .coversConversationComposers()
             }
-            .sheet(item: $presentedNote) { noteInfo in
+            .sheet(item: $agentPresentation.presentedNote) { noteInfo in
                 noteSheet(for: noteInfo).coversConversationComposers()
             }
-            .alert("Rename Agent", isPresented: $showRenameAlert) {
-                TextField("Agent name", text: $renameText)
+            .alert("Rename Agent", isPresented: $agentPresentation.presentingRename) {
+                TextField("Agent name", text: $agentPresentation.renameDraft)
                 Button("Rename", action: renameAgent)
                     .disabledWhileReadOnly()
                 Button("Cancel", role: .cancel) {}
@@ -322,7 +314,7 @@ private extension ConversationViewContent {
             onNavigateToAgent: navigateToAgent,
             usesWorkspaceDesign: usesWorkspaceDesign,
             answeringWorkspaceQuestions: $answeringWorkspaceQuestions
-        ) { showDemoCover = true }
+        ) { agentPresentation.present(.demoCover) }
     }
 
     /// Presented-or-not binding for the dismiss-failure alert, hoisted out of
@@ -355,7 +347,7 @@ private extension ConversationViewContent {
             nativeAgentMenu
             .confirmationDialog(
                 "Delete Agent?",
-                isPresented: $showDeleteConfirmation,
+                isPresented: $agentPresentation.presenting(.deleteConfirmation),
                 titleVisibility: .visible
             ) {
                 Button("Delete", role: .destructive, action: deleteAgent)
@@ -377,12 +369,11 @@ private extension ConversationViewContent {
         switch action {
         case .changeModel:
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            showModelPicker = true
+            agentPresentation.present(.modelPicker)
         case .delete:
-            showDeleteConfirmation = true
+            agentPresentation.present(.deleteConfirmation)
         case .rename:
-            renameText = viewModel.agentName
-            showRenameAlert = true
+            agentPresentation.present(.rename(draft: viewModel.agentName))
         }
     }
 
@@ -423,7 +414,7 @@ private extension ConversationViewContent {
     /// Note detail sheet content for a tapped note reference.
     private func noteSheet(for noteInfo: NoteSheetInfo) -> some View {
         ConversationNoteSheet(noteInfo: noteInfo, session: session) {
-            presentedNote = nil
+            agentPresentation.dismissNote()
         }
     }
 
@@ -438,7 +429,7 @@ private extension ConversationViewContent {
     /// Delete-confirmation action: deletes the agent then dismisses this view.
     private func deleteAgent() {
         HapticManager.notification(.warning)
-        selfInitiatedDelete = true
+        agentPresentation.beginDeletion()
         Task {
             do {
                 _ = try await session.connection.request(
@@ -454,7 +445,7 @@ private extension ConversationViewContent {
                     navigateBack()
                 }
             } catch {
-                selfInitiatedDelete = false
+                agentPresentation.deletionFailed()
                 AppLog.userInterface.error("[ConversationView] Failed to delete agent: \(error)")
             }
         }
@@ -462,7 +453,7 @@ private extension ConversationViewContent {
 
     /// Rename-alert action: applies the trimmed name if non-empty.
     private func renameAgent() {
-        let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newName = agentPresentation.renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !newName.isEmpty else { return }
         Task {
             do {
@@ -477,7 +468,7 @@ private extension ConversationViewContent {
     /// load or deleted while open): navigate back to the workspace's agent list.
     /// Skipped for a self-initiated delete (the Delete button already dismisses).
     private func handleAgentNotFoundIfNeeded() {
-        guard viewModel.agentNotFound, !selfInitiatedDelete else { return }
+        guard viewModel.agentNotFound, !agentPresentation.suppressesMissingAgentFallback else { return }
         if let onAgentUnavailable {
             onAgentUnavailable()
             return
@@ -486,7 +477,7 @@ private extension ConversationViewContent {
     }
 
     private func navigateToNote(noteId: String, workspaceId: String, title: String) {
-        presentedNote = NoteSheetInfo(noteId: noteId, workspaceId: workspaceId, noteTitle: title)
+        agentPresentation.present(.note(NoteSheetInfo(noteId: noteId, workspaceId: workspaceId, noteTitle: title)))
     }
 
     private func navigateToAgent(agentId: String, workspaceId: String, name: String) {

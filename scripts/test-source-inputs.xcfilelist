@@ -402,6 +402,7 @@ $(SRCROOT)/Intent/PersistenceManager+InvitedSessions.swift
 $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
 $(SRCROOT)/Intent/Presentation
+$(SRCROOT)/Intent/Presentation/AgentConversationPresentation.swift
 $(SRCROOT)/Intent/Presentation/BoundedMarkdownCache.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStep.swift
@@ -432,6 +433,7 @@ $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
+$(SRCROOT)/Intent/Presentation/QuestionWizardPresentation.swift
 $(SRCROOT)/Intent/Presentation/RetainedIPadPane.swift
 $(SRCROOT)/Intent/Presentation/SlashSkillContext.swift
 $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
@@ -445,6 +447,7 @@ $(SRCROOT)/Intent/Presentation/ToolClassifier.swift
 $(SRCROOT)/Intent/Presentation/TranscriptDisclosureState.swift
 $(SRCROOT)/Intent/Presentation/WatcherMessagePresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceAgentSelection.swift
+$(SRCROOT)/Intent/Presentation/WorkspaceChromePresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceDiffPresentation.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceDiffRows.swift
 $(SRCROOT)/Intent/Presentation/WorkspaceLinks.swift
@@ -1285,6 +1288,7 @@ $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
 $(SRCROOT)/IntentTests/RetainedTranscriptMemoryTests.swift
 $(SRCROOT)/IntentTests/SavedConnectionCardTests.swift
+$(SRCROOT)/IntentTests/ScreenPresentationStateTests.swift
 $(SRCROOT)/IntentTests/ScriptListPagingTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorCapabilitiesTests.swift
 $(SRCROOT)/IntentTests/ScriptMonitorPresentationTests+Conversation.swift

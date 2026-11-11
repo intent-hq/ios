@@ -20,9 +20,8 @@ struct RootView: View {
     @State private var statusConsumer = UUID()
     @State private var statusWorkspaceId: String?
     @State private var isSearchingWorkspaces = false
-    @State private var showingCreateWorkspace = false
-    @State private var showingConnections = false
-    @State private var showingConnectionSwitcher = false
+    /// Regular width only; compact width's list owns its own value.
+    @State private var workspacePresentation = WorkspaceChromePresentation.none
     @State private var conversationIsPopping = false
     /// Modal layers open in this window; keeps only the foremost chat's composer.
     @State private var composerCoverage = ComposerCoverage()
@@ -129,8 +128,9 @@ struct RootView: View {
         } else {
             // iPad: NavigationSplitView with sidebar selection
             WorkspaceConnectionSwitcher(
-                isPresented: $showingConnectionSwitcher,
-                isEnabled: isWorkspaceFlow && !showingConnections && !showingCreateWorkspace
+                isPresented: $workspacePresentation.presenting(.switcher),
+                isEnabled: isWorkspaceFlow && !workspacePresentation.isPresenting(.connections)
+                    && !workspacePresentation.isPresenting(.createWorkspace)
                     && coordinator.selectedSection == .workspaces,
                 onReveal: prepareConnectionSwitcher
             ) {
@@ -143,17 +143,17 @@ struct RootView: View {
                 hostsVerticalBarButton: false,
                 onCreateWorkspace: createWorkspace
             ) {
-                showingConnections = true
+                workspacePresentation.setPresenting(.connections, true)
             })
             .onChange(of: coordinator.shouldDismissWorkspaceCreation) { _, shouldDismiss in
-                if shouldDismiss { showingCreateWorkspace = false }
+                if shouldDismiss { workspacePresentation.dismissWorkspaceCreation() }
             }
-            .sheet(isPresented: $showingCreateWorkspace) {
+            .sheet(isPresented: $workspacePresentation.presenting(.createWorkspace)) {
                 CreateWorkspaceView(session: session, coordinator: coordinator)
                     .environment(coordinator)
                     .coversConversationComposers()
             }
-            .sheet(isPresented: $showingConnections) {
+            .sheet(isPresented: $workspacePresentation.presenting(.connections)) {
                 ConnectionsView()
                     .environment(coordinator)
                     .coversConversationComposers()
@@ -457,7 +457,6 @@ private extension RootView {
     }
 
     func createWorkspace() {
-        showingConnectionSwitcher = false
-        if coordinator.canCreateWorkspace { showingCreateWorkspace = true }
+        workspacePresentation.createWorkspace(canCreate: coordinator.canCreateWorkspace)
     }
 }

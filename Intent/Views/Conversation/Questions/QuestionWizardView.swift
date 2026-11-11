@@ -35,12 +35,9 @@ struct QuestionWizardView: View {
     @State private var idx = 0
     @State private var movingForward = true
     @State private var drafts: [DraftAnswer]
-    @State private var confirmingDismiss = false
-    @State private var dismissed = false
+    @State private var wizardPresentation = QuestionWizardPresentation()
     @State private var stepContentHeights: [Int: CGFloat] = [:]
     @State private var answerFocused = false
-    @State private var showsPhotos = false
-    @State private var showsFiles = false
     @State private var answerComposerHeight: CGFloat = Constants.Conversation.Design.Composer.minimumHeight
 
     init(
@@ -121,8 +118,8 @@ struct QuestionWizardView: View {
         .modifier(QuestionAttachmentPickers(
             attachments: attachments,
             workspaceId: workspaceId,
-            showsPhotos: $showsPhotos,
-            showsFiles: $showsFiles
+            showsPhotos: $wizardPresentation.presenting(.photos),
+            showsFiles: $wizardPresentation.presenting(.files)
         ))
         .onChange(of: collapsed) { _, collapsed in
             if collapsed { answerFocused = false }
@@ -147,8 +144,8 @@ struct QuestionWizardView: View {
                 isLast: isLast,
                 onSubmit: handleNext,
                 onTextChange: markCurrentDraftUnskipped,
-                onPhotos: { showsPhotos = true },
-                onFiles: { showsFiles = true },
+                onPhotos: { wizardPresentation.setPresenting(.photos, true) },
+                onFiles: { wizardPresentation.setPresenting(.files, true) },
                 onPasteImages: attachments.pasteImages,
                 photosEnabled: attachments.remainingPhotoImageCount != 0
             )
@@ -174,12 +171,11 @@ struct QuestionWizardView: View {
         .animation(wizardAnimation, value: collapsed)
         .confirmationDialog(
             "Dismiss questions?",
-            isPresented: $confirmingDismiss,
+            isPresented: $wizardPresentation.presenting(.dismissConfirmation),
             titleVisibility: .visible
         ) {
             Button("Dismiss questions", role: .destructive) {
-                guard !dismissed, !submitted, !isRemoteReadOnly else { return }
-                dismissed = true
+                guard wizardPresentation.confirmDismiss(isSubmitting: submitted, isReadOnly: isRemoteReadOnly) else { return }
                 onDismiss?()
             }
             Button("Cancel", role: .cancel) {}
@@ -200,9 +196,9 @@ struct QuestionWizardView: View {
             QuestionWizardCollapsedBanner(
                 questionCount: questions.count,
                 showsDismiss: onDismiss != nil,
-                dismissed: dismissed,
+                dismissed: wizardPresentation.isDismissed,
                 onExpand: { collapsed = false },
-                onDismiss: { confirmingDismiss = true },
+                onDismiss: { wizardPresentation.setPresenting(.dismissConfirmation, true) },
                 usesWorkspaceDesign: workspaceAvailableHeight != nil
             )
         } else {
@@ -219,9 +215,9 @@ struct QuestionWizardView: View {
                 index: step,
                 isMulti: questions[step].multiSelect,
                 showsDismiss: onDismiss != nil,
-                dismissed: dismissed,
+                dismissed: wizardPresentation.isDismissed,
                 onIgnore: { collapsed = true },
-                onDismiss: { confirmingDismiss = true }
+                onDismiss: { wizardPresentation.setPresenting(.dismissConfirmation, true) }
             )
             QuestionStepView(
                 step: step,
@@ -236,8 +232,8 @@ struct QuestionWizardView: View {
                 onSubmit: handleNext,
                 onTextChange: { drafts[step].skipped = false },
                 isActive: step == idx && !collapsed && isPaneVisible,
-                onPhotos: { showsPhotos = true },
-                onFiles: { showsFiles = true },
+                onPhotos: { wizardPresentation.setPresenting(.photos, true) },
+                onFiles: { wizardPresentation.setPresenting(.files, true) },
                 onPasteImages: attachments.pasteImages,
                 photosEnabled: attachments.remainingPhotoImageCount != 0
             )
@@ -258,7 +254,7 @@ struct QuestionWizardView: View {
             showNext: usesWorkspaceDesign || Self.showsNext(isMulti: isMulti, isLast: isLast, hasFreeText: hasText),
             nextDisabled: (usesWorkspaceDesign || isMulti || isLast) && drafts[step].sel.isEmpty && !hasText,
             submitted: submitted,
-            dismissed: dismissed,
+            dismissed: wizardPresentation.isDismissed,
             onBack: handleBack,
             onSkip: handleSkip,
             onNext: handleNext,
@@ -281,7 +277,7 @@ struct QuestionWizardView: View {
     private func advance() {
         if idx >= questions.count - 1 {
             // Answers wait in the drafts until the Mac is back.
-            guard !submitted, !dismissed, !isRemoteReadOnly else { return }
+            guard !submitted, !wizardPresentation.isDismissed, !isRemoteReadOnly else { return }
             onComplete(buildAnswers())
             return
         }
