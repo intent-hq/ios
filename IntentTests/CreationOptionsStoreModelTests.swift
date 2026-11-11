@@ -92,7 +92,7 @@ extension CreationOptionsStoreTests {
         fake.errorMap["models.list"] = NSError(domain: "t", code: -1)
         await store.loadModelsIfNeeded(providerId: "auggie")
         try await waitFor("refresh read") { fake.paramsForMethod("models.list").count == 3 }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitFor("failed refresh to settle") { store.modelCatalog(for: "auggie").loadFailed }
         #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
     }
 
