@@ -198,6 +198,33 @@ extension SpecialistInfo {
         }
     }
 
+    /// Pauses live event and reconnect observation while this workspace's
+    /// stores sit offscreen in `WorkspaceDetailStoresCache`, retaining cached rows.
+    func suspendObservation() {
+        fetchDebounceTask?.cancel()
+        fetchDebounceTask = nil
+        if let handlerId = eventHandlerId {
+            connectionManager.removeEventHandler(id: handlerId)
+            eventHandlerId = nil
+        }
+        connectionObserver = nil
+    }
+
+    /// Restores reconnect and event observation when the workspace returns on screen.
+    func resumeObservation() {
+        if connectionObserver == nil {
+            connectionObserver = connectionManager.connectionStatePublisher
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] state in
+                    if state == .connected {
+                        Task { await self?.onConnected() }
+                    }
+                }
+        }
+        startObservingEvents()
+    }
+
     func fetchSpecialists() async -> [SpecialistInfo] {
         do {
             let result = try await connectionManager.request("specialist.list")

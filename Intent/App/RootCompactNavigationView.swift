@@ -3,9 +3,9 @@ import SwiftUI
 extension RootView {
     @ViewBuilder
     var compactNavigationView: some View {
-        NavigationStack(path: $noteStack) {
+        NavigationStack(path: $navigation.noteStack) {
             WorkspaceListView(workspaceStore: session.workspaceStore)
-                .navigationDestination(isPresented: $showingWorkspaceDetail) {
+                .navigationDestination(isPresented: $navigation.showingWorkspaceDetail) {
                     if let workspaceId = coordinator.selectedWorkspaceId {
                         WorkspaceDetailView(workspaceId: workspaceId, session: session, storesCache: coordinator.workspaceDetailStores)
                             .pullRequestLinkRouting()
@@ -15,12 +15,12 @@ extension RootView {
                             #else
                             .toolbar(.visible, for: .navigationBar)
                             #endif
-                            .navigationDestination(isPresented: $showingConversation) {
+                            .navigationDestination(isPresented: $navigation.isShowingConversation) {
                                 conversationDestination
                                     .pullRequestLinkRouting()
                                     .modifier(WorkspaceActionLauncherToolbar())
                             }
-                            .navigationDestination(isPresented: $showingNoteDetail) {
+                            .navigationDestination(isPresented: $navigation.isShowingCompactNoteDetail) {
                                 compactNoteDetail
                             }
                     }
@@ -35,55 +35,54 @@ extension RootView {
         .onChange(of: coordinator.conversationRequestId) {
             syncNavigationState()
         }
-        .onChange(of: showingWorkspaceDetail) { _, newValue in
+        .onChange(of: navigation.showingWorkspaceDetail) { _, newValue in
             if newValue {
-                if pendingConversationPush {
+                if navigation.conversationPhase == .pendingAfterWorkspaceDetail {
                     DispatchQueue.main.async {
-                        showingConversation = true
-                        pendingConversationPush = false
+                        if navigation.conversationPhase == .pendingAfterWorkspaceDetail {
+                            navigation.conversationPhase = .presented
+                        }
                     }
                 }
-                if pendingNoteDetailPush {
+                if navigation.compactNotePhase == .pendingAfterWorkspaceDetail {
                     DispatchQueue.main.async {
-                        showingNoteDetail = true
-                        pendingNoteDetailPush = false
+                        if navigation.compactNotePhase == .pendingAfterWorkspaceDetail {
+                            navigation.compactNotePhase = .presented
+                        }
                     }
                 }
-            }
-            if !newValue, case .workspaceDetail = coordinator.currentScreen {
-                coordinator.onBackToWorkspaceList()
-            }
-            if !newValue, case .agentConversation = coordinator.currentScreen {
-                coordinator.onBackToWorkspaceList()
-            }
-            if !newValue, case .noteDetail = coordinator.currentScreen {
-                coordinator.onBackToWorkspaceList()
+            } else {
+                switch coordinator.currentScreen {
+                case .workspaceDetail, .agentConversation, .noteDetail:
+                    coordinator.onBackToWorkspaceList()
+                default:
+                    break
+                }
             }
         }
-        .onChange(of: showingConversation) { _, newValue in
-            if !newValue, case .agentConversation = coordinator.currentScreen {
+        .onChange(of: navigation.conversationPhase) { oldPhase, newPhase in
+            if oldPhase == .presented, newPhase == .hidden, case .agentConversation = coordinator.currentScreen {
                 coordinator.onBackToWorkspaceDetail()
             }
         }
-        .onChange(of: showingNoteDetail) { _, newValue in
-            if !newValue, case .noteDetail = coordinator.currentScreen {
+        .onChange(of: navigation.compactNotePhase) { oldPhase, newPhase in
+            if oldPhase == .presented, newPhase == .hidden, case .noteDetail = coordinator.currentScreen {
                 coordinator.onBackFromNote()
             }
         }
     }
 
     private var compactNoteDetail: some View {
-        NoteDetailView(
-            noteId: noteDetailNoteId,
-            workspaceId: noteDetailWorkspaceId,
-            noteTitle: noteDetailNoteTitle,
+        let target = navigation.compactNoteTarget ?? NoteDestination(noteId: "", workspaceId: "", noteTitle: "")
+        return NoteDetailView(
+            noteId: target.noteId,
+            workspaceId: target.workspaceId,
+            noteTitle: target.noteTitle,
             session: session
         ) { noteId, workspaceId, title in
-            noteDetailNoteId = noteId
-            noteDetailWorkspaceId = workspaceId
-            noteDetailNoteTitle = title
+            navigation.compactNoteTarget = NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title)
         }
-        .id(noteDetailNoteId)
+        .id(target.noteId)
         .pullRequestLinkRouting()
         .modifier(WorkspaceActionLauncherToolbar())
     }
@@ -97,26 +96,27 @@ extension RootView {
         case .workspaceDetail:
             syncWorkspaceDetail()
         default:
-            resetNavigationState()
+            navigation.reset()
         }
     }
 
     private func syncAgentConversation(agentId: String, workspaceId: String, agentName: String) {
-        let agentChanged = conversationAgentId != agentId
-        let isNewRequest = handledConversationRequestId != coordinator.conversationRequestId
-        handledConversationRequestId = coordinator.conversationRequestId
-        conversationAgentId = agentId
-        conversationWorkspaceId = workspaceId
-        conversationAgentName = agentName
-        if !noteStack.isEmpty { noteStack = NavigationPath() }
-        if showingNoteDetail { showingNoteDetail = false }
+        let agentChanged = navigation.conversationTarget?.agentId != agentId
+        let isNewRequest = navigation.handledConversationRequestId != coordinator.conversationRequestId
+        navigation.handledConversationRequestId = coordinator.conversationRequestId
+        navigation.conversationTarget = ConversationDestinationView.Target(
+            agentId: agentId,
+            workspaceId: workspaceId,
+            agentName: agentName
+        )
+        navigation.clearNotes()
 
-        if !showingWorkspaceDetail {
-            showingWorkspaceDetail = true
-            pendingConversationPush = true
-        } else if !showingConversation {
-            if Self.canPushConversationNow(repushInFlight: programmaticConversationDismiss) {
-                showingConversation = true
+        if !navigation.showingWorkspaceDetail {
+            navigation.showingWorkspaceDetail = true
+            navigation.conversationPhase = .pendingAfterWorkspaceDetail
+        } else if !navigation.isShowingConversation {
+            if Self.canPushConversationNow(repushInFlight: navigation.isRepushingConversation) {
+                navigation.conversationPhase = .presented
             }
         } else if Self.needsConversationRepush(
             agentChanged: agentChanged,
@@ -124,65 +124,53 @@ extension RootView {
             isRegularWidth: sizeClass == .regular
         ) {
             // iPad NavigationStack rebuild race: when the workspace detail is
-            // rebuilt (different workspace) but showingConversation is still
-            // true, SwiftUI may not push the new conversation. Tear down
-            // first, then re-push on the next runloop tick so the rebuilt
-            // NavigationStack accepts the new destination.
-            programmaticConversationDismiss = true
-            showingConversation = false
+            // rebuilt (different workspace) while presented, tear down first,
+            // then re-push on the next runloop tick so the rebuilt stack
+            // accepts the new destination without misfiring user-back handlers.
+            navigation.conversationPhase = .repushing
             let pendingAgentId = agentId
-            // Ordering note: the onChange(of: showingConversation) pass for the
-            // tear-down above runs in the current runloop's view update, before
-            // this next-tick block, so the flag is normally consumed there and
-            // the clear below is just a backstop.
             DispatchQueue.main.async {
-                programmaticConversationDismiss = false
                 if Self.shouldRepushConversation(
                     currentScreen: coordinator.currentScreen,
                     pendingAgentId: pendingAgentId,
-                    conversationAgentId: conversationAgentId
+                    conversationAgentId: navigation.conversationTarget?.agentId ?? ""
                 ) {
-                    showingConversation = true
+                    navigation.conversationPhase = .presented
+                } else if navigation.conversationPhase == .repushing {
+                    navigation.conversationPhase = .hidden
                 }
             }
         }
-        // If showingConversation is already true and agent changed,
-        // the .id(conversationAgentId) modifier forces SwiftUI to
-        // destroy and recreate ConversationView with fresh @State-owned state
     }
 
     private func syncNoteDetail(noteId: String, workspaceId: String, noteTitle: String) {
+        navigation.hideConversation()
         if sizeClass == .compact {
-            // iPhone: use isPresented-based navigation (not noteStack)
-            noteDetailNoteId = noteId
-            noteDetailWorkspaceId = workspaceId
-            noteDetailNoteTitle = noteTitle
-            if showingConversation { showingConversation = false }
-            if !showingWorkspaceDetail {
-                showingWorkspaceDetail = true
-                pendingNoteDetailPush = true
-            } else if !showingNoteDetail {
-                showingNoteDetail = true
+            navigation.compactNoteTarget = NoteDestination(
+                noteId: noteId,
+                workspaceId: workspaceId,
+                noteTitle: noteTitle
+            )
+            if !navigation.showingWorkspaceDetail {
+                navigation.showingWorkspaceDetail = true
+                navigation.compactNotePhase = .pendingAfterWorkspaceDetail
+            } else if !navigation.isShowingCompactNoteDetail {
+                navigation.compactNotePhase = .presented
             }
         } else {
-            // iPad: use noteStack path-based navigation
-            if showingConversation { showingConversation = false }
-            if !showingWorkspaceDetail {
-                showingWorkspaceDetail = true
+            if !navigation.showingWorkspaceDetail {
+                navigation.showingWorkspaceDetail = true
             }
-            // Tear down then rebuild on next runloop tick so a freshly
-            // rebuilt NavigationStack (e.g. after workspace switch) picks
-            // up the new destination reliably.
-            if !noteStack.isEmpty {
-                noteStack = NavigationPath()
+            if !navigation.noteStack.isEmpty {
+                navigation.noteStack = NavigationPath()
             }
             let pendingNoteId = noteId
             let pendingWorkspaceId = workspaceId
             let pendingTitle = noteTitle
             DispatchQueue.main.async {
                 if case .noteDetail(let curId, _, _) = coordinator.currentScreen, curId == pendingNoteId {
-                    noteStack = NavigationPath()
-                    noteStack.append(NoteDestination(
+                    navigation.noteStack = NavigationPath()
+                    navigation.noteStack.append(NoteDestination(
                         noteId: pendingNoteId,
                         workspaceId: pendingWorkspaceId,
                         noteTitle: pendingTitle
@@ -193,17 +181,9 @@ extension RootView {
     }
 
     private func syncWorkspaceDetail() {
-        if !showingWorkspaceDetail { showingWorkspaceDetail = true }
-        if showingConversation { showingConversation = false }
-        if showingNoteDetail { showingNoteDetail = false }
-        if !noteStack.isEmpty { noteStack = NavigationPath() }
-    }
-
-    private func resetNavigationState() {
-        if showingWorkspaceDetail { showingWorkspaceDetail = false }
-        if showingConversation { showingConversation = false }
-        if showingNoteDetail { showingNoteDetail = false }
-        if !noteStack.isEmpty { noteStack = NavigationPath() }
+        if !navigation.showingWorkspaceDetail { navigation.showingWorkspaceDetail = true }
+        navigation.hideConversation()
+        navigation.clearNotes()
     }
 
     static func needsConversationRepush(
@@ -222,8 +202,6 @@ extension RootView {
     /// tear-down/re-push branch in `syncNavigationState()`. Only re-push when
     /// the coordinator is still showing the same conversation; if the user has
     /// navigated back in the meantime, the re-push must be dropped.
-    /// The screen match compares agent ids only, which assumes agent ids are
-    /// globally unique across workspaces (`agent-{uuid}`).
     static func shouldRepushConversation(
         currentScreen: AppScreen,
         pendingAgentId: String,

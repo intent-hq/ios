@@ -4,6 +4,90 @@ import Testing
 
 @MainActor
 struct NoteStoreLiveStateTests {
+    @Test(arguments: [false, true])
+    func queuedConnectionDeliveryCannotReviveSuspendedNotes(resumedObserver: Bool) async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        store.startObservingEvents(workspaceId: "ws-1")
+        fake.responseMap["note.list"] = ["notes": []]
+        fake.responseMap["note.subscribe"] = ["subscriptionId": "returned-sub"]
+        if resumedObserver {
+            store.suspendObservation()
+            store.resumeObservation(workspaceId: "ws-1")
+        }
+
+        // receive(on:) has queued the connected emission, but cannot deliver it
+        // until this main-actor turn ends. Suspend before that delivery.
+        fake.simulateConnect()
+        store.suspendObservation()
+        let suspendedGeneration = store.liveSubscriptionGeneration
+        try await expectNever("offscreen note work", within: .milliseconds(100)) {
+            fake.didCallMethod("note.list") || fake.didCallMethod("note.subscribe")
+        }
+        #expect(store.liveSubscriptionGeneration == suspendedGeneration)
+        #expect(store.liveSubscription == .idle)
+
+        // A further reconnect while offscreen must not leave a stale live
+        // subscription that causes resume to skip installing a new handler.
+        fake.simulateDisconnect()
+        fake.simulateConnect()
+        store.resumeObservation(workspaceId: "ws-1")
+        try await waitUntil("returned note subscription") { fake.hasSubscriptionHandler(id: "returned-sub") }
+        let snapshot = try #require(SubscriptionPush.parse(method: "subscription.push", params: [
+            "subscriptionId": "returned-sub", "kind": "snapshot", "seq": 0,
+            "snapshot": [["id": "n-1", "title": "Returned", "content": "", "createdAt": "", "updatedAt": ""]]
+        ]))
+        fake.deliverSubscriptionPush(snapshot)
+        #expect(store.notes.first?.title == "Returned")
+        let delta = try #require(SubscriptionPush.parse(method: "subscription.push", params: [
+            "subscriptionId": "returned-sub", "kind": "delta", "seq": 1,
+            "delta": [
+                "added": [],
+                "updated": [
+                    ["id": "n-1", "title": "Edited later", "content": "", "createdAt": "", "updatedAt": "later"]
+                ],
+                "removedIds": []
+            ]
+        ]))
+        fake.deliverSubscriptionPush(delta)
+        #expect(store.notes.first?.title == "Edited later")
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func scheduledReconnectCannotOutliveItsObserver(resumedObserver: Bool, reactivate: Bool) async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        store.startObservingEvents(workspaceId: "ws-1")
+        fake.responseMap["note.list"] = ["notes": []]
+        fake.responseMap["note.subscribe"] = ["subscriptionId": "returned-sub"]
+        if resumedObserver {
+            store.suspendObservation()
+            store.resumeObservation(workspaceId: "ws-1")
+        }
+        fake.simulateConnect()
+        // Exercise the exact task scheduled by the observer, with suspension
+        // and reactivation before the task gets a chance to start.
+        let queuedReconnect = store.scheduleReconnect()
+        store.suspendObservation()
+        if !reactivate {
+            let suspendedGeneration = store.liveSubscriptionGeneration
+            await queuedReconnect.value
+            #expect(store.liveSubscriptionGeneration == suspendedGeneration)
+            #expect(!fake.didCallMethod("note.list"))
+            #expect(!fake.didCallMethod("note.subscribe"))
+            return
+        }
+        store.resumeObservation(workspaceId: "ws-1")
+        let resumedGeneration = store.liveSubscriptionGeneration
+        await queuedReconnect.value
+        try await waitUntil("returned subscription") { fake.hasSubscriptionHandler(id: "returned-sub") }
+        #expect(store.liveSubscriptionGeneration == resumedGeneration)
+        try await expectNever("stale reconnect refetch", within: .milliseconds(100)) {
+            fake.didCallMethod("note.list")
+        }
+        #expect(fake.requestLog.filter { $0.method == "note.subscribe" }.count == 1)
+    }
+
     // MARK: - Snapshot tests
 
     @Test func appliesSnapshot() {

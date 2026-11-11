@@ -9,8 +9,15 @@ struct RepoOwnerAvatarView: View {
     var size: CGFloat = Constants.RepoOwnerAvatar.defaultSize
     var fallbackSymbol: String?
     var cornerRadius: CGFloat?
+    var loader: RemoteImageLoader = .shared
 
     @Environment(\.colorScheme) private var colorScheme
+    @State private var loadedAvatar: LoadedAvatar?
+
+    private struct LoadedAvatar {
+        let url: URL
+        let image: UIImage
+    }
 
     /// URL for a GitHub owner avatar, or nil when the owner is missing/empty.
     static func avatarURL(for owner: String?) -> URL? {
@@ -18,20 +25,26 @@ struct RepoOwnerAvatarView: View {
         return URL(string: "https://github.com/\(owner).png?size=\(Constants.RepoOwnerAvatar.requestPixelSize)")
     }
 
+    private var avatarURL: URL? { Self.avatarURL(for: owner) }
+
     var body: some View {
         Group {
-            if let url = Self.avatarURL(for: owner) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable().scaledToFill()
-                    default:
-                        fallbackIcon
-                    }
-                }
+            if let avatarURL, let loadedAvatar, loadedAvatar.url == avatarURL {
+                Image(uiImage: loadedAvatar.image)
+                    .resizable()
+                    .scaledToFill()
             } else {
                 fallbackIcon
+            }
+        }
+        .task(id: avatarURL) {
+            guard let url = avatarURL else {
+                loadedAvatar = nil
+                return
+            }
+            guard loadedAvatar?.url != url else { return }
+            if let image = try? await loader.image(for: url), !Task.isCancelled {
+                loadedAvatar = LoadedAvatar(url: url, image: image)
             }
         }
         .frame(width: size, height: size)

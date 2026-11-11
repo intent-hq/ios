@@ -130,7 +130,10 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
             )
         } catch {
             return AnyAttachment(
-                IntentFileFailureAttachment(altText: text) as any Textual.Attachment
+                IntentFileFailureAttachment(
+                    altText: text,
+                    retrySource: .file(workspaceId: resolvedWorkspaceId, path: link.path)
+                ) as any Textual.Attachment
             )
         }
     }
@@ -181,7 +184,10 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
                     workspaceId: link.workspaceId, assetId: link.assetId
                 ))
             }
-            return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+            return AnyAttachment(IntentFileFailureAttachment(
+                altText: text,
+                retrySource: .asset(workspaceId: link.workspaceId, assetId: link.assetId)
+            ) as any Textual.Attachment)
         }
     }
 
@@ -243,11 +249,32 @@ struct IntentFileImageAttachment: Attachment {
 /// fetch/decode failures.
 struct IntentFileFailureAttachment: Attachment {
     let altText: String
+    var retrySource: IntentFileVideoFailureAttachment.RetrySource?
+
+    nonisolated init(altText: String, retrySource: IntentFileVideoFailureAttachment.RetrySource? = nil) {
+        self.altText = altText
+        self.retrySource = retrySource
+    }
 
     var description: String { altText }
 
     var body: some View {
         ImageDecodeFailureView()
+            .accessibilityHint("Retries loading the image", isEnabled: retrySource != nil)
+            .accessibilityAddTraits(retrySource == nil ? [] : .isButton)
+    }
+
+    @MainActor
+    func prepareRetry(using loader: WorkspaceFileImageLoader) -> Bool {
+        switch retrySource {
+        case let .asset(workspaceId, assetId):
+            loader.forgetAssetFailure(workspaceId: workspaceId, assetId: assetId)
+        case let .file(workspaceId, path):
+            loader.forgetFailure(workspaceId: workspaceId, path: path)
+        case nil:
+            return false
+        }
+        return true
     }
 
     func sizeThatFits(_: ProposedViewSize, in environment: TextEnvironmentValues) -> CGSize {

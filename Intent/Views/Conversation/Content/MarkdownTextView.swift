@@ -124,6 +124,9 @@ struct MarkdownTextView: View {
                 } else if let failure = attachment.base as? IntentFileVideoFailureAttachment,
                           failure.prepareRetry(using: session?.workspaceFileImageLoader ?? .shared) {
                     attachmentAttempt += 1
+                } else if let failure = attachment.base as? IntentFileFailureAttachment,
+                          failure.prepareRetry(using: session?.workspaceFileImageLoader ?? .shared) {
+                    attachmentAttempt += 1
                 }
             }
             // Textual resolves URLs once per attributed string. Recreate that

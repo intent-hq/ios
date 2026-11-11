@@ -5,6 +5,118 @@ import Vision
 import VisionKit
 #endif
 
+/// Pure state machine for `QRScannerView` (idle -> validating -> fingerprint
+/// confirmation or error), eliminating mutually invalid Boolean/Optional
+/// combinations and keeping scan/probe/trust transitions unit-testable without
+/// VisionKit camera hardware.
+struct QRScannerSessionState: Equatable {
+    enum Phase: Equatable {
+        case confirmingFingerprint(payload: PairingPayload, fingerprint: String)
+        case error(message: String, autoClearID: UUID?)
+        case idle
+        case validating
+    }
+
+    static let invalidCodeMessage = "Invalid QR code. Scan the code from Settings -> Mobile in the desktop app."
+
+    private(set) var phase: Phase = .idle
+
+    var isValidating: Bool {
+        switch phase {
+        case .validating, .confirmingFingerprint:
+            return true
+        case .idle, .error:
+            return false
+        }
+    }
+
+    var errorMessage: String? {
+        if case let .error(message, _) = phase { return message }
+        return nil
+    }
+
+    var errorAutoClearID: UUID? {
+        if case let .error(_, id) = phase { return id }
+        return nil
+    }
+
+    var isConfirmingFingerprint: Bool {
+        if case .confirmingFingerprint = phase { return true }
+        return false
+    }
+
+    var probedFingerprint: String? {
+        if case let .confirmingFingerprint(_, fingerprint) = phase { return fingerprint }
+        return nil
+    }
+
+    enum ScanDecision: Equatable {
+        case ignoreWhileBusy
+        case invalidInput
+        case validate(PairingPayload)
+    }
+
+    mutating func receiveScannedCode(_ code: String) -> ScanDecision {
+        guard !isValidating else { return .ignoreWhileBusy }
+        guard let payload = PairingPayload.parse(code) else {
+            phase = .error(message: Self.invalidCodeMessage, autoClearID: UUID())
+            return .invalidInput
+        }
+        phase = .validating
+        return .validate(payload)
+    }
+
+    mutating func requestFingerprintConfirmation(payload: PairingPayload, fingerprint: String) {
+        phase = .confirmingFingerprint(payload: payload, fingerprint: fingerprint)
+    }
+
+    mutating func consumeConfirmedFingerprint() -> (payload: PairingPayload, fingerprint: String)? {
+        guard case let .confirmingFingerprint(payload, fingerprint) = phase else {
+            phase = .idle
+            return nil
+        }
+        phase = .validating
+        return (payload, fingerprint)
+    }
+
+    mutating func cancelConfirmation() {
+        if case .confirmingFingerprint = phase {
+            phase = .idle
+        }
+    }
+
+    mutating func fail(_ message: String) {
+        phase = .error(message: message, autoClearID: nil)
+    }
+
+    mutating func clearError(matching id: UUID) {
+        if case let .error(_, currentID) = phase, currentID == id {
+            phase = .idle
+        }
+    }
+
+    mutating func reset() {
+        phase = .idle
+    }
+}
+
+/// Suppresses consecutive scans of the same barcode until its cooldown expires.
+struct QRScannerDeduplicator: Equatable {
+    private(set) var lastScannedCode: String?
+
+    mutating func accept(_ candidates: [String]) -> String? {
+        guard let code = candidates.first, code != lastScannedCode else { return nil }
+        lastScannedCode = code
+        return code
+    }
+
+    mutating func expire(matching code: String) -> Bool {
+        guard lastScannedCode == code else { return false }
+        lastScannedCode = nil
+        return true
+    }
+}
+
 #if os(visionOS)
 /// DataScannerViewController (VisionKit live camera scanning) is unavailable
 /// on visionOS; keep the same API so call sites compile, and direct the user
@@ -49,47 +161,50 @@ struct QRScannerView: View {
     var onPaired: ((StoredConnection) -> Void)?
     var isEmbedded = false
     var onCancel: (() -> Void)?
-    @State private var isValidating = false
-    @State private var errorMessage: String?
-    @State private var pendingPayload: PairingPayload?
-    @State private var probedFingerprint: String?
-    @State private var showFingerprintConfirmation = false
+    @State private var scannerState = QRScannerSessionState()
     @State private var scannerAvailability: ScannerAvailability = .checking
-    @State private var errorAutoClearID: UUID?
     @State private var connectTask: Task<Void, Never>?
+
+    private var confirmationBinding: Binding<Bool> {
+        Binding(
+            get: { scannerState.isConfirmingFingerprint },
+            set: { presented in
+                if !presented { scannerState.cancelConfirmation() }
+            }
+        )
+    }
 
     var body: some View {
         ZStack {
             scannerLayer
             QRScannerOverlay(
                 showsGuide: scannerAvailability == .available,
-                isValidating: isValidating,
-                errorMessage: errorMessage,
+                isValidating: scannerState.isValidating,
+                errorMessage: scannerState.errorMessage,
                 isEmbedded: isEmbedded,
                 onCancel: cancel
             )
         }
         .preferredColorScheme(isEmbedded ? nil : .dark)
         .environment(\.colorScheme, .dark)
-        .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
+        .alert("Verify Server Identity", isPresented: confirmationBinding) {
             Button("Cancel", role: .cancel) {
-                pendingPayload = nil
-                isValidating = false
+                scannerState.cancelConfirmation()
             }
             Button("Trust & Connect") { trustPendingFingerprint() }
         } message: {
-            Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
+            Text("The server's TLS certificate fingerprint is:\n\n\(scannerState.probedFingerprint ?? "")\n\nDo you trust this server?")
         }
         .onDisappear { connectTask?.cancel() }
         .accessibilityAction(.escape, cancel)
         .task { await prepareScanner() }
-        .task(id: errorAutoClearID) { await clearErrorAfterDelay() }
+        .task(id: scannerState.errorAutoClearID) { await clearErrorAfterDelay() }
     }
 
     private func cancel() {
         connectTask?.cancel()
         connectTask = nil
-        pendingPayload = nil
+        scannerState.reset()
         if isEmbedded { onCancel?() } else { dismiss() }
     }
 
@@ -118,24 +233,18 @@ struct QRScannerView: View {
     }
 
     private func trustPendingFingerprint() {
-        if let payload = pendingPayload, let fingerprint = probedFingerprint {
-            pendingPayload = nil
-            connect(payload: payload, certFingerprint: fingerprint)
-        } else {
-            pendingPayload = nil
-            isValidating = false
-        }
+        guard let confirmed = scannerState.consumeConfirmedFingerprint() else { return }
+        connect(payload: confirmed.payload, certFingerprint: confirmed.fingerprint)
     }
 
     private func clearErrorAfterDelay() async {
-        guard errorAutoClearID != nil else { return }
+        guard let id = scannerState.errorAutoClearID else { return }
         do {
             try await Task.sleep(for: Constants.QRScanner.errorDisplayDuration)
         } catch {
             return
         }
-        errorMessage = nil
-        errorAutoClearID = nil
+        scannerState.clearError(matching: id)
     }
 
     private func prepareScanner() async {
@@ -167,38 +276,27 @@ struct QRScannerView: View {
     }
 
     private func handleScannedCode(_ code: String) {
-        guard !isValidating else { return }
-
-        // Parse both pairing-URI dialects (canonical `fp=` and legacy
-        // `certFingerprint=`); see PairingPayload.
-        guard let payload = PairingPayload.parse(code) else {
-            PairingDiagnostics.invalidInput()
-            errorMessage = "Invalid QR code. Scan the code from Settings -> Mobile in the desktop app."
-            errorAutoClearID = UUID()
+        switch scannerState.receiveScannedCode(code) {
+        case .ignoreWhileBusy:
             return
-        }
-
-        isValidating = true
-        errorAutoClearID = nil
-        errorMessage = nil
-
-        // A payload fingerprint is pinned directly; without one, PairingFlow
-        // probes the server cert like manual entry does and the user must
-        // trust it before connecting pinned over wss — never plain ws://.
-        connectTask = Task {
-            let resolution = await PairingFlow.resolveFingerprint(for: payload)
-            guard !Task.isCancelled else { return }
-            switch resolution {
-            case .pinned(let fingerprint):
-                connect(payload: payload, certFingerprint: fingerprint)
-            case .needsUserConfirmation(let fingerprint):
-                pendingPayload = payload
-                probedFingerprint = fingerprint
-                showFingerprintConfirmation = true
-            case .failed(let message):
-                errorAutoClearID = nil
-                errorMessage = message
-                isValidating = false
+        case .invalidInput:
+            PairingDiagnostics.invalidInput()
+            return
+        case .validate(let payload):
+            // A payload fingerprint is pinned directly; without one, PairingFlow
+            // probes the server cert like manual entry does and the user must
+            // trust it before connecting pinned over wss — never plain ws://.
+            connectTask = Task {
+                let resolution = await PairingFlow.resolveFingerprint(for: payload)
+                guard !Task.isCancelled else { return }
+                switch resolution {
+                case .pinned(let fingerprint):
+                    connect(payload: payload, certFingerprint: fingerprint)
+                case .needsUserConfirmation(let fingerprint):
+                    scannerState.requestFingerprintConfirmation(payload: payload, fingerprint: fingerprint)
+                case .failed(let message):
+                    scannerState.fail(message)
+                }
             }
         }
     }
@@ -223,9 +321,7 @@ struct QRScannerView: View {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                errorAutoClearID = nil
-                errorMessage = "Connection failed: \(error.localizedDescription)"
-                isValidating = false
+                scannerState.fail("Connection failed: \(error.localizedDescription)")
             }
         }
     }
@@ -277,7 +373,7 @@ struct QRCameraPreview: UIViewControllerRepresentable {
         var onCodeScanned: (String) -> Void
         var onUnavailable: () -> Void
         private weak var scanner: DataScannerViewController?
-        private var lastScannedCode: String?
+        private var deduplicator = QRScannerDeduplicator()
         private var resetTask: Task<Void, Never>?
         private var isActive = true
 
@@ -314,13 +410,11 @@ struct QRCameraPreview: UIViewControllerRepresentable {
         }
 
         private func process(_ items: [RecognizedItem]) {
-            let firstCode = items.lazy.compactMap { item -> String? in
+            let candidates = items.compactMap { item -> String? in
                 guard case .barcode(let barcode) = item else { return nil }
                 return barcode.payloadStringValue
-            }.first
-            guard let code = firstCode,
-                  code != lastScannedCode else { return }
-            lastScannedCode = code
+            }
+            guard let code = deduplicator.accept(candidates) else { return }
             onCodeScanned(code)
 
             // Reset after 3 seconds to allow re-scanning
@@ -329,8 +423,7 @@ struct QRCameraPreview: UIViewControllerRepresentable {
                 try? await Task.sleep(for: Constants.QRScanner.duplicateScanResetDelay)
                 guard !Task.isCancelled,
                       let self,
-                      lastScannedCode == code else { return }
-                lastScannedCode = nil
+                      deduplicator.expire(matching: code) else { return }
                 guard isActive, let scanner else { return }
                 scanner.stopScanning()
                 startScanning(scanner)

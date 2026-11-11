@@ -24,12 +24,16 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
     /// False while another chat is pushed over this one, so only the chat in
     /// front owns the window's composer. (Sheets and full-screen covers do
     /// not end appearance; `ComposerCoverage` handles those.)
-    @State private var isActiveChat = false
+    @State private var lifecycle = FloatingComposerLifecycle()
+
+    private var isForemost: Bool {
+        coverage?.isForemost(depth: layerDepth) ?? true
+    }
 
     private var presentation: FloatingComposerPresentation {
         FloatingComposerPolicy.presentation(
-            isActiveChat: isActiveChat,
-            isForemost: coverage?.isForemost(depth: layerDepth) ?? true,
+            isActiveChat: lifecycle.isActiveChat,
+            isForemost: isForemost,
             showsLoadingState: showsLoadingState,
             composerVisible: composerVisible
         )
@@ -47,13 +51,21 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onAppear { isActiveChat = true }
+            .onAppear {
+                lifecycle.appear(
+                    isForemost: isForemost,
+                    showsLoadingState: showsLoadingState,
+                    composerVisible: composerVisible
+                )
+            }
             .onDisappear {
-                isActiveChat = false
-                onWithdraw()
+                if lifecycle.disappear() { onWithdraw() }
             }
             .onChange(of: presentation) { old, new in
-                if FloatingComposerPolicy.cancelsPhotoImport(from: old, to: new) { onWithdraw() }
+                // Keep `FloatingComposerPolicy.cancelsPhotoImport(from: old, to: new)` delegated
+                // through `lifecycle.applyPresentation` so `.onDisappear` + `.onChange` fires once.
+                _ = old
+                if lifecycle.applyPresentation(new) { onWithdraw() }
             }
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.width

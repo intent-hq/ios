@@ -379,4 +379,30 @@ struct TaskStoreIntegrationTests {
             fake.didCallMethod("task.list")
         }
     }
+
+    @Test func overlappingFetchAllDropsStaleOlderReply() async throws {
+        let fake = FakeConnectionManager()
+        let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
+        fake.pendingMethods.insert("task.list")
+
+        let first = Task { await store.fetchAll() }
+        try await fake.waitForPendingRequests("task.list", count: 1)
+        let second = Task { await store.fetchAll() }
+        try await fake.waitForPendingRequests("task.list", count: 2)
+        #expect(store.isLoading)
+
+        fake.resolvePending("task.list", with: [
+            "tasks": [["id": "stale", "title": "Stale", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]]
+        ])
+        await first.value
+        #expect(store.tasks.isEmpty)
+        #expect(store.isLoading)
+
+        fake.resolvePending("task.list", with: [
+            "tasks": [["id": "fresh", "title": "Fresh", "status": "complete", "updatedAt": "2024-01-02T00:00:00Z"]]
+        ])
+        await second.value
+        #expect(store.tasks.map(\.id) == ["fresh"])
+        #expect(!store.isLoading)
+    }
 }

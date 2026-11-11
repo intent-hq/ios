@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 
 /// The per-workspace-page stores over the page's session connection. A window
@@ -12,6 +13,7 @@ final class WorkspaceDetailStores {
     let scriptStore: WorkspaceScriptStore
     let changesStore: WorkspaceChangesStore
     let filesStore: WorkspaceFilesStore
+    @ObservationIgnored private var consumers: Set<UUID> = []
 
     convenience init(session: BackendSession) {
         self.init(connection: session.connection, summaries: session.agentSummaries)
@@ -25,6 +27,23 @@ final class WorkspaceDetailStores {
         scriptStore = WorkspaceScriptStore(connection: connection)
         changesStore = WorkspaceChangesStore(connectionManager: connection)
         filesStore = WorkspaceFilesStore(connection: connection)
+    }
+
+    func retain(_ consumer: UUID, workspaceId: String) {
+        let wasEmpty = consumers.isEmpty
+        consumers.insert(consumer)
+        if wasEmpty {
+            agentStore.resumeObservation()
+            noteStore.resumeObservation(workspaceId: workspaceId)
+            scriptStore.resumeObservation()
+        }
+    }
+
+    func release(_ consumer: UUID) {
+        guard consumers.remove(consumer) != nil, consumers.isEmpty else { return }
+        agentStore.suspendObservation()
+        noteStore.suspendObservation()
+        scriptStore.suspendObservation()
     }
 }
 

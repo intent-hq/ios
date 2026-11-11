@@ -41,6 +41,7 @@ import Observation
 
     // Live-state subscription tracking
     @ObservationIgnored private var liveSubscription = LiveSubscription.idle
+    @ObservationIgnored private var liveSubscriptionGeneration = 0
     /// Read-only outside this file so local patches can reseed it.
     @ObservationIgnored private(set) var workspaceReconciler: DeltaReconciler<Workspace>?
     /// Reads the rest of a paged `workspace.subscribe` snapshot (protocol §6.9).
@@ -80,6 +81,7 @@ import Observation
     private func onConnected() async {
         // Reset live-state tracking on new connection. Unregister the old
         // handler if reconnecting (defensive: subscription is invalid after disconnect)
+        liveSubscriptionGeneration &+= 1
         if let oldId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
@@ -88,7 +90,7 @@ import Observation
 
         await fetchAll()
         subscribeToEvents()
-        await subscribeLiveState()
+        await subscribeLiveState(generation: liveSubscriptionGeneration)
     }
 
     // MARK: - Fetch
@@ -263,7 +265,7 @@ extension WorkspaceStore {
         }
     }
 
-    private func subscribeLiveState() async {
+    private func subscribeLiveState(generation: Int) async {
         // Initialize workspace reconciler
         workspaceReconciler = DeltaReconciler<Workspace>(
             getId: { dict in dict["id"] as? String },
@@ -275,6 +277,13 @@ extension WorkspaceStore {
             let result = try await connectionManager.request("workspace.subscribe", params: [
                 "replaceGroup": "ios-workspaces"
             ])
+            guard generation == liveSubscriptionGeneration else {
+                if let dict = result as? [String: Any], let subId = dict["subscriptionId"] as? String,
+                   connectionManager.connectionState == .connected {
+                    _ = try? await connectionManager.request("workspace.unsubscribe", params: ["subscriptionId": subId])
+                }
+                return
+            }
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
                 // Unregister old handler if we had one
@@ -288,6 +297,7 @@ extension WorkspaceStore {
                 AppLog.workspace.info("[WorkspaceStore] Subscribed to workspace.subscribe: \(subId)")
             }
         } catch {
+            guard generation == liveSubscriptionGeneration else { return }
             AppLog.workspace.warning("[WorkspaceStore] workspace.subscribe failed: \(error), falling back to legacy")
         }
     }
@@ -406,8 +416,13 @@ extension WorkspaceStore {
     }
 
     private func resnapshot() async {
+        let generation = liveSubscriptionGeneration
         liveSubscription.beginResnapshot()
-        defer { liveSubscription.endResnapshot() }
+        defer {
+            if generation == liveSubscriptionGeneration {
+                liveSubscription.endResnapshot()
+            }
+        }
 
         workspaceReconciler?.reset()
         snapshotFiller.cancel()
@@ -424,10 +439,12 @@ extension WorkspaceStore {
             }
         }
 
+        guard generation == liveSubscriptionGeneration else { return }
         liveSubscription.clearId()
 
         // Re-subscribe and refetch to bridge
-        await subscribeLiveState()
+        await subscribeLiveState(generation: generation)
+        guard generation == liveSubscriptionGeneration else { return }
         await fetchAll()
     }
 }

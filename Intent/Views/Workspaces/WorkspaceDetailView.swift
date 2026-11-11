@@ -19,9 +19,16 @@ struct WorkspaceDetailView: View {
     @State private var notesExpanded = true
     @State private var filesExpanded = true
     @State private var titleEditor = WorkspaceTitleEditor()
+    @State private var storesLease = StoresLease()
     @FocusState private var titleFocused: Bool
     @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
     @Environment(BackendSession.self) var session
+
+    private struct StoresLease {
+        let id = UUID()
+        var workspaceId: String?
+        var stores: WorkspaceDetailStores?
+    }
 
     init(
         workspaceId: String,
@@ -100,6 +107,7 @@ struct WorkspaceDetailView: View {
             }
         }
         .onAppear {
+            updateStoresLease(to: workspaceId)
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceOpened(
                     workspaceId: workspaceId,
@@ -115,6 +123,7 @@ struct WorkspaceDetailView: View {
         .onDisappear {
             titleEditor.cancel()
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
+            updateStoresLease(to: nil)
             // Remove only this workspace/connection pair, preserving other windows.
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
@@ -125,7 +134,8 @@ struct WorkspaceDetailView: View {
         }
         .onChange(of: workspaceId) { oldId, newId in
             titleEditor.cancel()
-            scriptStore.cancelPendingLaunch(workspaceId: oldId)
+            storesLease.stores?.scriptStore.cancelPendingLaunch(workspaceId: oldId)
+            updateStoresLease(to: newId)
             presentation.resetForWorkspaceChange()
             revealedSwipeTarget = nil
             if let connectionId = session.backendID?.connectionID {
@@ -202,6 +212,19 @@ struct WorkspaceDetailView: View {
 }
 
 private extension WorkspaceDetailView {
+    func updateStoresLease(to newWorkspaceId: String?) {
+        guard storesLease.workspaceId != newWorkspaceId else { return }
+        let nextStores = newWorkspaceId.map { id in
+            storesCache.stores(for: id) { WorkspaceDetailStores(session: storesSession) }
+        }
+        if let newWorkspaceId, let nextStores {
+            nextStores.retain(storesLease.id, workspaceId: newWorkspaceId)
+        }
+        storesLease.stores?.release(storesLease.id)
+        storesLease.workspaceId = newWorkspaceId
+        storesLease.stores = nextStores
+    }
+
     func saveTitle() {
         Task { await titleEditor.save(connection: session.connection, store: workspaceStore, isReadOnly: isRemoteReadOnly) }
     }

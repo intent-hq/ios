@@ -19,6 +19,7 @@ $(SRCROOT)/Intent/App/IntentApp.swift
 $(SRCROOT)/Intent/App/NavigationDestinations.swift
 $(SRCROOT)/Intent/App/RootCompactNavigationView.swift
 $(SRCROOT)/Intent/App/RootDetailContentView.swift
+$(SRCROOT)/Intent/App/RootNavigationState.swift
 $(SRCROOT)/Intent/App/RootView.swift
 $(SRCROOT)/Intent/App/WindowSceneActivator.swift
 $(SRCROOT)/Intent/App/WindowSceneTitle.swift
@@ -253,6 +254,7 @@ $(SRCROOT)/Intent/Services/CreationOptionsStore.swift
 $(SRCROOT)/Intent/Services/DaemonStartupStatus.swift
 $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/FileSyntaxHighlighter.swift
+$(SRCROOT)/Intent/Services/GitHubRepoStore+Branches.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/ImagePasteboard.swift
 $(SRCROOT)/Intent/Services/ImportedPhotoVideo.swift
@@ -273,6 +275,7 @@ $(SRCROOT)/Intent/Services/NetworkAvailability.swift
 $(SRCROOT)/Intent/Services/NetworkCopyDiagnostics.swift
 $(SRCROOT)/Intent/Services/NetworkPathMonitoring.swift
 $(SRCROOT)/Intent/Services/NoteStore+Events.swift
+$(SRCROOT)/Intent/Services/NoteStore+LiveState.swift
 $(SRCROOT)/Intent/Services/NoteStore+TaskStatus.swift
 $(SRCROOT)/Intent/Services/NoteStore.swift
 $(SRCROOT)/Intent/Services/NoteStoreCollections.swift
@@ -310,6 +313,7 @@ $(SRCROOT)/Intent/Services/WorkspaceChangesStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceCreationImages.swift
 $(SRCROOT)/Intent/Services/WorkspaceCreationVideoSubmission.swift
 $(SRCROOT)/Intent/Services/WorkspaceDiffLoader.swift
+$(SRCROOT)/Intent/Services/WorkspaceFileImageLoader+Documents.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceFilesStore.swift
 $(SRCROOT)/Intent/Services/WorkspacePDF.swift
@@ -321,6 +325,7 @@ $(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore+Details.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore+Events.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptMonitorsStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptRepository.swift
+$(SRCROOT)/Intent/Services/WorkspaceScriptStore+Actions.swift
 $(SRCROOT)/Intent/Services/WorkspaceScriptStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore+Loading.swift
 $(SRCROOT)/Intent/Services/WorkspaceStatusStore+Pages.swift
@@ -975,6 +980,7 @@ $(SRCROOT)/IntentTests/ProposalActionStoreTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
 $(SRCROOT)/IntentTests/PullRequestDetailTests.swift
 $(SRCROOT)/IntentTests/PullRequestListStoreTests.swift
+$(SRCROOT)/IntentTests/QRScannerTests.swift
 $(SRCROOT)/IntentTests/QuestionAttachmentLifecycleTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
 $(SRCROOT)/IntentTests/QuestionWizardLayoutTests.swift

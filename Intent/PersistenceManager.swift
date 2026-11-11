@@ -268,6 +268,7 @@ extension PersistenceManager {
     func deleteConnection(id: UUID) -> Bool {
         guard var connections = loadConnectionsWithOutcome().connections else { return false }
         guard let existing = connections.first(where: { $0.id == id }) else { return true }
+        preserveLegacyDraftOwner()
         if existing.invitedPersonKey != nil, !rememberInvitedRemoval(existing) { return false }
         connections.removeAll { $0.id == id }
         guard saveConnectionsLocked(connections) else { return false }
@@ -290,6 +291,7 @@ extension PersistenceManager {
     @discardableResult
     func setActiveConnection(id: UUID) -> Bool {
         guard loadConnectionsWithOutcome().error == nil else { return false }
+        preserveLegacyDraftOwner()
         defaults.set(id.uuidString, forKey: activeConnectionIdKey)
         return true
     }
@@ -335,6 +337,7 @@ extension PersistenceManager {
         let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
         var removedActive = false
         if result.changed {
+            preserveLegacyDraftOwner()
             guard saveConnectionsLocked(result.connections) else {
                 return SyncedBackendMergeOutcome(
                     addedIds: [],

@@ -106,4 +106,25 @@ struct RemoteImageLoaderTests {
         }
         #expect(counter.count == 1)
     }
+
+    @Test func transientOfflineURLErrorDoesNotPoisonNegativeCache() async throws {
+        let png = Self.pngBytes()
+        let counter = FetchCounter()
+        let loader = RemoteImageLoader { _ in
+            counter.increment()
+            if counter.count == 1 {
+                throw URLError(.notConnectedToInternet)
+            }
+            return (png, try Self.response())
+        }
+
+        await #expect(throws: URLError.self) {
+            _ = try await loader.image(for: Self.url)
+        }
+        #expect(loader.failedKeys.isEmpty)
+
+        let recovered = try await loader.image(for: Self.url)
+        #expect(recovered.size.width > 0)
+        #expect(counter.count == 2)
+    }
 }

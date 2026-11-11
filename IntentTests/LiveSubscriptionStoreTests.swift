@@ -43,22 +43,26 @@ struct LiveSubscriptionStoreTests {
         try await waitUntil("reconnect subscription") { fake.hasSubscriptionHandler(id: "sub-2") }
         #expect(fake.unregisteredSubscriptionIds == ["sub-1", "sub-1"])
 
-        // The parked resnapshot then finishes with its own subscribe.
+        // The parked pre-reconnect resnapshot finishes its unsubscribe and sees
+        // that the connection generation advanced, so it does NOT open a
+        // duplicate subscription over the new connection.
         fake.pendingMethods = []
         fake.resolvePending("task.unsubscribe", with: ["ok": true])
-        try await waitUntil("resnapshot subscription") { fake.hasSubscriptionHandler(id: "sub-3") }
-        #expect(fake.unregisteredSubscriptionIds == ["sub-1", "sub-1"])
+        try await expectNever("superseded resnapshot subscribing again", within: .milliseconds(150)) {
+            fake.hasSubscriptionHandler(id: "sub-3")
+        }
+        #expect(fake.hasSubscriptionHandler(id: "sub-2"))
 
         // The reconnect cleared the resnapshot guard: the next gap recovers again.
-        fake.deliverSubscriptionPush(taskSnapshot("sub-3"))
+        fake.deliverSubscriptionPush(taskSnapshot("sub-2"))
         fake.responseMap["task.unsubscribe"] = ["ok": true]
-        fake.deliverSubscriptionPush(gap("sub-3"))
-        try await waitUntil("recovery after the reconnect") { fake.hasSubscriptionHandler(id: "sub-4") }
-        #expect(fake.unregisteredSubscriptionIds == ["sub-1", "sub-1", "sub-3"])
-        #expect(fake.paramsForMethod("task.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1", "sub-3"])
+        fake.deliverSubscriptionPush(gap("sub-2"))
+        try await waitUntil("recovery after the reconnect") { fake.hasSubscriptionHandler(id: "sub-3") }
+        #expect(fake.unregisteredSubscriptionIds == ["sub-1", "sub-1", "sub-2"])
+        #expect(fake.paramsForMethod("task.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1", "sub-2"])
     }
 
-    @Test func teardownWhileSubscribingIgnoresTheLateAckUntilTheNextSubscribeReleasesIt() async throws {
+    @Test func teardownWhileSubscribingReleasesLateAckWithoutRegisteringIt() async throws {
         let fake = FakeConnectionManager()
         let store = CommentStore(connectionManager: fake)
         fake.responseMap["comment.unsubscribe"] = [:] as [String: Any]
@@ -72,6 +76,9 @@ struct LiveSubscriptionStoreTests {
         fake.pendingMethods = []
         fake.resolvePending("comment.subscribe", with: ["subscriptionId": "sub-1"])
         await subscribing.value
+        // The superseded ack is immediately released daemon-side and never registered locally.
+        #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
+        #expect(fake.paramsForMethod("comment.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1"])
         let thread: [String: Any] = [
             "threadId": "t1", "noteId": "note-1", "status": "open", "createdAt": "2024-01-01T00:00:00Z",
             "lastActivity": "2024-01-01T00:00:00Z", "commentCount": 1
@@ -81,9 +88,7 @@ struct LiveSubscriptionStoreTests {
 
         fake.responseMap["comment.subscribe"] = ["subscriptionId": "sub-2"]
         await store.subscribeToNote(workspaceId: "ws-1", noteId: "note-2")
-        // Released before the switch, then again as the "previous" id on the new ack.
-        #expect(fake.unregisteredSubscriptionIds == ["sub-1", "sub-1"])
-        #expect(fake.paramsForMethod("comment.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1"])
+        #expect(fake.unregisteredSubscriptionIds.isEmpty)
         #expect(fake.hasSubscriptionHandler(id: "sub-2"))
     }
 
@@ -108,5 +113,18 @@ struct LiveSubscriptionStoreTests {
             ["id": "ws-1", "title": "Workspace"]
         ]))
         #expect(store.workspaces.map(\.id) == ["ws-1"])
+    }
+
+    @Test func noteStoreWorkspaceSwitchUnregistersPreviousSubscriptionHandler() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": []]
+        fake.responseMap["note.subscribe"] = ["subscriptionId": "note-sub-ws1"]
+        await store.fetchNotes(workspaceId: "ws-1")
+        fake.simulateConnect()
+        try await waitUntil("ws-1 note subscription") { fake.hasSubscriptionHandler(id: "note-sub-ws1") }
+
+        await store.fetchNotes(workspaceId: "ws-2")
+        #expect(!fake.hasSubscriptionHandler(id: "note-sub-ws1"), "Switching workspaces must unregister the old handler")
     }
 }

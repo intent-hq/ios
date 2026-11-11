@@ -244,3 +244,116 @@ struct SecItemKeychainStorageTests {
         #expect(fake.deleteCallCount == 0)
     }
 }
+
+@MainActor
+struct DraftPersistenceTests {
+    private func withStore(_ body: (PersistenceManager, UserDefaults, BackendID, BackendID) throws -> Void) throws {
+        let suite = "DraftPersistenceTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        let first = persistence.upsertConnection(StoredConnection(
+            server: PairedServer(hosts: ["first.local"], port: 4242, name: "First", pairedAt: Date()), token: "first"
+        ))
+        let second = persistence.upsertConnection(StoredConnection(
+            server: PairedServer(hosts: ["second.local"], port: 4242, name: "Second", pairedAt: Date()), token: "second"
+        ))
+        persistence.setActiveConnection(id: first.id)
+        try body(persistence, defaults, BackendID(first.id), BackendID(second.id))
+    }
+
+    @Test func legacyDraftMigratesOnlyToActiveBackendAndSurvivesRestart() throws {
+        try withStore { persistence, defaults, first, second in
+            // Seed the exact key written by the previous app version.
+            defaults.set("Saved before upgrade", forKey: "draft_workspace_agent")
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: second).isEmpty)
+            #expect(defaults.string(forKey: "draft_workspace_agent") == "Saved before upgrade")
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first) == "Saved before upgrade")
+            #expect(defaults.object(forKey: "draft_workspace_agent") == nil)
+            persistence.setActiveConnection(id: second.connectionID)
+            let restarted = PersistenceManager(defaults: defaults, keychainStorage: persistence.keychainStorage)
+            #expect(restarted.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: second).isEmpty)
+            #expect(restarted.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first) == "Saved before upgrade")
+        }
+    }
+
+    @Test func switchingBeforeFirstReadPreservesAllLegacyDraftOwnership() throws {
+        try withStore { persistence, defaults, first, second in
+            defaults.set("First conversation", forKey: "draft_workspace_agent")
+            defaults.set("Another conversation", forKey: "draft_other_agent")
+            persistence.setActiveConnection(id: second.connectionID)
+            let restarted = PersistenceManager(defaults: defaults, keychainStorage: persistence.keychainStorage)
+            for workspace in ["workspace", "other"] {
+                #expect(restarted.loadDraft(workspaceId: workspace, agentId: "agent", backendID: second).isEmpty)
+            }
+            #expect(restarted.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first) == "First conversation")
+            #expect(restarted.loadDraft(workspaceId: "other", agentId: "agent", backendID: first) == "Another conversation")
+        }
+    }
+
+    @Test func removingLegacyOwnerDoesNotGiveDraftToAnotherBackend() throws {
+        try withStore { persistence, defaults, first, second in
+            defaults.set("Removed backend's draft", forKey: "draft_workspace_agent")
+            #expect(persistence.deleteConnection(id: first.connectionID))
+            persistence.setActiveConnection(id: second.connectionID)
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: second).isEmpty)
+            #expect(defaults.string(forKey: "draft_workspace_agent") == "Removed backend's draft")
+        }
+    }
+
+    @Test func newerScopedDraftWinsAndConsumesLegacyValue() throws {
+        try withStore { persistence, defaults, first, _ in
+            defaults.set("Old draft", forKey: "draft_workspace_agent")
+            defaults.set("New draft", forKey: "draft_\(first.connectionID.uuidString)_workspace_agent")
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first) == "New draft")
+            #expect(defaults.object(forKey: "draft_workspace_agent") == nil)
+            persistence.clearDraft(workspaceId: "workspace", agentId: "agent", backendID: first)
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first).isEmpty)
+        }
+    }
+
+    @Test(arguments: ["clear", "empty", "replace"])
+    func scopedWritesConsumeLegacyDraftBeforeFirstRead(operation: String) throws {
+        try withStore { persistence, defaults, first, _ in
+            defaults.set("Old draft", forKey: "draft_workspace_agent")
+            if operation == "clear" {
+                persistence.clearDraft(workspaceId: "workspace", agentId: "agent", backendID: first)
+            } else {
+                persistence.saveDraft(operation == "empty" ? "" : "Replacement", workspaceId: "workspace", agentId: "agent", backendID: first)
+            }
+            #expect(defaults.object(forKey: "draft_workspace_agent") == nil)
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first) == (operation == "replace" ? "Replacement" : ""))
+        }
+    }
+
+    @Test func otherBackendWritesLeaveLegacyDraftForOwner() throws {
+        try withStore { persistence, defaults, first, second in
+            defaults.set("Owner's draft", forKey: "draft_workspace_agent")
+            persistence.clearDraft(workspaceId: "workspace", agentId: "agent", backendID: second)
+            persistence.saveDraft("Other draft", workspaceId: "workspace", agentId: "agent", backendID: second)
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first) == "Owner's draft")
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: second) == "Other draft")
+        }
+    }
+
+    @Test func malformedRegistryDoesNotClaimOrDiscardLegacyDraft() throws {
+        try withStore { persistence, defaults, first, _ in
+            persistence.saveDataToKeychain(data: Data("invalid registry".utf8), account: persistence.keychainAccountConnections)
+            defaults.set("Recoverable draft", forKey: "draft_workspace_agent")
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first).isEmpty)
+            #expect(defaults.string(forKey: "draft_workspace_agent") == "Recoverable draft")
+            #expect(defaults.object(forKey: "legacyDraftOwner") == nil)
+        }
+    }
+
+    @Test func unresolvedOwnerLeavesLegacyDraftUntouchedUntilActiveConnectionResolves() throws {
+        try withStore { persistence, defaults, first, _ in
+            defaults.removeObject(forKey: persistence.activeConnectionIdKey)
+            defaults.set("Waiting for owner", forKey: "draft_workspace_agent")
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first).isEmpty)
+            #expect(defaults.string(forKey: "draft_workspace_agent") == "Waiting for owner")
+            persistence.setActiveConnection(id: first.connectionID)
+            #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: first) == "Waiting for owner")
+        }
+    }
+}

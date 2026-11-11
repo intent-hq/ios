@@ -49,7 +49,7 @@ extension WorkspaceStatusStore {
                 cursor = nil
             } catch {
                 guard owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
-                bucket.failedNextPage = cursor != nil
+                bucket.failureOrigin = cursor != nil ? .nextPage : .none
                 bucket.error = error.localizedDescription
                 bucket.isStale = true
                 bucket.recoveryExhausted = true
@@ -63,7 +63,7 @@ extension WorkspaceStatusStore {
     private func publishPage(_ rows: [Row], nextCursor: String?, replacing: Bool, bucket: Bucket, workspaceId: String) {
         bucket.rows = rows
         bucket.nextCursor = nextCursor
-        bucket.failedNextPage = false
+        bucket.failureOrigin = .none
         if replacing { pageAdapter?.didReplacePage(workspaceId) }
     }
 

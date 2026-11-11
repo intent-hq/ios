@@ -16,7 +16,7 @@ final class AssistantStore {
     private let summaries: AgentSummaryStore?
     @ObservationIgnored private var eventHandlerId: UUID?
     @ObservationIgnored private var connectionObserver: AnyCancellable?
-    private var refreshRequested = false
+    @ObservationIgnored let refreshReads = CoalescedRead()
     private var creationKey: String?
 
     init(connection: any ConnectionManagerRouting, summaries: AgentSummaryStore? = nil) {
@@ -44,6 +44,7 @@ final class AssistantStore {
     }
 
     isolated deinit {
+        refreshReads.cancel()
         if let eventHandlerId {
             connection.removeEventHandler(id: eventHandlerId)
         }
@@ -51,38 +52,42 @@ final class AssistantStore {
 
     func refresh() async {
         startObservingIfNeeded()
-        guard !isLoading else {
-            refreshRequested = true
+        if refreshReads.isRunning {
+            _ = refreshReads.invalidate()
             return
         }
         isLoading = true
         defer { isLoading = false }
-        repeat {
-            refreshRequested = false
-            do {
-                let summaryBoundary = summaries?.beginRead()
-                // Every page: threads ascend by creation, so the newest are on the last page.
-                let result = try await PagedReads.requestAgentList(
-                    ["workspaceId": Workspace.chiefWorkspaceId], connection: connection
-                )
-                try Task.checkCancellation()
-                guard let response = result as? [String: Any],
-                      let rows = response["agents"] as? [[String: Any]] else {
-                    throw AssistantError.invalidResponse
-                }
-                if let summaryBoundary { summaries?.seed(rows, workspaceId: Workspace.chiefWorkspaceId, since: summaryBoundary) }
-                threads = rows.compactMap(AgentSession.parseAgent)
-                    .filter { $0.createdByAgentId == nil && $0.status.lowercased() != "deleted" }
-                    .sorted { timestamp($0) > timestamp($1) }
-                hasLoaded = true
-                errorMessage = nil
-            } catch is CancellationError {
-                return
-            } catch {
-                errorMessage = error.localizedDescription
-                return
+        while await refreshReads.run(isCurrent: { !Task.isCancelled }, pass: { [weak self] passRevision in
+            await self?.runRefreshPass(passRevision)
+        }) {}
+    }
+
+    private func runRefreshPass(_ passRevision: Int) async {
+        do {
+            let summaryBoundary = summaries?.beginRead()
+            // Every page: threads ascend by creation, so the newest are on the last page.
+            let result = try await PagedReads.requestAgentList(
+                ["workspaceId": Workspace.chiefWorkspaceId], connection: connection
+            )
+            try Task.checkCancellation()
+            guard let response = result as? [String: Any],
+                  let rows = response["agents"] as? [[String: Any]] else {
+                throw AssistantError.invalidResponse
             }
-        } while refreshRequested
+            guard passRevision == refreshReads.revision else { return }
+            if let summaryBoundary { summaries?.seed(rows, workspaceId: Workspace.chiefWorkspaceId, since: summaryBoundary) }
+            threads = rows.compactMap(AgentSession.parseAgent)
+                .filter { $0.createdByAgentId == nil && $0.status.lowercased() != "deleted" }
+                .sorted { timestamp($0) > timestamp($1) }
+            hasLoaded = true
+            errorMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard passRevision == refreshReads.revision else { return }
+            errorMessage = error.localizedDescription
+        }
     }
 
     func createThread() async -> String? {
@@ -112,7 +117,7 @@ final class AssistantStore {
             threads.removeAll { $0.id == agent.id }
             threads.insert(agent, at: 0)
             hasLoaded = true
-            if isLoading { refreshRequested = true }
+            if refreshReads.isRunning { _ = refreshReads.invalidate() }
             return agent.id
         } catch {
             errorMessage = error.localizedDescription
@@ -139,7 +144,7 @@ final class AssistantStore {
 
     func removeThread(_ agentId: String) {
         threads.removeAll { $0.id == agentId }
-        if isLoading { refreshRequested = true }
+        if refreshReads.isRunning { _ = refreshReads.invalidate() }
     }
 
     private func timestamp(_ agent: AgentSession) -> Date {

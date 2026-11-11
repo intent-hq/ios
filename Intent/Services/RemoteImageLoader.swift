@@ -80,13 +80,27 @@ final class RemoteImageLoader {
         do {
             return try await task.value
         } catch {
-            // Remember the failure for the session (skip cancellation — the
-            // fetch itself didn't fail) so broken URLs don't refetch forever.
-            if !(error is CancellationError) {
+            // Remember content/HTTP failures for the session so broken URLs
+            // don't refetch forever, while skipping cancellation and transient
+            // offline/connectivity URLErrors so reconnecting recovers naturally.
+            if Self.shouldNegativelyCache(error) {
                 failedKeys.insert(key)
             }
             throw error
         }
+    }
+
+    /// Clears a previously failed URL so an explicit retry can refetch it.
+    func forgetFailure(for url: URL) {
+        failedKeys.remove(url.absoluteString)
+    }
+
+    nonisolated static func shouldNegativelyCache(_ error: any Error) -> Bool {
+        if error is CancellationError { return false }
+        if let urlError = error as? URLError, urlError.isTransientConnectivityError {
+            return false
+        }
+        return true
     }
 
     /// Explicitly concurrent so the download and image decode run on the
@@ -126,5 +140,25 @@ final class RemoteImageLoader {
             data.append(byte)
         }
         return (data, response)
+    }
+}
+
+extension URLError {
+    nonisolated var isTransientConnectivityError: Bool {
+        switch code {
+        case .cancelled,
+             .timedOut,
+             .cannotFindHost,
+             .cannotConnectToHost,
+             .networkConnectionLost,
+             .dnsLookupFailed,
+             .notConnectedToInternet,
+             .internationalRoamingOff,
+             .callIsActive,
+             .dataNotAllowed:
+            return true
+        default:
+            return false
+        }
     }
 }

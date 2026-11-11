@@ -115,3 +115,74 @@ enum FloatingComposerPolicy {
         host == .floatingOrnament ? launcherClearance : 0
     }
 }
+
+/// Stateful lifecycle machine owned by `FloatingComposerOrnament` so unit tests
+/// exercise the exact same presentation/disappear withdrawal transitions rather
+/// than re-implementing the view modifier's branching, and so `.onDisappear`
+/// followed by a trailing `.onChange` never cancels a photo import twice.
+struct FloatingComposerLifecycle: Equatable {
+    private(set) var isActiveChat = false
+    private(set) var presentation: FloatingComposerPresentation = .withdrawn
+
+    mutating func appear(
+        isForemost: Bool,
+        showsLoadingState: Bool,
+        composerVisible: Bool
+    ) {
+        isActiveChat = true
+        presentation = FloatingComposerPolicy.presentation(
+            isActiveChat: true,
+            isForemost: isForemost,
+            showsLoadingState: showsLoadingState,
+            composerVisible: composerVisible
+        )
+    }
+
+    /// Updates presentation from current inputs and returns true when an
+    /// in-flight photo import must be cancelled.
+    @discardableResult
+    mutating func sync(
+        isForemost: Bool,
+        showsLoadingState: Bool,
+        composerVisible: Bool
+    ) -> Bool {
+        let next = FloatingComposerPolicy.presentation(
+            isActiveChat: isActiveChat,
+            isForemost: isForemost,
+            showsLoadingState: showsLoadingState,
+            composerVisible: composerVisible
+        )
+        return applyPresentation(next)
+    }
+
+    @discardableResult
+    mutating func updateActiveChat(
+        _ active: Bool,
+        isForemost: Bool,
+        showsLoadingState: Bool,
+        composerVisible: Bool
+    ) -> Bool {
+        isActiveChat = active
+        return sync(
+            isForemost: isForemost,
+            showsLoadingState: showsLoadingState,
+            composerVisible: composerVisible
+        )
+    }
+
+    /// Applies an observed presentation transition; deduplicates against `disappear()`.
+    @discardableResult
+    mutating func applyPresentation(_ next: FloatingComposerPresentation) -> Bool {
+        let old = presentation
+        presentation = next
+        return FloatingComposerPolicy.cancelsPhotoImport(from: old, to: next)
+    }
+
+    /// Marks the chat inactive on view disappearance and returns true once if
+    /// the composer was not already withdrawn.
+    @discardableResult
+    mutating func disappear() -> Bool {
+        isActiveChat = false
+        return applyPresentation(.withdrawn)
+    }
+}

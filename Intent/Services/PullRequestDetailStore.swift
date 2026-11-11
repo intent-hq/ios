@@ -33,6 +33,9 @@ import Observation
     static let reviewsLimit = 50
 
     @ObservationIgnored private var requestedReviewers: [String] = []
+    @ObservationIgnored private var hasReviewsRequestedReviewers = false
+    @ObservationIgnored private var lastReviews: [[String: Any]] = []
+    @ObservationIgnored private var sectionGenerations: [Section: Int] = [:]
     private let connection: any ConnectionManagerRouting
 
     init(item: PullRequestListItem, connection: any ConnectionManagerRouting) {
@@ -45,6 +48,7 @@ import Observation
     }
 
     func loadAll() async {
+        hasReviewsRequestedReviewers = false
         async let detail: Void = load(.detail)
         async let checks: Void = load(.checks)
         async let reviews: Void = load(.reviews)
@@ -53,44 +57,95 @@ import Observation
     }
 
     func load(_ section: Section) async {
-        guard !loading.contains(section) else { return }
+        guard !Task.isCancelled, !loading.contains(section) else { return }
+        let generation = (sectionGenerations[section] ?? 0) &+ 1
+        sectionGenerations[section] = generation
         loading.insert(section)
         errors[section] = nil
-        defer { loading.remove(section) }
-        do {
-            switch section {
-            case .detail:
-                let result = try await connection.request("github.pulls.get", params: address) as? [String: Any]
-                guard let pull = result?["pull"] as? [String: Any],
-                      let loadedDetail = PullRequestDetail(wire: pull) else { throw ResponseError.malformed }
-                detail = loadedDetail
-                if let loaded = PullRequestListItem(wire: pull, owner: item.owner, repo: item.repo) {
-                    item = loaded.filling(from: item)
-                }
-            case .checks:
-                let result = try await connection.request("github.pulls.checks", params: address) as? [String: Any]
-                checks = (result?["checks"] as? [[String: Any]] ?? []).compactMap(PullRequestCheck.init(wire:))
-                requestedReviewers = result?["requestedReviewers"] as? [String] ?? requestedReviewers
-                reviewers = PullRequestReviewer.rows(reviews: lastReviews, requested: requestedReviewers)
-            case .reviews:
-                var params = address
-                params["limit"] = Self.reviewsLimit
-                let result = try await connection.request("github.pulls.reviews", params: params) as? [String: Any]
-                lastReviews = result?["reviews"] as? [[String: Any]] ?? []
-                requestedReviewers = result?["requestedReviewers"] as? [String] ?? requestedReviewers
-                reviewers = PullRequestReviewer.rows(reviews: lastReviews, requested: requestedReviewers)
-            case .files:
-                var params = address
-                params["limit"] = Self.filesLimit
-                let result = try await connection.request("github.pulls.files", params: params) as? [String: Any]
-                files = (result?["files"] as? [[String: Any]] ?? []).compactMap(PullRequestFile.init(wire:))
-                filesTruncated = result?["truncated"] as? Bool == true || result?["nextToken"] is String
+        defer {
+            if isCurrent(section, generation: generation) {
+                loading.remove(section)
             }
+        }
+        do {
+            try await fetchSection(section, generation: generation)
+        } catch is CancellationError {
         } catch {
+            guard isCurrent(section, generation: generation), !Task.isCancelled else { return }
             AppLog.github.error("[PullRequestDetailStore] \(String(describing: section)) failed: \(error)")
             errors[section] = error.localizedDescription
         }
     }
 
-    @ObservationIgnored private var lastReviews: [[String: Any]] = []
+    private func isCurrent(_ section: Section, generation: Int) -> Bool {
+        sectionGenerations[section] == generation
+    }
+
+    private func fetchSection(_ section: Section, generation: Int) async throws {
+        switch section {
+        case .detail: try await fetchDetail(generation: generation)
+        case .checks: try await fetchChecks(generation: generation)
+        case .reviews: try await fetchReviews(generation: generation)
+        case .files: try await fetchFiles(generation: generation)
+        }
+    }
+
+    private func fetchDetail(generation: Int) async throws {
+        let result = try await connection.request("github.pulls.get", params: address) as? [String: Any]
+        guard isCurrent(.detail, generation: generation), !Task.isCancelled else { return }
+        guard let pull = result?["pull"] as? [String: Any],
+              let loadedDetail = PullRequestDetail(wire: pull) else { throw ResponseError.malformed }
+        detail = loadedDetail
+        if let loaded = PullRequestListItem(wire: pull, owner: item.owner, repo: item.repo) {
+            item = loaded.filling(from: item)
+        }
+    }
+
+    private func fetchChecks(generation: Int) async throws {
+        let result = try await connection.request("github.pulls.checks", params: address) as? [String: Any]
+        guard isCurrent(.checks, generation: generation), !Task.isCancelled else { return }
+        checks = (result?["checks"] as? [[String: Any]] ?? []).compactMap(PullRequestCheck.init(wire:))
+        if !hasReviewsRequestedReviewers, let requested = result?["requestedReviewers"] as? [String] {
+            requestedReviewers = requested
+        }
+        reviewers = PullRequestReviewer.rows(reviews: lastReviews, requested: requestedReviewers)
+    }
+
+    private func fetchReviews(generation: Int) async throws {
+        var params = address
+        params["limit"] = Self.reviewsLimit
+        let result = try await connection.request("github.pulls.reviews", params: params) as? [String: Any]
+        guard isCurrent(.reviews, generation: generation), !Task.isCancelled else { return }
+        lastReviews = result?["reviews"] as? [[String: Any]] ?? []
+        if let requested = result?["requestedReviewers"] as? [String] {
+            requestedReviewers = requested
+            hasReviewsRequestedReviewers = true
+        }
+        reviewers = PullRequestReviewer.rows(reviews: lastReviews, requested: requestedReviewers)
+    }
+
+    private func fetchFiles(generation: Int) async throws {
+        var params = address
+        params["limit"] = Self.filesLimit
+        let result = try await connection.request("github.pulls.files", params: params) as? [String: Any]
+        guard isCurrent(.files, generation: generation), !Task.isCancelled else { return }
+        files = (result?["files"] as? [[String: Any]] ?? []).compactMap(PullRequestFile.init(wire:))
+        filesTruncated = result?["truncated"] as? Bool == true || result?["nextToken"] is String
+    }
+
+    func reset() {
+        for section in [Section.checks, .detail, .files, .reviews] {
+            sectionGenerations[section] = (sectionGenerations[section] ?? 0) &+ 1
+        }
+        loading.removeAll()
+        errors.removeAll()
+        detail = nil
+        checks = []
+        reviewers = []
+        files = []
+        filesTruncated = false
+        requestedReviewers = []
+        hasReviewsRequestedReviewers = false
+        lastReviews = []
+    }
 }

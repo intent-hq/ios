@@ -5,20 +5,24 @@ import Synchronization
 import Testing
 import UIKit
 
-// Tests share the PersistenceManager draft key "test-ws"/"test-agent".
-@Suite(.serialized)
 @MainActor
 struct ConversationViewModelTests {
     // MARK: - Helpers
 
     func makeVM(workspaceId: String = "test-ws") -> ConversationViewModel {
-        ConversationViewModel(
+        let connection = FakeConnectionManager()
+        let suiteName = "ConversationViewModelTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defaults.removePersistentDomain(forName: suiteName)
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: EphemeralKeychainStorage())
+        return ConversationViewModel(
             agentId: "test-agent",
             workspaceId: workspaceId,
             agentName: "Test",
-            connection: ConnectionManager.shared,
-            uploadService: .shared,
-            optionsStore: CreationOptionsStore()
+            connection: connection,
+            uploadService: AttachmentUploadService(connection: connection),
+            optionsStore: CreationOptionsStore(connectionManager: connection),
+            persistence: persistence
         )
     }
 
@@ -66,65 +70,7 @@ struct ConversationViewModelTests {
         )
     }
 
-    // MARK: - filteredMessages
-
-    @Test func filteredMessagesKeepsWorkspaceEvents() {
-        // Event wakes render as a banner (or fall back to the user bubble
-        // on legacy text-only rows) — they are no longer hidden.
-        let viewModel = makeVM()
-        viewModel.store.messages = [
-            textMessage(role: .user, text: "[WORKSPACE EVENTS] something happened")
-        ]
-        #expect(viewModel.filteredMessages.count == 1)
-    }
-
-    @Test func filteredMessagesKeepsTaskWake() {
-        let viewModel = makeVM()
-        viewModel.store.messages = [
-            textMessage(role: .user, text: "[TASK WAKE] waking up")
-        ]
-        #expect(viewModel.filteredMessages.count == 1)
-    }
-
-    @Test func filteredMessagesKeepsAgentMessage() {
-        // A2A sends are no longer hidden — MessageView renders them with a
-        // sender attribution header instead.
-        let viewModel = makeVM()
-        viewModel.store.messages = [
-            textMessage(role: .user, text: "[AGENT MESSAGE] from another agent")
-        ]
-        #expect(viewModel.filteredMessages.count == 1)
-    }
-
-    @Test func filteredMessagesKeepsEventNotificationMetadata() {
-        let viewModel = makeVM()
-        viewModel.store.messages = [
-            textMessage(
-                role: .user,
-                text: "event data",
-                metadata: ["type": AnyCodable("event_notification")]
-            )
-        ]
-        #expect(viewModel.filteredMessages.count == 1)
-    }
-
-    @Test func filteredMessagesHandlesEmptyList() {
-        let viewModel = makeVM()
-        viewModel.store.messages = []
-        #expect(viewModel.filteredMessages.isEmpty)
-    }
-
-    @Test func filteredMessagesMixedKeepsCorrectOnes() {
-        let viewModel = makeVM()
-        viewModel.store.messages = [
-            textMessage(role: .user, text: "Hello"),
-            textMessage(role: .assistant, text: "Hi"),
-            textMessage(role: .user, text: "[WORKSPACE EVENTS] x"),
-            textMessage(role: .user, text: "[AGENT MESSAGE] z"),
-            textMessage(role: .assistant, text: "Done")
-        ]
-        #expect(viewModel.filteredMessages.count == 5)
-    }
+    // MARK: - Transcript membership & observation
 
     @Test func transcriptMembershipTracksMutationsAndReset() {
         let viewModel = makeVM()

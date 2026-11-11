@@ -75,6 +75,29 @@ struct ListLoadPhaseTests {
         #expect(store.loadPhase == .idle)
     }
 
+    @Test func supersededNoteFailureDoesNotEndTheCurrentRead() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.pendingMethods.insert("note.list")
+        let older = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("note.list")
+        let newer = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("note.list", count: 2)
+
+        fake.failPending("note.list", with: Self.offline)
+        await older.value
+        #expect(store.loadPhase == .loading(lastLoadedAt: nil), "the newer read still owns loading")
+
+        fake.failPending("note.list", with: Self.offline)
+        await newer.value
+        #expect(store.loadPhase == .failed("Request timed out"), "only the current failure offers Retry")
+
+        fake.pendingMethods = []
+        fake.responseMap["note.list"] = ["notes": [note("spec")]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.hasLoaded && store.loadPhase.failureMessage == nil)
+    }
+
     // MARK: - AgentStore
 
     @Test func agentsMoveFromNotStartedToFailedAndRetryToLoaded() async throws {

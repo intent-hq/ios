@@ -16,14 +16,18 @@ import Observation
     /// True once a `note.list` for the current workspace has succeeded.
     var hasLoaded: Bool { loadPhase.hasLoaded }
 
-    private var workspaceId: String?
-    @ObservationIgnored private var eventHandlerId: UUID?
+    var workspaceId: String?
+    @ObservationIgnored private var fetchRevision = 0
+    @ObservationIgnored let eventRefreshes = CoalescedRead()
+    @ObservationIgnored var eventHandlerId: UUID?
     let connectionManager: ConnectionManagerRouting
 
     // Live-state tracking (subscription.push)
-    private var liveSubscription = LiveSubscription.idle
-    private var noteReconciler: DeltaReconciler<Note>?
-    private var connectionObserver: AnyCancellable?
+    @ObservationIgnored var liveSubscription = LiveSubscription.idle
+    @ObservationIgnored var liveSubscriptionGeneration = 0
+    @ObservationIgnored var noteReconciler: DeltaReconciler<Note>?
+    @ObservationIgnored var connectionObserver: AnyCancellable?
+    @ObservationIgnored private var connectionObservationID = UUID()
     /// Reads the rest of a paged `note.subscribe` snapshot (protocol §6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
     /// Test seam for the whole-note read's page retry backoff.
@@ -39,6 +43,7 @@ import Observation
     }
 
     isolated deinit {
+        eventRefreshes.cancel()
         for continuation in noteChangeContinuations.values {
             continuation.finish()
         }
@@ -54,19 +59,37 @@ import Observation
 
     // MARK: - Connection observation
 
-    private func observeConnection() {
+    func observeConnection(dropInitialState: Bool = false) {
+        let observationID = UUID()
+        connectionObservationID = observationID
         connectionObserver = connectionManager.connectionStatePublisher
+            .dropFirst(dropInitialState ? 1 : 0)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
-                if state == .connected {
-                    Task { await self?.onConnected() }
-                }
+                guard let self, connectionObserver != nil,
+                      connectionObservationID == observationID, state == .connected else { return }
+                scheduleReconnect()
             }
     }
 
-    private func onConnected() async {
+    /// Fence both queued delivery and execution: cancelling a Combine observer
+    /// cannot cancel a reconnect task it has already scheduled.
+    @discardableResult
+    func scheduleReconnect() -> Task<Void, Never> {
+        let observationID = connectionObservationID
+        let generation = liveSubscriptionGeneration
+        return Task { [weak self] in
+            guard let self, connectionObserver != nil,
+                  connectionObservationID == observationID,
+                  liveSubscriptionGeneration == generation else { return }
+            await onConnected()
+        }
+    }
+
+    func onConnected() async {
         // Reset live-state tracking on new connection. Unregister the old
         // handler if reconnecting (defensive: subscription is invalid after disconnect)
+        liveSubscriptionGeneration &+= 1
         if let oldId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
@@ -75,8 +98,10 @@ import Observation
 
         // If we have a workspace context, refetch and subscribe
         if let workspaceId {
+            let generation = liveSubscriptionGeneration
             await fetchNotes(workspaceId: workspaceId)
-            await subscribeLiveState(workspaceId: workspaceId)
+            guard generation == liveSubscriptionGeneration, self.workspaceId == workspaceId else { return }
+            await subscribeLiveState(workspaceId: workspaceId, generation: generation)
         }
     }
 
@@ -88,6 +113,8 @@ import Observation
     /// workspace's load phase while the fetch task has not started yet.
     func prepareForWorkspaceChange(to workspaceId: String) {
         guard self.workspaceId != workspaceId else { return }
+        fetchRevision &+= 1
+        eventRefreshes.cancel()
         notes = []
         loadPhase = .idle
     }
@@ -96,24 +123,40 @@ import Observation
         if next != loadPhase { loadPhase = next }
     }
 
-    func fetchNotes(workspaceId: String) async {
-        let workspaceChanged = self.workspaceId != workspaceId
-        // If workspace changed, clear notes immediately to prevent stale data
-        if workspaceChanged {
-            notes = []
-            loadPhase = .idle
-            // Reset live-state for new workspace (the old handler stays registered, as before)
-            liveSubscription.reset()
-            noteReconciler = nil
-            snapshotFiller.cancel()
+    private func isCurrentFetch(workspaceId: String, revision: Int) -> Bool {
+        self.workspaceId == workspaceId && fetchRevision == revision
+    }
+
+    private func resetForFetchIfWorkspaceChanged(to workspaceId: String) {
+        guard self.workspaceId != workspaceId else { return }
+        eventRefreshes.cancel()
+        notes = []
+        loadPhase = .idle
+        liveSubscriptionGeneration &+= 1
+        if let oldId = liveSubscription.reset() {
+            connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
+        noteReconciler = nil
+        snapshotFiller.cancel()
+    }
+
+    func fetchNotes(workspaceId: String) async {
+        // If workspace changed, clear notes immediately to prevent stale data.
+        resetForFetchIfWorkspaceChanged(to: workspaceId)
         self.workspaceId = workspaceId
+        fetchRevision &+= 1
+        let requestRevision = fetchRevision
         // Only the first read shows loading; refreshes keep the list as is.
         if !hasLoaded { setLoadPhase(loadPhase.beginning()) }
+        defer {
+            if isCurrentFetch(workspaceId: workspaceId, revision: requestRevision) {
+                setLoadPhase(loadPhase.settled())
+            }
+        }
         do {
             let items = try await requestNoteList(workspaceId: workspaceId)
-            // Ignore stale responses for a previous workspace.
-            guard self.workspaceId == workspaceId else { return }
+            // Ignore stale responses for a previous workspace or superseded same-workspace read.
+            guard isCurrentFetch(workspaceId: workspaceId, revision: requestRevision) else { return }
             // A cancelled fetch must not publish its late response.
             try Task.checkCancellation()
             // Avoid invalidating observers for an identical refetch.
@@ -129,9 +172,10 @@ import Observation
         } catch is CancellationError {
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
-            if self.workspaceId == workspaceId { setLoadPhase(loadPhase.failing(error)) }
+            if isCurrentFetch(workspaceId: workspaceId, revision: requestRevision) {
+                setLoadPhase(loadPhase.failing(error))
+            }
         }
-        if self.workspaceId == workspaceId { setLoadPhase(loadPhase.settled()) }
         // Live-state subscription is owned by onConnected().
     }
 
@@ -272,194 +316,6 @@ import Observation
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch note: \(error)")
             return .transientError
-        }
-    }
-}
-
-extension NoteStore {
-    // MARK: - Live-state subscription
-
-    private func subscribeLiveState(workspaceId: String) async {
-        // Initialize note reconciler synchronously before await to eliminate race
-        // (any push arriving between subscribe-sent and response-received will have a reconciler ready)
-        noteReconciler = DeltaReconciler<Note>(
-            getId: { dict in dict["id"] as? String },
-            normalize: { dict in Note.parseNote(dict) }
-        )
-
-        // Try to subscribe - if server doesn't support it, error response falls back to legacy
-        do {
-            let result = try await connectionManager.request("note.subscribe", params: [
-                "workspaceId": workspaceId,
-                "limit": PagedReads.notePageLimit,
-                "replaceGroup": "ios-notes-\(workspaceId)"
-            ])
-            if let dict = result as? [String: Any],
-               let subId = dict["subscriptionId"] as? String {
-                // Unregister old handler if we had one
-                if let oldId = liveSubscription.acknowledge(subId) {
-                    connectionManager.unregisterSubscriptionHandler(id: oldId)
-                }
-                // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
-                connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
-                    self?.handleSubscriptionPush(push)
-                }
-                AppLog.notes.info("[NoteStore] Subscribed to note.subscribe: \(subId)")
-            } else {
-                // Response missing subscriptionId - clean up and fall back to legacy
-                noteReconciler = nil
-                liveSubscription.subscribeFailed()
-            }
-        } catch {
-            // Subscribe failed - clean up reconciler and fall back to legacy
-            noteReconciler = nil
-            liveSubscription.subscribeFailed()
-            AppLog.notes.warning("[NoteStore] note.subscribe failed: \(error), falling back to legacy")
-        }
-    }
-
-    // MARK: - Event subscription
-
-    func startObservingEvents(workspaceId: String? = nil) {
-        if let workspaceId {
-            self.workspaceId = workspaceId
-        }
-
-        // Remove old handler to prevent accumulation on reconnect
-        if let handlerId = eventHandlerId {
-            connectionManager.removeEventHandler(id: handlerId)
-        }
-
-        // Register event handler on ConnectionManager
-        // (server subscription is handled centrally by ConnectionManager.subscribeToAllEvents)
-        eventHandlerId = connectionManager.onEvent { [weak self] method, params in
-            Task { @MainActor [weak self] in
-                self?.handleEvent(method, params: params)
-            }
-        }
-    }
-
-    private func handleEvent(_ method: String, params: Any) {
-        // Handle subscription.push for live-state updates (test injection compatibility)
-        if let push = SubscriptionPush.parse(method: method, params: params) {
-            handleSubscriptionPush(push)
-            return
-        }
-
-        guard let event = Self.event(from: params) else { return }
-        guard let eventType = event["type"] as? String else { return }
-
-        let eventWorkspaceId = event["workspaceId"] as? String
-        guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
-
-        switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
-        case .refetch:
-            // Only refetch if not in live mode (avoid double-apply)
-            if !liveSubscription.isLive {
-                guard let workspaceId else { return }
-                Task { await fetchNotes(workspaceId: workspaceId) }
-            }
-            onNoteChanged?()
-            if eventType != "note:created" {
-                for continuation in noteChangeContinuations.values {
-                    continuation.yield()
-                }
-            }
-        case .patchInPlace, .ignore, nil:
-            break
-        }
-    }
-
-    private func handleSubscriptionPush(_ push: SubscriptionPush) {
-        // Only process pushes if we have a reconciler ready
-        // (reconciler is initialized synchronously before subscribe request, so any
-        // push arriving between subscribe-sent and response-received is safe to process)
-        guard let reconciler = noteReconciler else {
-            return
-        }
-
-        // ConnectionManager now routes pushes by subscriptionId at the transport layer,
-        // so this handler only receives pushes for our exact subscriptionId.
-        // No per-store gate needed (single source of truth is the router)
-
-        switch push.kind {
-        case .snapshot:
-            guard let rawItems = push.snapshot else { return }
-            liveSubscription.applySnapshot()
-            reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
-            AppLog.notes.debug("[NoteStore] Applied snapshot with \(rawItems.count) notes, seq=\(push.seq)")
-            if let token = push.nextToken {
-                fillSnapshot(reconciler: reconciler, firstToken: token)
-            } else {
-                snapshotFiller.cancel()
-                notes = reconciler.values()
-            }
-
-        case .delta:
-            guard let delta = push.delta else { return }
-            if reconciler.applyDelta(seq: push.seq, delta: delta) {
-                // A paged snapshot still filling publishes once complete.
-                if !snapshotFiller.isFilling { notes = reconciler.values() }
-                AppLog.notes.debug("[NoteStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
-            } else {
-                // Gap detected — resnapshot (guard against storm)
-                if liveSubscription.requestResnapshot() {
-                    AppLog.notes.warning("[NoteStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
-                    Task { await resnapshot() }
-                }
-            }
-        }
-    }
-
-    /// Reads the rest of a paged snapshot (§6.9) with `note.list` in the
-    /// subscription's projection (full), then publishes the whole list; the
-    /// previous list stays visible meanwhile. A walk that gives up shows what
-    /// it has unless that would shrink the list, then resubscribes.
-    private func fillSnapshot(reconciler: DeltaReconciler<Note>, firstToken: String) {
-        guard let workspaceId else { return }
-        let source = PagedReads.PageSource(field: "notes") { [connectionManager] token in
-            try await connectionManager.request("note.list", params: [
-                "workspaceId": workspaceId, "limit": PagedReads.notePageLimit, "nextToken": token
-            ])
-        }
-        snapshotFiller.start(reconciler, from: firstToken, source: source, owner: .init(
-            isCurrent: { [weak self] in self?.noteReconciler === reconciler && self?.workspaceId == workspaceId },
-            publish: { [weak self] complete in
-                guard let self, complete || reconciler.values().count >= notes.count else { return }
-                notes = reconciler.values()
-            },
-            resubscribe: { [weak self] in
-                guard let self, !liveSubscription.isResnapshotting else { return }
-                await resnapshot()
-            }
-        ))
-    }
-
-    private func resnapshot() async {
-        liveSubscription.beginResnapshot()
-        defer { liveSubscription.endResnapshot() }
-
-        noteReconciler?.reset()
-        snapshotFiller.cancel()
-
-        if let subId = liveSubscription.id {
-            // Unregister handler before unsubscribing
-            connectionManager.unregisterSubscriptionHandler(id: subId)
-            do {
-                _ = try await connectionManager.request("note.unsubscribe", params: [
-                    "subscriptionId": subId
-                ])
-            } catch {
-                AppLog.notes.error("[NoteStore] note.unsubscribe failed: \(error)")
-            }
-        }
-
-        liveSubscription.clearId()
-
-        if let workspaceId {
-            await subscribeLiveState(workspaceId: workspaceId)
-            // Baseline refetch to bridge the gap during resnapshot
-            await fetchNotes(workspaceId: workspaceId)
         }
     }
 }
