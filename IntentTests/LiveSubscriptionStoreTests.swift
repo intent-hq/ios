@@ -115,16 +115,102 @@ struct LiveSubscriptionStoreTests {
         #expect(store.workspaces.map(\.id) == ["ws-1"])
     }
 
-    @Test func noteStoreWorkspaceSwitchUnregistersPreviousSubscriptionHandler() async throws {
+    /// A NoteStore subscribed to `ws-1` through `onConnected`, with
+    /// `note.subscribe` acks taken from `acks` in order.
+    private func subscribedNoteStore(acks: [String]) async throws -> (NoteStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
         fake.responseMap["note.list"] = ["notes": []]
-        fake.responseMap["note.subscribe"] = ["subscriptionId": "note-sub-ws1"]
+        fake.responseMap["note.unsubscribe"] = [:] as [String: Any]
+        fake.responseQueueMap["note.subscribe"] = acks.map { ["subscriptionId": $0] }
         await store.fetchNotes(workspaceId: "ws-1")
         fake.simulateConnect()
-        try await waitUntil("ws-1 note subscription") { fake.hasSubscriptionHandler(id: "note-sub-ws1") }
+        try await waitUntil("ws-1 note subscription") { fake.hasSubscriptionHandler(id: acks[0]) }
+        return (store, fake)
+    }
+
+    private func noteSubscribeWorkspaces(_ fake: FakeConnectionManager) -> [String] {
+        fake.paramsForMethod("note.subscribe").compactMap { $0["workspaceId"] as? String }
+    }
+
+    @Test func noteStoreWorkspaceSwitchUnregistersPreviousSubscriptionHandler() async throws {
+        let (store, fake) = try await subscribedNoteStore(acks: ["note-sub-ws1", "note-sub-ws2"])
 
         await store.fetchNotes(workspaceId: "ws-2")
         #expect(!fake.hasSubscriptionHandler(id: "note-sub-ws1"), "Switching workspaces must unregister the old handler")
+        try await waitUntil("old subscription released daemon-side") {
+            fake.paramsForMethod("note.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["note-sub-ws1"]
+        }
+    }
+
+    /// ios#996: a switch subscribes the new workspace once, without waiting for a reconnect.
+    @Test func noteStoreWorkspaceSwitchSubscribesTheNewWorkspace() async throws {
+        let (store, fake) = try await subscribedNoteStore(acks: ["note-sub-ws1", "note-sub-ws2"])
+
+        await store.fetchNotes(workspaceId: "ws-2")
+        #expect(fake.hasSubscriptionHandler(id: "note-sub-ws2"))
+        #expect(store.liveSubscription == .subscribed(id: "note-sub-ws2"))
+        #expect(noteSubscribeWorkspaces(fake) == ["ws-1", "ws-2"])
+        fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "note-sub-ws2", seq: 0, snapshot: [
+            ["id": "n-2", "title": "Live in ws-2", "content": "", "createdAt": "", "updatedAt": ""]
+        ]))
+        #expect(store.notes.map(\.title) == ["Live in ws-2"])
+
+        // A same-workspace refresh does not subscribe again.
+        await store.fetchNotes(workspaceId: "ws-2")
+        #expect(noteSubscribeWorkspaces(fake) == ["ws-1", "ws-2"])
+    }
+
+    /// ios#996: an ack for the old workspace that lands after the switch is
+    /// released and never becomes the current subscription.
+    @Test func noteStoreLateAckFromPreviousWorkspaceIsReleased() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": []]
+        fake.responseMap["note.unsubscribe"] = [:] as [String: Any]
+        fake.pendingMethods = ["note.subscribe"]
+        await store.fetchNotes(workspaceId: "ws-1")
+        fake.simulateConnect()
+        try await fake.waitForPendingRequests("note.subscribe")
+
+        let switching = Task { await store.fetchNotes(workspaceId: "ws-2") }
+        try await fake.waitForPendingRequests("note.subscribe", count: 2)
+        fake.pendingMethods = []
+        fake.resolvePending("note.subscribe", with: ["subscriptionId": "late-ws1"])
+        fake.resolvePending("note.subscribe", with: ["subscriptionId": "sub-ws2"])
+        await switching.value
+        try await waitUntil("late ack released") {
+            fake.paramsForMethod("note.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["late-ws1"]
+        }
+
+        #expect(!fake.hasSubscriptionHandler(id: "late-ws1"))
+        #expect(fake.hasSubscriptionHandler(id: "sub-ws2"))
+        #expect(store.liveSubscription == .subscribed(id: "sub-ws2"))
+        #expect(noteSubscribeWorkspaces(fake) == ["ws-1", "ws-2"])
+    }
+
+    /// ios#996: A → B → A before either list returns ends with one
+    /// subscription, for the last workspace.
+    @Test func noteStoreRapidWorkspaceSwitchesSubscribeOnlyTheLastWorkspace() async throws {
+        let (store, fake) = try await subscribedNoteStore(acks: ["sub-ws1", "sub-ws1-again", "unexpected"])
+        fake.pendingMethods = ["note.list"]
+
+        let toWs2 = Task { await store.fetchNotes(workspaceId: "ws-2") }
+        try await fake.waitForPendingRequests("note.list")
+        let backToWs1 = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await fake.waitForPendingRequests("note.list", count: 2)
+        fake.pendingMethods = []
+        fake.resolvePending("note.list", with: ["notes": []])
+        fake.resolvePending("note.list", with: ["notes": []])
+        await toWs2.value
+        await backToWs1.value
+
+        #expect(noteSubscribeWorkspaces(fake) == ["ws-1", "ws-1"])
+        #expect(store.liveSubscription == .subscribed(id: "sub-ws1-again"))
+        #expect(fake.hasSubscriptionHandler(id: "sub-ws1-again"))
+        #expect(!fake.hasSubscriptionHandler(id: "sub-ws1"))
+        try await expectNever("a subscription for the skipped workspace", within: .milliseconds(100)) {
+            fake.paramsForMethod("note.subscribe").count > 2
+        }
     }
 }

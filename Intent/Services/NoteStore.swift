@@ -127,22 +127,48 @@ import Observation
         self.workspaceId == workspaceId && fetchRevision == revision
     }
 
-    private func resetForFetchIfWorkspaceChanged(to workspaceId: String) {
-        guard self.workspaceId != workspaceId else { return }
+    /// Clears the previous workspace's list and live subscription. Returns the
+    /// new subscription generation when this replaced another workspace, so
+    /// the caller subscribes the new one (ios#996); nil when the workspace is
+    /// unchanged or is the store's first, which `onConnected` subscribes.
+    private func resetForFetchIfWorkspaceChanged(to workspaceId: String) -> Int? {
+        guard self.workspaceId != workspaceId else { return nil }
+        let replacesWorkspace = self.workspaceId != nil
         eventRefreshes.cancel()
         notes = []
         loadPhase = .idle
         liveSubscriptionGeneration &+= 1
         if let oldId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
+            if connectionManager.connectionState == .connected {
+                let connection = connectionManager
+                Task { _ = try? await connection.request("note.unsubscribe", params: ["subscriptionId": oldId]) }
+            }
         }
         noteReconciler = nil
         snapshotFiller.cancel()
+        return replacesWorkspace ? liveSubscriptionGeneration : nil
     }
 
     func fetchNotes(workspaceId: String) async {
         // If workspace changed, clear notes immediately to prevent stale data.
-        resetForFetchIfWorkspaceChanged(to: workspaceId)
+        let switchGeneration = resetForFetchIfWorkspaceChanged(to: workspaceId)
+        await readNotes(workspaceId: workspaceId)
+        // After the list, as onConnected does. A later switch, reconnect or
+        // suspension bumps the generation, so only the last switch subscribes.
+        if let switchGeneration {
+            await subscribeAfterWorkspaceSwitch(workspaceId: workspaceId, generation: switchGeneration)
+        }
+    }
+
+    private func subscribeAfterWorkspaceSwitch(workspaceId: String, generation: Int) async {
+        guard !Task.isCancelled, generation == liveSubscriptionGeneration, self.workspaceId == workspaceId,
+              connectionObserver != nil, connectionManager.connectionState == .connected,
+              liveSubscription == .idle else { return }
+        await subscribeLiveState(workspaceId: workspaceId, generation: generation)
+    }
+
+    private func readNotes(workspaceId: String) async {
         self.workspaceId = workspaceId
         fetchRevision &+= 1
         let requestRevision = fetchRevision
@@ -176,7 +202,8 @@ import Observation
                 setLoadPhase(loadPhase.failing(error))
             }
         }
-        // Live-state subscription is owned by onConnected().
+        // Live-state subscription is owned by onConnected() and, after a
+        // workspace switch, by fetchNotes(workspaceId:).
     }
 
     /// `note.list` with the slim projection (PROTOCOL §5.2 `projection:
