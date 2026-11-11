@@ -237,25 +237,31 @@ struct LiveSubscriptionStoreTests {
     }
 
     /// The first fetch and a connect delivery queued in the same main-queue
-    /// window must not leave two handlers registered.
-    @Test func noteStoreFirstFetchWithQueuedConnectLeavesOneHandler() async throws {
+    /// window subscribe once: the replayed connected state does not reset the
+    /// subscription fetchNotes just made.
+    @Test func noteStoreFirstFetchWithQueuedConnectSubscribesOnce() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["note.list"] = ["notes": []]
-        fake.responseQueueMap["note.subscribe"] = ["sub-1", "sub-2", "sub-3"].map { ["subscriptionId": $0] }
+        fake.responseQueueMap["note.subscribe"] = ["sub-1", "sub-2"].map { ["subscriptionId": $0] }
         fake.simulateConnect()
         let store = NoteStore(connectionManager: fake)
         // The connected emission is still queued on the main queue here.
         await store.fetchNotes(workspaceId: "ws-1")
-        try await waitUntil("queued connect handled") {
-            store.liveSubscriptionGeneration >= 2 && store.liveSubscription.id != nil
+        try await waitUntil("ws-1 subscribed") { store.liveSubscription.id != nil }
+        try await expectNever("a second subscribe or handler", within: .milliseconds(150)) {
+            fake.paramsForMethod("note.subscribe").count > 1 || fake.subscriptionHandlerCount > 1
         }
-        try await expectNever("a second registered handler", within: .milliseconds(150)) {
-            fake.subscriptionHandlerCount > 1
-        }
-        let current = try #require(store.liveSubscription.id)
+        #expect(noteSubscribeWorkspaces(fake) == ["ws-1"])
+        #expect(store.liveSubscription == .subscribed(id: "sub-1"))
         #expect(fake.subscriptionHandlerCount == 1)
-        #expect(fake.hasSubscriptionHandler(id: current))
-        #expect(Set(noteSubscribeWorkspaces(fake)) == ["ws-1"])
+        #expect(fake.unregisteredSubscriptionIds.isEmpty)
+
+        // A real reconnect later still resets and resubscribes.
+        fake.simulateDisconnect()
+        fake.simulateConnect()
+        try await waitUntil("resubscribed after reconnect") { fake.hasSubscriptionHandler(id: "sub-2") }
+        #expect(fake.unregisteredSubscriptionIds == ["sub-1"])
+        #expect(fake.subscriptionHandlerCount == 1)
     }
 
     /// Pins the generation fence on its own: in ws-2 -> ws-1 -> ws-2 the first

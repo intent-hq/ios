@@ -62,22 +62,28 @@ import Observation
     func observeConnection(dropInitialState: Bool = false) {
         let observationID = UUID()
         connectionObservationID = observationID
+        // Record the generation when the state is sent (on the main actor),
+        // not when the queued delivery runs: a workspace change in between
+        // subscribes by itself (fetchNotes), so that connect must not reset
+        // and subscribe a second time.
         connectionObserver = connectionManager.connectionStatePublisher
             .dropFirst(dropInitialState ? 1 : 0)
+            .map { [weak self] state in (state, self?.liveSubscriptionGeneration) }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in
-                guard let self, connectionObserver != nil,
+            .sink { [weak self] state, generation in
+                guard let self, let generation, connectionObserver != nil,
                       connectionObservationID == observationID, state == .connected else { return }
-                scheduleReconnect()
+                scheduleReconnect(generation: generation)
             }
     }
 
     /// Fence both queued delivery and execution: cancelling a Combine observer
-    /// cannot cancel a reconnect task it has already scheduled.
+    /// cannot cancel a reconnect task it has already scheduled. `generation`
+    /// is the one current when the connected state was sent.
     @discardableResult
-    func scheduleReconnect() -> Task<Void, Never> {
+    func scheduleReconnect(generation: Int? = nil) -> Task<Void, Never> {
         let observationID = connectionObservationID
-        let generation = liveSubscriptionGeneration
+        let generation = generation ?? liveSubscriptionGeneration
         return Task { [weak self] in
             guard let self, connectionObserver != nil,
                   connectionObservationID == observationID,
