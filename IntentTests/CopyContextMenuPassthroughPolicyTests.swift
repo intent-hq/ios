@@ -30,6 +30,7 @@ struct CopyContextMenuPassthroughPolicyTests {
         "Content/PDFLightboxView.swift": (1, "Full-screen lightbox presented from a row."),
         "Content/PDFLinkPreviewView.swift": (2, "Full-screen preview presented from a row."),
         "Content/TextLinkPreviewView.swift": (1, "Full-screen preview presented from a row."),
+        "Content/UnopenableLinkAlert.swift": (2, "Copy Link and OK render only inside an alert."),
         "Content/VideoLightboxView.swift": (1, "Full-screen lightbox presented from a row.")
     ]
 

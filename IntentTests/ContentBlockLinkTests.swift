@@ -86,34 +86,40 @@ struct ContentBlockLinkTests {
     }
 
     @Test(arguments: [
-        "intent://local/file/image.png",
-        "intent://local/linked/file/image.PNG",
-        "intent://local/file/movie.mp4",
-        "intent://local/linked/file/movie.MP4",
-        "intent://local/file/movie.webm",
-        "intent://local/file/../notes.txt",
-        "intent://local/linked/file/%2E%2E/notes.txt",
-        "intent://local/file/reports%2Fnotes.txt",
-        "intent://remote/file/notes.txt",
-        "workspace-asset://current/notes.txt",
         "https://example.com/notes.txt",
-        "intent://local/file/../report.pdf",
-        "intent://local/linked/file/%2E%2E/report.pdf",
-        "intent://local/file/reports%2Freport.pdf",
-        "intent://local/file//report.pdf",
-        "intent://remote/file/report.pdf",
-        "intent://local/file",
-        "workspace-asset://current/report.pdf",
         "https://example.com/report.pdf",
         "http://localhost:5173/report.pdf",
-        "file:///tmp/report.pdf",
         "mailto:hello@example.com",
         "https://example.com/page.html",
-        "intent://local/file/../page.html",
-        "workspace-asset://current/page.html"
+        "intent://pair?payload=abc"
     ])
     func otherLinksKeepSystemRouting(_ address: String) throws {
         let url = try #require(URL(string: address))
         #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .system)
+    }
+
+    @Test(arguments: [
+        ("intent://local/file/image.png", UnopenableLink.Reason.unsupportedIntentLink),
+        ("intent://local/linked/file/image.PNG", .unsupportedIntentLink),
+        ("intent://local/file/movie.mp4", .unsupportedIntentLink),
+        ("intent://local/linked/file/movie.MP4", .unsupportedIntentLink),
+        ("intent://local/file/movie.webm", .unsupportedIntentLink),
+        ("intent://local/file/../notes.txt", .unsupportedIntentLink),
+        ("intent://local/linked/file/%2E%2E/notes.txt", .unsupportedIntentLink),
+        ("intent://local/file/reports%2Fnotes.txt", .unsupportedIntentLink),
+        ("intent://remote/file/notes.txt", .unsupportedIntentLink),
+        ("intent://local/file/../report.pdf", .unsupportedIntentLink),
+        ("intent://local/file//report.pdf", .unsupportedIntentLink),
+        ("intent://local/file", .unsupportedIntentLink),
+        ("intent://local/settings", .unsupportedIntentLink),
+        ("intent://local/file/../page.html", .unsupportedIntentLink),
+        ("workspace-asset://current/notes.txt", .unsupportedLocation),
+        ("file:///tmp/report.pdf", .unsupportedLocation),
+        ("report.html", .unsupportedLocation),
+        ("/Users/me/report.html", .unsupportedLocation)
+    ])
+    func unopenableLinksShowAMessage(address: String, reason: UnopenableLink.Reason) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .unopenable(reason))
     }
 }

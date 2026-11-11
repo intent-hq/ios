@@ -313,6 +313,12 @@ CAPTURES = {
             "Text viewer after toggling wrapping",
         ),
     },
+    "UnopenableLinkUITests": {
+        "testUnopenableLinksShowMessageWithCopyLink": (
+            "Unopenable link message light", "In-app browser failure message light",
+            "Unopenable link message dark", "In-app browser failure message dark",
+        ),
+    },
     "AssistantStateUITests": {
         "testLoadingFailureRetriesToEmptyAndStartsConversation": (
             "Assistant loading light", "Assistant error light", "Assistant empty light",
