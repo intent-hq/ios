@@ -12,7 +12,8 @@ extension AppCoordinatorTests {
         defer { resetConnectionState() }
 
         let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.pairingShowsSavedConnections = true
+        coordinator.currentScreen = .pairing
+        coordinator.connectionScreen = .pairing(showsSavedConnections: true)
         coordinator.onReconnect()
 
         #expect(
@@ -170,7 +171,8 @@ extension AppCoordinatorTests {
         let target = persistence.upsertConnection(Self.makeConnection(port: 1))
 
         let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.pairingShowsSavedConnections = true
+        coordinator.currentScreen = .pairing
+        coordinator.connectionScreen = .pairing(showsSavedConnections: true)
         coordinator.onSwitchConnection(id: target.id)
 
         #expect(!coordinator.pairingShowsSavedConnections)
@@ -250,7 +252,8 @@ extension AppCoordinatorTests {
         let remaining = persistence.upsertConnection(Self.makeConnection(port: 1))
 
         let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.pairingShowsSavedConnections = true
+        coordinator.currentScreen = .pairing
+        coordinator.connectionScreen = .pairing(showsSavedConnections: true)
         coordinator.onDeleteConnection(id: remaining.id)
 
         #expect(persistence.loadConnections().isEmpty)

@@ -34,6 +34,43 @@ enum ConnectionFailureRetryPolicy: Equatable {
     case manualLogOff
 }
 
+/// The fields only the connection screens read. `.loading` and `.connecting`
+/// share one splash, so both use `.connecting`; every other screen is `.other`.
+/// `AppCoordinator.currentScreen` keeps the case in step with the screen.
+enum ConnectionScreen: Equatable {
+    /// `startedByLaunch`: launch/restoration auto-connect, which uses the launch
+    /// artwork and hides Connecting's Back action until startup needs it.
+    case connecting(startedByLaunch: Bool)
+    /// Connect to…: whether to offer the other saved connections (for example
+    /// after logging off one connection while others are still saved).
+    case pairing(showsSavedConnections: Bool)
+    case other
+
+    /// The value kept when `currentScreen` changes: entering a connection
+    /// screen without an explicit value starts with its flag off.
+    func kept(on screen: AppScreen) -> ConnectionScreen {
+        switch (screen, self) {
+        case (.loading, .connecting), (.connecting, .connecting), (.pairing, .pairing):
+            return self
+        case (.loading, _), (.connecting, _):
+            return .connecting(startedByLaunch: false)
+        case (.pairing, _):
+            return .pairing(showsSavedConnections: false)
+        default:
+            return .other
+        }
+    }
+}
+
+/// The connection-loss overlay after the user entered the remote UI. `.lost`
+/// stays until the transport reconnects; `.recovering` then waits for workspace
+/// data (or the overlay timeout) before clearing, so the UI never flashes blank.
+enum ConnectionLoss {
+    case none
+    case lost
+    case recovering(observationID: UUID, timeout: Task<Void, Never>)
+}
+
 /// A pairing request delivered via an `intent://pair` deep link, awaiting
 /// explicit user confirmation before any connection is attempted — unlike the
 /// in-app camera scan, a deep link can be triggered by any web page.
@@ -61,6 +98,8 @@ class AppCoordinator {
             workspaceChange = nil
             navigationState.recentWorkspaceAgentRequestId = nil
             recordAgentVisit()
+            let connectionScreen = connectionScreen.kept(on: currentScreen)
+            if connectionScreen != self.connectionScreen { self.connectionScreen = connectionScreen }
             if !currentScreen.supportsConnectionLossOverlay {
                 resetConnectionLossEligibility()
             }
@@ -85,15 +124,24 @@ class AppCoordinator {
     var assistantAgentId: String?
     var workspaceCreationDraft: WorkspaceCreationDraft?
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
-    var isDisconnected = false {
+    /// Set only by the connection observer and recovery; leaving it clears the
+    /// recovery's workspace-load observation and timeout.
+    var connectionLoss = ConnectionLoss.none {
         didSet {
-            if oldValue, !isDisconnected { connectionLossPresentation.recovered() }
+            endRecoveryWait(oldValue)
+            if oldValue.isLost, !connectionLoss.isLost { connectionLossPresentation.recovered() }
         }
     }
-    /// True when the pairing surface should also offer the remaining saved
-    /// connections (e.g. after logging off the active connection while others
-    /// are still saved). The Connect to… screen reads this flag.
-    var pairingShowsSavedConnections = false
+    /// A loss recorded after entry that has not finished recovering. Unlike
+    /// the transport state, it stays true while reconnected data reloads.
+    var isDisconnected: Bool { connectionLoss.isLost }
+    /// The loading/connecting splash and Connect to… screen state.
+    var connectionScreen: ConnectionScreen
+    /// The Connect to… screen also offers the remaining saved connections.
+    var pairingShowsSavedConnections: Bool {
+        if case .pairing(let shows) = connectionScreen { return shows }
+        return false
+    }
     /// True when the saved-connections store exists but could not be decoded.
     var savedConnectionsUndecodable = false
     /// Settings' snapshot, refreshed after the existing local/iCloud merge.
@@ -108,7 +156,9 @@ class AppCoordinator {
     /// keep the existing ConnectingView and never re-run its task.
     private(set) var connectionAttemptId = 0
     /// Only launch/restoration auto-connect hides Connecting's Back action.
-    var connectingStartedByLaunch = false
+    var connectingStartedByLaunch: Bool {
+        connectionScreen == .connecting(startedByLaunch: true)
+    }
     var conversationRequestId = 0
 
     var selectedWorkspaceId: String? {
@@ -129,11 +179,9 @@ class AppCoordinator {
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var connectionObservationID: UUID?
     @ObservationIgnored private var certMismatchObserver: AnyCancellable?
-    @ObservationIgnored private var reconnectLoadingObservationID: UUID?
     /// Intentionally tracked so mutating it consumes the current one-shot
     /// workspace-loading registration before that registration is abandoned.
     private var reconnectLoadingObservationGeneration = 0
-    @ObservationIgnored private var reconnectOverlayTimeoutTask: Task<Void, Never>?
     @ObservationIgnored var invitedRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var savedConnectionsObserver: AnyCancellable?
     @ObservationIgnored private var workspaceRemovalObserver: AnyCancellable?
@@ -227,7 +275,7 @@ class AppCoordinator {
             claimScreenRestoration: claimScreenRestoration
         )
         self.backendID = backendID
-        connectingStartedByLaunch = !sessionRegistry.consumeConnectionSelection(for: backendID)
+        connectionScreen = .connecting(startedByLaunch: !sessionRegistry.consumeConnectionSelection(for: backendID))
         self.connectionLossPresentation = connectionLossPresentation
         workspaceListPresentation = WorkspaceListPresentation(persistence: persistence)
         lifecycleState.entry = .routing(dataStamp: workspaceStore.lastUpdated)
@@ -245,7 +293,7 @@ class AppCoordinator {
 
     /// Restarts the keyed ConnectingView task while preserving its transition order.
     func restartConnectionAttempt() {
-        connectingStartedByLaunch = false
+        connectionScreen = .connecting(startedByLaunch: false)
         connectionAttemptId += 1
         currentScreen = .connecting
     }
@@ -260,8 +308,22 @@ class AppCoordinator {
     isolated deinit {
         invitedRefreshTask?.cancel()
         connectionLossPresentation.reset()
-        reconnectOverlayTimeoutTask?.cancel()
-        cancelReconnectLoadingObservation()
+        endRecoveryWait(connectionLoss)
+    }
+
+    /// Cancels a recovery's timeout and retires its one-shot workspace-loading
+    /// registration. Every write that leaves `.recovering` goes through here.
+    private func endRecoveryWait(_ loss: ConnectionLoss) {
+        guard case .recovering(_, let timeout) = loss else { return }
+        timeout.cancel()
+        reconnectLoadingObservationGeneration &+= 1
+    }
+}
+
+extension ConnectionLoss {
+    var isLost: Bool {
+        if case .none = self { return false }
+        return true
     }
 }
 
@@ -285,10 +347,7 @@ extension AppCoordinator {
         workspaceDetailStores.removeAll()
         connectionLossPresentation.reset()
         lifecycleState.entry = .routing(dataStamp: dependencies.workspaceStore.lastUpdated)
-        isDisconnected = false
-        cancelReconnectLoadingObservation()
-        reconnectOverlayTimeoutTask?.cancel()
-        reconnectOverlayTimeoutTask = nil
+        connectionLoss = .none
     }
 
     /// Retire callbacks before the root releases the session: queued publisher
@@ -321,11 +380,10 @@ extension AppCoordinator {
                       connectionDeliveryIsCurrent(state) else { return }
                 switch state {
                 case .reconnecting, .disconnected:
-                    cancelReconnectLoadingObservation()
-                    reconnectOverlayTimeoutTask?.cancel()
-                    reconnectOverlayTimeoutTask = nil
-                    if lifecycleState.hasEnteredRemoteUI, currentScreen.supportsConnectionLossOverlay {
-                        isDisconnected = true
+                    // A recovery in progress stops waiting and shows the loss again.
+                    if connectionLoss.isLost
+                        || (lifecycleState.hasEnteredRemoteUI && currentScreen.supportsConnectionLossOverlay) {
+                        connectionLoss = .lost
                     }
                 case .connected:
                     establishConnectionLossEligibility()
@@ -361,8 +419,7 @@ extension AppCoordinator {
     }
 
     func reconcileBackgroundRecovery() {
-        guard isDisconnected, dependencies.connection.connectionState == .connected,
-              reconnectLoadingObservationID == nil else { return }
+        guard case .lost = connectionLoss, dependencies.connection.connectionState == .connected else { return }
         waitForWorkspaceLoadThenClearOverlay()
         revalidateCurrentAgentAfterReconnect()
     }
@@ -371,42 +428,29 @@ extension AppCoordinator {
     /// Falls back to a 5-second timeout so the overlay never gets stuck.
     private func waitForWorkspaceLoadThenClearOverlay() {
         // Cancel any previous observer from a prior reconnection attempt
-        cancelReconnectLoadingObservation()
-        reconnectOverlayTimeoutTask?.cancel()
-        reconnectOverlayTimeoutTask = nil
+        connectionLoss = .lost
 
         // If WorkspaceStore is not currently loading (fetchAll already completed
         // or hasn't started yet), check if data is already available.
         if !dependencies.workspaceStore.isLoading, dependencies.workspaceStore.lastUpdated != nil {
-            isDisconnected = false
+            connectionLoss = .none
             return
         }
 
         // Observe isLoading: wait for it to go from true → false (fetchAll completed).
         let observationID = UUID()
-        reconnectLoadingObservationID = observationID
-        observeWorkspaceLoading(observationID: observationID)
-
         // Timeout: if the fetch takes too long or fails silently, clear the overlay anyway.
-        reconnectOverlayTimeoutTask = Task { @MainActor [weak self] in
+        let timeout = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(for: Constants.AppCoordination.reconnectOverlayTimeout)
             } catch {
                 return
             }
             guard let self, !Task.isCancelled, dependencies.connection.connectionState == .connected else { return }
-            reconnectOverlayTimeoutTask = nil
-            if isDisconnected {
-                cancelReconnectLoadingObservation()
-                isDisconnected = false
-            }
+            connectionLoss = .none
         }
-    }
-
-    private func cancelReconnectLoadingObservation() {
-        guard reconnectLoadingObservationID != nil else { return }
-        reconnectLoadingObservationID = nil
-        reconnectLoadingObservationGeneration &+= 1
+        connectionLoss = .recovering(observationID: observationID, timeout: timeout)
+        observeWorkspaceLoading(observationID: observationID)
     }
 
     private func observeWorkspaceLoading(observationID: UUID) {
@@ -418,15 +462,12 @@ extension AppCoordinator {
             observationDidChange()
             Task { @MainActor [weak self] in
                 guard let self,
-                      reconnectLoadingObservationID == observationID,
+                      case .recovering(observationID, _) = connectionLoss,
                       dependencies.connection.connectionState == .connected else { return }
                 if dependencies.workspaceStore.isLoading {
                     observeWorkspaceLoading(observationID: observationID)
                 } else {
-                    reconnectOverlayTimeoutTask?.cancel()
-                    reconnectOverlayTimeoutTask = nil
-                    cancelReconnectLoadingObservation()
-                    isDisconnected = false
+                    connectionLoss = .none
                 }
             }
         }
