@@ -13,7 +13,6 @@ struct StateFlagBudgetPolicyTests {
     /// entry (or delete it at the allowance) when a type sheds flags.
     static let baseline: [String: Int] = [
         "Intent/App/AppCoordinator.swift#AppCoordinator": 7,
-        "Intent/App/IPadNavigationState.swift#IPadNavigationState": 6,
         "Intent/App/RootView.swift#RootView": 6,
         "Intent/Demo/DemoFixturesDesign.swift#DemoDesignFixtures": 6,
         "Intent/Demo/DemoScriptMonitorFixtures.swift#DemoScriptMonitorFixtures": 5,
