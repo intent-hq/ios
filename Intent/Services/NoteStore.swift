@@ -123,6 +123,10 @@ import Observation
         if next != loadPhase { loadPhase = next }
     }
 
+    private func isCurrentFetch(workspaceId: String, revision: Int) -> Bool {
+        self.workspaceId == workspaceId && fetchRevision == revision
+    }
+
     func fetchNotes(workspaceId: String) async {
         let workspaceChanged = self.workspaceId != workspaceId
         // If workspace changed, clear notes immediately to prevent stale data
@@ -143,14 +147,14 @@ import Observation
         // Only the first read shows loading; refreshes keep the list as is.
         if !hasLoaded { setLoadPhase(loadPhase.beginning()) }
         defer {
-            if self.workspaceId == workspaceId, fetchRevision == requestRevision {
+            if isCurrentFetch(workspaceId: workspaceId, revision: requestRevision) {
                 setLoadPhase(loadPhase.settled())
             }
         }
         do {
             let items = try await requestNoteList(workspaceId: workspaceId)
             // Ignore stale responses for a previous workspace or superseded same-workspace read.
-            guard self.workspaceId == workspaceId, fetchRevision == requestRevision else { return }
+            guard isCurrentFetch(workspaceId: workspaceId, revision: requestRevision) else { return }
             // A cancelled fetch must not publish its late response.
             try Task.checkCancellation()
             // Avoid invalidating observers for an identical refetch.
@@ -166,7 +170,7 @@ import Observation
         } catch is CancellationError {
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
-            if self.workspaceId == workspaceId, fetchRevision == requestRevision {
+            if isCurrentFetch(workspaceId: workspaceId, revision: requestRevision) {
                 setLoadPhase(loadPhase.failing(error))
             }
         }
