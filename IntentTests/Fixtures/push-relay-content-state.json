@@ -1,0 +1,19 @@
+{
+  "rows": [
+    {
+      "connectionId": "6F9619FF-8B86-D011-B42D-00C04FC964FF",
+      "workspaceId": "w1",
+      "title": "Fix websocket reconnect storm",
+      "detail": "Retrying with jittered backoff",
+      "agentId": "agent-123",
+      "agentName": "Coder"
+    },
+    {
+      "connectionId": "6F9619FF-8B86-D011-B42D-00C04FC964FF",
+      "workspaceId": "w2",
+      "title": "Docs pass"
+    }
+  ],
+  "runningCount": 2,
+  "updatedAt": 1800000000
+}
