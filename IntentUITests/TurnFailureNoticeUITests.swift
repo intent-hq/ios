@@ -36,15 +36,21 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
 
     @MainActor
     private func verifyCard(in app: XCUIApplication, appearance: String) {
-        let summary = app.descendants(matching: .any)["turnFailure.summary"].firstMatch
-        XCTAssertTrue(summary.waitForExistence(timeout: Self.timeout), app.debugDescription)
-        XCTAssertTrue(summary.label.hasPrefix("Usage limit reached"), "Summary label: \(summary.label)")
-        XCTAssertTrue(summary.label.contains("You've hit your usage limit."), "Summary label: \(summary.label)")
-        XCTAssertTrue(summary.label.contains("Try again at Nov 14th, 2026 8:07 AM"), "Summary label: \(summary.label)")
+        let title = app.staticTexts["Usage limit reached"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        let message = app.descendants(matching: .any)["turnFailure.message"].firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        XCTAssertTrue(message.label.contains("You've hit your usage limit."), "Message label: \(message.label)")
+        XCTAssertTrue(message.label.contains("try again at Nov 14th, 2026 8:07 AM"), "Message label: \(message.label)")
         for marker in ["codexErrorInfo", "JSON-RPC", "internal error"] {
-            XCTAssertFalse(summary.label.contains(marker), "The friendly summary must not show \(marker)")
+            XCTAssertFalse(message.label.contains(marker), "The friendly message must not show \(marker)")
         }
-        XCTAssertTrue(app.links["turnFailure.link"].exists, "The provider link is exposed as a link")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["turnFailure.retryHint"].exists,
+            "The retry hint is hidden when the message already says it"
+        )
+        XCTAssertFalse(app.descendants(matching: .any)["turnFailure.link"].exists, "An inline URL needs no separate link row")
+        XCTAssertTrue(inlineLink(in: app).exists, "The URL in the message is an accessible link\n\(app.debugDescription)")
 
         let details = app.buttons["turnFailure.details"]
         XCTAssertTrue(details.waitForExistence(timeout: Self.timeout))
@@ -70,6 +76,19 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
         )
         details.tap()
         XCTAssertTrue(raw.waitForNonExistence(timeout: Self.timeout), "Collapsing hides the raw reason again")
+
+        // The row's Copy overlay must not swallow the inline link tap.
+        let link = inlineLink(in: app)
+        XCTAssertTrue(link.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        XCTAssertTrue(safari.wait(for: .runningForeground, timeout: Self.timeout), "Tapping the inline link opens the URL")
+        safari.terminate()
+    }
+
+    @MainActor
+    private func inlineLink(in app: XCUIApplication) -> XCUIElement {
+        app.links.matching(NSPredicate(format: "label CONTAINS %@", "chatgpt.com/settings/usage")).firstMatch
     }
 
     @MainActor

@@ -172,6 +172,7 @@ extension Constants.Conversation.NoticeCard {
     static let turnFailureDetailsPadding: CGFloat = 8
     static let turnFailureDetailsCornerRadius: CGFloat = 6
     static let turnFailureDetailsBackgroundOpacity: Double = 0.06
+    static let turnFailureSecondaryOpacity: Double = 0.7
     static let turnFailureDetailsIncreasedOpacity: Double = 0.12
 }
 

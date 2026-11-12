@@ -42,7 +42,7 @@ struct TurnFailureNoticeView: View {
         VStack(alignment: .leading, spacing: Card.turnFailureSectionSpacing) {
             summaryRow
             VStack(alignment: .leading, spacing: Card.turnFailureSectionSpacing) {
-                if let url = summary.linkURL {
+                if let url = summary.linkURL, !linkedMessage.hasInlineLink {
                     linkButton(url)
                 }
                 detailsButton
@@ -90,24 +90,56 @@ struct TurnFailureNoticeView: View {
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .accessibilityAddTraits(.isHeader)
 
-                if let message = summary.message {
-                    Text(message)
+                if let text = linkedMessage.text {
+                    Text(text)
                         .interFont(bodyStyle)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .tint(Theme.foreground(for: colorScheme))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("turnFailure.message")
                 }
 
-                if let retryHint = summary.retryHint {
+                if let retryHint = visibleRetryHint {
                     Text(Self.sentenceCased(retryHint))
                         .interFont(bodyStyle.withFace(.medium))
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme, contrast: contrast))
+                        .foregroundStyle(secondaryForeground)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("turnFailure.retryHint")
                 }
             }
         }
-        .accessibilityElement(children: .combine)
+        // Contain rather than combine so an inline link stays its own
+        // VoiceOver and UI-test element; title and message still read in order.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("turnFailure.summary")
+    }
+
+    /// The message with `linkURL` made tappable in place when the URL text
+    /// appears in it; otherwise the link gets its own row below.
+    private var linkedMessage: (text: AttributedString?, hasInlineLink: Bool) {
+        guard let message = summary.message else { return (nil, false) }
+        var text = AttributedString(message)
+        guard let url = summary.linkURL,
+              let range = text.range(of: url.absoluteString, options: .caseInsensitive) else {
+            return (text, false)
+        }
+        text[range].link = url
+        text[range].underlineStyle = .single
+        return (text, true)
+    }
+
+    /// The provider's reset phrase, only when the message does not already say it.
+    private var visibleRetryHint: String? {
+        guard let hint = summary.retryHint else { return nil }
+        if let message = summary.message, message.localizedCaseInsensitiveContains(hint) { return nil }
+        return hint
+    }
+
+    /// Neutral secondary text that sits on the amber or red card without
+    /// borrowing the app accent; full foreground under increased contrast.
+    private var secondaryForeground: Color {
+        Theme.foreground(for: colorScheme).opacity(contrast == .increased ? 1 : Card.turnFailureSecondaryOpacity)
     }
 
     // MARK: - Link
@@ -156,7 +188,7 @@ struct TurnFailureNoticeView: View {
                 WorkspaceTranscriptDisclosure(isExpanded: isExpanded)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme, contrast: contrast))
+            .foregroundStyle(secondaryForeground)
             .frame(minHeight: Design.minimumTapTarget)
             .contentShape(Rectangle())
             .copyContextMenuPassthrough()
@@ -172,6 +204,9 @@ struct TurnFailureNoticeView: View {
         VStack(alignment: .leading, spacing: Card.turnFailureActionSpacing) {
             Text(summary.rawDetails)
                 .font(.caption.monospaced())
+                // A language without hyphenation data keeps tokens such as
+                // "usageLimitExceeded" from breaking with an inserted hyphen.
+                .typesettingLanguage(Locale.Language(identifier: "zxx"))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
@@ -202,7 +237,7 @@ struct TurnFailureNoticeView: View {
                 Text(copied ? "Copied" : "Copy")
                     .interFont(Constants.Typography.subtextXXS)
             }
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme, contrast: contrast))
+            .foregroundStyle(secondaryForeground)
             .frame(minHeight: Design.minimumTapTarget)
             .contentShape(Rectangle())
             .copyContextMenuPassthrough()
