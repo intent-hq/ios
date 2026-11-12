@@ -121,7 +121,7 @@ final class PushRelayController {
         guard deviceSync.invalidate() else { return }
         Task { [weak self] in
             guard let self else { return }
-            await deviceSync.run(isCurrent: { true }) { [weak self] _ in await self?.syncDevice() }
+            _ = await deviceSync.run(isCurrent: { true }, pass: { [weak self] _ in await self?.syncDevice() })
             deviceSync.settleScheduled()
         }
     }

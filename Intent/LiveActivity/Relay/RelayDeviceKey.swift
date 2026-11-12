@@ -19,7 +19,7 @@ nonisolated final class RelayDeviceKey: RelaySigner, @unchecked Sendable {
         case software(P256.Signing.PrivateKey)
     }
 
-    nonisolated private enum Tag: UInt8 {
+    nonisolated private enum KeyTag: UInt8 {
         case secureEnclave = 1
         case software = 2
     }
@@ -56,12 +56,12 @@ nonisolated final class RelayDeviceKey: RelaySigner, @unchecked Sendable {
         case .failure(let error):
             throw error
         }
-        let (key, blob) = try create()
+        let (key, blob) = create()
         guard store(blob) else { throw LoadError.keyCreationFailed }
         return key
     }
 
-    private static func create() throws -> (RelayDeviceKey, Data) {
+    private static func create() -> (RelayDeviceKey, Data) {
         if SecureEnclave.isAvailable {
             var error: Unmanaged<CFError>?
             if let access = SecAccessControlCreateWithFlags(
@@ -70,15 +70,15 @@ nonisolated final class RelayDeviceKey: RelaySigner, @unchecked Sendable {
                 .privateKeyUsage,
                 &error
             ), let key = try? SecureEnclave.P256.Signing.PrivateKey(accessControl: access) {
-                return (RelayDeviceKey(.secureEnclave(key)), Data([Tag.secureEnclave.rawValue]) + key.dataRepresentation)
+                return (RelayDeviceKey(.secureEnclave(key)), Data([KeyTag.secureEnclave.rawValue]) + key.dataRepresentation)
             }
         }
         let key = P256.Signing.PrivateKey()
-        return (RelayDeviceKey(.software(key)), Data([Tag.software.rawValue]) + key.rawRepresentation)
+        return (RelayDeviceKey(.software(key)), Data([KeyTag.software.rawValue]) + key.rawRepresentation)
     }
 
     private static func decode(_ blob: Data) -> RelayDeviceKey? {
-        guard let first = blob.first, let tag = Tag(rawValue: first) else { return nil }
+        guard let first = blob.first, let tag = KeyTag(rawValue: first) else { return nil }
         let body = blob.dropFirst()
         switch tag {
         case .secureEnclave:
