@@ -70,7 +70,6 @@ struct TurnFailureNoticeView: View {
                         : Card.borderWidth
                 )
         )
-        .accessibilityIdentifier("turnFailure.card")
     }
 
     // MARK: - Summary
