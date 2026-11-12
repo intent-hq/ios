@@ -6,7 +6,9 @@ import UIKit
 /// Keeps one Live Activity in step with running agents on every live backend.
 ///
 /// The app drives every update, so the activity is current while the app runs
-/// (foreground or its background grace period) and marked stale after.
+/// (foreground or its background grace period) and marked stale after. Once a
+/// machine is linked to the push relay, the relay drives it instead and this
+/// controller only ends activities when the switch turns off.
 @MainActor
 final class AgentLiveActivityController {
     static let shared = AgentLiveActivityController()
@@ -23,9 +25,10 @@ final class AgentLiveActivityController {
     /// starts only when another workspace begins running.
     private var dismissedRunningKeys: Set<String> = []
     private var activeObserver: NSObjectProtocol?
+    private var isRelayDriven = RelayLinkState.load(from: .standard).isRelayDriven
 
     private init() {
-        let existing = Activity<AgentActivityAttributes>.activities
+        let existing = isRelayDriven ? [] : Activity<AgentActivityAttributes>.activities
         activityID = existing.first?.id
         for extra in existing.dropFirst() {
             let id = extra.id
@@ -56,9 +59,32 @@ final class AgentLiveActivityController {
             return
         }
         dismissedRunningKeys = []
+        if isRelayDriven {
+            Task { await Self.endAll() }
+            return
+        }
         guard let id = activityID else { return }
         activityID = nil
         Task { await Self.end(id: id, content: nil, policy: .immediate) }
+    }
+
+    /// The relay starts its own activity with push tokens, so an app-started
+    /// one ends when the first machine links; the app adopts the relay's
+    /// activity when the last machine unlinks.
+    func setRelayDriven(_ driven: Bool) {
+        guard driven != isRelayDriven else { return }
+        isRelayDriven = driven
+        publishTask?.cancel()
+        publishTask = nil
+        dismissedRunningKeys = []
+        if driven {
+            guard let id = activityID else { return }
+            activityID = nil
+            Task { await Self.end(id: id, content: nil, policy: .immediate) }
+        } else {
+            activityID = Activity<AgentActivityAttributes>.activities.first?.id
+            schedulePublish()
+        }
     }
 
     private var isEnabled: Bool {
@@ -83,7 +109,7 @@ final class AgentLiveActivityController {
     }
 
     private func schedulePublish() {
-        guard publishTask == nil else { return }
+        guard !isRelayDriven, publishTask == nil else { return }
         publishTask = Task { [weak self] in
             try? await Task.sleep(for: Self.publishDelay)
             guard let self, !Task.isCancelled else { return }
@@ -93,7 +119,7 @@ final class AgentLiveActivityController {
     }
 
     private func publish() async {
-        guard isEnabled else { return }
+        guard isEnabled, !isRelayDriven else { return }
         let entries = stores
             .sorted { $0.key.connectionID.uuidString < $1.key.connectionID.uuidString }
             .flatMap { backendID, store in
@@ -140,6 +166,12 @@ final class AgentLiveActivityController {
     ) async {
         await Activity<AgentActivityAttributes>.activities.first { $0.id == id }?
             .end(content, dismissalPolicy: policy)
+    }
+
+    nonisolated private static func endAll() async {
+        for activity in Activity<AgentActivityAttributes>.activities {
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
     }
 
     private func start(_ content: ActivityContent<AgentActivityAttributes.ContentState>, running: Set<String>) {

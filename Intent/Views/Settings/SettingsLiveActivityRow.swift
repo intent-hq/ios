@@ -26,6 +26,7 @@ struct SettingsLiveActivityRow: View {
         .accessibilityIdentifier("settings.liveActivities")
         .onChange(of: isEnabled) { _, enabled in
             AgentLiveActivityController.shared.setEnabled(enabled)
+            PushRelayController.shared.preferencesChanged()
         }
     }
 }

@@ -41,6 +41,10 @@ final class BackendSessionRegistry {
     /// connection is torn down.
     @ObservationIgnored var onSessionTeardown: ((BackendSession) -> Void)?
 
+    /// Called when saved connections are removed, while their sessions may
+    /// still be live.
+    @ObservationIgnored var onBackendsRemoved: (([BackendID]) -> Void)?
+
     init(makeSession: @escaping SessionFactory = BackendSessionRegistry.makeLiveSession) {
         self.makeSession = makeSession
     }
@@ -126,12 +130,14 @@ final class BackendSessionRegistry {
     /// it auto-closes. Idempotent.
     func markBackendRemoved(_ id: BackendID) {
         removedBackendIDs.insert(id)
+        onBackendsRemoved?([id])
     }
 
     /// Marks several backends removed at once (synced-merge tombstones).
     func markBackendsRemoved(_ ids: [BackendID]) {
         guard !ids.isEmpty else { return }
         removedBackendIDs.formUnion(ids)
+        onBackendsRemoved?(ids)
     }
 
     /// Clears removal marks for backends whose saved connection reappeared
