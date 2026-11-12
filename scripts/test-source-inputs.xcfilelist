@@ -977,6 +977,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorStartupTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorWorkspaceValidationTests.swift
 $(SRCROOT)/IntentTests/AssistantLauncherLayoutTests.swift
+$(SRCROOT)/IntentTests/AssistantStoreLoadPhaseTests.swift
 $(SRCROOT)/IntentTests/AssistantStoreTests.swift
 $(SRCROOT)/IntentTests/AttachmentImageLoaderTests.swift
 $(SRCROOT)/IntentTests/AttachmentUploadServiceTests.swift
@@ -1124,6 +1125,7 @@ $(SRCROOT)/IntentTests/CreationOptionsCatalogEventTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsCatalogIsolationTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsCatalogTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsFeedReadinessTests.swift
+$(SRCROOT)/IntentTests/CreationOptionsLoadPhaseTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/CreationPickerControlsTests.swift
@@ -1297,6 +1299,7 @@ $(SRCROOT)/IntentTests/SharedWorkspaceStatusFailureTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusLifetimeTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusRaceTests.swift
 $(SRCROOT)/IntentTests/SharedWorkspaceStatusTests.swift
+$(SRCROOT)/IntentTests/SkillCatalogLoadPhaseTests.swift
 $(SRCROOT)/IntentTests/SkillCatalogStoreTests.swift
 $(SRCROOT)/IntentTests/SlashSkillContextTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
@@ -1377,6 +1380,7 @@ $(SRCROOT)/IntentTests/WorkspaceBrowserStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTabTests.swift
 $(SRCROOT)/IntentTests/WorkspaceBrowserTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangeTreeTests.swift
+$(SRCROOT)/IntentTests/WorkspaceChangesLoadPhaseTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRaceTests.swift
 $(SRCROOT)/IntentTests/WorkspaceChangesRootRaceTests.swift
