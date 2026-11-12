@@ -177,7 +177,6 @@ $(SRCROOT)/Intent/Assets.xcassets/MapPin.imageset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownCodeBlockBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownInlineCodeBackground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/MarkdownInlineCodeForeground.colorset
-$(SRCROOT)/Intent/Assets.xcassets/MarkdownLinkForeground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/Menu.imageset
 $(SRCROOT)/Intent/Assets.xcassets/MenuQuad.imageset
 $(SRCROOT)/Intent/Assets.xcassets/Message.imageset

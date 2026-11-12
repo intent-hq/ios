@@ -14,12 +14,16 @@ struct CompactMarkdownStyle: StructuredText.Style {
         dark: Constants.Colors.Markdown.inlineCodeBackground(for: .dark)
     )
 
-    static let linkForeground = DynamicColor(
-        light: Constants.Colors.Markdown.linkForeground(for: .light),
-        dark: Constants.Colors.Markdown.linkForeground(for: .dark)
-    )
-
-    let inlineStyle: InlineStyle
+    let inlineStyle = InlineStyle()
+        .code(
+            // Inter has no monospaced design; select the system code font explicitly.
+            .font(.system(.body, design: .monospaced)),
+            .fontScale(Constants.Markdown.codeFontScale),
+            .foregroundColor(Self.codeForeground),
+            .backgroundColor(Self.codeBackground)
+        )
+        // Links keep the surrounding text color and read as links by underline (#904).
+        .link(.underlineStyle(.single))
     let headingStyle = CompactHeadingStyle()
     let paragraphStyle = CompactParagraphStyle()
     let blockQuoteStyle = CompactBlockQuoteStyle()
@@ -35,34 +39,14 @@ struct CompactMarkdownStyle: StructuredText.Style {
     let tableCellStyle = CompactTableCellStyle()
     let thematicBreakStyle = CompactThematicBreakStyle()
 
-    /// `linkStyle` `.chat` colors links and draws single-link lines as rows
-    /// (`StandaloneLinkRow`); `.plain` keeps underlined body-colored links.
-    init(
-        mermaidSources: [String: String] = [:],
-        pendingMermaidLanguage: String? = nil,
-        linkStyle: MarkdownLinkStyle = .plain
-    ) {
+    init(mermaidSources: [String: String] = [:], pendingMermaidLanguage: String? = nil) {
         codeBlockStyle = MermaidCodeBlockStyle(sources: mermaidSources, pendingLanguage: pendingMermaidLanguage)
-        let code = InlineStyle()
-            .code(
-                // Inter has no monospaced design; select the system code font explicitly.
-                .font(.system(.body, design: .monospaced)),
-                .fontScale(Constants.Markdown.codeFontScale),
-                .foregroundColor(Self.codeForeground),
-                .backgroundColor(Self.codeBackground)
-            )
-        switch linkStyle {
-        case .plain:
-            // Links keep the surrounding text color and read as links by underline.
-            inlineStyle = code.link(.underlineStyle(.single))
-        case .chat:
-            inlineStyle = code.link(.underlineStyle(.single), .foregroundColor(Self.linkForeground))
-        }
     }
 }
 
-/// How Markdown links look: `.plain` for notes and pull requests, `.chat`
-/// for transcript messages.
+/// How Markdown links are laid out: `.plain` for notes and pull requests,
+/// `.chat` for transcript messages, where single-link lines become
+/// full-width rows. Both keep links underlined in the text color (#904).
 enum MarkdownLinkStyle {
     case chat
     case plain

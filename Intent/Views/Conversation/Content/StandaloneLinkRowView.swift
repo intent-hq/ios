@@ -4,6 +4,7 @@ import Textual
 /// A chat line that is only one link, drawn as a full-width row at least
 /// 44 pt tall so a tap anywhere on it opens the link, not just on the glyphs.
 /// Opens through the environment's `openURL`, the same route as inline links.
+/// Title and icons inherit the surrounding text color, like inline links (#904).
 struct StandaloneLinkRowView: View {
     let row: StandaloneLinkRow
     @Environment(\.openURL) private var openURL
@@ -53,7 +54,6 @@ struct StandaloneLinkRowView: View {
                     .opacity(Layout.iconOpacity)
                     .accessibilityHidden(true)
             }
-            .foregroundStyle(Constants.Colors.Markdown.linkForeground(for: colorScheme))
             .padding(.vertical, Layout.verticalPadding)
             .frame(maxWidth: .infinity, minHeight: Layout.minimumHeight, alignment: .leading)
             .contentShape(Rectangle())
@@ -73,7 +73,7 @@ struct StandaloneLinkRowView: View {
                 .background {
                     if configuration.isPressed {
                         RoundedRectangle(cornerRadius: Layout.pressedCornerRadius)
-                            .fill(Constants.Colors.Markdown.linkForeground(for: colorScheme).opacity(Layout.pressedOpacity))
+                            .fill(Theme.foreground(for: colorScheme).opacity(Layout.pressedOpacity))
                             .padding(.horizontal, Layout.pressedOutset)
                     }
                 }

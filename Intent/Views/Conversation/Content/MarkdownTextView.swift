@@ -9,7 +9,7 @@ struct MarkdownTextView: View {
     /// Intent-file images render even when nil if the link carries its own
     /// workspace ID (long form).
     var workspaceId: String?
-    /// `.chat` colors links and renders single-link lines as full-width rows.
+    /// `.chat` renders single-link lines as full-width rows.
     var linkStyle: MarkdownLinkStyle
     /// Prepared source is reused across view reconstruction and conversation visits.
     private let markdownSource: String
@@ -95,13 +95,6 @@ struct MarkdownTextView: View {
         }
     }
 
-    private var linkColor: Color {
-        switch linkStyle {
-        case .plain: textColor
-        case .chat: Constants.Colors.Markdown.linkForeground(for: colorScheme)
-        }
-    }
-
     var body: some View {
         let pending = isStreaming ? pendingDiagram : nil
         let markdownView = StructuredText(
@@ -110,8 +103,7 @@ struct MarkdownTextView: View {
         )
             .textual.structuredTextStyle(CompactMarkdownStyle(
                 mermaidSources: mermaidSources,
-                pendingMermaidLanguage: pending?.language,
-                linkStyle: linkStyle
+                pendingMermaidLanguage: pending?.language
             ))
             .textual.imageAttachmentLoader(
                 IntentFileAttachmentLoader(
@@ -155,8 +147,8 @@ struct MarkdownTextView: View {
             .interFont(Constants.Typography.bodyS)
             .tracking(workspaceDesign ? Constants.Conversation.Design.Typography.bodyTracking : 0)
             .foregroundStyle(textColor)
-            // SwiftUI draws link runs in the tint: underlined body text, or the link color in chat.
-            .tint(linkColor)
+            // SwiftUI draws link runs in the tint; links match the text and are underlined instead.
+            .tint(textColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
                 ImageLightboxView(image: item.image)
