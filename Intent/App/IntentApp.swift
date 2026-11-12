@@ -3,6 +3,10 @@ import UIKit
 
 @main
 struct IntentApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(RemoteNotificationsAppDelegate.self) private var appDelegate
+    #endif
+
     init() {
         ConversationTrace.emit("AppStarted", "")
         LifecycleDiagnostics.sessionStarted()
@@ -10,6 +14,11 @@ struct IntentApp: App {
         DemoConnectionLoss.seedSavedMachineIfNeeded()
         DemoSettings.seedConnectionsIfNeeded()
         DemoStartupConnection.seedSavedMachineIfNeeded()
+        #endif
+        #if os(iOS)
+        LocalNotificationService.shared.onAuthorized = {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
         #endif
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
@@ -20,6 +29,7 @@ struct IntentApp: App {
             NotificationManager.shared.attachSessionObserver(for: session)
             #if os(iOS)
             AgentLiveActivityController.shared.attach(session)
+            PushRelayController.shared.attach(session)
             #endif
         }
         BackendSessionRegistry.shared.onSessionTeardown = { session in
@@ -27,9 +37,16 @@ struct IntentApp: App {
                 NotificationManager.shared.detachSessionObserver(for: backendID)
                 #if os(iOS)
                 AgentLiveActivityController.shared.detach(backendID)
+                PushRelayController.shared.detach(backendID)
                 #endif
             }
         }
+        #if os(iOS)
+        BackendSessionRegistry.shared.onBackendsRemoved = { backendIDs in
+            PushRelayController.shared.connectionsRemoved(backendIDs)
+        }
+        PushRelayController.shared.start()
+        #endif
     }
 
     var body: some Scene {
