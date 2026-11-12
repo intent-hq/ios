@@ -66,7 +66,6 @@ nonisolated struct RelayClient: Sendable {
         let device: RelayDeviceInfo
     }
 
-
     func register(linkToken: String, connectionId: UUID, device: RelayDeviceInfo) async throws -> Registration {
         let body = RegistrationBody(linkToken: linkToken, connectionId: connectionId.uuidString, publicKey: signer.publicKey, device: device)
         let data = try await send("POST", "/v1/devices", body: try JSONEncoder().encode(body))
