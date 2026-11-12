@@ -65,7 +65,7 @@ struct AgentActivityLockScreenView: View {
                     .font(.subheadline.weight(.semibold))
                 Spacer(minLength: AgentActivityStyle.headerSpacing)
                 if isStale {
-                    Text("Updated \(state.updatedAt, style: .time)")
+                    Text("Updated \(state.updatedDate, style: .time)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
