@@ -5,7 +5,7 @@ import WebKit
 /// Relative images, stylesheets and fonts load only from the report's own workspace.
 struct HTMLFileWebView: UIViewRepresentable {
     let file: WorkspaceTextFile
-    /// Workspace-relative location of `file`; relative subresources resolve against it.
+    /// Location of `file`, workspace-relative or absolute; relative subresources resolve against it.
     let path: String
     let workspaceId: String
     let loader: WorkspaceFileImageLoader

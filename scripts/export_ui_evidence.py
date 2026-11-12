@@ -317,6 +317,9 @@ CAPTURES = {
         "testRelativeHTMLPathLinkOpensHTMLViewer": (
             "HTML viewer from relative path link light", "HTML viewer from relative path link dark",
         ),
+        "testAbsoluteHTMLPathLinkLoadsItsRelativeAssets": (
+            "HTML viewer from absolute path link light",
+        ),
     },
     "ChatLinkTapTargetUITests": {
         "testLinkRowsInLightAndDark": ("Chat link rows light", "Chat link rows dark"),
