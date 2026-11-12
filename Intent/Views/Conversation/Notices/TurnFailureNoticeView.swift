@@ -98,7 +98,8 @@ struct TurnFailureNoticeView: View {
                     InlineText(message, parser: TurnFailureMessageParser(linkURL: summary.linkURL))
                         .interFont(bodyStyle)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .tint(Theme.foreground(for: colorScheme))
+                        // Underlined body color, not the system accent, on the tinted card.
+                        .textual.inlineStyle(InlineStyle().link(.foregroundColor(Theme.foreground(for: colorScheme))))
                         .textual.textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("turnFailure.message")
