@@ -25,6 +25,7 @@ struct MarkdownTextView: View {
     @State private var videoItem: VideoItem?
     @State private var pdfItem: PDFItem?
     @State private var browserItem: WorkspaceBrowser?
+    @State private var unopenableLink: UnopenableLink?
     @State private var attachmentAttempt = 0
 
     private static let maximumBlockIndent = 3
@@ -159,6 +160,7 @@ struct MarkdownTextView: View {
                         .coversConversationComposers()
                 }
             }
+            .unopenableLinkAlert($unopenableLink)
     }
 
     private func openLink(_ url: URL) -> OpenURLAction.Result {
@@ -168,7 +170,8 @@ struct MarkdownTextView: View {
                 return .handled
             }
         } catch {
-            return .discarded
+            unopenableLink = UnopenableLink(url: url, reason: .browserFailed(error.localizedDescription))
+            return .handled
         }
         if let onOpenURL { return onOpenURL(url) }
         inheritedOpenURL(url)

@@ -313,6 +313,20 @@ CAPTURES = {
             "Text viewer after toggling wrapping",
         ),
     },
+    "PathFileLinkUITests": {
+        "testRelativeHTMLPathLinkOpensHTMLViewer": (
+            "HTML viewer from relative path link light", "HTML viewer from relative path link dark",
+        ),
+        "testAbsoluteHTMLPathLinkLoadsItsRelativeAssets": (
+            "HTML viewer from absolute path link light",
+        ),
+    },
+    "UnopenableLinkUITests": {
+        "testUnopenableLinksShowMessageWithCopyLink": (
+            "Unopenable link message light", "In-app browser failure message light",
+            "Unopenable link message dark", "In-app browser failure message dark",
+        ),
+    },
     "AssistantStateUITests": {
         "testLoadingFailureRetriesToEmptyAndStartsConversation": (
             "Assistant loading light", "Assistant error light", "Assistant empty light",

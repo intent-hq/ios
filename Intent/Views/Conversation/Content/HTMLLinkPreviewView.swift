@@ -93,7 +93,9 @@ struct HTMLLinkPreviewView: View {
                 .accessibilityLabel("Retry loading HTML file")
             }
         } else if let file, let rules {
-            HTMLFileWebView(file: file, rules: rules) { hasFailed = true }
+            HTMLFileWebView(file: file, path: link.path, workspaceId: link.workspaceId, loader: fileLoader, rules: rules) {
+                hasFailed = true
+            }
         } else {
             ProgressView("Loading HTML file…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

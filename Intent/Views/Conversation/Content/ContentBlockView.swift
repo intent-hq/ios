@@ -104,6 +104,7 @@ struct ContentBlockBody: View, Equatable {
     @State private var pdfLink: PDFLinkPreviewView.Link?
     @State private var textLink: TextLinkPreviewView.Link?
     @State private var htmlLink: HTMLLinkPreviewView.Link?
+    @State private var unopenableLink: UnopenableLink?
     /// Set when a thumbnail tap started hydration: the lightbox then opens
     /// automatically once the full block merges in (dataTruncated clears).
     @State private var lightboxPendingHydration = false
@@ -209,6 +210,7 @@ struct ContentBlockBody: View, Equatable {
             HTMLLinkPreviewView(link: link)
                 .coversConversationComposers()
         }
+        .unopenableLinkAlert($unopenableLink)
     }
 
     private func openTextURL(_ url: URL) -> OpenURLAction.Result {
@@ -225,6 +227,8 @@ struct ContentBlockBody: View, Equatable {
             } else {
                 coordinator.onSelectNote(noteId, workspaceId: targetWorkspaceId, noteTitle: "Note")
             }
+        case .unopenable(let reason):
+            unopenableLink = UnopenableLink(url: url, reason: reason)
         case .system:
             // Defer to the inherited handler, which opens tracked pull requests in the app.
             openURL(url)
@@ -401,22 +405,32 @@ extension ContentBlockBody {
         case text(TextLinkPreviewView.Link)
         case html(HTMLLinkPreviewView.Link)
         case note(id: String, workspaceId: String)
+        /// iOS can't open the link; the row explains why instead of ignoring the tap.
+        case unopenable(UnopenableLink.Reason)
         case system
     }
 
     /// Shared by ordinary transcript markdown and the chief workspace's linked text.
+    /// Workspace file links open in the matching viewer whether they are written as
+    /// `intent://local/file/…` links or as paths (`report.html`, `/…/report.html`, `file://…`).
     static func textURLRoute(for url: URL, workspaceId: String) -> TextURLRoute {
-        if let link = IntentFileLink.parse(url), WorkspacePDF.isPDF(path: link.path) {
-            return .pdf(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
-        }
-        if let link = IntentFileLink.parse(url), ["html", "htm"].contains(URL(fileURLWithPath: link.path).pathExtension.lowercased()) {
-            return .html(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
-        }
-        if let link = IntentFileLink.parse(url), !link.isImage, !WorkspaceVideo.isVideo(path: link.path) {
-            return .text(.init(workspaceId: link.workspaceId ?? workspaceId, path: link.path))
+        if let link = IntentFileLink.parse(url) ?? IntentFileLink.parsePath(url) {
+            let target = link.workspaceId ?? workspaceId
+            if WorkspacePDF.isPDF(path: link.path) {
+                return .pdf(.init(workspaceId: target, path: link.path))
+            }
+            if ["html", "htm"].contains(URL(fileURLWithPath: link.path).pathExtension.lowercased()) {
+                return .html(.init(workspaceId: target, path: link.path))
+            }
+            if !link.isImage, !WorkspaceVideo.isVideo(path: link.path) {
+                return .text(.init(workspaceId: target, path: link.path))
+            }
         }
         if let link = NoteDetailView.parseIntentNoteLink(url) {
             return .note(id: link.id, workspaceId: link.workspaceId ?? workspaceId)
+        }
+        if let reason = UnopenableLink.reason(for: url) {
+            return .unopenable(reason)
         }
         return .system
     }

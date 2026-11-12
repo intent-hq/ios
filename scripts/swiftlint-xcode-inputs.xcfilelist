@@ -461,6 +461,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/CodeBlockView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/CompactMarkdownStyle.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ContentBlockView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ContextMentionChipView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/HTMLFileResources.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/HTMLFileWebView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/HTMLLinkPreviewView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageAttachmentThumbnail.swift
@@ -478,6 +479,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/PDFLinkPreviewView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalCardView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalSelectionSwitch.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/TextLinkPreviewView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/UnopenableLinkAlert.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceCreationProposalView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceLinkedTextView.swift
@@ -890,6 +892,10 @@ $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
+$(SRCROOT)/IntentTests/HTMLFileResourceHandlerTests.swift
+$(SRCROOT)/IntentTests/HTMLFileResourcePolicyTests.swift
+$(SRCROOT)/IntentTests/HTMLFileResourceQueueTests.swift
+$(SRCROOT)/IntentTests/HTMLFileResourceTestSupport.swift
 $(SRCROOT)/IntentTests/HTMLFileWebViewTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
 $(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
@@ -1078,6 +1084,7 @@ $(SRCROOT)/IntentTests/TransferDestinationPolicyTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
 $(SRCROOT)/IntentTests/TurnFailureSummaryTests.swift
 $(SRCROOT)/IntentTests/TypographyTests.swift
+$(SRCROOT)/IntentTests/UnopenableLinkTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WKWebViewPageJavaScriptTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
@@ -1222,6 +1229,7 @@ $(SRCROOT)/IntentUITests/ListLoadFailureUITests.swift
 $(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
 $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
+$(SRCROOT)/IntentUITests/PathFileLinkUITests.swift
 $(SRCROOT)/IntentUITests/QuestionAttachmentUITests.swift
 $(SRCROOT)/IntentUITests/QuestionWizardUITests.swift
 $(SRCROOT)/IntentUITests/ScriptMonitorsUITests.swift
@@ -1232,6 +1240,7 @@ $(SRCROOT)/IntentUITests/StartupWebSocketFixture.swift
 $(SRCROOT)/IntentUITests/ToastUITests.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
 $(SRCROOT)/IntentUITests/TurnFailureNoticeUITests.swift
+$(SRCROOT)/IntentUITests/UnopenableLinkUITests.swift
 $(SRCROOT)/IntentUITests/WatcherMessageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceAgentGroupsUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceBackgroundUITests.swift

@@ -86,34 +86,107 @@ struct ContentBlockLinkTests {
     }
 
     @Test(arguments: [
-        "intent://local/file/image.png",
-        "intent://local/linked/file/image.PNG",
-        "intent://local/file/movie.mp4",
-        "intent://local/linked/file/movie.MP4",
-        "intent://local/file/movie.webm",
-        "intent://local/file/../notes.txt",
-        "intent://local/linked/file/%2E%2E/notes.txt",
-        "intent://local/file/reports%2Fnotes.txt",
-        "intent://remote/file/notes.txt",
-        "workspace-asset://current/notes.txt",
         "https://example.com/notes.txt",
-        "intent://local/file/../report.pdf",
-        "intent://local/linked/file/%2E%2E/report.pdf",
-        "intent://local/file/reports%2Freport.pdf",
-        "intent://local/file//report.pdf",
-        "intent://remote/file/report.pdf",
-        "intent://local/file",
-        "workspace-asset://current/report.pdf",
         "https://example.com/report.pdf",
         "http://localhost:5173/report.pdf",
-        "file:///tmp/report.pdf",
         "mailto:hello@example.com",
         "https://example.com/page.html",
-        "intent://local/file/../page.html",
-        "workspace-asset://current/page.html"
+        "intent://pair?payload=abc"
     ])
     func otherLinksKeepSystemRouting(_ address: String) throws {
         let url = try #require(URL(string: address))
         #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .system)
+    }
+
+    @Test(arguments: [
+        ("intent://local/file/image.png", UnopenableLink.Reason.unsupportedIntentLink),
+        ("intent://local/linked/file/image.PNG", .unsupportedIntentLink),
+        ("intent://local/file/movie.mp4", .unsupportedIntentLink),
+        ("intent://local/linked/file/movie.MP4", .unsupportedIntentLink),
+        ("intent://local/file/movie.webm", .unsupportedIntentLink),
+        ("intent://local/file/../notes.txt", .unsupportedIntentLink),
+        ("intent://local/linked/file/%2E%2E/notes.txt", .unsupportedIntentLink),
+        ("intent://local/file/reports%2Fnotes.txt", .unsupportedIntentLink),
+        ("intent://remote/file/notes.txt", .unsupportedIntentLink),
+        ("intent://local/file/../report.pdf", .unsupportedIntentLink),
+        ("intent://local/file//report.pdf", .unsupportedIntentLink),
+        ("intent://local/file", .unsupportedIntentLink),
+        ("intent://local/settings", .unsupportedIntentLink),
+        ("intent://local/file/../page.html", .unsupportedIntentLink),
+        ("workspace-asset://current/notes.txt", .unsupportedLocation),
+        // Path links that can't be resolved to a workspace file keep the message.
+        ("../report.html", .unsupportedLocation),
+        ("reports/../../report.html", .unsupportedLocation),
+        ("./../report.html", .unsupportedLocation),
+        ("reports//report.html", .unsupportedLocation),
+        ("reports/", .unsupportedLocation),
+        ("reports%5Creport.html", .unsupportedLocation),
+        ("reports%2Freport.html", .unsupportedLocation),
+        ("/Users/me/../report.html", .unsupportedLocation),
+        ("/", .unsupportedLocation),
+        ("#summary", .unsupportedLocation),
+        ("C:/Users/me/report.html", .unsupportedLocation),
+        ("file://server/share/report.html", .unsupportedLocation),
+        ("file:report.html", .unsupportedLocation),
+        ("file:///tmp/../report.pdf", .unsupportedLocation),
+        ("reports/chart.png", .unsupportedLocation),
+        ("file:///Users/me/movie.mp4", .unsupportedLocation)
+    ])
+    func unopenableLinksShowAMessage(address: String, reason: UnopenableLink.Reason) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .unopenable(reason))
+    }
+
+    @Test(arguments: [
+        ("report.html", "report.html"),
+        ("./report.html", "report.html"),
+        (".intent/artifacts/report.html", ".intent/artifacts/report.html"),
+        ("reports/Demo%20report.HTM", "reports/Demo report.HTM"),
+        ("reports/report.html#summary", "reports/report.html"),
+        ("reports/report.html?view=full", "reports/report.html"),
+        ("/Users/me/project/report.html", "/Users/me/project/report.html"),
+        ("file:///Users/me/project/report.html", "/Users/me/project/report.html"),
+        ("FILE:///Users/me/project/report.html", "/Users/me/project/report.html"),
+        ("file://localhost/Users/me/project/Demo%20report.html", "/Users/me/project/Demo report.html")
+    ])
+    func htmlPathLinksOpenRenderedPage(address: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .html(
+            .init(workspaceId: "current", path: expectedPath)
+        ))
+    }
+
+    @Test(arguments: [
+        ("report.pdf", "report.pdf"),
+        (".intent/artifacts/Review%20notes.PDF", ".intent/artifacts/Review notes.PDF"),
+        ("/tmp/report.pdf", "/tmp/report.pdf"),
+        ("file:///tmp/report.pdf", "/tmp/report.pdf")
+    ])
+    func pdfPathLinksOpenInViewer(address: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .pdf(
+            .init(workspaceId: "current", path: expectedPath)
+        ))
+    }
+
+    @Test(arguments: [
+        ("README.md", "README.md"),
+        ("docs/notes.txt", "docs/notes.txt"),
+        ("./Sources/App.swift", "Sources/App.swift"),
+        ("/Users/me/project/output.log", "/Users/me/project/output.log"),
+        ("file:///Users/me/project/config.json", "/Users/me/project/config.json")
+    ])
+    func textPathLinksOpenInViewer(address: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .text(
+            .init(workspaceId: "current", path: expectedPath)
+        ))
+    }
+
+    @Test func chiefWorkspacePathLinkOpensInChiefWorkspace() throws {
+        let url = try #require(URL(string: "reports/report.html"))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: Workspace.chiefWorkspaceId) == .html(
+            .init(workspaceId: Workspace.chiefWorkspaceId, path: "reports/report.html")
+        ))
     }
 }
