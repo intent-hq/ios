@@ -81,10 +81,16 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
         let link = inlineLink(in: app)
         XCTAssertTrue(link.waitForExistence(timeout: Self.timeout), app.debugDescription)
         // Selectable text overlays the semantic link in accessibility hit-testing
-        // (as in InlineResponseImageUITests), so tap the link's own frame.
-        link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        // (as in InlineResponseImageUITests), so tap inside the link's frame.
+        // A wrapped link's frame spans two lines; its lower-left corner is on
+        // the link's start in either the one- or two-line layout.
+        let frame = link.frame
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.75)).tap()
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
-        XCTAssertTrue(safari.wait(for: .runningForeground, timeout: Self.timeout), "Tapping the inline link opens the URL")
+        XCTAssertTrue(
+            safari.wait(for: .runningForeground, timeout: Self.timeout),
+            "Tapping the inline link opens the URL (link frame \(frame), app state \(app.state.rawValue))\n\(app.debugDescription)"
+        )
         safari.terminate()
     }
 
