@@ -19,6 +19,7 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
             ("Open the text notes", .text),
             ("Open the missing text file", .text),
             ("Open the HTML report", .html),
+            ("Open the HTML report by absolute path", .html),
             ("Open the workspace settings", .message),
             ("Open the signed-in preview", .message)
         ]
