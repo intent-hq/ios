@@ -166,6 +166,13 @@ extension Constants.Conversation.NoticeCard {
     static let increasedContrastBackgroundMultiplier: Double = 1.75
     static let increasedContrastBorderWidthMultiplier: CGFloat = 2
     static let attentionTextSpacing: CGFloat = 2
+    /// Gap between the turn-failure summary, link, and Details sections.
+    static let turnFailureSectionSpacing: CGFloat = 6
+    static let turnFailureActionSpacing: CGFloat = 4
+    static let turnFailureDetailsPadding: CGFloat = 8
+    static let turnFailureDetailsCornerRadius: CGFloat = 6
+    static let turnFailureDetailsBackgroundOpacity: Double = 0.06
+    static let turnFailureDetailsIncreasedOpacity: Double = 0.12
 }
 
 extension Constants.Conversation.DividerNotice {

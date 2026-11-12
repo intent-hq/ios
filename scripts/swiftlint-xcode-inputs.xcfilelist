@@ -491,6 +491,7 @@ $(SRCROOT)/Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/QuestionsDismissedNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/ScriptMonitorWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/SystemNoticeBannerView.swift
+$(SRCROOT)/Intent/Views/Conversation/Notices/TurnFailureNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/WakeCardDisclosureHeader.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/WatcherMessageBodyView.swift
 $(SRCROOT)/Intent/Views/Conversation/Questions/QuestionAttachmentLifecycle.swift
@@ -1224,6 +1225,7 @@ $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/StartupWebSocketFixture.swift
 $(SRCROOT)/IntentUITests/ToastUITests.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
+$(SRCROOT)/IntentUITests/TurnFailureNoticeUITests.swift
 $(SRCROOT)/IntentUITests/WatcherMessageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceAgentGroupsUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceBackgroundUITests.swift

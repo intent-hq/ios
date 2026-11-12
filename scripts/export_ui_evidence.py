@@ -338,6 +338,13 @@ CAPTURES = {
             "Automated messages collapsed", "Automated messages agent expanded", "Automated messages final state",
         ),
     },
+    "TurnFailureNoticeUITests": {
+        "testUsageLimitCardHidesRawDetailsUntilExpanded": tuple(
+            f"Turn failure {state} {appearance}"
+            for appearance in ("light", "dark")
+            for state in ("collapsed", "expanded")
+        ),
+    },
     "WatcherMessageUITests": {
         "testWatcherDetailsExpandAndCollapseWithoutLosingTheReport": (
             "Watcher collapsed", "Watcher summary", "Watcher expanded details", "Watcher final state",

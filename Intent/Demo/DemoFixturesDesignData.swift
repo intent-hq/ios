@@ -39,6 +39,11 @@ extension DemoDesignFixtures {
     changes will be attempted.
     """
 
+    /// The raw reason intentd persisted for a Codex usage-limit turn failure.
+    static let turnFailureText = #"internal error: session/prompt failed: JSON-RPC error -32603: Internal error: "#
+        + #"{"message":"You've hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits "#
+        + #"or try again at Nov 14th, 2026 8:07 AM.","codexErrorInfo":"usageLimitExceeded"}"#
+
     static var mermaidHistory: [[String: Any]] {
         (0..<4).flatMap { turn in
             let explanation = Array(repeating: "The app loads its transcript, prepares each message, and preserves the current reading position while diagrams render.", count: 8).joined(separator: "\n\n")
@@ -168,6 +173,11 @@ extension DemoDesignFixtures {
         if scenario == .blocker {
             rows.append(Self.message(id: "demo-design-blocker", role: "system", blocks: [
                 ["type": "text", "text": Self.blockerText, "meta": ["kind": "blocker-report"]]
+            ]))
+        }
+        if scenario == .turnFailure {
+            rows.append(Self.message(id: "demo-design-turn-failure", role: "system", blocks: [
+                ["type": "text", "text": Self.turnFailureText, "meta": ["kind": "turn-failure"]]
             ]))
         }
         if hasQuestions {
