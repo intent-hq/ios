@@ -39,7 +39,7 @@ extension AppCoordinatorTests {
             sessionRegistry: registry
         )
         coordinator.selectedWorkspaceId = "workspace"
-        coordinator.isDisconnected = true
+        coordinator.connectionLoss = .lost
         if let failurePolicy {
             coordinator.routeToConnectionFailure(error: "Connection unavailable", retryPolicy: failurePolicy)
         }

@@ -1,5 +1,6 @@
 $(SRCROOT)/Intent/App/AppCoordinator.swift
 $(SRCROOT)/Intent/App/AppCoordinatorAgentHistory.swift
+$(SRCROOT)/Intent/App/AppCoordinatorConnectionScreen.swift
 $(SRCROOT)/Intent/App/AppCoordinatorIPadNavigation.swift
 $(SRCROOT)/Intent/App/AppCoordinatorLifecycleState.swift
 $(SRCROOT)/Intent/App/AppCoordinatorNavigation.swift
@@ -686,6 +687,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorAutoOpenTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorBackendRegistryTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorBackgroundRecoveryTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionFailureTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorConnectionScreenTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorIPadReselectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorInvitedSyncTests.swift

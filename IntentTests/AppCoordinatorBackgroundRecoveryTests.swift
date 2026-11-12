@@ -54,6 +54,39 @@ extension AppCoordinatorTests {
         #expect(fixture.clock.cancelledSleeps == 1)
     }
 
+    /// A recovery that first waits for workspace data (`.recovering` → `.none`)
+    /// must still retire the background grace, like an immediate recovery.
+    @Test @MainActor func recoveryAfterWorkspaceReloadRetiresBackgroundGrace() async {
+        let fixture = await backgroundRecoveryFixture()
+        let coordinator = fixture.coordinator
+        coordinator.onScenePhaseBackground()
+        fixture.connection.simulateStoppedReconnection()
+        await Self.drainBackgroundEvents()
+        coordinator.onScenePhaseActive()
+        await Self.drainBackgroundEvents()
+        #expect(coordinator.connectionLossPresentation.isDeferred)
+
+        fixture.store.setLastUpdated(nil) // Recovery must wait for a fresh snapshot.
+        fixture.connection.simulateConnect()
+        await Self.drainBackgroundEvents()
+        guard case .recovering = coordinator.connectionLoss else {
+            Issue.record("Expected .recovering, got \(coordinator.connectionLoss)")
+            return
+        }
+        #expect(coordinator.connectionLossPresentation.isDeferred, "Grace lasts while data reloads")
+
+        fixture.store.setLoading(true)
+        await Self.drainBackgroundEvents()
+        fixture.store.setLoading(false)
+        await Self.drainBackgroundEvents()
+        #expect(!coordinator.isDisconnected)
+        #expect(!coordinator.connectionLossPresentation.isDeferred, "recovered() must reset the grace")
+        fixture.clock.advance(by: .seconds(1))
+        await Self.drainBackgroundEvents()
+        #expect(fixture.clock.cancelledSleeps == 1, "The grace deadline was retired, not reached")
+        #expect(!coordinator.showsConnectionLossOverlay)
+    }
+
     @Test @MainActor func sustainedBackgroundLossAppearsAtOneSecondWithoutExtendingDeadline() async {
         let fixture = await backgroundRecoveryFixture()
         let coordinator = fixture.coordinator

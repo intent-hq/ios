@@ -23,7 +23,7 @@ extension AppCoordinator {
         } else {
             // Synced connections merged from the registry (or connections
             // saved earlier) must be offered on the pairing surface.
-            pairingShowsSavedConnections = !dependencies.persistence.loadConnections().isEmpty
+            connectionScreen = .pairing(showsSavedConnections: !dependencies.persistence.loadConnections().isEmpty)
             currentScreen = .pairing
         }
         // A deep link that arrived during the cold-start load is surfaced
@@ -121,7 +121,7 @@ extension AppCoordinator {
             return
         }
         if case .pairing = currentScreen {
-            pairingShowsSavedConnections = false
+            connectionScreen = .pairing(showsSavedConnections: false)
             onConnectionSuccess()
         } else {
             onSwitchConnection(id: connection.id)
@@ -242,7 +242,7 @@ extension AppCoordinator {
             // A merge while the pairing surface is up must (un)offer the
             // saved connections it added/removed.
             if case .pairing = currentScreen {
-                pairingShowsSavedConnections = !dependencies.persistence.loadConnections().isEmpty
+                connectionScreen = .pairing(showsSavedConnections: !dependencies.persistence.loadConnections().isEmpty)
             }
         }
         return outcome
@@ -256,7 +256,7 @@ extension AppCoordinator {
             return (lhs.lastConnectedAt ?? .distantPast) > (rhs.lastConnectedAt ?? .distantPast)
         }
         refreshInvitedReconnectCredentials(savedConnections)
-        if case .pairing = currentScreen { pairingShowsSavedConnections = !savedConnections.isEmpty }
+        if case .pairing = currentScreen { connectionScreen = .pairing(showsSavedConnections: !savedConnections.isEmpty) }
     }
 
     func refreshInvitedConnections(authenticate: PersistenceManager.InvitedAuthenticator? = nil) {
@@ -346,7 +346,7 @@ extension AppCoordinator {
 
     func onRetryConnection() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
-        connectingStartedByLaunch = false
+        connectionScreen = .connecting(startedByLaunch: false)
         currentScreen = .connecting
     }
 
@@ -360,13 +360,12 @@ extension AppCoordinator {
     func onReturnToSavedMachines() {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
         stopConnectionLifecycleForReturnHome()
-        connectingStartedByLaunch = false
-        isDisconnected = false
+        connectionLoss = .none
         selectedWorkspaceId = nil
         pendingDeepLinkPairing = nil
         routingState.stashedDeepLinkPayload = nil
         routingState.pendingNotificationSelection = nil
-        pairingShowsSavedConnections = !dependencies.persistence.loadConnections().isEmpty
+        connectionScreen = .pairing(showsSavedConnections: !dependencies.persistence.loadConnections().isEmpty)
         currentScreen = .pairing
         if let returnWindowToSavedMachines {
             returnWindowToSavedMachines()
@@ -412,7 +411,7 @@ extension AppCoordinator {
             dependencies.persistence.clearLastScreen(for: connectionID)
         }
         selectedWorkspaceId = nil
-        pairingShowsSavedConnections = !dependencies.persistence.loadConnections().isEmpty
+        connectionScreen = .pairing(showsSavedConnections: !dependencies.persistence.loadConnections().isEmpty)
         currentScreen = .pairing
     }
 
@@ -433,7 +432,6 @@ extension AppCoordinator {
         dependencies.connection.disconnect()
         resetWorkspaceStore()
         selectedWorkspaceId = nil
-        pairingShowsSavedConnections = false
         resumeConnectionLifecycleIfNeeded()
         restartConnectionAttempt()
     }
@@ -453,8 +451,8 @@ extension AppCoordinator {
         dependencies.sessionRegistry.markBackendRemoved(BackendID(id))
         if wasThisWindows {
             exitRemovedBackend()
-        } else if dependencies.persistence.loadConnections().isEmpty {
-            pairingShowsSavedConnections = false
+        } else if case .pairing = connectionScreen, dependencies.persistence.loadConnections().isEmpty {
+            connectionScreen = .pairing(showsSavedConnections: false)
         }
         return true
     }
