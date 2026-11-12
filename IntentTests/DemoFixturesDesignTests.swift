@@ -54,6 +54,11 @@ extension DemoFixturesTests {
             #expect(notice.kind == .blockerReport)
             #expect(notice.reason.contains("runner inventory returns 403"))
         }
+        if scenario == .turnFailure {
+            let summary = try #require(viewModel.messages.last?.attentionNotice?.turnFailureSummary)
+            #expect(summary.category == .usageLimit)
+            #expect(summary.rawDetails == DemoDesignFixtures.turnFailureText)
+        }
         if scenario == .questions || scenario == .questionFlow || scenario == .questionCards {
             let questions = try #require(viewModel.pendingQuestions)
             let expectedQuestion = scenario == .questionCards ? "What should happen next?" : "Can I access the repository?"
