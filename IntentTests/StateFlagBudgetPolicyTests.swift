@@ -12,9 +12,6 @@ struct StateFlagBudgetPolicyTests {
     /// Types already above the allowance. Counts may only go down; lower the
     /// entry (or delete it at the allowance) when a type sheds flags.
     static let baseline: [String: Int] = [
-        "Intent/App/AppCoordinator.swift#AppCoordinator": 7,
-        "Intent/App/IPadNavigationState.swift#IPadNavigationState": 6,
-        "Intent/App/RootView.swift#RootView": 6,
         "Intent/Demo/DemoFixturesDesign.swift#DemoDesignFixtures": 6,
         "Intent/Demo/DemoScriptMonitorFixtures.swift#DemoScriptMonitorFixtures": 5,
         "Intent/Presentation/ConversationModelSelection.swift#ConversationModelSelection": 5,
@@ -22,18 +19,16 @@ struct StateFlagBudgetPolicyTests {
         "Intent/Services/ConnectionManager.swift#ConnectionManager": 7,
         "Intent/Services/ConversationLiveTranscript.swift#ConversationLiveTranscript": 11,
         "Intent/Services/ConversationStore.swift#ConversationStore": 7,
-        "Intent/Services/CreationOptionsStore.swift#CreationOptionsStore": 8,
+        "Intent/Services/CreationOptionsStore.swift#CreationOptionsStore": 6,
         "Intent/ViewModels/ConversationViewModel.swift#ConversationViewModel": 7,
-        "Intent/Views/Conversation/Questions/QuestionWizardView.swift#QuestionWizardView": 7,
         "Intent/Views/Conversation/Transcript/ConversationColumnView.swift#ConversationColumnView": 6,
-        "Intent/Views/Conversation/Transcript/ConversationView.swift#ConversationViewContent": 8,
         "Intent/Views/Conversation/Transcript/WorkspaceConversationHeader.swift#WorkspaceNavigationHeader": 7,
         "Intent/Views/Onboarding/ManualTokenEntryView.swift#ManualTokenEntryView": 5,
         "Intent/Views/Workspaces/SpecialistPickerView.swift#SpecialistPickerView": 5,
         "Intent/Views/Workspaces/WorkspaceDetailPresentation.swift#WorkspaceDetailPresentation": 5,
         "Intent/Views/Workspaces/WorkspaceDetailSupport.swift#WorkspaceDetailHeading": 5,
         "Intent/Views/Workspaces/WorkspaceFileDiffView.swift#WorkspaceFileDiffView": 6,
-        "Intent/Views/Workspaces/WorkspaceListView.swift#WorkspaceListView": 8,
+        "Intent/Views/Workspaces/WorkspaceListView.swift#WorkspaceListView": 5,
         "Intent/Views/Workspaces/WorkspaceSwipeRow.swift#WorkspaceSwipeRow": 5
     ]
 

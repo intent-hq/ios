@@ -32,6 +32,8 @@ enum DemoDesignScenario: String, CaseIterable {
     case streaming
     case tables
     case tools
+    /// A usage-limit `turn-failure` notice with a raw JSON-RPC reason.
+    case turnFailure = "turn-failure"
     case watcher
 
     static func requested(by arguments: [String]) -> Self? {

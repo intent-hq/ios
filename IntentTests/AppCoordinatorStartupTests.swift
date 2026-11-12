@@ -255,15 +255,16 @@ extension AppCoordinatorTests {
         coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
         #expect(!coordinator.lifecycleState.hasEnteredRemoteUI, "A socket without its first data is still startup")
 
-        server.dropClients()
-        try await waitUntil("the actual socket enters automatic reconnect") {
-            if case .reconnecting = manager.connectionState { return true }
-            return false
-        }
+        // This socket outlived the stable-connection threshold, so recovery redials
+        // with no backoff: park its admission so the reconnect is still in flight
+        // while the startup UI is asserted, then release it.
+        try await ConnectionManagerTests.awaitParkedReplacement(on: server) { server.dropClients() }
+        #expect(ConnectionManagerTests.isReconnecting(manager.connectionState))
         await Self.drainStartupCallbacks()
         #expect(!coordinator.showsReadOnlyBanner, "First-data timeout must not expose the loss banner")
         #expect(!coordinator.showsConnectionLossOverlay, "First-data timeout must not expose the loss overlay")
         #expect(coordinator.currentScreenDescription == "workspaceList", "Keep the bounded navigation fallback")
+        server.releaseHandshakes()
         try await waitUntil("automatic reconnect and its failed first-data request finish") {
             manager.connectionState == .connected && server.requestCount(method: "workspace.list") == 2 && !store.isLoading
         }
@@ -273,9 +274,11 @@ extension AppCoordinatorTests {
         try await waitUntil("late usable data enables established-session loss") {
             coordinator.lifecycleState.hasEnteredRemoteUI
         }
-        server.dropClients()
+        try await ConnectionManagerTests.awaitParkedReplacement(on: server) { server.dropClients() }
         try await waitUntil("a later established-session loss presents") { coordinator.showsReadOnlyBanner }
+        #expect(ConnectionManagerTests.isReconnecting(manager.connectionState))
         #expect(!coordinator.showsConnectionLossOverlay, "Automatic reconnect is read-only, not blocking")
+        server.releaseHandshakes()
         try await waitUntil("established reconnect clears the banner", timeout: .seconds(5)) {
             manager.connectionState == .connected && !coordinator.showsReadOnlyBanner
         }

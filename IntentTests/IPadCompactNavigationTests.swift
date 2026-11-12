@@ -91,6 +91,100 @@ struct IPadCompactNavigationTests {
         }
     }
 
+    @Test func compactWidthsAlwaysUseTheOverlay() {
+        for width in stride(from: CGFloat(1), to: IPadShellLayout.compactWindowWidth, by: 1) {
+            for accessibility in [false, true] {
+                for foldable in [false, true] {
+                    for leadingBar in [false, true] {
+                        let layout = IPadShellLayout(
+                            width: width,
+                            isAccessibilitySize: accessibility,
+                            usesFoldableLayout: foldable,
+                            usesLeadingVerticalBar: leadingBar
+                        )
+                        #expect(layout.usesSidebarOverlay, "Compact width \(width) must overlay")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Only 12 of the 32 combinations of the five former layout flags happen:
+    /// before measurement and at split width there is no drawer, and compact implies overlay.
+    @Test func layoutModeReachesOnlyTheInventoriedCombinations() {
+        typealias Operation = (inout IPadNavigationState) -> Void
+        let operations: [Operation] = [
+            { $0.revealSidebar() },
+            { $0.collapseSidebar() },
+            { $0.showWorkspaceDetail() },
+            { $0.selectSection(.settings) },
+            { $0.presentPairing(.manual) },
+            { $0.cancelPairing() },
+            { $0.prepareForConnectionSwitcher(showingWorkspaceList: false) },
+            { $0.updateLayout(usesOverlay: false) },
+            { $0.updateLayout(usesOverlay: true) },
+            { $0.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true) }
+        ]
+        func flags(_ state: IPadNavigationState) -> [Bool] {
+            [
+                state.isSidebarExpanded, state.isDrawerPresented, state.usesSidebarOverlay,
+                state.usesCompactNavigation, state.hasMeasuredLayout
+            ]
+        }
+        var seen: Set<[Bool]> = []
+        func visit(_ state: IPadNavigationState, depth: Int) {
+            seen.insert(flags(state))
+            guard depth > 0 else { return }
+            for operation in operations {
+                var next = state
+                operation(&next)
+                visit(next, depth: depth - 1)
+            }
+        }
+        visit(IPadNavigationState(), depth: 4)
+        var expected: Set<[Bool]> = []
+        for expanded in [false, true] {
+            expected.insert([expanded, false, false, false, false])
+            expected.insert([expanded, false, false, false, true])
+            for drawer in [false, true] {
+                expected.insert([expanded, drawer, true, false, true])
+                expected.insert([expanded, drawer, true, true, true])
+            }
+        }
+        #expect(seen == expected)
+    }
+
+    @Test func layoutModeTransitions() {
+        var state = IPadNavigationState()
+        #expect(state.layoutMode == .unmeasured)
+        #expect(!state.canPlaceTool)
+        state.collapseSidebar()
+        state.updateLayout(usesOverlay: false)
+        #expect(state.layoutMode == .split)
+        #expect(!state.isSidebarVisible, "The first split measurement keeps a choice made before it")
+        #expect(state.canPlaceTool)
+        state.revealSidebar()
+        let browser = IPadWorkspaceTool.browser(WorkspaceBrowser(
+            id: "browser:preview", workspaceId: "workspace", title: "Preview", url: "http://localhost:3000", command: nil
+        ))
+        let placed = state.placeTool(browser)
+        #expect(placed)
+        state.updateLayout(usesOverlay: true)
+        #expect(state.layoutMode == .overlay(drawerOpen: false))
+        #expect(state.mainTool == nil)
+        state.revealSidebar()
+        state.updateLayout(usesOverlay: true)
+        #expect(state.layoutMode == .overlay(drawerOpen: true), "Remeasuring the same width keeps the drawer open")
+        state.updateLayout(usesOverlay: true, usesCompactNavigation: true)
+        #expect(state.layoutMode == .compact(drawerOpen: false))
+        state.revealSidebar()
+        state.showWorkspaceDetail()
+        #expect(state.layoutMode == .compact(drawerOpen: false), "Selecting a detail closes the drawer")
+        state.updateLayout(usesOverlay: false)
+        #expect(state.layoutMode == .split)
+        #expect(state.isSidebarExpanded)
+    }
+
     @Test func initialCompactWindowShowsTheWorkspaceList() {
         var state = IPadNavigationState()
         state.updateLayout(usesOverlay: true, usesCompactNavigation: true, showsWorkspaceList: true)
