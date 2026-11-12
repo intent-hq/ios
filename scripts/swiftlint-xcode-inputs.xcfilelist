@@ -124,6 +124,7 @@ $(SRCROOT)/Intent/Models/ScriptMonitor.swift
 $(SRCROOT)/Intent/Models/ScriptMonitorPage.swift
 $(SRCROOT)/Intent/Models/ScriptMonitorWakeAttribution.swift
 $(SRCROOT)/Intent/Models/SkillInfo.swift
+$(SRCROOT)/Intent/Models/TurnFailureSummary.swift
 $(SRCROOT)/Intent/Models/WatchedAgentRow.swift
 $(SRCROOT)/Intent/Models/WorkspaceAction.swift
 $(SRCROOT)/Intent/Models/WorkspaceBrowser.swift
@@ -1068,6 +1069,7 @@ $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+VisibilitySequences.swif
 $(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/TransferDestinationPolicyTests.swift
 $(SRCROOT)/IntentTests/TransportDiagnosticTests.swift
+$(SRCROOT)/IntentTests/TurnFailureSummaryTests.swift
 $(SRCROOT)/IntentTests/TypographyTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WKWebViewPageJavaScriptTests.swift
