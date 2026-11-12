@@ -316,21 +316,27 @@ final class WorkspaceFileImageLoader {
     /// Assemble the file's raw bytes from sequential `file.readChunk` slices
     /// on the global executor, hopping to the main actor only for each RPC.
     @concurrent
-    nonisolated private static func fetchBytes(
-        chunkRequester: ChunkRequester, workspaceId: String, path: String
+    nonisolated static func fetchBytes(
+        chunkRequester: ChunkRequester,
+        workspaceId: String,
+        path: String,
+        limit: Int = maxFileBytes,
+        length: Int = chunkLength
     ) async throws -> Data {
         var data = Data()
         var offset = 0
         while true {
+            try Task.checkCancellation()
             let result = try await chunkRequester.request(
                 workspaceId: workspaceId,
                 path: path,
-                offset: offset
+                offset: offset,
+                length: length
             )
-            guard result.size <= maxFileBytes else { throw LoadError.fileTooLarge }
+            guard result.size <= limit else { throw LoadError.fileTooLarge }
             guard let chunk = Data(base64Encoded: result.content), chunk.count == result.bytesRead
             else { throw LoadError.malformedResponse }
-            guard data.count <= maxFileBytes - chunk.count else { throw LoadError.fileTooLarge }
+            guard data.count <= limit - chunk.count else { throw LoadError.fileTooLarge }
             data.append(chunk)
             offset += result.bytesRead
             // EOF window (bytesRead == 0) or the whole file assembled.

@@ -55,6 +55,83 @@ struct HTMLFileWebViewTests {
         }
     }
 
+    @Test func loadsRelativeImagesAndStylesheetsFromTheReportWorkspaceOnly() async throws {
+        let pixel = try #require(Data(base64Encoded: ImageServer.pixel))
+        let files: [String: Data] = [
+            "reports/images/pixel.png": pixel,
+            "shared/pixel.png": pixel,
+            "reports/style.css": Data("h1 { color: rgb(1, 2, 3); } .bg { background-image: url('images/pixel.png'); }".utf8),
+            "reports/fake.png": Data("<html>not an image</html>".utf8),
+            "reports/script.js": Data("document.title='Script ran'".utf8)
+        ]
+        var requested: [String] = []
+        let source = """
+        <title>Relative report</title><link rel="stylesheet" href="style.css">
+        <h1>Report</h1><div id="bg" class="bg">Background</div>
+        <img id="relative" src="images/pixel.png"><img id="parent" src="../shared/pixel.png">
+        <img id="escape" src="../../secret.png"><img id="absolute" src="/etc/pixel.png">
+        <img id="fake" src="fake.png"><img id="missing" src="images/missing.png">
+        <img id="other" src="intent-file://another-page/workspace/reports/images/pixel.png">
+        <script src="script.js"></script>
+        """
+        try await withPage(source, files: files, requested: { requested.append($0) }, check: { webView in
+            try await waitUntil {
+                try await evaluate("document.getElementById('relative').complete && document.getElementById('fake').complete", in: webView) as? Bool == true
+            }
+            #expect(try await evaluate("document.getElementById('relative').naturalWidth", in: webView) as? Int == 1)
+            #expect(try await evaluate("document.getElementById('parent').naturalWidth", in: webView) as? Int == 1)
+            for id in ["escape", "absolute", "fake", "missing", "other"] {
+                #expect(try await evaluate("document.getElementById('\(id)').naturalWidth", in: webView) as? Int == 0, "\(id)")
+            }
+            #expect(try await evaluate("getComputedStyle(document.querySelector('h1')).color", in: webView) as? String == "rgb(1, 2, 3)")
+            #expect(webView.title == "Relative report")
+        })
+        #expect(!requested.contains("reports/script.js"), "CSP blocks scripts before they reach the daemon")
+        #expect(requested.allSatisfy { files.keys.contains($0) || $0 == "reports/images/missing.png" }, "\(requested)")
+    }
+
+    @Test func loadsRelativeFontFacesAndRejectsMislabeledFonts() async throws {
+        let inter = try Data(contentsOf: try #require(Bundle.main.url(forResource: "Inter-Regular", withExtension: "ttf")))
+        let files: [String: Data] = [
+            "reports/fonts/Report.ttf": inter,
+            "reports/fonts/Fake.woff2": inter,
+            "reports/fonts/Legacy.eot": inter
+        ]
+        var requested: [String] = []
+        let source = """
+        <title>Font report</title>
+        <style>
+        @font-face { font-family: "Report Face"; src: url("fonts/Report.ttf") format("truetype"); }
+        @font-face { font-family: "Fake Face"; src: url("fonts/Fake.woff2") format("woff2"); }
+        @font-face { font-family: "Legacy Face"; src: url("fonts/Legacy.eot"); }
+        @font-face { font-family: "Escape Face"; src: url("../../fonts/Report.ttf"); }
+        h1 { font-family: "Report Face", serif; }
+        </style>
+        <h1>Report</h1>
+        """
+        try await withPage(source, files: files, requested: { requested.append($0) }, check: { webView in
+            let statuses = try await webView.callJavaScript(
+                """
+                const names = ["Report Face", "Fake Face", "Legacy Face", "Escape Face"];
+                const result = {};
+                for (const name of names) {
+                    try { await document.fonts.load(`16px "${name}"`); } catch (error) {}
+                    const face = [...document.fonts].find(face => face.family.replaceAll('"', '') === name);
+                    result[name] = face ? face.status : "absent";
+                }
+                return result;
+                """,
+                arguments: [:],
+                in: .defaultClient
+            ) as? [String: String]
+            #expect(statuses?["Report Face"] == "loaded", "\(String(describing: statuses))")
+            for name in ["Fake Face", "Legacy Face", "Escape Face"] {
+                #expect(statuses?[name] == "error", "\(name): \(String(describing: statuses))")
+            }
+        })
+        #expect(requested.sorted() == ["reports/fonts/Fake.woff2", "reports/fonts/Report.ttf"], "Unsupported types and escapes never reach the daemon")
+    }
+
     @Test func metaRefreshCannotReplaceTheInitialDocument() async throws {
         try await withPage("<meta http-equiv='refresh' content='0;url=about:blank'><title>Keep this page</title><h1>Report</h1>") { webView in
             try await Task.sleep(for: .milliseconds(200))
@@ -78,7 +155,13 @@ struct HTMLFileWebViewTests {
     }
 
     private func checkInertLinks(in webView: WKWebView, address: String, server: ImageServer, baseline: Int) async throws {
-        for target in [address, "https://example.com", "file:///tmp/page.html", "about:blank", "data:text/html,Replaced", "intent://local/note/spec"] {
+        let initialURL = try #require(webView.url)
+        #expect(initialURL.scheme == HTMLFileResourcePolicy.scheme)
+        let targets = [
+            address, "https://example.com", "file:///tmp/page.html", "about:blank", "data:text/html,Replaced",
+            "intent://local/note/spec", "other.html", "chart.png"
+        ]
+        for target in targets {
             _ = try await webView.callJavaScript(
                 "document.getElementById('link').href = target; document.getElementById('link').click();",
                 arguments: ["target": target],
@@ -86,13 +169,18 @@ struct HTMLFileWebViewTests {
             )
             try await Task.sleep(for: .milliseconds(100))
             print("HTML target", target, "requests", server.requests, "connections", server.acceptedConnections)
-            #expect(webView.url?.absoluteString == "about:blank")
+            #expect(webView.url == initialURL)
             #expect(webView.title == "Static report")
             #expect(server.requests == baseline)
         }
     }
 
-    private func withPage(_ source: String, check: (WKWebView) async throws -> Void) async throws {
+    private func withPage(
+        _ source: String,
+        files: [String: Data] = [:],
+        requested: ((String) -> Void)? = nil,
+        check: (WKWebView) async throws -> Void
+    ) async throws {
         let bytes = Data(source.utf8)
         let file = try await WorkspaceTextFile.load(path: "report.html") { handle in
             try handle.write(contentsOf: bytes)
@@ -100,11 +188,17 @@ struct HTMLFileWebViewTests {
         }
         let rules = try await HTMLFileWebView.blockingRules()
         var failed = false
-        let coordinator = HTMLFileWebView.Coordinator { failed = true }
+        let resources = HTMLFileResourceHandler(workspaceId: "ws-report") { workspaceId, path, _ in
+            #expect(workspaceId == "ws-report")
+            requested?(path)
+            guard let data = files[path] else { throw URLError(.fileDoesNotExist) }
+            return data
+        }
+        let coordinator = HTMLFileWebView.Coordinator(resources: resources) { failed = true }
         let webView = HTMLFileWebView.makeWebView(coordinator: coordinator, rules: rules)
         webView.frame = CGRect(x: 0, y: 0, width: 320, height: 480)
         defer { HTMLFileWebView.dismantleUIView(webView, coordinator: coordinator) }
-        coordinator.load(file, in: webView)
+        coordinator.load(file, path: "reports/report.html", in: webView)
         try await waitUntil {
             try await evaluate("document.readyState === 'complete' && document.querySelector('h1') !== null", in: webView) as? Bool == true
         }

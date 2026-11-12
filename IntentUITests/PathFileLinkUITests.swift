@@ -1,7 +1,8 @@
 import XCTest
 
 /// Taps a transcript link an agent wrote as a relative path (`reports/Demo report.html`)
-/// and checks that it opens in the HTML viewer instead of the Can't Open Link message.
+/// and checks that it opens in the HTML viewer instead of the Can't Open Link message,
+/// with the report's relative PNG and stylesheet loaded from the workspace.
 nonisolated final class PathFileLinkUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
@@ -9,6 +10,11 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
         static let linkLabel = "Open the HTML report"
         static let fileName = "Demo report.html"
         static let heading = "Usage analytics report"
+        static let chartLabel = "Daily active users chart"
+        /// Hidden by the report's inline style; only the relative stylesheet shows it.
+        static let stylesheetNote = "Styled by assets/report.css"
+        /// A broken image collapses to its alt text; the 600×300 chart is far taller.
+        static let minimumChartHeight: CGFloat = 80
         static let alertTitle = "Can't Open Link"
         static let timeout: TimeInterval = 15
         static let launchTimeout: TimeInterval = 30
@@ -43,6 +49,13 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
             let page = app.webViews["html.content"].firstMatch
             XCTAssertTrue(page.waitForExistence(timeout: Fixture.timeout))
             XCTAssertTrue(page.staticTexts[Fixture.heading].waitForExistence(timeout: Fixture.timeout))
+            let chart = page.images[Fixture.chartLabel].firstMatch
+            XCTAssertTrue(chart.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(
+                waitUntil(timeout: Fixture.timeout) { chart.frame.height > Fixture.minimumChartHeight },
+                "The relative PNG must render, not a broken image: \(chart.frame)"
+            )
+            XCTAssertTrue(page.staticTexts[Fixture.stylesheetNote].waitForExistence(timeout: Fixture.timeout))
             XCTAssertFalse(app.alerts[Fixture.alertTitle].exists, "A resolvable path link must not show the message")
             captureMedia(app, named: "HTML viewer from relative path link \(appearance)")
 
