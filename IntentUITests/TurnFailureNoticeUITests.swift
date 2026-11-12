@@ -44,7 +44,7 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
         for marker in ["codexErrorInfo", "JSON-RPC", "internal error"] {
             XCTAssertFalse(summary.label.contains(marker), "The friendly summary must not show \(marker)")
         }
-        XCTAssertTrue(app.buttons["turnFailure.link"].exists, "The provider link is tappable")
+        XCTAssertTrue(app.links["turnFailure.link"].exists, "The provider link is exposed as a link")
 
         let details = app.buttons["turnFailure.details"]
         XCTAssertTrue(details.waitForExistence(timeout: Self.timeout))
