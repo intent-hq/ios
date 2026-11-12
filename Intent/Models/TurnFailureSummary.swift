@@ -23,7 +23,8 @@ nonisolated enum TurnFailureCategory: Equatable, Sendable {
         }
     }
 
-    /// Used when the reason carries a category signal but no human sentence.
+    /// Used when a valid JSON reason carries a category signal but no
+    /// human string field.
     var fallbackMessage: String? {
         switch self {
         case .usageLimit: "The provider's usage limit was reached."
@@ -43,7 +44,8 @@ nonisolated enum TurnFailureCategory: Equatable, Sendable {
 ///
 /// - `title`: short headline for the category ("Usage limit reached").
 /// - `message`: a human sentence with wrapper prefixes, RPC codes, and JSON
-///   stripped; nil when the reason has no human text.
+///   stripped. Nil only when the peeled reason is empty; otherwise falls
+///   back to a JSON string field, the category sentence, or the peeled text.
 /// - `retryHint`: the provider's own reset wording ("try again at Nov 14th,
 ///   2026 8:07 AM", "resets 3pm"), when present.
 /// - `linkURL`: the first http(s) link in the human text, when present.
@@ -61,9 +63,9 @@ nonisolated struct TurnFailureSummary: Equatable, Sendable {
         rawDetails = reason
         let peeled = Self.peelWrappers(reason)
         let embedded = EmbeddedError(peeledText: peeled)
-        let human = embedded.humanText(peeledText: peeled)
         category = Self.classify(reason: reason, hints: embedded.hints)
-        message = human ?? category.fallbackMessage
+        let human = embedded.humanText(peeledText: peeled, fallback: category.fallbackMessage)
+        message = human
         retryHint = human.flatMap(Self.retryHint(in:))
         linkURL = human.flatMap(Self.firstLink(in:))
     }
@@ -90,6 +92,9 @@ nonisolated private extension TurnFailureSummary {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Structured hints win; otherwise only the phrasings intentd matches
+    /// (`crates/intent-acp/src/error.rs`) count, so generic "limit reached",
+    /// "quota", or tool "timeout" text stays `.generic`.
     static func classify(reason: String, hints: [String]) -> TurnFailureCategory {
         let hints = hints.map { $0.lowercased() }
         if hints.contains(where: { ["usagelimitexceeded", "ratelimitexceeded", "rate_limit", "billing_error"].contains($0) }) {
@@ -98,11 +103,8 @@ nonisolated private extension TurnFailureSummary {
         if hints.contains("authentication_failed") { return .authentication }
 
         let text = reason.lowercased()
-        let usageMarkers = [
-            "usage limit", "hit your limit", "rate limit", "rate_limit", "billing_error",
-            "usagelimitexceeded", "ratelimitexceeded", "limit reached", "quota exceeded"
-        ]
-        if usageMarkers.contains(where: text.contains) { return .usageLimit }
+        let usage = #/usage limit|usagelimitexceeded|ratelimitexceeded|hit your (?:session |weekly )?limit|\b5-hour limit|\bweekly limit|·\s*resets\b/#
+        if text.contains(usage) { return .usageLimit }
         let authMarkers = [
             "authentication_failed", "authentication failed", "authentication required",
             "not authenticated", "unauthorized", "invalid api key", "please log in", "please sign in"
@@ -110,20 +112,29 @@ nonisolated private extension TurnFailureSummary {
         if authMarkers.contains(where: text.contains) { return .authentication }
         let networkMarkers = [
             "econnreset", "connection reset", "econnrefused", "connection refused", "etimedout",
-            "timed out", "timeout", "socket hang up", "network error", "connection closed"
+            "connection timed out", "timed out connecting", "network timeout", "socket hang up",
+            "network error", "network is unreachable", "connection closed", "connection lost"
         ]
         if networkMarkers.contains(where: text.contains) { return .network }
         return .generic
     }
 
     /// The provider's reset phrase, e.g. "try again at Nov 14th, 2026 8:07 AM"
-    /// or "resets 3pm". Ends at a sentence period, `·`, newline, or the end.
+    /// or "resets 3pm". Ends at a sentence-ending period, `·`, newline, or
+    /// the end; `a.m.`/`p.m.` do not end it. A "try again …" phrase counts
+    /// only when it names a time or date ("in a moment" does not).
     static func retryHint(in text: String) -> String? {
-        let pattern = #/\b(?:try again (?:at|in|after|on)|resets(?: at| in| on)?|reset (?:at|in|on))\s+[^\n·]+?(?=\.\s|\.$|·|\n|$)/#
+        let pattern = #/\b(?<lead>try again (?:at|in|after|on|by)|resets(?: at| in| on)?|reset (?:at|in|on))\s+(?:[ap]\.m\.|[^\n·])+?(?=\.\s+[A-Z(]|\.\s*$|·|\n|$)/#
             .ignoresCase()
-        guard let match = text.firstMatch(of: pattern) else { return nil }
-        let hint = String(match.output).trimmingCharacters(in: .whitespaces)
-        return hint.isEmpty ? nil : hint
+        let timeToken = #/\d|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|mon|tue|wed|thu|fri|sat|sun)[a-z]*\b|tomorrow|tonight|noon|midnight|minute|hour|second|\bday|week|month/#
+            .ignoresCase()
+        for match in text.matches(of: pattern) {
+            let hint = String(match.output.0).trimmingCharacters(in: .whitespaces)
+            let isReset = match.output.lead.lowercased().hasPrefix("reset")
+            let body = hint.dropFirst(match.output.lead.count)
+            if isReset || body.contains(timeToken) { return hint }
+        }
+        return nil
     }
 
     static func firstLink(in text: String) -> URL? {
@@ -137,56 +148,73 @@ nonisolated private extension TurnFailureSummary {
     }
 }
 
-/// The JSON object (if any) embedded in a peeled reason, plus the text
-/// before it.
-nonisolated private struct EmbeddedError {
-    /// Text before the first `{`, or the whole text when there is none.
-    let leadingText: String
-    /// The `message` field, from parsed JSON or (for malformed JSON) a
-    /// best-effort scan of a `"message":"…"` pair.
-    let message: String?
-    /// `codexErrorInfo` / `errorKind` values (and `codexErrorInfo` object keys).
-    let hints: [String]
-    /// Whether the text contains a `{` at all.
-    let hasObject: Bool
+/// What a peeled reason carries besides plain text.
+nonisolated private enum EmbeddedError {
+    /// A valid JSON object starts at the first `{`. `text` is its best human
+    /// string field; `leading` is the text before the object.
+    case object(leading: String, text: String?, hints: [String])
+    /// No `{` in the text.
+    case plain
+    /// A `{` that is not valid JSON (truncated JSON or prose like
+    /// "Invalid value {foo}"). `message` is a best-effort `"message":"…"` scan.
+    case unparsed(message: String?, hints: [String])
 
     init(peeledText text: String) {
         guard let open = text.firstIndex(of: "{") else {
-            leadingText = text
-            message = nil
-            hints = []
-            hasObject = false
+            self = .plain
             return
         }
-        hasObject = true
-        leadingText = String(text[..<open]).trimmingCharacters(in: .whitespacesAndNewlines)
         let candidate = text.lastIndex(of: "}").flatMap { $0 > open ? String(text[open...$0]) : nil }
         if let candidate,
            let data = candidate.data(using: .utf8),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            message = Self.firstString(forKey: "message", in: object)
-            hints = Self.hints(in: object)
+            let leading = String(text[..<open]).trimmingCharacters(in: .whitespacesAndNewlines)
+            self = .object(leading: leading, text: Self.humanField(in: object), hints: Self.hints(in: object))
         } else {
-            message = Self.scanString(forKey: "message", in: text)
-            hints = ["codexErrorInfo", "errorKind"].compactMap { Self.scanString(forKey: $0, in: text) }
+            let hints = ["codexErrorInfo", "errorKind"].compactMap { Self.scanString(forKey: $0, in: text) }
+            self = .unparsed(message: Self.scanString(forKey: "message", in: text), hints: hints)
         }
     }
 
-    /// The best human sentence: the JSON message, else the leading text,
-    /// else (no JSON at all) the peeled text itself.
-    func humanText(peeledText: String) -> String? {
-        let candidates = hasObject ? [message, leadingText] : [peeledText]
+    var hints: [String] {
+        switch self {
+        case .plain: []
+        case let .object(_, _, hints), let .unparsed(_, hints): hints
+        }
+    }
+
+    /// The best human sentence; nil only when every candidate is empty.
+    func humanText(peeledText: String, fallback: String?) -> String? {
+        let candidates: [String?] = switch self {
+        case .plain: [peeledText]
+        case let .object(leading, text, _): [text, leading, fallback, peeledText]
+        case let .unparsed(message, _): [message, peeledText]
+        }
         return candidates
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
     }
 
-    /// Breadth-first search so a top-level `message` beats a nested one.
+    /// `message`, `details`, `detail`, `reason`, or a string `error` (each
+    /// searched breadth-first, so top-level wins), then `error.type`, then a
+    /// top-level `type` other than the envelope value "error".
+    private static func humanField(in object: [String: Any]) -> String? {
+        for key in ["message", "details", "detail", "reason", "error"] {
+            if let value = firstString(forKey: key, in: object) { return value }
+        }
+        let errorType = (object["error"] as? [String: Any])?["type"] as? String
+        let type = (object["type"] as? String).flatMap { $0 == "error" ? nil : $0 }
+        return [errorType, type].compactMap { $0 }.first { !$0.isEmpty }
+    }
+
     private static func firstString(forKey key: String, in object: [String: Any]) -> String? {
         var queue: [[String: Any]] = [object]
         while !queue.isEmpty {
             let current = queue.removeFirst()
-            if let value = current[key] as? String { return value }
+            if let value = current[key] as? String,
+               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return value
+            }
             queue.append(contentsOf: current.values.compactMap { $0 as? [String: Any] })
         }
         return nil

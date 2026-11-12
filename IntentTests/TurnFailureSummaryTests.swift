@@ -64,11 +64,91 @@ struct TurnFailureSummaryTests {
         #expect(summary.rawDetails == reason)
     }
 
-    @Test func malformedJSONWithoutMessageKeepsLeadingText() {
+    @Test func malformedJSONWithoutMessageKeepsFullPeeledText() {
         let summary = TurnFailureSummary(reason: #"internal error: agent crashed {"code": 7,"#)
 
         #expect(summary.category == .generic)
-        #expect(summary.message == "agent crashed")
+        #expect(summary.message == #"agent crashed {"code": 7,"#)
+    }
+
+    @Test func proseBracesAreNotTreatedAsJSON() {
+        let summary = TurnFailureSummary(reason: "Internal error: Invalid value {foo} for parameter bar")
+
+        #expect(summary.category == .generic)
+        #expect(summary.message == "Invalid value {foo} for parameter bar")
+    }
+
+    @Test func validJSONWithoutMessageFallsBackToStringFields() {
+        let details = TurnFailureSummary(reason: #"Internal error: {"details":"Claude Code process exited with code 1"}"#)
+        #expect(details.category == .generic)
+        #expect(details.message == "Claude Code process exited with code 1")
+
+        let errorType = TurnFailureSummary(reason: #"{"type":"error","error":{"type":"overloaded_error"}}"#)
+        #expect(errorType.message == "overloaded_error")
+
+        let nestedMessage = TurnFailureSummary(reason: #"{"error":{"type":"api_error","message":"Overloaded"}}"#)
+        #expect(nestedMessage.message == "Overloaded")
+
+        let stringError = TurnFailureSummary(reason: #"{"error":"bad gateway","code":502}"#)
+        #expect(stringError.message == "bad gateway")
+    }
+
+    @Test func nonEmptyReasonNeverYieldsNilMessage() {
+        let reasons = [
+            #"{"code":7}"#, #"Internal error: {"code":7}"#, "{", "}", "{}", #"{"message":""}"#, "x {"
+        ]
+        for reason in reasons {
+            #expect(TurnFailureSummary(reason: reason).message?.isEmpty == false, "reason: \(reason)")
+        }
+    }
+
+    @Test func limitLikeTextOutsideIntentdPhrasingsIsNotUsageLimit() {
+        let reasons = [
+            "Disk quota exceeded (os error 122)",
+            "Prompt is too long: context window limit reached",
+            "Max turns limit reached",
+            "rate limiting middleware misconfigured"
+        ]
+        for reason in reasons {
+            #expect(TurnFailureSummary(reason: reason).category == .generic, "reason: \(reason)")
+        }
+    }
+
+    @Test func intentdUsagePhrasingsAreUsageLimit() {
+        let reasons = [
+            "You've hit your session limit · resets 4am",
+            "You've hit your weekly limit",
+            "5-hour limit reached",
+            "Weekly limit reached, upgrade for more",
+            "Claude AI usage limit reached|1731600000"
+        ]
+        for reason in reasons {
+            #expect(TurnFailureSummary(reason: reason).category == .usageLimit, "reason: \(reason)")
+        }
+    }
+
+    @Test func nonConnectionTimeoutsAreNotNetwork() {
+        #expect(TurnFailureSummary(reason: "Tool call timeout after 30s").category == .generic)
+        #expect(TurnFailureSummary(reason: "Command timed out after 120s").category == .generic)
+    }
+
+    @Test func connectionLevelFailuresAreNetwork() {
+        let reasons = ["connect ECONNREFUSED 127.0.0.1:443", "Connection timed out", "network timeout while streaming", "socket hang up"]
+        for reason in reasons {
+            #expect(TurnFailureSummary(reason: reason).category == .network, "reason: \(reason)")
+        }
+    }
+
+    @Test func retryHintKeepsMeridiemAbbreviations() {
+        #expect(TurnFailureSummary(reason: "Try again at 3 p.m. tomorrow").retryHint == "Try again at 3 p.m. tomorrow")
+        #expect(TurnFailureSummary(reason: "Limit hit. Try again at 9 a.m. tomorrow. Thanks.").retryHint == "Try again at 9 a.m. tomorrow")
+    }
+
+    @Test func retryHintRequiresATimeOrDate() {
+        #expect(TurnFailureSummary(reason: "Please try again in a moment.").retryHint == nil)
+        #expect(TurnFailureSummary(reason: "Please try again later.").retryHint == nil)
+        #expect(TurnFailureSummary(reason: "Please try again in a few seconds.").retryHint == "try again in a few seconds")
+        #expect(TurnFailureSummary(reason: "Try again on Monday.").retryHint == "Try again on Monday")
     }
 
     @Test func plainTextIsGenericWithPeeledMessage() {
