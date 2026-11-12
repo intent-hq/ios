@@ -40,6 +40,8 @@ final class MarkdownContentCache: MarkupParser {
     // Future options must get distinct keys before sharing this semantic store.
     private static let preparationVersion = 1
     private static let parserVersion = 1
+    /// Offsets the chat variant's key so it never shares an entry with plain parses.
+    private static let standaloneLinkRowsVariant = 1 << 16
     private static let preparedCostLimit = 2_097_152
     private static let parsedCostLimit = 8_388_608
     private static let preparedEntryLimit = 128
@@ -81,14 +83,35 @@ final class MarkdownContentCache: MarkupParser {
         try parsed.value(
             for: input,
             version: Self.parserVersion,
-            cost: { value in
-                // Foundation's storage size is opaque. Charge conservatively for source,
-                // attributed characters and semantic runs; this is not a heap-size claim.
-                input.utf8.count * Self.semanticSourceMultiplier
-                    + String(value.characters).utf8.count * 2
-                    + value.runs.count * Self.semanticRunOverhead
-            },
+            cost: { Self.parsedCost(input: input, value: $0) },
             create: { try parser.attributedString(for: input) }
         )
+    }
+
+    /// The parse with each single-link paragraph rewritten into a
+    /// `StandaloneLinkRow` block, cached separately from the plain parse.
+    func attributedStringWithLinkRows(for input: String) throws -> AttributedString {
+        let plain = try attributedString(for: input)
+        return parsed.value(
+            for: input,
+            version: Self.parserVersion + Self.standaloneLinkRowsVariant,
+            cost: { Self.parsedCost(input: input, value: $0) },
+            create: { StandaloneLinkRow.rewriting(plain) }
+        )
+    }
+
+    /// Foundation's storage size is opaque. Charge conservatively for source,
+    /// attributed characters and semantic runs; this is not a heap-size claim.
+    private static func parsedCost(input: String, value: AttributedString) -> Int {
+        input.utf8.count * semanticSourceMultiplier
+            + String(value.characters).utf8.count * 2
+            + value.runs.count * semanticRunOverhead
+    }
+
+    /// Chat's parser: standalone link lines become full-width rows.
+    struct LinkRowsParser: MarkupParser {
+        func attributedString(for input: String) throws -> AttributedString {
+            try MarkdownContentCache.shared.attributedStringWithLinkRows(for: input)
+        }
     }
 }

@@ -69,6 +69,13 @@ extension Constants.Colors {
         static func codeBlockBackground(for scheme: ColorScheme) -> Color {
             Constants.Colors.resolvedColor(UIColor(resource: .markdownCodeBlockBackground), for: scheme)
         }
+
+        /// Chat link text: #2563C9 light (5.7:1 on white, 5.0:1 on paper) and
+        /// #7AA7FF dark (6.3:1 or more on every dark surface). The lime accent
+        /// reads at only 1.3:1 on white, so links use this blue instead.
+        static func linkForeground(for scheme: ColorScheme) -> Color {
+            Constants.Colors.resolvedColor(UIColor(resource: .markdownLinkForeground), for: scheme)
+        }
     }
 
     enum CodeBlock {

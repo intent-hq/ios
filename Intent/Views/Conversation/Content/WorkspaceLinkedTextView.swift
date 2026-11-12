@@ -43,7 +43,7 @@ struct WorkspaceLinkedTextView: View {
     private func segmentContent(_ segment: WorkspaceLinks.Segment) -> some View {
         switch segment {
         case .markdown(let markdown):
-            MarkdownTextView(text: markdown, onOpenURL: onOpenURL, workspaceId: workspaceId)
+            MarkdownTextView(text: markdown, onOpenURL: onOpenURL, workspaceId: workspaceId, linkStyle: .chat)
         case .workspaces(let ids):
             let rows = ids.filter { !coveredIDs.contains($0) }.map { id in
                 (id: id, content: workspaceButton(id))
