@@ -34,7 +34,7 @@ enum AgentActivityContent {
             state: AgentActivityAttributes.ContentState(
                 rows: Array(rows.prefix(maxRows)),
                 runningCount: rows.count,
-                updatedAt: now
+                updatedAt: now.timeIntervalSince1970
             ),
             runningKeys: Set(rows.map(\.id))
         )

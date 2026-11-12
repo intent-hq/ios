@@ -79,11 +79,14 @@ nonisolated struct AgentActivityLink: Equatable, Sendable {
 
 #if os(iOS)
 nonisolated struct AgentActivityAttributes: ActivityAttributes, Sendable {
-    struct ContentState: Codable, Hashable, Sendable {
+    nonisolated struct ContentState: Codable, Hashable, Sendable {
         /// The first running workspaces, capped so the payload stays small.
         var rows: [AgentActivityRow]
         var runningCount: Int
-        var updatedAt: Date
+        /// Unix seconds, so the push relay's JSON decodes without a date strategy.
+        var updatedAt: Double
+
+        var updatedDate: Date { Date(timeIntervalSince1970: updatedAt) }
     }
 }
 #endif
