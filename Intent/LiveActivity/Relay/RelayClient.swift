@@ -23,12 +23,26 @@ nonisolated struct RelaySnapshot: Decodable, Sendable {
 }
 
 nonisolated enum RelayClientError: Error, Equatable {
-    case status(Int, String)
     case invalidResponse
+    case status(Int, String)
 }
 
 /// Device-side calls to the push relay. Every request carries a fresh proof.
+/// Encodes `pushToken` as an explicit null when the activity ended.
+nonisolated private struct ActivityTokenBody: Encodable {
+    enum CodingKeys: String, CodingKey { case pushToken }
+
+    let pushToken: String?
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(pushToken, forKey: .pushToken)
+    }
+}
+
 nonisolated struct RelayClient: Sendable {
+    private static let successfulHTTPStatusCodes: ClosedRange<Int> = 200...299
+
     nonisolated struct Registration: Decodable, Equatable, Sendable {
         let deviceId: String
         let daemonId: String
@@ -52,17 +66,6 @@ nonisolated struct RelayClient: Sendable {
         let device: RelayDeviceInfo
     }
 
-    /// Encodes `pushToken` as an explicit null when the activity ended.
-    nonisolated private struct ActivityTokenBody: Encodable {
-        enum CodingKeys: String, CodingKey { case pushToken }
-
-        let pushToken: String?
-
-        func encode(to encoder: any Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(pushToken, forKey: .pushToken)
-        }
-    }
 
     func register(linkToken: String, connectionId: UUID, device: RelayDeviceInfo) async throws -> Registration {
         let body = RegistrationBody(linkToken: linkToken, connectionId: connectionId.uuidString, publicKey: signer.publicKey, device: device)
@@ -101,7 +104,7 @@ nonisolated struct RelayClient: Sendable {
         request.setValue("\(RelayProof.scheme) \(proof)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw RelayClientError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
+        guard Self.successfulHTTPStatusCodes.contains(http.statusCode) else {
             throw RelayClientError.status(http.statusCode, String(bytes: data, encoding: .utf8) ?? "")
         }
         return data
