@@ -76,7 +76,8 @@ struct HTMLFileResourcePolicyTests {
         #expect(try resolve("../shared/site.css", from: report).path == "/Users/alice/project/shared/site.css")
 
         // A file:// link reaches the viewer as the same absolute path.
-        let fileLink = try #require(IntentFileLink.parsePath(try #require(URL(string: "file:///Users/alice/project/reports/report.html"))))
+        let fileURL = try #require(URL(string: "file:///Users/alice/project/reports/report.html"))
+        let fileLink = try #require(IntentFileLink.parsePath(fileURL))
         #expect(fileLink.path == report)
         #expect(try resolve("images/chart.png", from: fileLink.path).path == "/Users/alice/project/reports/images/chart.png")
         #expect(Policy.baseURL(host: Self.host, filePath: "/") == nil)
