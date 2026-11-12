@@ -1,4 +1,5 @@
 import SwiftUI
+import Textual
 
 /// The `turn-failure` attention card: a friendly title and message from
 /// `TurnFailureSummary`, an optional retry hint and provider link, and the
@@ -42,7 +43,7 @@ struct TurnFailureNoticeView: View {
         VStack(alignment: .leading, spacing: Card.turnFailureSectionSpacing) {
             summaryRow
             VStack(alignment: .leading, spacing: Card.turnFailureSectionSpacing) {
-                if let url = summary.linkURL, !linkedMessage.hasInlineLink {
+                if let url = summary.linkURL, !hasInlineLink {
                     linkButton(url)
                 }
                 detailsButton
@@ -90,12 +91,15 @@ struct TurnFailureNoticeView: View {
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .accessibilityAddTraits(.isHeader)
 
-                if let text = linkedMessage.text {
-                    Text(text)
+                if let message = summary.message {
+                    // Textual's selectable text is the view the row's Copy
+                    // overlay passes link taps through to; plain `Text` links
+                    // are swallowed by the overlay.
+                    InlineText(message, parser: TurnFailureMessageParser(linkURL: summary.linkURL))
                         .interFont(bodyStyle)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .tint(Theme.foreground(for: colorScheme))
-                        .textSelection(.enabled)
+                        .textual.textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("turnFailure.message")
                 }
@@ -115,18 +119,11 @@ struct TurnFailureNoticeView: View {
         .accessibilityIdentifier("turnFailure.summary")
     }
 
-    /// The message with `linkURL` made tappable in place when the URL text
-    /// appears in it; otherwise the link gets its own row below.
-    private var linkedMessage: (text: AttributedString?, hasInlineLink: Bool) {
-        guard let message = summary.message else { return (nil, false) }
-        var text = AttributedString(message)
-        guard let url = summary.linkURL,
-              let range = text.range(of: url.absoluteString, options: .caseInsensitive) else {
-            return (text, false)
-        }
-        text[range].link = url
-        text[range].underlineStyle = .single
-        return (text, true)
+    /// Whether `linkURL` is tappable in place inside the message; otherwise
+    /// the link gets its own row below.
+    private var hasInlineLink: Bool {
+        guard let message = summary.message, let url = summary.linkURL else { return false }
+        return TurnFailureMessageParser.linkRange(of: url, in: AttributedString(message)) != nil
     }
 
     /// The provider's reset phrase, only when the message does not already say it.
@@ -260,5 +257,24 @@ struct TurnFailureNoticeView: View {
     private static func sentenceCased(_ text: String) -> String {
         guard let first = text.first else { return text }
         return first.uppercased() + text.dropFirst()
+    }
+}
+
+/// Plain message text with `linkURL` linked where its text appears; no
+/// Markdown, so provider text is shown exactly as sent.
+private struct TurnFailureMessageParser: MarkupParser {
+    let linkURL: URL?
+
+    func attributedString(for input: String) -> AttributedString {
+        var text = AttributedString(input)
+        if let linkURL, let range = Self.linkRange(of: linkURL, in: text) {
+            text[range].link = linkURL
+            text[range].underlineStyle = .single
+        }
+        return text
+    }
+
+    nonisolated static func linkRange(of url: URL, in text: AttributedString) -> Range<AttributedString.Index>? {
+        text.range(of: url.absoluteString, options: .caseInsensitive)
     }
 }
