@@ -148,8 +148,13 @@ final class HTMLFileResourceHandler: NSObject, WKURLSchemeHandler {
     let host = UUID().uuidString.lowercased()
     private let fetch: Fetch
     private var tasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    /// Bytes delivered to the current page, plus the limits of its loads still in flight,
+    /// so concurrent loads can never together exceed the page cap.
     private var servedBytes = 0
+    private var reservedBytes = 0
     private var requestCount = 0
+    /// Increments per page so a previous page's late completion never touches the new budget.
+    private var pageGeneration = 0
 
     init(workspaceId: String, fetch: @escaping Fetch) {
         self.workspaceId = workspaceId
@@ -168,9 +173,12 @@ final class HTMLFileResourceHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
-    /// Starts a fresh per-page budget and returns the page's base URL.
+    /// Cancels the previous page's loads, starts a fresh per-page budget and returns the page's base URL.
     func beginPage(filePath: String) -> URL? {
+        cancelAll()
+        pageGeneration += 1
         servedBytes = 0
+        reservedBytes = 0
         requestCount = 0
         return HTMLFileResourcePolicy.baseURL(host: host, filePath: filePath)
     }
@@ -212,8 +220,21 @@ final class HTMLFileResourceHandler: NSObject, WKURLSchemeHandler {
             let resource = try HTMLFileResourcePolicy.resource(for: url, host: host)
             guard requestCount < HTMLFileResourcePolicy.maxPageRequests else { throw HTMLFileResourcePolicy.Rejection.pageBudgetExhausted }
             requestCount += 1
-            let limit = min(HTMLFileResourcePolicy.maxResourceBytes, HTMLFileResourcePolicy.maxPageBytes - servedBytes)
+            let limit = min(
+                HTMLFileResourcePolicy.maxResourceBytes,
+                HTMLFileResourcePolicy.maxPageBytes - servedBytes - reservedBytes
+            )
             guard limit > 0 else { throw HTMLFileResourcePolicy.Rejection.pageBudgetExhausted }
+            // Reserve the whole limit up front; release it, keeping only the delivered bytes, when the load ends.
+            let generation = pageGeneration
+            reservedBytes += limit
+            var delivered = 0
+            defer {
+                if generation == pageGeneration {
+                    reservedBytes -= limit
+                    servedBytes += delivered
+                }
+            }
             let data: Data
             do {
                 data = try await fetch(workspaceId, resource.path, limit)
@@ -222,11 +243,10 @@ final class HTMLFileResourceHandler: NSObject, WKURLSchemeHandler {
             } catch {
                 throw HTMLFileResourcePolicy.Rejection.invalidContent
             }
-            // Concurrent loads each fit the budget they started with; recheck after they land.
-            guard data.count <= limit, servedBytes + data.count <= HTMLFileResourcePolicy.maxPageBytes
-            else { throw HTMLFileResourcePolicy.Rejection.tooLarge }
+            guard generation == pageGeneration else { throw HTMLFileResourcePolicy.Rejection.pageBudgetExhausted }
+            guard data.count <= limit else { throw HTMLFileResourcePolicy.Rejection.tooLarge }
             try HTMLFileResourcePolicy.validate(data, as: resource.kind)
-            servedBytes += data.count
+            delivered = data.count
             let response = URLResponse(
                 url: url,
                 mimeType: resource.kind.mimeType,
