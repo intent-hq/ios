@@ -14,6 +14,10 @@ struct StandaloneLinkRowView: View {
         static let minimumHeight: CGFloat = 44
         static let spacing: CGFloat = 8
         static let verticalPadding: CGFloat = 6
+        /// Spacing collapses to the larger neighbor value: rows stay close
+        /// together, and the row's own padding plus this matches the gap
+        /// before a following paragraph to the paragraph spacing.
+        static let bottomBlockSpacing: CGFloat = 6
         static let iconOpacity = 0.75
         static let pressedOpacity = 0.08
         static let pressedCornerRadius: CGFloat = 8
@@ -29,7 +33,7 @@ struct StandaloneLinkRowView: View {
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .textual.textSelection(.disabled)
-        .textual.blockSpacing(.init(top: 0, bottom: 0))
+        .textual.blockSpacing(.init(top: 0, bottom: Layout.bottomBlockSpacing))
     }
 
     private var button: some View {

@@ -37,12 +37,19 @@ struct StandaloneLinkRowTests {
     @Test(arguments: [
         "Read [the report](https://example.com) first.",
         "[One](https://example.com/1) [Two](https://example.com/2)",
-        "[![Chart](intent://local/file/chart.png)](https://example.com)",
+        "[Open](https://example.com) ![Chart](intent://local/file/chart.png)",
         "```\n[Not a link](https://example.com)\n```",
         "Plain text only."
     ])
     func paragraphsWithOtherContentStayInline(markdown: String) throws {
         #expect(try rows(in: markdown).isEmpty)
+    }
+
+    /// Foundation drops `imageURL` inside a link, so a linked image already
+    /// renders as its alt text; the row keeps that text rather than losing an image.
+    @Test func linkedImageAltTextBecomesARow() throws {
+        let rows = try rows(in: "[![Chart](intent://local/file/chart.png)](https://example.com)")
+        #expect(rows == [StandaloneLinkRow(title: "Chart", url: try #require(URL(string: "https://example.com")))])
     }
 
     @Test func listItemRowKeepsItsListAndIdentity() throws {
