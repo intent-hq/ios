@@ -26,6 +26,41 @@ enum IPadFocusPresentation: Equatable {
     case workspaceSearch
 }
 
+/// How the shell lays out its sidebar at the current width.
+/// Only overlay widths have a drawer; nothing is known before the first measurement.
+enum IPadShellLayoutMode: Equatable {
+    /// Narrow windows: the drawer fills the width and the rail is hidden.
+    case compact(drawerOpen: Bool)
+    /// The sidebar is a drawer over the detail.
+    case overlay(drawerOpen: Bool)
+    /// The sidebar sits beside the detail and follows `isSidebarExpanded`.
+    case split
+    /// Before the first measurement; the sidebar behaves as in `split`.
+    case unmeasured
+
+    var usesOverlay: Bool {
+        switch self {
+        case .compact, .overlay: true
+        case .split, .unmeasured: false
+        }
+    }
+
+    var isDrawerOpen: Bool {
+        switch self {
+        case .compact(let open), .overlay(let open): open
+        case .split, .unmeasured: false
+        }
+    }
+
+    func withDrawer(open: Bool) -> Self {
+        switch self {
+        case .compact: .compact(drawerOpen: open)
+        case .overlay: .overlay(drawerOpen: open)
+        case .split, .unmeasured: self
+        }
+    }
+}
+
 /// Window-owned presentation state, independent of the backend and workspace route.
 struct IPadNavigationState: Equatable {
     private(set) var focusPresentation: IPadFocusPresentation = .normal
@@ -33,16 +68,22 @@ struct IPadNavigationState: Equatable {
     private(set) var detail: IPadDetailSelection = .workspace
     private(set) var pairing: IPadPairingMode?
     private(set) var hasOpenedAssistant = false
+    private(set) var layoutMode: IPadShellLayoutMode = .unmeasured
+    /// The wide-window choice; it survives trips through overlay and compact widths.
     private(set) var isSidebarExpanded = true
-    private(set) var isDrawerPresented = false
-    private(set) var usesSidebarOverlay = false
-    private(set) var usesCompactNavigation = false
-    private(set) var hasMeasuredLayout = false
     private(set) var mainTool: IPadWorkspaceTool?
     let toolDragWindowId = UUID()
 
+    var hasMeasuredLayout: Bool { layoutMode != .unmeasured }
+    var usesSidebarOverlay: Bool { layoutMode.usesOverlay }
+    var usesCompactNavigation: Bool {
+        if case .compact = layoutMode { return true }
+        return false
+    }
+    var isDrawerPresented: Bool { layoutMode.isDrawerOpen }
+
     var canPlaceTool: Bool {
-        hasMeasuredLayout && !usesSidebarOverlay && !usesCompactNavigation && pairing == nil && section == .workspaces
+        layoutMode == .split && pairing == nil && section == .workspaces
     }
 
     @discardableResult
@@ -116,19 +157,15 @@ struct IPadNavigationState: Equatable {
         if usesCompactNavigation { revealSidebar() }
     }
 
-    mutating func revealSidebar() {
-        if usesSidebarOverlay {
-            isDrawerPresented = true
-        } else {
-            isSidebarExpanded = true
-        }
-    }
+    mutating func revealSidebar() { setSidebarVisible(true) }
 
-    mutating func collapseSidebar() {
+    mutating func collapseSidebar() { setSidebarVisible(false) }
+
+    private mutating func setSidebarVisible(_ visible: Bool) {
         if usesSidebarOverlay {
-            isDrawerPresented = false
+            layoutMode = layoutMode.withDrawer(open: visible)
         } else {
-            isSidebarExpanded = false
+            isSidebarExpanded = visible
         }
     }
 
@@ -138,15 +175,17 @@ struct IPadNavigationState: Equatable {
         collapseSidebar()
     }
 
+    /// `IPadShellLayout` only reports compact navigation at overlay widths, so compact implies overlay here.
     mutating func updateLayout(usesOverlay: Bool, usesCompactNavigation: Bool = false, showsWorkspaceList: Bool = false) {
-        hasMeasuredLayout = true
-        guard usesSidebarOverlay != usesOverlay || self.usesCompactNavigation != usesCompactNavigation else { return }
-        usesSidebarOverlay = usesOverlay
-        self.usesCompactNavigation = usesCompactNavigation
-        if usesOverlay || usesCompactNavigation { closeTool() }
         // Rotation preserves the wide-window preference, without unexpectedly
         // opening a drawer over the conversation in a narrow window.
-        isDrawerPresented = false
+        let measured: IPadShellLayoutMode = usesCompactNavigation ? .compact(drawerOpen: false)
+            : usesOverlay ? .overlay(drawerOpen: false) : .split
+        guard measured != layoutMode.withDrawer(open: false) else { return }
+        let layoutChanged = measured != .split || layoutMode != .unmeasured
+        layoutMode = measured
+        guard layoutChanged else { return }
+        if measured != .split { closeTool() }
         if usesCompactNavigation, pairing == nil,
            section == .settings || section == .connections || section == .pullRequests
            || (detail == .workspace && showsWorkspaceList) {
@@ -169,6 +208,6 @@ struct IPadNavigationState: Equatable {
 
     private mutating func detailWasSelected() {
         focusPresentation = .normal
-        isDrawerPresented = false
+        layoutMode = layoutMode.withDrawer(open: false)
     }
 }
