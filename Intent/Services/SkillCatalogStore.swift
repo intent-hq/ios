@@ -4,8 +4,9 @@ import Observation
 @MainActor
 @Observable final class SkillCatalogStore {
     private(set) var skills: [SkillInfo] = []
-    private(set) var isLoading = false
-    private(set) var errorMessage: String?
+    private(set) var loadPhase = LoadPhase.idle
+    var isLoading: Bool { loadPhase.isLoading }
+    var errorMessage: String? { loadPhase.failureMessage }
 
     @ObservationIgnored private var loadIdentity = UUID()
 
@@ -39,15 +40,14 @@ import Observation
         if let cached = Self.cache[key], cached.connection === connection {
             loadIdentity = UUID()
             skills = cached.skills
-            isLoading = false
-            errorMessage = nil
+            loadPhase = .loaded(Date())
             return
         }
         reset()
         let identity = loadIdentity
-        isLoading = true
+        loadPhase = .loading(lastLoadedAt: nil)
         defer {
-            if identity == loadIdentity { isLoading = false }
+            if identity == loadIdentity { loadPhase = loadPhase.settled() }
         }
         do {
             let response = try await connection.request("skill.list", params: ["workspaceId": workspaceId])
@@ -67,9 +67,10 @@ import Observation
                 return lhs.location < rhs.location
             }
             Self.cache[key] = CachedCatalog(connection: connection, skills: skills)
+            loadPhase = .loaded(Date())
         } catch {
             guard identity == loadIdentity, !Task.isCancelled, !(error is CancellationError) else { return }
-            errorMessage = "Skills could not be loaded. Try again."
+            loadPhase = .failed("Skills could not be loaded. Try again.")
         }
     }
 
@@ -77,7 +78,6 @@ import Observation
     func reset() {
         loadIdentity = UUID()
         skills = []
-        isLoading = false
-        errorMessage = nil
+        loadPhase = .idle
     }
 }

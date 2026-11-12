@@ -368,7 +368,7 @@ extension AppCoordinatorTests {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.currentScreen = .pairing
-        coordinator.pairingShowsSavedConnections = true
+        coordinator.connectionScreen = .pairing(showsSavedConnections: true)
         coordinator.onPaired(stored)
         #expect(!coordinator.pairingShowsSavedConnections)
     }
