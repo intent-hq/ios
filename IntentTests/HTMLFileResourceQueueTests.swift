@@ -100,10 +100,11 @@ struct HTMLFileResourceQueueTests {
     @Test func beginPageClearsTheQueue() async throws {
         let gate = FetchGate()
         var fetched: [String] = []
-        let handler = HTMLFileResourceHandler(workspaceId: "ws-a") { _, path, limit in
+        let png = paddedPNG(byteCount: 0)
+        let handler = HTMLFileResourceHandler(workspaceId: "ws-a") { _, path, _ in
             fetched.append(path)
             if path.hasPrefix("old") { await gate.wait() }
-            return paddedPNG(byteCount: min(limit, 1024))
+            return png
         }
         let oldBase = try #require(handler.beginPage(filePath: "index.html"))
         let webView = WKWebView()
@@ -118,8 +119,7 @@ struct HTMLFileResourceQueueTests {
         for load in queued {
             #expect(await load.value == .failure(.cancelled), "Queued loads end without waiting for the old page")
         }
-        let fresh = await load("new.png", with: handler, base: newBase)
-        #expect(fresh.map(\.count) == .success(1024), "\(fresh.map(\.count))")
+        #expect(await load("new.png", with: handler, base: newBase) == .success(png), "The new page starts with the full budget")
         gate.release()
         for _ in 0..<100 { await Task.yield() }
         #expect(running.allSatisfy { $0.callbacks.isEmpty })
