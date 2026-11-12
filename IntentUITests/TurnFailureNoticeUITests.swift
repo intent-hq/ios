@@ -79,7 +79,9 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
 
         // The row's Copy overlay must not swallow the inline link tap.
         let link = inlineLink(in: app)
-        XCTAssertTrue(link.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
+        XCTAssertTrue(link.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        // Selectable text overlays the semantic link in accessibility hit-testing
+        // (as in InlineResponseImageUITests), so tap the link's own frame.
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         XCTAssertTrue(safari.wait(for: .runningForeground, timeout: Self.timeout), "Tapping the inline link opens the URL")
