@@ -118,7 +118,8 @@ struct HTMLFileResourceQueueTests {
         for load in queued {
             #expect(await load.value == .failure(.cancelled), "Queued loads end without waiting for the old page")
         }
-        #expect(await load("new.png", with: handler, base: newBase).map(\.count) == .success(1024))
+        let fresh = await load("new.png", with: handler, base: newBase)
+        #expect(fresh.map(\.count) == .success(1024), "\(fresh.map(\.count))")
         gate.release()
         for _ in 0..<100 { await Task.yield() }
         #expect(running.allSatisfy { $0.callbacks.isEmpty })

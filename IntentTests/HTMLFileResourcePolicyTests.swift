@@ -90,10 +90,12 @@ struct HTMLFileResourcePolicyTests {
         for reference in [
             "../../../../../secret.png", "/etc/secret.png", "%2e%2e/%2e%2e/secret.png", "images/..%2F..%2Fsecret.png",
             "images%2Fchart.png", "a%5C..%5Csecret.png", "bad%00name.png", "images//chart.png",
-            "../../../../workspace/secret.png", "/workspace/reports/chart.png"
+            "../../../../../workspace/secret.png", "/workspace/reports/chart.png"
         ] {
             #expect(try rejection(reference, from: report) == .outsideWorkspace, "\(reference)")
         }
+        // Climbing within the absolute tree stays absolute; the daemon decides whether it is inside the workspace.
+        #expect(try resolve("../../../../workspace/x.png", from: report).path == "/workspace/x.png")
         #expect(try rejection("intent-file://other-page/absolute/Users/alice/chart.png", from: report) == .wrongOrigin)
         #expect(try rejection("file:///Users/alice/project/reports/chart.png", from: report) == .wrongOrigin)
 
