@@ -1,13 +1,14 @@
 import XCTest
 
 /// Taps a transcript link an agent wrote as a relative path (`reports/Demo report.html`)
-/// and checks that it opens in the HTML viewer instead of the Can't Open Link message,
-/// with the report's relative PNG and stylesheet loaded from the workspace.
+/// or an absolute path, and checks that it opens in the HTML viewer instead of the
+/// Can't Open Link message, with the report's relative PNG and stylesheet loaded from the workspace.
 nonisolated final class PathFileLinkUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
         static let agentName = "Dashboard Implementor"
         static let linkLabel = "Open the HTML report"
+        static let absoluteLinkLabel = "Open the HTML report by absolute path"
         static let fileName = "Demo report.html"
         static let heading = "Usage analytics report"
         static let chartLabel = "Daily active users chart"
@@ -35,37 +36,48 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
     @MainActor
     func testRelativeHTMLPathLinkOpensHTMLViewer() {
         for appearance in ["light", "dark"] {
-            let app = XCUIApplication()
-            app.launchArguments += ["--demo-data", "--demo-inline-text", "-appThemePreference", appearance]
-            app.launch()
-            let transcript = openTranscript(in: app)
-
-            let link = app.links[Fixture.linkLabel].firstMatch
-            XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
-            reveal(link, in: transcript)
-            link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-
-            XCTAssertTrue(app.navigationBars[Fixture.fileName].waitForExistence(timeout: Fixture.timeout))
-            let page = app.webViews["html.content"].firstMatch
-            XCTAssertTrue(page.waitForExistence(timeout: Fixture.timeout))
-            XCTAssertTrue(page.staticTexts[Fixture.heading].waitForExistence(timeout: Fixture.timeout))
-            let chart = page.images[Fixture.chartLabel].firstMatch
-            XCTAssertTrue(chart.waitForExistence(timeout: Fixture.timeout))
-            XCTAssertTrue(
-                waitUntil(timeout: Fixture.timeout) { chart.frame.height > Fixture.minimumChartHeight },
-                "The relative PNG must render, not a broken image: \(chart.frame)"
-            )
-            XCTAssertTrue(page.staticTexts[Fixture.stylesheetNote].waitForExistence(timeout: Fixture.timeout))
-            XCTAssertFalse(app.alerts[Fixture.alertTitle].exists, "A resolvable path link must not show the message")
-            captureMedia(app, named: "HTML viewer from relative path link \(appearance)")
-
-            let close = app.buttons["html.close"].firstMatch
-            XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
-            close.tap()
-            XCTAssertTrue(page.waitForNonExistence(timeout: Fixture.timeout))
-            XCTAssertTrue(transcript.exists, "Closing the viewer must keep the conversation open")
-            app.terminate()
+            openReport(linkLabel: Fixture.linkLabel, appearance: appearance, screenshotName: "HTML viewer from relative path link \(appearance)")
         }
+    }
+
+    /// An absolutely addressed report resolves its relative assets beside it, as absolute paths.
+    @MainActor
+    func testAbsoluteHTMLPathLinkLoadsItsRelativeAssets() {
+        openReport(linkLabel: Fixture.absoluteLinkLabel, appearance: "light", screenshotName: "HTML viewer from absolute path link light")
+    }
+
+    @MainActor
+    private func openReport(linkLabel: String, appearance: String, screenshotName: String) {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-text", "-appThemePreference", appearance]
+        app.launch()
+        let transcript = openTranscript(in: app)
+
+        let link = app.links[linkLabel].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        reveal(link, in: transcript)
+        link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        XCTAssertTrue(app.navigationBars[Fixture.fileName].waitForExistence(timeout: Fixture.timeout))
+        let page = app.webViews["html.content"].firstMatch
+        XCTAssertTrue(page.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(page.staticTexts[Fixture.heading].waitForExistence(timeout: Fixture.timeout))
+        let chart = page.images[Fixture.chartLabel].firstMatch
+        XCTAssertTrue(chart.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(
+            waitUntil(timeout: Fixture.timeout) { chart.frame.height > Fixture.minimumChartHeight },
+            "The relative PNG must render, not a broken image: \(chart.frame)"
+        )
+        XCTAssertTrue(page.staticTexts[Fixture.stylesheetNote].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertFalse(app.alerts[Fixture.alertTitle].exists, "A resolvable path link must not show the message")
+        captureMedia(app, named: screenshotName)
+
+        let close = app.buttons["html.close"].firstMatch
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
+        close.tap()
+        XCTAssertTrue(page.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(transcript.exists, "Closing the viewer must keep the conversation open")
+        app.terminate()
     }
 
     @MainActor

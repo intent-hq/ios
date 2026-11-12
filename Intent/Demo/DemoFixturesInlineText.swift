@@ -16,6 +16,9 @@ extension DemoFixtures {
     private static let inlineReportStylesheetPath = "reports/assets/report.css"
     private static let inlineReportChartPath = "reports/images/usage-chart.png"
     private static let inlineReportFontPath = "reports/assets/fonts/Inter-ExtraBold.ttf"
+    /// Where the demo workspace sits on the Mac, for links written as absolute paths.
+    /// The daemon accepts an absolute path inside the workspace, so the report's files serve from both.
+    private static let inlineWorkspaceFolder = "/Users/demo/dashboard/"
 
     static var inlineTextMessages: [[String: Any]] {
         let text = [
@@ -23,6 +26,7 @@ extension DemoFixtures {
             "[Open the text notes](intent://local/file/docs/Demo%20notes.txt)",
             "[Open the missing text file](intent://local/file/docs/Missing%20notes.txt)",
             "[Open the HTML report](reports/Demo%20report.html)",
+            "[Open the HTML report by absolute path](/Users/demo/dashboard/reports/Demo%20report.html)",
             // Links the app can't open: each tap shows a message instead of doing nothing.
             "[Open the workspace settings](intent://local/settings)",
             "[Open the signed-in preview](http://user@localhost:3000)",
@@ -51,11 +55,13 @@ extension DemoFixtures {
     }
 
     private static var inlineFiles: [String: Data] {
-        [
+        let files = [
             inlineTextPath: inlineTextBytes, inlineHTMLPath: inlineHTMLBytes,
             inlineReportStylesheetPath: inlineReportStylesheetBytes, inlineReportChartPath: inlineReportChartBytes,
             inlineReportFontPath: inlineReportFontBytes
         ]
+        let absolute = files.map { (inlineWorkspaceFolder + $0.key, $0.value) }
+        return files.merging(absolute) { relative, _ in relative }
     }
 
     /// The app's own bundled Inter (SIL OFL 1.1, Inter-LICENSE.txt), served under a report-only

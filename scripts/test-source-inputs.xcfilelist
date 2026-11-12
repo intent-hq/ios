@@ -1179,7 +1179,10 @@ $(SRCROOT)/IntentTests/GitHubRepoStoreBranchCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreCacheTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoStoreTests.swift
 $(SRCROOT)/IntentTests/GitHubRepoSuggestionsTests.swift
+$(SRCROOT)/IntentTests/HTMLFileResourceHandlerTests.swift
 $(SRCROOT)/IntentTests/HTMLFileResourcePolicyTests.swift
+$(SRCROOT)/IntentTests/HTMLFileResourceQueueTests.swift
+$(SRCROOT)/IntentTests/HTMLFileResourceTestSupport.swift
 $(SRCROOT)/IntentTests/HTMLFileWebViewTests.swift
 $(SRCROOT)/IntentTests/HookTimeBarTests.swift
 $(SRCROOT)/IntentTests/IPadCompactNavigationTests.swift
