@@ -195,7 +195,7 @@ struct ContentBlockBody: View, Equatable {
             if workspaceId == Workspace.chiefWorkspaceId {
                 WorkspaceLinkedTextView(text: text, workspaceId: workspaceId, onOpenURL: openTextURL)
             } else {
-                MarkdownTextView(text: text, onOpenURL: openTextURL, workspaceId: workspaceId)
+                MarkdownTextView(text: text, onOpenURL: openTextURL, workspaceId: workspaceId, linkStyle: .chat)
             }
         }
         .fullScreenCover(item: $pdfLink) { link in

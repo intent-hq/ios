@@ -22,7 +22,7 @@ struct CompactMarkdownStyle: StructuredText.Style {
             .foregroundColor(Self.codeForeground),
             .backgroundColor(Self.codeBackground)
         )
-        // Links keep the surrounding text color and read as links by underline.
+        // Links keep the surrounding text color and read as links by underline (#904).
         .link(.underlineStyle(.single))
     let headingStyle = CompactHeadingStyle()
     let paragraphStyle = CompactParagraphStyle()
@@ -42,6 +42,14 @@ struct CompactMarkdownStyle: StructuredText.Style {
     init(mermaidSources: [String: String] = [:], pendingMermaidLanguage: String? = nil) {
         codeBlockStyle = MermaidCodeBlockStyle(sources: mermaidSources, pendingLanguage: pendingMermaidLanguage)
     }
+}
+
+/// How Markdown links are laid out: `.plain` for notes and pull requests,
+/// `.chat` for transcript messages, where single-link lines become
+/// full-width rows. Both keep links underlined in the text color (#904).
+enum MarkdownLinkStyle {
+    case chat
+    case plain
 }
 
 extension StructuredText.Style where Self == CompactMarkdownStyle {
@@ -113,7 +121,9 @@ struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
 
     @ViewBuilder
     func makeBody(configuration: Configuration) -> some View {
-        if let language = configuration.languageHint, language == pendingLanguage {
+        if let row = StandaloneLinkRow(languageHint: configuration.languageHint) {
+            StandaloneLinkRowView(row: row)
+        } else if let language = configuration.languageHint, language == pendingLanguage {
             MermaidStreamingPlaceholder()
                 .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
         } else if let language = configuration.languageHint, let source = sources[language] {

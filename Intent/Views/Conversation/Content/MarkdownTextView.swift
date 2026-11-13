@@ -9,6 +9,8 @@ struct MarkdownTextView: View {
     /// Intent-file images render even when nil if the link carries its own
     /// workspace ID (long form).
     var workspaceId: String?
+    /// `.chat` renders single-link lines as full-width rows.
+    var linkStyle: MarkdownLinkStyle
     /// Prepared source is reused across view reconstruction and conversation visits.
     private let markdownSource: String
     private let mermaidSources: [String: String]
@@ -36,11 +38,13 @@ struct MarkdownTextView: View {
     init(
         text: String,
         onOpenURL: ((URL) -> OpenURLAction.Result)? = nil,
-        workspaceId: String? = nil
+        workspaceId: String? = nil,
+        linkStyle: MarkdownLinkStyle = .plain
     ) {
         self.text = text
         self.onOpenURL = onOpenURL
         self.workspaceId = workspaceId
+        self.linkStyle = linkStyle
         let prepared = MarkdownContentCache.shared.preparedContent(for: text)
         self.markdownSource = prepared.markdown
         self.mermaidSources = prepared.mermaidSources
@@ -84,11 +88,18 @@ struct MarkdownTextView: View {
             : Theme.foreground(for: colorScheme)
     }
 
+    private var parser: any MarkupParser {
+        switch linkStyle {
+        case .plain: MarkdownContentCache.shared
+        case .chat: MarkdownContentCache.LinkRowsParser()
+        }
+    }
+
     var body: some View {
         let pending = isStreaming ? pendingDiagram : nil
         let markdownView = StructuredText(
             pending?.markdown ?? markdownSource,
-            parser: MarkdownContentCache.shared
+            parser: parser
         )
             .textual.structuredTextStyle(CompactMarkdownStyle(
                 mermaidSources: mermaidSources,
