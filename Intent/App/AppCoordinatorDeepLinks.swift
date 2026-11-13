@@ -85,14 +85,11 @@ extension AppCoordinator {
         if let demo = DemoInviteJoin.environment(open: { [weak self] _, _ in self?.pendingDeepLink = nil }) { return demo }
         #endif
         let persistence = dependencies.persistence
-        let registry = dependencies.sessionRegistry
         let dialer = connection.tunnelDialer
         return InviteJoinEnvironment(
             openTransport: { link in try await InviteSocket.open(link, dialer: dialer) },
             savedConnections: { persistence.loadConnections() },
-            openOwnDaemon: { mac in
-                try await OwnMacConnection.open(mac, live: registry.session(for: BackendID(mac.id))?.connection, persistence: persistence)
-            },
+            openOwnDaemon: { mac in try await OwnMacConnection.open(mac, persistence: persistence) },
             saveCredential: { link, credential in
                 let payload = PairingPayload(
                     hosts: link.hosts,
@@ -113,32 +110,24 @@ extension AppCoordinator {
     }
 }
 
-/// The person's own Mac, used to read their forge account and publish the
-/// identity proof. Reuses a live window connection to it when there is one;
-/// otherwise dials a short-lived connection that `close()` drops.
+/// The person's own Mac, used to read their forge account and publish and
+/// delete the identity proof, over a dedicated short-lived connection that
+/// `close()` drops. Never a window's session connection: saving the joined
+/// login dials the new host over the presenting session's connection.
 @MainActor
 final class OwnMacConnection: InviteOwnDaemon {
     private static let requestTimeout: TimeInterval = 60
 
-    private let connection: any SessionConnectionManaging
-    private let ownsConnection: Bool
+    private let connection: ConnectionManager
 
-    private init(connection: any SessionConnectionManaging, ownsConnection: Bool) {
+    private init(connection: ConnectionManager) {
         self.connection = connection
-        self.ownsConnection = ownsConnection
     }
 
     var supportsCollaborationIdentity: Bool { connection.capabilities.supportsCollaborationIdentity }
     var supportsIdentitySeam: Bool { connection.capabilities.supportsIdentitySeam }
 
-    static func open(
-        _ mac: StoredConnection,
-        live: (any SessionConnectionManaging)?,
-        persistence: PersistenceManager
-    ) async throws -> OwnMacConnection {
-        if let live, live.connectionState == .connected, live.currentPrincipal?.isOwner == true {
-            return OwnMacConnection(connection: live, ownsConnection: false)
-        }
+    static func open(_ mac: StoredConnection, persistence: PersistenceManager) async throws -> OwnMacConnection {
         let manager = ConnectionManager(persistence: persistence)
         do {
             try await manager.connect(
@@ -154,7 +143,7 @@ final class OwnMacConnection: InviteOwnDaemon {
             manager.disconnect()
             throw error
         }
-        return OwnMacConnection(connection: manager, ownsConnection: true)
+        return OwnMacConnection(connection: manager)
     }
 
     func request(_ method: String, params: [String: Any]) async throws -> Any {
@@ -162,6 +151,6 @@ final class OwnMacConnection: InviteOwnDaemon {
     }
 
     func close() {
-        if ownsConnection { connection.disconnect() }
+        connection.disconnect()
     }
 }
