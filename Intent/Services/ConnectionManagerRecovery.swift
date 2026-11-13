@@ -112,7 +112,8 @@ extension ConnectionManager {
         tcAddress: String,
         remotePort: Int,
         token: String,
-        certFingerprint: String?
+        certFingerprint: String?,
+        endpoint: WebSocketConnection.Endpoint = .rpc
     ) async throws -> RacedConnection {
         let tunnel: any TunnelSession
         do {
@@ -126,7 +127,8 @@ extension ConnectionManager {
                 host: "127.0.0.1",
                 port: tunnel.localPort,
                 token: token,
-                certFingerprint: certFingerprint
+                certFingerprint: certFingerprint,
+                endpoint: endpoint
             )
             return RacedConnection(
                 socket: socket,

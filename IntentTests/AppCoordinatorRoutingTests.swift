@@ -47,7 +47,7 @@ extension AppCoordinatorTests {
             URL(string: "intent://pair?token=t&host=127.0.0.1&port=5181")!
         )
 
-        #expect(coordinator.pendingDeepLinkPairing?.payload == PairingPayload(
+        #expect(coordinator.pendingDeepLink?.pairingPayload == PairingPayload(
             hosts: ["127.0.0.1"],
             port: 5181,
             token: "t",
@@ -68,7 +68,7 @@ extension AppCoordinatorTests {
 
         coordinator.handleIncomingURL(URL(string: "intent://something?x=1")!)
 
-        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(coordinator.pendingDeepLink == nil)
         if case .pairing = coordinator.currentScreen {
             // pass — app state untouched
         } else {
@@ -91,7 +91,7 @@ extension AppCoordinatorTests {
             URL(string: "intent://pair?host=127.0.0.1&port=5181")!
         )
 
-        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(coordinator.pendingDeepLink == nil)
         if case .pairing = coordinator.currentScreen {
             // pass — app state untouched
         } else {
@@ -112,10 +112,10 @@ extension AppCoordinatorTests {
         coordinator.handleIncomingURL(
             URL(string: "intent://pair?token=t&host=10.0.0.5&port=4242")!
         )
-        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(coordinator.pendingDeepLink == nil)
 
         coordinator.onLoadComplete()
-        #expect(coordinator.pendingDeepLinkPairing?.payload.hosts == ["10.0.0.5"])
+        #expect(coordinator.pendingDeepLink?.pairingPayload?.hosts == ["10.0.0.5"])
         if case .pairing = coordinator.currentScreen {
             // pass — load still routed to its normal first screen
         } else {
@@ -138,7 +138,7 @@ extension AppCoordinatorTests {
 
         coordinator.onDeepLinkPaired(Self.makeConnection(port: 5181))
 
-        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(coordinator.pendingDeepLink == nil)
         if case .workspaceList = coordinator.currentScreen {
             // pass — same landing as a successful QR scan
         } else {
@@ -153,19 +153,19 @@ extension AppCoordinatorTests {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.currentScreen = .workspaceList
-        coordinator.pendingDeepLinkPairing = DeepLinkPairingRequest(
-            payload: PairingPayload(
+        coordinator.pendingDeepLink = DeepLinkRequest(
+            target: .pair(PairingPayload(
                 hosts: ["10.0.0.1"],
                 port: 4242,
                 token: "tok-4242",
                 certFingerprint: nil,
                 tcAddress: nil
-            )
+            ))
         )
 
         coordinator.onDeepLinkPaired(stored)
 
-        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(coordinator.pendingDeepLink == nil)
         #expect(persistence.activeConnection()?.id == stored.id)
         if case .connecting = coordinator.currentScreen {
             // pass — routed through onSwitchConnection
@@ -205,7 +205,7 @@ extension AppCoordinatorTests {
 
         // Screen stays .connecting (same value), so the restart must come
         // from the attempt id that keys ConnectingView's .task(id:).
-        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(coordinator.pendingDeepLink == nil)
         #expect(persistence.activeConnection()?.id == paired.id)
         #expect(
             coordinator.connectionAttemptId != attemptBefore,

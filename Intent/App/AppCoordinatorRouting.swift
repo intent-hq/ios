@@ -9,7 +9,7 @@ final class AppCoordinatorRoutingState {
     }
 
     var hasLoadCompleted = false
-    var stashedDeepLinkPayload: PairingPayload?
+    var stashedDeepLink: DeepLinkRequest.Target?
     var pendingNotificationSelection: PendingNotificationSelection?
 }
 
@@ -28,32 +28,10 @@ extension AppCoordinator {
         }
         // A deep link that arrived during the cold-start load is surfaced
         // now, over whichever screen the load routed to.
-        if let payload = routingState.stashedDeepLinkPayload {
-            routingState.stashedDeepLinkPayload = nil
-            pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
+        if let target = routingState.stashedDeepLink {
+            routingState.stashedDeepLink = nil
+            pendingDeepLink = DeepLinkRequest(target: target)
         }
-    }
-
-    // MARK: - Deep links (intent:// URLs)
-
-    /// Entry point for `intent://` URLs (IntentApp.onOpenURL). Only
-    /// `intent://pair` URIs are actionable: they surface a confirmation
-    /// (DeepLinkPairingView) before any connection is attempted. Every other
-    /// or malformed `intent://` URL is ignored without disturbing app state.
-    /// The URL itself is never logged — pair payloads carry the auth token.
-    func handleIncomingURL(_ url: URL) {
-        guard let payload = PairingPayload.parse(url.absoluteString) else {
-            if url.scheme == "intent", url.host == "pair" { PairingDiagnostics.invalidInput() }
-            AppLog.app.info("[AppCoordinator] Ignoring non-pairing deep link")
-            return
-        }
-        guard routingState.hasLoadCompleted else {
-            // Cold start: the URL can arrive before onLoadComplete has routed
-            // to the first screen — stash it and surface it after load.
-            routingState.stashedDeepLinkPayload = payload
-            return
-        }
-        pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
     }
 
     /// A deep-link pairing connected and persisted successfully.
@@ -67,7 +45,7 @@ extension AppCoordinator {
     /// where multiple windows are supported).
     func onDeepLinkPaired(_ connection: StoredConnection) {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
-        pendingDeepLinkPairing = nil
+        pendingDeepLink = nil
         if let bound = backendID, bound.connectionID == connection.id {
             dependencies.connection.updateCachedCredentials(
                 hosts: connection.server.hosts,
@@ -362,8 +340,8 @@ extension AppCoordinator {
         stopConnectionLifecycleForReturnHome()
         connectionLoss = .none
         selectedWorkspaceId = nil
-        pendingDeepLinkPairing = nil
-        routingState.stashedDeepLinkPayload = nil
+        pendingDeepLink = nil
+        routingState.stashedDeepLink = nil
         routingState.pendingNotificationSelection = nil
         connectionScreen = .pairing(showsSavedConnections: !dependencies.persistence.loadConnections().isEmpty)
         currentScreen = .pairing

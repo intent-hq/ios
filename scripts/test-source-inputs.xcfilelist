@@ -3,6 +3,7 @@ $(SRCROOT)/Intent/App
 $(SRCROOT)/Intent/App/AppCoordinator.swift
 $(SRCROOT)/Intent/App/AppCoordinatorAgentHistory.swift
 $(SRCROOT)/Intent/App/AppCoordinatorConnectionScreen.swift
+$(SRCROOT)/Intent/App/AppCoordinatorDeepLinks.swift
 $(SRCROOT)/Intent/App/AppCoordinatorIPadNavigation.swift
 $(SRCROOT)/Intent/App/AppCoordinatorLifecycleState.swift
 $(SRCROOT)/Intent/App/AppCoordinatorNavigation.swift
@@ -307,6 +308,7 @@ $(SRCROOT)/Intent/Demo/DemoFixturesTranscriptVideo.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesWorkspaceCreation.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesWorkspaceProposal.swift
 $(SRCROOT)/Intent/Demo/DemoIPadProducerVisibility.swift
+$(SRCROOT)/Intent/Demo/DemoInviteJoin.swift
 $(SRCROOT)/Intent/Demo/DemoMode.swift
 $(SRCROOT)/Intent/Demo/DemoNetworkPathMonitor.swift
 $(SRCROOT)/Intent/Demo/DemoPullRequestFixtures.swift
@@ -526,6 +528,9 @@ $(SRCROOT)/Intent/Services/GitHubRepoStore+Branches.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/ImagePasteboard.swift
 $(SRCROOT)/Intent/Services/ImportedPhotoVideo.swift
+$(SRCROOT)/Intent/Services/InviteConnection.swift
+$(SRCROOT)/Intent/Services/InviteIdentityProof.swift
+$(SRCROOT)/Intent/Services/InviteJoinFlow.swift
 $(SRCROOT)/Intent/Services/InvitedImportOutcome.swift
 $(SRCROOT)/Intent/Services/InvitedLegacyMigration.swift
 $(SRCROOT)/Intent/Services/InvitedSessionRegistry.swift
@@ -630,6 +635,7 @@ $(SRCROOT)/Intent/Utils/ExternalLink.swift
 $(SRCROOT)/Intent/Utils/HapticManager.swift
 $(SRCROOT)/Intent/Utils/ISO8601+Lenient.swift
 $(SRCROOT)/Intent/Utils/IntentFileLink.swift
+$(SRCROOT)/Intent/Utils/InviteLink.swift
 $(SRCROOT)/Intent/Utils/LaunchOptions.swift
 $(SRCROOT)/Intent/Utils/LocalNotificationService.swift
 $(SRCROOT)/Intent/Utils/NotificationChime.swift
@@ -838,6 +844,7 @@ $(SRCROOT)/Intent/Views/Notes/WorkspaceNoteIcon.swift
 $(SRCROOT)/Intent/Views/Onboarding
 $(SRCROOT)/Intent/Views/Onboarding/DeepLinkPairingView.swift
 $(SRCROOT)/Intent/Views/Onboarding/IPadPairingDetail.swift
+$(SRCROOT)/Intent/Views/Onboarding/InviteJoinView.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionField.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionHeader.swift
 $(SRCROOT)/Intent/Views/Onboarding/ManualConnectionSubmitButton.swift
@@ -974,6 +981,7 @@ $(SRCROOT)/IntentTests/AppCoordinatorConnectionFailureTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionScreenTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorConnectionTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorIPadReselectionTests.swift
+$(SRCROOT)/IntentTests/AppCoordinatorInviteRoutingTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorInvitedSyncTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorMissingEntityTests.swift
 $(SRCROOT)/IntentTests/AppCoordinatorReadOnlyTests.swift
@@ -1199,6 +1207,8 @@ $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
 $(SRCROOT)/IntentTests/IntentFileVideoTests.swift
 $(SRCROOT)/IntentTests/IntentNoteLinkParsingTests.swift
 $(SRCROOT)/IntentTests/InterFontTests.swift
+$(SRCROOT)/IntentTests/InviteJoinFlowTests.swift
+$(SRCROOT)/IntentTests/InviteLinkTests.swift
 $(SRCROOT)/IntentTests/InvitedGroupedMigrationTests.swift
 $(SRCROOT)/IntentTests/InvitedImportReadFailureTests.swift
 $(SRCROOT)/IntentTests/InvitedRouteRefreshRaceTests.swift

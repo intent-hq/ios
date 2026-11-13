@@ -29,7 +29,7 @@ struct DeepLinkPairingView: View {
                 .toolbarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        IntentIconButton(icon: .close, label: "Cancel") { coordinator.pendingDeepLinkPairing = nil }
+                        IntentIconButton(icon: .close, label: "Cancel") { coordinator.pendingDeepLink = nil }
                     }
                     .intentToolbarSurface()
                 }
