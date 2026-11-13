@@ -52,7 +52,7 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
 
     private init(mode: Mode) throws {
         self.mode = mode
-        listener = try NWListener(using: .tcp, on: .any)
+        listener = try NWListener.loopback()
     }
 
     static func start(mode: Mode) async throws -> CompressionWebSocketServer {

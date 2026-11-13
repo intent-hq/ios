@@ -289,7 +289,7 @@ extension ConnectionManagerTests {
     nonisolated private static func startSilentListener(
         accepted: OSAllocatedUnfairLock<[NWConnection]>
     ) async throws -> NWListener {
-        let listener = try NWListener(using: .tcp, on: .any)
+        let listener = try NWListener.loopback()
         let queue = DispatchQueue(label: "ConnectionManagerHostRaceTests.silent-listener")
         listener.newConnectionHandler = { @Sendable connection in
             accepted.withLock { $0.append(connection) }
