@@ -4,7 +4,8 @@ import Foundation
 /// Debug-only failure seams for the hands-on check of error states:
 /// `--demo-failures=pr-search,pr-load-more,pr-detail,file-preview` (and the
 /// first-read lists `workspace-list,agent-list,note-list`, ios#462) with
-/// `--demo-data`. Each failure fires a fixed number of times per launch, so Retry recovers.
+/// `--demo-data`. Each failure fires a fixed number of times per launch (first-read lists: per
+/// workspace, so a workspace the iPad opens at launch does not use up another one's), so Retry recovers.
 enum DemoFailureFixtures {
     private static let argumentPrefix = "--demo-failures="
     private static let nextToken = "demo-failure-page-2"
@@ -15,7 +16,7 @@ enum DemoFailureFixtures {
     private static let garbledFile = "docs/Garbled reply.png"
     private static let webMFile = "docs/Screen recording.webm"
     private static var fired: Set<String> = []
-    /// Reads failed so far per first-read fixture.
+    /// Reads failed so far per first-read fixture and workspace.
     private static var failedReads: [String: Int] = [:]
     /// Matches the wording of the live connection's request timeout.
     private static let requestTimedOut = NSError(
@@ -37,10 +38,12 @@ enum DemoFailureFixtures {
     }
 
     static func response(for method: String, params: [String: Any]) throws -> Any? {
-        if let (list, reads) = firstReadFailure(for: method, params: params), enabled.contains(list),
-           failedReads[list, default: 0] < reads {
-            failedReads[list, default: 0] += 1
-            throw requestTimedOut
+        if let (list, reads) = firstReadFailure(for: method, params: params), enabled.contains(list) {
+            let key = [list, params["workspaceId"] as? String].compactMap(\.self).joined(separator: ":")
+            if failedReads[key, default: 0] < reads {
+                failedReads[key, default: 0] += 1
+                throw requestTimedOut
+            }
         }
         switch method {
         case "github.pulls.search":

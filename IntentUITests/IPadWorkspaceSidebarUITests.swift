@@ -145,30 +145,29 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    func testSidebarKeepsNamingTheAgentWhenItsListRefreshFails() throws {
+    func testConversationKeepsItsTitleWhenTheSidebarCannotListAgents() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent sidebar")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = XCUIApplication()
-        app.launchArguments = ["--demo-data", "--demo-design-scenario=agent-list-unavailable", "-appThemePreference", "light"]
+        // A toast opens the agent before its workspace's agents were ever read, so the sidebar's read
+        // is the first one and fails. The overview shares the store and reads first otherwise (ios#1008).
+        app.launchArguments = ["--demo-data", "--demo-toast", "--demo-failures=agent-list", "-appThemePreference", "light"]
         app.launch()
         defer { app.terminate() }
-        let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
-        workspace.tap()
-        let agent = app.buttons["workspace.agent.groups-parent"]
-        XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        agent.tap()
+        let toast = app.buttons["Add usage analytics dashboard: Dashboard Implementor completed"]
+        XCTAssertTrue(toast.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        toast.tap()
         XCTAssertTrue(app.buttons["conversation.back"].waitForExistence(timeout: Self.timeout))
-        // The sidebar shares the overview's agent store (ios#979), and its own read fails after the
-        // overview's succeeded; a failed refresh keeps the listed rows (ios#1000, ios#1008).
-        XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout), "The sidebar keeps listing the open agent")
-        XCTAssertFalse(app.descendants(matching: .any)["workspace.agents.loadFailure"].exists, "A failed refresh does not replace the listed agents")
-        XCTAssertFalse(
-            app.descendants(matching: .any)["conversation.header.title"].exists,
-            "The sidebar names the agent, so the header does not repeat it"
+        XCTAssertTrue(
+            app.descendants(matching: .any)["workspace.agents.loadFailure"].waitForExistence(timeout: Self.timeout),
+            "The sidebar's agent list failed"
         )
-        capture("ipad-sidebar-list-refresh-failed")
+        XCTAssertTrue(
+            app.descendants(matching: .any)["conversation.header.title"].waitForExistence(timeout: Self.timeout),
+            "A failed sidebar list leaves the conversation to name its agent"
+        )
+        capture("ipad-sidebar-list-failed")
     }
 
     @MainActor
