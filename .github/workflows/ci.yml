@@ -968,6 +968,7 @@ jobs:
             IntentUITests/WorkspaceChangesUITests/testIPadCommitUsesMainPaneAndPreservesRepositoryInBothThemes
             IntentUITests/WorkspaceChangesUITests/testCommitFilenamesStayPinnedWhileScrollingInBothThemes
             IntentUITests/IPadWorkspaceSidebarUITests/testDetailPaneShowsPlaceholderWithoutSelectedWorkspaceInBothThemes
+            IntentUITests/IPadWorkspaceSidebarUITests/testSidebarKeepsNamingTheAgentWhenItsListRefreshFails
         run: |
           set -o pipefail
           scripts/xcodebuild.sh test-without-building-ui 2>&1 | tee ui-tests.log

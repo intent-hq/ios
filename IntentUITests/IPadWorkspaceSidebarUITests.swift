@@ -145,7 +145,7 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    func testConversationKeepsItsTitleWhenTheSidebarCannotListAgents() throws {
+    func testSidebarKeepsNamingTheAgentWhenItsListRefreshFails() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent sidebar")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
@@ -160,11 +160,15 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         agent.tap()
         XCTAssertTrue(app.buttons["conversation.back"].waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(
-            app.descendants(matching: .any)["conversation.header.title"].waitForExistence(timeout: Self.timeout),
-            "A failed sidebar list leaves the conversation to name its agent"
+        // The sidebar shares the overview's agent store (ios#979), and its own read fails after the
+        // overview's succeeded; a failed refresh keeps the listed rows (ios#1000, ios#1008).
+        XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout), "The sidebar keeps listing the open agent")
+        XCTAssertFalse(app.descendants(matching: .any)["workspace.agents.loadFailure"].exists, "A failed refresh does not replace the listed agents")
+        XCTAssertFalse(
+            app.descendants(matching: .any)["conversation.header.title"].exists,
+            "The sidebar names the agent, so the header does not repeat it"
         )
-        capture("ipad-sidebar-list-failed")
+        capture("ipad-sidebar-list-refresh-failed")
     }
 
     @MainActor
