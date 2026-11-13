@@ -36,11 +36,15 @@ struct DemoToastOverlay: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay(alignment: .top) {
             if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-toast"), !isDismissed {
-                ToastView(toast: toast, onTap: {
-                    isDismissed = true
-                    coordinator.onSelectAgent(toast.agentId, workspaceId: toast.workspaceId, agentName: toast.agentName)
-                }, onDismiss: { isDismissed = true })
-                    .padding(.top, Constants.Root.toastTopPadding)
+                ToastView(
+                    toast: toast,
+                    onTap: {
+                        isDismissed = true
+                        coordinator.onSelectAgent(toast.agentId, workspaceId: toast.workspaceId, agentName: toast.agentName)
+                    },
+                    onDismiss: { isDismissed = true }
+                )
+                .padding(.top, Constants.Root.toastTopPadding)
             }
         }
     }
