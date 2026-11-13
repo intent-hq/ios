@@ -345,6 +345,22 @@ $(SRCROOT)/Intent/DesignSystem/VisionHitTarget.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspaceChromeLayout.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspaceDetailStyle.swift
 $(SRCROOT)/Intent/DesignSystem/WorkspacePageLayout.swift
+$(SRCROOT)/Intent/LiveActivity
+$(SRCROOT)/Intent/LiveActivity/AgentActivityAttributes.swift
+$(SRCROOT)/Intent/LiveActivity/AgentActivityContent.swift
+$(SRCROOT)/Intent/LiveActivity/AgentActivityViews.swift
+$(SRCROOT)/Intent/LiveActivity/AgentLiveActivityController.swift
+$(SRCROOT)/Intent/LiveActivity/Relay
+$(SRCROOT)/Intent/LiveActivity/Relay/PushRelayController.swift
+$(SRCROOT)/Intent/LiveActivity/Relay/RelayClient.swift
+$(SRCROOT)/Intent/LiveActivity/Relay/RelayDeviceKey.swift
+$(SRCROOT)/Intent/LiveActivity/Relay/RelayLinkState.swift
+$(SRCROOT)/Intent/LiveActivity/Relay/RelayProof.swift
+$(SRCROOT)/Intent/LiveActivity/Relay/RemoteNotificationsAppDelegate.swift
+$(SRCROOT)/Intent/LiveActivity/Widget
+$(SRCROOT)/Intent/LiveActivity/Widget/IntentWidgetsBundle.swift
+$(SRCROOT)/Intent/LiveActivity/Widget/Widget.xcassets
+$(SRCROOT)/Intent/LiveActivity/Widget/Widget.xcassets/IntentDandelion.imageset
 $(SRCROOT)/Intent/Models
 $(SRCROOT)/Intent/Models.swift
 $(SRCROOT)/Intent/Models/ActionProposal.swift
@@ -858,6 +874,7 @@ $(SRCROOT)/Intent/Views/Settings/DiagnosticShareSheet.swift
 $(SRCROOT)/Intent/Views/Settings/LogOffConfirmationSheet.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsActionLabel.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsHeader.swift
+$(SRCROOT)/Intent/Views/Settings/SettingsLiveActivityRow.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsPairingSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsSection.swift
 $(SRCROOT)/Intent/Views/Settings/SettingsStyle.swift
@@ -952,6 +969,7 @@ $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTitleEditingControls.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTitleEditor.swift
 $(SRCROOT)/Intent/Views/Workspaces/WorkspaceTransferSheet.swift
 $(SRCROOT)/IntentTests
+$(SRCROOT)/IntentTests/AgentActivityContentTests.swift
 $(SRCROOT)/IntentTests/AgentAvatarDesignTests.swift
 $(SRCROOT)/IntentTests/AgentAvatarPulseTests.swift
 $(SRCROOT)/IntentTests/AgentDetailStoreTests.swift
@@ -1284,6 +1302,7 @@ $(SRCROOT)/IntentTests/ProposalActionStoreTests.swift
 $(SRCROOT)/IntentTests/ProviderCatalogTests.swift
 $(SRCROOT)/IntentTests/PullRequestDetailTests.swift
 $(SRCROOT)/IntentTests/PullRequestListStoreTests.swift
+$(SRCROOT)/IntentTests/PushRelayContractTests.swift
 $(SRCROOT)/IntentTests/QRScannerTests.swift
 $(SRCROOT)/IntentTests/QuestionAttachmentLifecycleTests.swift
 $(SRCROOT)/IntentTests/QuestionTests.swift
@@ -1294,6 +1313,7 @@ $(SRCROOT)/IntentTests/RPCRecordingConnectionTests.swift
 $(SRCROOT)/IntentTests/RPCTraffic.swift
 $(SRCROOT)/IntentTests/ReadOnlyBannerMessageTests.swift
 $(SRCROOT)/IntentTests/RecentRetentionTests.swift
+$(SRCROOT)/IntentTests/RelayLinkStateTests.swift
 $(SRCROOT)/IntentTests/ReleaseConfigurationTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift

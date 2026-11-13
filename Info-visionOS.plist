@@ -74,6 +74,8 @@
 	     introspection API. -->
 	<key>AppIdentifierPrefix</key>
 	<string>$(AppIdentifierPrefix)</string>
+	<key>IntentApsEnvironment</key>
+	<string>$(APS_ENVIRONMENT)</string>
 	<!-- Composer dictation (SpeechDictationController, visionOS only). -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Intent uses the microphone to dictate messages into the composer.</string>
