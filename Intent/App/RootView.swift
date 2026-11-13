@@ -294,12 +294,18 @@ struct RootView: View {
         }
         #if DEBUG
         .task { await DemoConnectionLoss.run(connection: session.connection, coordinator: coordinator) }
+        .task { DemoInviteJoin.present(coordinator) }
         #endif
-        // intent://pair deep-link confirmation — presented over whichever
-        // screen is current (first-run pairing or an existing connection).
-        .sheet(item: $coordinator.pendingDeepLinkPairing) { request in
-            DeepLinkPairingView(payload: request.payload)
-                .coversConversationComposers()
+        // intent://pair and intent://invite confirmations — presented over
+        // whichever screen is current (first-run pairing or a connection).
+        .sheet(item: $coordinator.pendingDeepLink) { request in
+            Group {
+                switch request.target {
+                case .pair(let payload): DeepLinkPairingView(payload: payload)
+                case .invite(let link): InviteJoinView(link: link)
+                }
+            }
+            .coversConversationComposers()
         }
         .onChange(of: usesIPadShell, initial: true) { _, enabled in
             coordinator.updateShellPresentation(enabled)
