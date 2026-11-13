@@ -35,6 +35,8 @@ struct InviteJoinFlowTests {
     final class Recorder {
         var saved: [InviteCredential] = []
         var opened: [(StoredConnection, String?)] = []
+        /// Runs as the credential is saved (which dials the new host).
+        var onSave: () -> Void = {}
     }
 
     static func model(
@@ -51,6 +53,7 @@ struct InviteJoinFlowTests {
                 return daemon
             },
             saveCredential: { _, credential in
+                recorder.onSave()
                 recorder.saved.append(credential)
                 return Self.connection(Self.hostFingerprint, role: .guest, token: credential.token, name: "joined")
             },
@@ -146,6 +149,8 @@ struct InviteJoinFlowTests {
         ])
         let mac = Self.connection(Self.macFingerprint, role: .owner, token: "mac", name: "Ada's MacBook")
         let recorder = Recorder()
+        var methodsAtSave: [String] = []
+        recorder.onSave = { methodsAtSave = daemon.methods }
         let model = Self.model(transport: transport, connections: [mac], recorder: recorder, daemon: daemon)
         model.start()
         try await Self.waitFor(model, Self.isConfirm)
@@ -161,7 +166,7 @@ struct InviteJoinFlowTests {
         #expect(prove["secret"] as? String == "s3cret")
         #expect(recorder.saved.map(\.token) == ["new-token"])
         #expect(recorder.opened.first?.1 == "ws-1")
-        #expect(daemon.methods.last == "github.identityProof.delete")
+        #expect(methodsAtSave.last == "github.identityProof.delete", "The proof is gone before saving dials the new host")
         #expect(daemon.closed)
     }
 
@@ -213,6 +218,27 @@ struct InviteJoinFlowTests {
             return false
         }
         #expect(transport.closed)
+    }
+
+    @Test func onlyTheConfirmedGuestLoginIsPresented() async throws {
+        var older = Self.connection(Self.hostFingerprint, role: .guest, token: "other-person", name: "studio")
+        older.principal = ConnectionPrincipal(id: "grace", hostRole: .guest, revision: nil, login: "grace", displayName: nil)
+        older.lastConnectedAt = .distantPast
+        var newer = Self.connection(Self.hostFingerprint, role: .guest, token: "stale", name: "studio")
+        newer.lastConnectedAt = Date()
+        let transport = FakeInviteTransport(responses: [
+            "invite.inspect": .success(Self.preview),
+            "invite.accept": .failure(InviteFailure.refused("credential-invalid"))
+        ])
+        let model = Self.model(transport: transport, connections: [older, newer], recorder: Recorder())
+        model.start()
+        try await Self.waitFor(model, Self.isConfirm)
+        guard case .confirm(let confirmation) = model.phase else { return }
+        #expect(confirmation.login == "ada")
+        model.answer(true)
+        try await Self.waitFor(model) { $0 == .needsOwnMac }
+        #expect(transport.methods.filter { $0 == "invite.accept" }.count == 1, "Grace's login is never sent after confirming Ada")
+        #expect(transport.params(of: "invite.accept")["credential"] as? String == "stale")
     }
 
     @Test func invalidStoredLoginFallsBackToTheProof() async throws {

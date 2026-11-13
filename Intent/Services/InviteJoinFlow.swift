@@ -119,13 +119,13 @@ final class InviteJoinModel {
         let guests = sameHost
             .filter { $0.principal.map { !$0.isOwner } == true && !$0.token.isEmpty }
             .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
-        if let first = guests.first {
-            let login = first.principal?.login ?? first.displayName
+        // Only the confirmed person may join: when the host no longer knows
+        // that login, fall through to the proof, which asks again.
+        if let guest = guests.first {
+            let login = guest.principal?.login ?? guest.displayName
             guard try await confirm(preview: preview, login: login, method: .existingAccess) else { return }
-            for guest in guests {
-                let joined = try await accept(as: guest, preview: preview, client: client)
-                guard !joined else { return }
-            }
+            let joined = try await accept(as: guest, preview: preview, client: client)
+            guard !joined else { return }
         }
         try await proveOnOwnMac(preview: preview, client: client, saved: saved)
     }
@@ -175,20 +175,14 @@ final class InviteJoinModel {
         guard try await confirm(preview: preview, login: account.login, method: method) else { return }
         let session = ProofSession(client: client, daemon: daemon, account: account, preview: preview)
         let (credential, proof) = try await prove(session, challenge: challenge)
-        // Point of no return: the host minted the credential. The proof is
-        // spent either way, so it is removed before leaving.
-        let stored: StoredConnection
-        do {
-            guard matches(credential, preview),
-                  credential.identity == nil || account.identity == nil || credential.identity == account.identity else {
-                throw InviteFailure.invalidResponse
-            }
-            stored = try await environment.saveCredential(link, credential)
-        } catch {
-            await InviteIdentityProof.delete(proof, collaboration: account.collaboration, on: daemon)
-            throw error
-        }
+        // Point of no return: the host minted the credential and the proof is
+        // spent. Remove it before saving, which dials the new host.
         await InviteIdentityProof.delete(proof, collaboration: account.collaboration, on: daemon)
+        guard matches(credential, preview),
+              credential.identity == nil || account.identity == nil || credential.identity == account.identity else {
+            throw InviteFailure.invalidResponse
+        }
+        let stored = try await environment.saveCredential(link, credential)
         finish(stored, workspaceId: credential.workspaceId)
     }
 
