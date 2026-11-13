@@ -1330,6 +1330,7 @@ $(SRCROOT)/IntentTests/SwiftSourceLexer.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionMergeTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendConnectionTombstoneTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendIdentityTests.swift
+$(SRCROOT)/IntentTests/SyncedBackendNodeRecordTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendPublisherTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendRegistryTests.swift
 $(SRCROOT)/IntentTests/SyncedBackendRouteTests.swift

@@ -40,6 +40,11 @@ struct SyncedBackendRecord: Equatable, Sendable {
     /// Opaque, case-sensitive tunnel route. Missing/null/blank values mean
     /// unknown, not an instruction to erase a locally learned route.
     var tcAddress: String?
+    /// What kind of machine wrote this record. `"node"` marks an agent
+    /// runner (a machine a backend runs agents on) that iOS cannot connect
+    /// to; missing, null, blank or unrecognized values keep today's
+    /// behaviour (a connectable backend).
+    var role: String?
 }
 
 extension SyncedBackendRecord {
@@ -91,6 +96,14 @@ extension SyncedBackendRecord {
         deleted && (deletedAt ?? updatedAt) + Self.tombstoneTTLMs
             <= now.timeIntervalSince1970 * Self.millisecondsPerSecond
     }
+
+    /// Wire value of `role` for an agent-runner node (mirrors the desktop
+    /// keychain payload).
+    static let nodeRole = "node"
+
+    /// Whether this record describes a node: listed by the desktop but not
+    /// connectable, so iOS hides it.
+    var isNode: Bool { role == Self.nodeRole }
 }
 
 /// Parser for the versioned keychain payload, mirroring the desktop
@@ -137,7 +150,8 @@ enum SyncedBackendPayload {
             updatedAt: updatedAt,
             deleted: false,
             deletedAt: nil,
-            tcAddress: tunnelAddress(object["tcAddress"])
+            tcAddress: tunnelAddress(object["tcAddress"]),
+            role: role(object["role"])
         )
         if case .value(true) = bool(object["deleted"]) {
             record.deleted = true
@@ -147,7 +161,12 @@ enum SyncedBackendPayload {
         return .record(record)
     }
 
-    static func tunnelAddress(_ value: Any?) -> String? {
+    /// Optional string `role`; non-strings and blank values mean "no role".
+    static func role(_ value: Any?) -> String? { nonBlankString(value) }
+
+    static func tunnelAddress(_ value: Any?) -> String? { nonBlankString(value) }
+
+    private static func nonBlankString(_ value: Any?) -> String? {
         guard let raw = value as? String else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
@@ -295,7 +314,9 @@ struct SyncedBackendRegistry {
     /// `wins(over:)` — so a machine whose address changed never appears
     /// twice and row order never changes the outcome). INCLUDES winning
     /// unexpired tombstones — the merge into saved connections must act on
-    /// them.
+    /// them. Live NODE records (`isNode`) are dropped after the collapse:
+    /// iOS cannot connect to a node, and a node that wins its key still
+    /// hides older copies of it. Tombstones are kept whatever their role.
     func listBackends(now: Date = Date()) -> SyncedBackendRegistryList {
         guard let accessGroup else { return .unavailable(.accessGroupUnresolved) }
         switch keychain.list(matching: Self.listQuery(accessGroup: accessGroup)) {
@@ -320,7 +341,9 @@ struct SyncedBackendRegistry {
                     keyOrder.append(key)
                 }
             }
-            return .available(keyOrder.compactMap { newestByKey[$0] })
+            return .available(
+                keyOrder.compactMap { newestByKey[$0] }.filter { $0.deleted || !$0.isNode }
+            )
         }
     }
 
