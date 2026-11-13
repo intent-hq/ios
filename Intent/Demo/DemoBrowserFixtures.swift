@@ -31,6 +31,8 @@ enum DemoBrowserFixtures {
                longList: LaunchOptions.current.contains("--demo-long-script-list")
            ) { return response }
         switch method {
+        case "browser.syncTabs":
+            return ["drop": [String]()]
         case "browser.listTabs":
             if LaunchOptions.current.contains("--demo-browsers"),
                let workspaceId = params["workspaceId"] as? String {

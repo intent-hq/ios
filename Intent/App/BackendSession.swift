@@ -111,6 +111,7 @@ final class BackendSession {
     let pullRequestListStore: PullRequestListStore
     let mobileTerminalStore: MobileTerminalStore
     let browserStore: WorkspaceBrowserStore
+    let browserNavigation: NativeBrowserNavigation
     let attachmentUploadService: AttachmentUploadService
     let workspaceFileImageLoader: WorkspaceFileImageLoader
     let attachmentImageLoader: AttachmentImageLoader
@@ -153,10 +154,22 @@ final class BackendSession {
             persistence: MobileTerminalPersistence(backendID: backendID)
         )
         browserStore = WorkspaceBrowserStore(connection: connection, backendID: backendID)
+        let navigation = NativeBrowserNavigation(connection: connection, backendID: backendID)
+        browserNavigation = navigation
+        browserStore.nativeNavigation = navigation
         self.attachmentUploadService = attachmentUploadService
         self.workspaceFileImageLoader = workspaceFileImageLoader
         self.attachmentImageLoader = attachmentImageLoader
         self.attentionCueCenter = attentionCueCenter
+        navigation.savedBrowsers = { [weak browserStore] workspaceId in
+            browserStore?.savedBrowsers(workspaceId: workspaceId) ?? []
+        }
+        if let manager = connection as? ConnectionManager {
+            manager.browserNavigationHandler = { [weak navigation] params in
+                guard let navigation else { return ["success": false, "error": "Native browser is unavailable."] }
+                return await navigation.execute(params)
+            }
+        }
     }
 
     /// A fresh coordinator for one window over this session. Windows sharing

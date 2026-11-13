@@ -10,6 +10,12 @@ final class WorkspaceBrowserStore {
         "script:state", "script:changed", "browser:tab-opened", "browser:tab-updated", "browser:tab-closed"
     ]
 
+    var nativeNavigation: NativeBrowserNavigation?
+
+    func savedBrowsers(workspaceId: String) -> [WorkspaceBrowser] {
+        saved.filter { $0.workspaceId == workspaceId }
+    }
+
     private(set) var isConnected: Bool
     private var saved: [WorkspaceBrowser]
     private var detected: [String: [WorkspaceBrowser]] = [:]
@@ -57,8 +63,11 @@ final class WorkspaceBrowserStore {
             scripts: detected[workspaceId, default: []].filter { !hiddenIds.contains($0.id) },
             tabs: tabs[workspaceId, default: []].filter { !hiddenIds.contains($0.id) }
         )
-        let discoveredURLs = Set(servers.map(\.url))
-        return servers + saved.filter { $0.workspaceId == workspaceId && !discoveredURLs.contains($0.url) }
+        let native = nativeNavigation?.browsers(workspaceId: workspaceId) ?? []
+        let nativeURLs = Set(native.map(\.url))
+        let discoveredURLs = Set(servers.map(\.url)).union(nativeURLs)
+        return native + servers.filter { !nativeURLs.contains($0.url) }
+            + saved.filter { $0.workspaceId == workspaceId && !discoveredURLs.contains($0.url) }
     }
 
     func errorMessage(workspaceId: String) -> String? { errors[workspaceId] }
@@ -92,6 +101,7 @@ final class WorkspaceBrowserStore {
     }
 
     func remove(_ browser: WorkspaceBrowser) {
+        nativeNavigation?.remove(browser)
         if browser.isSavedSession {
             saved.removeAll { $0.id == browser.id && $0.workspaceId == browser.workspaceId }
         } else {

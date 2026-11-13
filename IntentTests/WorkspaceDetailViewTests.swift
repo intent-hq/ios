@@ -12,7 +12,10 @@ struct WorkspaceDetailViewTests {
     @MainActor func resourceBrowserShortcutReusesOrCreates(hasBrowser: Bool) async throws {
         let session = makePinnedSession(connection: FakeConnectionManager())
         if hasBrowser { _ = try session.browserStore.create(workspaceId: "workspace", url: "localhost:3000") }
-        let shortcuts = WorkspaceResourceShortcuts(workspaceId: "workspace").environment(session)
+        let shortcuts = WorkspaceResourceShortcuts(workspaceId: "workspace")
+            .modifier(NativeBrowserPresenter())
+            .environment(session)
+            .environment(\.scenePhase, .active)
         try await SyntheticBadgeHost.render(shortcuts, width: 386, height: 600) { host, window in
             let browser = try #require(SyntheticBadgeHost.accessibilityElements(in: host).first { element in
                 SyntheticBadgeHost.accessibilityIdentifier(of: element) == "workspace.shortcut.browser"

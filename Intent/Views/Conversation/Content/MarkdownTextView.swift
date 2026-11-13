@@ -165,11 +165,9 @@ struct MarkdownTextView: View {
 
         markdownView
             .environment(\.openURL, OpenURLAction(handler: openLink))
-            .fullScreenCover(item: $browserItem) { browser in
-                if let session {
-                    WorkspaceBrowserView(browser: browser, connection: session.connection)
-                        .coversConversationComposers()
-                }
+            .onChange(of: browserItem) { _, browser in
+                if let browser { session?.browserNavigation.presentUserBrowser(browser) }
+                browserItem = nil
             }
             .unopenableLinkAlert($unopenableLink)
     }

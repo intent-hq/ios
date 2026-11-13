@@ -180,6 +180,9 @@ extension ConnectionManager {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
+        if let method = json["method"] as? String, let id = json["id"], id is String || id is Int {
+            return .request(id: InboundJSONValue(value: id), method: method, params: InboundJSONValue(value: json["params"] ?? [:]))
+        }
         if let id = json["id"] as? Int {
             guard let error = json["error"] as? [String: Any] else {
                 return .response(id: id, result: InboundJSONValue(value: json["result"] as Any))
@@ -236,6 +239,8 @@ extension ConnectionManager {
     ) {
         let dispatchStart = CFAbsoluteTimeGetCurrent()
         switch frame {
+        case let .request(id, method, params):
+            handleReverseRequest(id: id.value, method: method, params: params.value)
         case let .response(id, result):
             pendingRequests.removeValue(forKey: id)?.resume(returning: result.value)
         case let .error(id, error):
@@ -326,7 +331,7 @@ extension ConnectionManager {
     }
 
     nonisolated static let globalEventTypes = [
-        "workspace:*", "note:*", "agent:*", "task:*", "specialists:changed", "settings:changed", "host:members-changed"
+        "workspace:*", "note:*", "agent:*", "task:*", "browser:*", "specialists:changed", "settings:changed", "host:members-changed"
     ]
     nonisolated static let globalSubscriptionMaxAttempts = 5
     nonisolated static let globalSubscriptionBackoffMaximumSeconds = 8

@@ -82,7 +82,8 @@ extension ConversationStartupBudgetTests {
         }
         await model.loadModelCatalogIfNeeded()
         let reconnect = connection.traffic(since: start)
-        #expect(reconnect.requests.count == 10)
+        #expect(reconnect.requests.count == 11)
+        #expect(reconnect.calls("browser.syncTabs").count == 1)
         #expect(reconnect.calls("chat.unsubscribe").isEmpty)
         #expect(reconnect.calls("events.unsubscribe").isEmpty)
         #expect(reconnect.requests.allSatisfy { $0.started.connectionGeneration == 2 })
