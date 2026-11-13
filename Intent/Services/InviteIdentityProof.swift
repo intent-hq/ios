@@ -57,8 +57,11 @@ nonisolated enum InviteProofFailure: Error, Equatable, Sendable {
 enum InviteIdentityProof {
     /// The account to prove for `pin`, or nil when none is signed in.
     static func account(for pin: InvitePin, on daemon: any InviteOwnDaemon) async throws -> InviteAccount? {
-        if daemon.supportsCollaborationIdentity, let account = try await collaborationAccount(for: pin, on: daemon) {
-            return account
+        // A Mac with the separate collaboration sign-in proves only with it:
+        // falling back to repository credentials is forbidden (§5.49), so a
+        // missing collaboration account means signing in there.
+        if daemon.supportsCollaborationIdentity {
+            return try await collaborationAccount(for: pin, on: daemon)
         }
         let required: InviteIdentity
         switch pin {
