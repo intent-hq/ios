@@ -12,7 +12,7 @@ struct StateFlagBudgetPolicyTests {
     /// Types already above the allowance. Counts may only go down; lower the
     /// entry (or delete it at the allowance) when a type sheds flags.
     static let baseline: [String: Int] = [
-        "Intent/Demo/DemoFixturesDesign.swift#DemoDesignFixtures": 6,
+        "Intent/Demo/DemoFixturesDesign.swift#DemoDesignFixtures": 5,
         "Intent/Demo/DemoScriptMonitorFixtures.swift#DemoScriptMonitorFixtures": 5,
         "Intent/Presentation/ConversationModelSelection.swift#ConversationModelSelection": 5,
         "Intent/Presentation/ConversationTranscriptScrollState.swift#ConversationTranscriptScrollState": 14,
