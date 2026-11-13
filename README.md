@@ -459,6 +459,13 @@ simulator runtime, and does not re-run. Try a simulator on another runtime with
 `SIM_UDID`. The [wrapper header](scripts/xcodebuild.sh) has the details and the
 `LAUNCH_CRASH_WATCH=0` opt-out.
 
+Test runs hold an exclusive lock on their simulator, so two runs that pick the same
+`SIM_UDID` take turns instead of killing each other's test processes. The lock files
+live in `/tmp/intent-xcodebuild-locks-<uid>`, one directory per user, independent of
+`TMPDIR`; agents with separate `TMPDIR`s therefore still wait for each other. Set
+`SIM_LOCK_DIR` to use another local directory, and `SIM_LOCK_TIMEOUT` (default 1800
+seconds) to bound the wait.
+
 For repeated focused runs, build once and reuse that build:
 
 ```bash
