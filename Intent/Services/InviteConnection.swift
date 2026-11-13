@@ -187,7 +187,13 @@ nonisolated struct InviteClient: Sendable {
     let transport: any InviteTransport
     let link: InviteLink
 
-    private var credentials: [String: Any] { ["inviteId": link.inviteId, "secret": link.secret] }
+    /// A host join sends `scope: "host"` on every call (§5.49); omission
+    /// means workspace scope, so workspace links keep the legacy shape.
+    private var credentials: [String: Any] {
+        var params: [String: Any] = ["inviteId": link.inviteId, "secret": link.secret]
+        if link.scope == .host { params["scope"] = InviteLink.Scope.host.rawValue }
+        return params
+    }
 
     func inspect() async throws -> InvitePreview {
         let result = try await transport.call("invite.inspect", params: credentials, timeout: Self.requestTimeout)

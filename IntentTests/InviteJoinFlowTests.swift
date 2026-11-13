@@ -241,6 +241,54 @@ struct InviteJoinFlowTests {
         #expect(transport.params(of: "invite.accept")["credential"] as? String == "stale")
     }
 
+    @Test func collaborationMacNeverFallsBackToRepositoryCredentials() async throws {
+        var challenge = Self.preview
+        challenge["nonce"] = "nonce-1"
+        let transport = FakeInviteTransport(responses: [
+            "invite.inspect": .success(Self.preview),
+            "invite.challenge": .success(challenge)
+        ])
+        let daemon = FakeOwnDaemon(responses: [
+            "principal.me": ["identity": ["provider": "github", "host": "github.com", "externalUserId": "42"]],
+            "identity.getUser": ["user": NSNull()],
+            "github.getUser": ["user": ["login": "ada", "id": 42]]
+        ])
+        daemon.supportsCollaborationIdentity = true
+        let mac = Self.connection(Self.macFingerprint, role: .owner, token: "mac", name: "Mac")
+        let model = Self.model(transport: transport, connections: [mac], recorder: Recorder(), daemon: daemon)
+        model.start()
+        try await Self.waitFor(model) { phase in
+            if case .needsSignIn = phase { return true }
+            return false
+        }
+        #expect(!daemon.methods.contains("github.getUser"), "The repository account is never consulted")
+        #expect(!daemon.methods.contains { $0.hasSuffix("identityProof.create") })
+    }
+
+    @Test func hostInvitesSendTheirScopeOnEveryCall() async throws {
+        let transport = FakeInviteTransport(responses: [
+            "invite.inspect": .success([
+                "scope": "host", "role": "member", "prettyHostname": "Studio Mac",
+                "pinIdentity": ["provider": "github", "host": "github.com", "externalUserId": "42"]
+            ])
+        ])
+        let link = InviteLink(
+            scope: .host,
+            hosts: [],
+            port: 5181,
+            fingerprint: Self.hostFingerprint,
+            tcAddress: "tc1-host",
+            inviteId: "inv-host",
+            secret: "s"
+        )
+        let preview = try await InviteClient(transport: transport, link: link).inspect()
+        #expect(preview.scope == .host)
+        #expect(transport.params(of: "invite.inspect")["scope"] as? String == "host")
+        let workspace = FakeInviteTransport(responses: ["invite.inspect": .success(Self.preview)])
+        _ = try await InviteClient(transport: workspace, link: Self.link).inspect()
+        #expect(workspace.params(of: "invite.inspect")["scope"] == nil, "Workspace links keep the legacy shape")
+    }
+
     @Test func invalidStoredLoginFallsBackToTheProof() async throws {
         let guest = Self.connection(Self.hostFingerprint, role: .guest, token: "stale", name: "studio")
         var challenge = Self.preview
