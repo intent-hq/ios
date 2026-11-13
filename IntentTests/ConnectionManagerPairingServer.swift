@@ -135,7 +135,7 @@ extension ConnectionManagerTests {
             wsOptions.autoReplyPing = true
             parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
             let server = LoopbackWebSocketServer(
-                listener: try NWListener(using: parameters, on: .any),
+                listener: try NWListener.loopback(using: parameters),
                 gated: gated
             )
             server.listener.newConnectionHandler = { [weak server] connection in

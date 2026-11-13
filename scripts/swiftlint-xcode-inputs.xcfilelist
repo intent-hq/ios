@@ -929,6 +929,7 @@ $(SRCROOT)/IntentTests/ListLoadPhaseTests.swift
 $(SRCROOT)/IntentTests/LiveSubscriptionStoreTests.swift
 $(SRCROOT)/IntentTests/LiveSubscriptionTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
+$(SRCROOT)/IntentTests/LoopbackTestListener.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownContentCacheTests.swift
