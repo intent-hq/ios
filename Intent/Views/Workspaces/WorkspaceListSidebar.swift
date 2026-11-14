@@ -377,13 +377,9 @@ extension WorkspaceListSidebar {
             ))
             .listRowSeparator(.hidden)
             .listRowBackground(
-                RoundedRectangle(
-                    cornerRadius: isEmbedded ? IPadSidebarStyle.rowRadius : Constants.WorkspaceList.sidebarSelectionCornerRadius,
-                    style: .continuous
-                )
-                .fill(coordinator.selectedWorkspaceId == workspace.id
-                    ? (isEmbedded ? IPadSidebarStyle.selection(for: colorScheme) : Theme.sidebarSelection(for: colorScheme))
-                    : .clear)
+                RoundedRectangle(cornerRadius: selectionCornerRadius, style: .continuous)
+                .fill(coordinator.selectedWorkspaceId == workspace.id ? selectionFill : .clear)
+                .opacity(listSelectionOpacity(for: workspace.id))
             )
     }
 
@@ -402,7 +398,9 @@ extension WorkspaceListSidebar {
             spacious: false,
             isSidebar: isEmbedded,
             isSelected: coordinator.selectedWorkspaceId == workspace.id,
-            isNextSelected: nextWorkspaceId != nil && coordinator.selectedWorkspaceId == nextWorkspaceId
+            isNextSelected: nextWorkspaceId != nil && coordinator.selectedWorkspaceId == nextWorkspaceId,
+            selectionFill: selectionFill,
+            selectionCornerRadius: selectionCornerRadius
         ) {
             searchFocused = false
             coordinator.onSelectWorkspace(workspace.id)
@@ -413,6 +411,23 @@ extension WorkspaceListSidebar {
             searchFocused = false
             pendingAction = PendingAction(workspace: workspace, action: action)
         }
+        #endif
+    }
+
+    private var selectionFill: Color {
+        isEmbedded ? IPadSidebarStyle.selection(for: colorScheme) : Theme.sidebarSelection(for: colorScheme)
+    }
+
+    private var selectionCornerRadius: CGFloat {
+        isEmbedded ? IPadSidebarStyle.rowRadius : Constants.WorkspaceList.sidebarSelectionCornerRadius
+    }
+
+    /// Swipe rows draw their own highlight so it moves with the row.
+    private func listSelectionOpacity(for workspaceId: String) -> Double {
+        #if os(visionOS)
+        1
+        #else
+        isEmbedded ? 0 : 1 - Double(workspaceSwipeProgress[workspaceId, default: 0])
         #endif
     }
 
