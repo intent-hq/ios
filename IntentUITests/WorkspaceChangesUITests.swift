@@ -8,6 +8,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         static let maximumInitialLineOffset: CGFloat = 100
         static let maximumLeadingInset: CGFloat = 40
         static let railSettleDuration: TimeInterval = 0.5
+        static let tabSwitchTimeout: TimeInterval = 5
     }
 
     override func setUpWithError() throws {
@@ -239,8 +240,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         option.tap()
     }
 
-    @MainActor
-    @discardableResult
+    @MainActor @discardableResult
     private func revealRepositoryPicker(in app: XCUIApplication) -> XCUIElement {
         let picker = app.buttons["changes.repository"].firstMatch
         reveal(picker, in: app, towardTop: true, required: false)
@@ -408,9 +408,9 @@ extension WorkspaceChangesUITests {
         let agents = app.buttons["Agents"].firstMatch
         reveal(agents, in: app, towardTop: true)
         agents.tap()
+        // A tap that only stops the overview's scroll momentum leaves Changes selected; tap again.
+        if !app.buttons["changes.section.pullRequests"].waitForNonExistence(timeout: Fixture.tabSwitchTimeout) { agents.tap() }
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-        // Changes can leave the overview scrolled past the agent rows.
-        reveal(agent, in: app, towardTop: true, required: false)
         reveal(agent, in: app)
         agent.tap()
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
