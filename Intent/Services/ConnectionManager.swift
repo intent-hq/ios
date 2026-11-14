@@ -96,6 +96,7 @@ import os
     /// share a generation; this counter ensures the NEWEST attempt wins the
     /// adoption race regardless of which one finishes first.
     @ObservationIgnored private var connectAttempt: Int = 0
+    var connectAttemptCount: Int { connectAttempt }
     @ObservationIgnored var reconnectTask: Task<Void, Never>?
     /// Read by tests as a completion barrier for a retired heartbeat.
     @ObservationIgnored var heartbeatTask: Task<Void, Never>?

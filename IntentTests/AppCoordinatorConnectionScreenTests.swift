@@ -151,13 +151,15 @@ extension AppCoordinatorTests {
         }
     }
 
-    @Test func supersededConnectIsNotShownAsAFailure() {
+    @Test func cancelledConnectIsNeverShownAsAFailure() {
         // A newer connect on the same session (e.g. a pairing link moving
-        // this window to another host) cancels the older one; its
-        // cancellation must not show "Swift.CancellationError" as a failure.
-        #expect(ConnectingView.failureMessage(for: CancellationError()) == nil)
-        #expect(ConnectingView.failureMessage(for: DaemonStartupError.failed) == nil)
+        // this window to another host) owns the screen.
+        #expect(ConnectingView.failureOutcome(for: CancellationError(), replacedByNewerAttempt: true) == .leave)
+        // Cancelled with no successor (sync refreshed the credentials during
+        // startup): connect again rather than stay on Connecting.
+        #expect(ConnectingView.failureOutcome(for: CancellationError(), replacedByNewerAttempt: false) == .retry)
+        #expect(ConnectingView.failureOutcome(for: DaemonStartupError.failed, replacedByNewerAttempt: false) == .leave)
         let timedOut = WebSocketTransportError.timedOut(host: "studio")
-        #expect(ConnectingView.failureMessage(for: timedOut) == timedOut.localizedDescription)
+        #expect(ConnectingView.failureOutcome(for: timedOut, replacedByNewerAttempt: false) == .show(timedOut.localizedDescription))
     }
 }
