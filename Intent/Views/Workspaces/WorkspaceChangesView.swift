@@ -7,12 +7,15 @@ enum WorkspaceChangesLayout {
     static let lineNumberWidth: CGFloat = 32
     static let diffTintOpacity = 0.12
     static let shortHashLength = 7
+    static let iconBaselineRatio: CGFloat = 0.3
 }
 
 struct WorkspaceChangesView: View {
     let workspaceId: String
     let store: WorkspaceChangesStore
+    var pullRequests: [PullRequestListItem] = []
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -20,9 +23,13 @@ struct WorkspaceChangesView: View {
     @State private var selectedFile: WorkspaceChange?
     @State private var selectedCommit: WorkspaceCommit?
     @State private var areCommitsExpanded = true
+    @State private var arePullRequestsExpanded = true
+    @State private var isRepositoryExpanded = true
+    @ScaledMetric(relativeTo: .body) private var pullRequestIconSize = WorkspaceChangesLayout.treeIconSize
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: CreateWorkspaceRepoStyle.sectionSpacing) {
+            pullRequestsSection
             repositorySection
             if let error = store.errorMessage {
                 VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
@@ -106,11 +113,59 @@ struct WorkspaceChangesView: View {
     }
 
     @ViewBuilder
+    private var pullRequestsSection: some View {
+        if !pullRequests.isEmpty {
+            WorkspaceChangesSection(
+                title: "Pull Requests",
+                count: pullRequests.count,
+                identifier: "pullRequests",
+                isExpanded: $arePullRequestsExpanded
+            ) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(pullRequests) { item in
+                        pullRequestRow(item)
+                            .overlay(alignment: .bottom) {
+                                if item.id != pullRequests.last?.id { rowDivider }
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    private func pullRequestRow(_ item: PullRequestListItem) -> some View {
+        Button {
+            if let url = item.url { openURL(url) }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: CreateWorkspaceFormStyle.rowSpacing) {
+                Image(WorkspaceRowView.pillImage(for: item.status))
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: pullRequestIconSize, height: pullRequestIconSize)
+                    .foregroundStyle(PullRequestRowView.stateColor(item.status, colorScheme: colorScheme, contrast: contrast))
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + pullRequestIconSize * WorkspaceChangesLayout.iconBaselineRatio }
+                    .accessibilityHidden(true)
+                WorkspaceChangesRow(title: item.title) {
+                    HStack(spacing: WorkspaceChangesLayout.statsSpacing) {
+                        Text("#\(item.number)")
+                        Text(item.status.rawValue.capitalized)
+                        if let updated = ISO8601DateFormatter.lenientDate(from: item.updatedAt)?.relativeFormatted {
+                            Text(updated)
+                        }
+                    }
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(IntentContentButtonStyle())
+        .accessibilityHint("Opens the pull request")
+        .accessibilityIdentifier("changes.pullRequest.\(item.id)")
+    }
+
+    @ViewBuilder
     private var repositorySection: some View {
         if !store.roots.isEmpty || store.repositoryErrorMessage != nil {
-            VStack(alignment: .leading, spacing: CreateWorkspaceFormStyle.rowSpacing) {
-                Text("Repository")
-                    .interFont(Constants.Typography.bodyS)
+            WorkspaceChangesSection(title: "Repository", identifier: "repository", isExpanded: $isRepositoryExpanded) {
                 Menu {
                     Picker("Repository", selection: repositorySelection) {
                         Text("Main repository").tag("")
