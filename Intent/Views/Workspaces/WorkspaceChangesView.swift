@@ -164,7 +164,7 @@ struct WorkspaceChangesView: View {
 
     @ViewBuilder
     private var repositorySection: some View {
-        if !store.roots.isEmpty || store.repositoryErrorMessage != nil {
+        if store.roots.contains(where: \.isSubmodule) {
             WorkspaceChangesSection(title: "Repository", identifier: "repository", isExpanded: $isRepositoryExpanded) {
                 Menu {
                     Picker("Repository", selection: repositorySelection) {
