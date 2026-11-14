@@ -56,6 +56,48 @@ struct PullRequestListStoreTests {
         #expect(links["acme/app#7"] == nil)
     }
 
+    @Test func ownedPullRequestsKeepTheWorkspaceRepositoryNewestFirst() {
+        let workspace = Workspace(
+            id: "ws",
+            title: "Dashboard",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            repositoryOwner: "Acme",
+            repositoryName: "App",
+            pullRequests: [
+                WorkspacePullRequest(number: 3, status: "Merged", title: "", updatedAt: "2026-01-01T00:00:00Z"),
+                WorkspacePullRequest(number: 7, status: "Open", url: "https://github.com/acme/lib/pull/7"),
+                WorkspacePullRequest(number: 5, status: "Open", url: "https://github.com/acme/app/pull/5")
+            ],
+            activePullRequest: WorkspacePullRequest(number: 9, status: "Open")
+        )
+        let items = PullRequestListItem.owned(by: workspace)
+        #expect(items.map(\.id) == ["acme/app#3", "acme/app#5"])
+        #expect(items[0].title == "#3")
+        #expect(items[0].url?.absoluteString == "https://github.com/Acme/App/pull/3")
+    }
+
+    @Test func ownedPullRequestsFallBackToTheActivePullRequest() {
+        let workspace = Workspace(
+            id: "ws",
+            title: "Dashboard",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            repositoryOwner: "acme",
+            repositoryName: "app",
+            activePullRequest: WorkspacePullRequest(number: 9, status: "Draft", title: "feat: draft")
+        )
+        let items = PullRequestListItem.owned(by: workspace)
+        #expect(items.map(\.id) == ["acme/app#9"])
+        #expect(items.first?.status == .draft)
+    }
+
     @Test func onlyLinksToWorkspaceTrackedPullRequestsResolve() throws {
         let workspace = Workspace(
             id: "ws",

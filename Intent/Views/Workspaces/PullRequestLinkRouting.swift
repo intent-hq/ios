@@ -8,6 +8,11 @@ extension View {
     }
 }
 
+extension EnvironmentValues {
+    /// Opens a pull request page the way tracked links do; nil outside link routing.
+    @Entry var openPullRequest: ((PullRequestListItem) -> Void)?
+}
+
 private struct PullRequestLinkRouting: ViewModifier {
     let inIPadDetail: Bool
     @Environment(BackendSession.self) private var session
@@ -18,6 +23,7 @@ private struct PullRequestLinkRouting: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.openURL, OpenURLAction(handler: open))
+            .environment(\.openPullRequest, show)
             .navigationDestination(item: $pushed) { detail($0) }
     }
 
@@ -26,12 +32,16 @@ private struct PullRequestLinkRouting: ViewModifier {
             inheritedOpenURL(url)
             return .handled
         }
-        if inIPadDetail {
-            coordinator.onSelectIPadPullRequest(tracked.item)
-        } else {
-            pushed = tracked.item
-        }
+        show(tracked.item)
         return .handled
+    }
+
+    private func show(_ item: PullRequestListItem) {
+        if inIPadDetail {
+            coordinator.onSelectIPadPullRequest(item)
+        } else {
+            pushed = item
+        }
     }
 
     private func detail(_ item: PullRequestListItem) -> some View {

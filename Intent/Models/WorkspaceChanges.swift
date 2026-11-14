@@ -105,6 +105,9 @@ struct WorkspaceGitRoot: Identifiable, Equatable, Sendable {
     let displayName: String
     let branch: String?
     let registeredCommitSha: String?
+    /// Detected by the daemon from the worktree's git submodules (`source: "auto"`),
+    /// as opposed to registered by an agent.
+    var isSubmodule = false
 
     static func parse(_ dictionary: [String: Any]) -> Self? {
         guard let id = dictionary["id"] as? String, !id.isEmpty,
@@ -115,7 +118,8 @@ struct WorkspaceGitRoot: Identifiable, Equatable, Sendable {
             path: path,
             displayName: repoName.flatMap { $0.isEmpty ? nil : $0 } ?? URL(fileURLWithPath: path).lastPathComponent,
             branch: dictionary["branch"] as? String,
-            registeredCommitSha: (dictionary["registeredCommitSha"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            registeredCommitSha: (dictionary["registeredCommitSha"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            isSubmodule: dictionary["source"] as? String == "auto"
         )
     }
 
