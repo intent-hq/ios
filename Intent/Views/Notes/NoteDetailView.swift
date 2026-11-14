@@ -9,12 +9,16 @@ struct NoteDetailView: View {
     let workspaceId: String
     let noteTitle: String
     let showsBackButton: Bool
+    /// Set by the iPad shell, which shows an inline header in place of the navigation bar.
+    var onInlineBack: (() -> Void)?
+    var inlineBackLabel: LocalizedStringKey = "Back"
     /// Optional closure to push a note onto the navigation stack (for note-to-note navigation).
     /// Parameters: (noteId, workspaceId, noteTitle)
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     @State private var noteStore: NoteStore
     @State private var agentStore: AgentStore
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.isRemoteReadOnly) private var isRemoteReadOnly
     @State private var note: Note?
@@ -26,12 +30,16 @@ struct NoteDetailView: View {
         noteTitle: String,
         session: BackendSession,
         showsBackButton: Bool = true,
+        onInlineBack: (() -> Void)? = nil,
+        inlineBackLabel: LocalizedStringKey = "Back",
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
     ) {
         self.noteId = noteId
         self.workspaceId = workspaceId
         self.noteTitle = noteTitle
         self.showsBackButton = showsBackButton
+        self.onInlineBack = onInlineBack
+        self.inlineBackLabel = inlineBackLabel
         self.onNavigateToNote = onNavigateToNote
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
         _agentStore = State(initialValue: AgentStore(connectionManager: session.connection, summaries: session.agentSummaries))
@@ -52,10 +60,14 @@ struct NoteDetailView: View {
     var body: some View {
         ZStack {
             WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
-            noteContentState
+            VStack(spacing: 0) {
+                if let onInlineBack { inlineHeader(onBack: onInlineBack) }
+                noteContentState
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .navigationTitle(noteTitle)
-        .toolbar(.visible, for: .navigationBar)
+        .toolbar(onInlineBack == nil ? .visible : .hidden, for: .navigationBar)
         .toolbarTitleDisplayMode(.inline)
         .intentNavigationBackButton(showsBackButton, usesWorkspaceVerticalBar: true, showsBackground: false)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
@@ -106,6 +118,27 @@ struct NoteDetailView: View {
                cached.updatedAt != full.updatedAt {
                 Task { await refreshNote() }
             }
+        }
+    }
+
+    private func inlineHeader(onBack: @escaping () -> Void) -> some View {
+        let workspaceTitle = WorkspaceSubtitleResolver.subtitle(
+            forWorkspaceId: workspaceId,
+            in: session.workspaceStore.workspaces
+        )
+        return WorkspaceNavigationHeader(
+            title: noteTitle,
+            subtitle: workspaceTitle.map { (title: String) -> LocalizedStringKey in "\(title)" },
+            backLabel: inlineBackLabel,
+            backIdentifier: "note.back",
+            titleIdentifier: "note.header.title",
+            showsBackground: false,
+            usesConversationLayout: true,
+            onBack: onBack
+        ) {
+            Color.clear
+                .frame(width: WorkspaceDetailStyle.controlSize, height: WorkspaceDetailStyle.controlSize)
+                .accessibilityHidden(true)
         }
     }
 
