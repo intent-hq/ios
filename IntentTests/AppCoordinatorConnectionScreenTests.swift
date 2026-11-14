@@ -150,4 +150,14 @@ extension AppCoordinatorTests {
             DispatchQueue.main.async { continuation.resume() }
         }
     }
+
+    @Test func supersededConnectIsNotShownAsAFailure() {
+        // A newer connect on the same session (e.g. a pairing link moving
+        // this window to another host) cancels the older one; its
+        // cancellation must not show "Swift.CancellationError" as a failure.
+        #expect(ConnectingView.failureMessage(for: CancellationError()) == nil)
+        #expect(ConnectingView.failureMessage(for: DaemonStartupError.failed) == nil)
+        let timedOut = WebSocketTransportError.timedOut(host: "studio")
+        #expect(ConnectingView.failureMessage(for: timedOut) == timedOut.localizedDescription)
+    }
 }

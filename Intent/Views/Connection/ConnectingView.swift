@@ -109,15 +109,26 @@ struct ConnectingView: View {
             // A bumped connectionAttemptId cancels this task and starts a
             // replacement: the superseded attempt's failure must not stomp
             // the screen the restarted attempt (or the connected UI) owns.
-            guard !Task.isCancelled else { return false }
-            if case DaemonStartupError.failed = error { return false }
-            coordinator.onConnectionFailed(error: error.localizedDescription)
+            guard !Task.isCancelled, let message = Self.failureMessage(for: error) else { return false }
+            coordinator.onConnectionFailed(error: message)
             return false
         }
         if !PersistenceManager.shared.touchLastConnected(id: connection.id) {
             AppLog.connection.warning("[ConnectingView] Could not persist last-connected timestamp")
         }
         return true
+    }
+
+    /// The failure to show for a failed connect, or nil when the attempt was
+    /// only superseded. A newer connect on the same session (for example a
+    /// pairing link moving this window to another host) cancels the
+    /// older one, and that newer attempt owns the screen: its cancellation is
+    /// not a connection failure and its "CancellationError" text never shows.
+    /// A failed daemon startup is already shown by the startup screen.
+    nonisolated static func failureMessage(for error: any Error) -> String? {
+        if error is CancellationError { return nil }
+        if case DaemonStartupError.failed = error { return nil }
+        return error.localizedDescription
     }
 
     private func attemptConnection() async {
