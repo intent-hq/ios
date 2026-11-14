@@ -16,6 +16,7 @@ struct WorkspaceChangesView: View {
     var pullRequests: [PullRequestListItem] = []
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.openURL) private var openURL
+    @Environment(\.openPullRequest) private var openPullRequest
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -135,7 +136,11 @@ struct WorkspaceChangesView: View {
 
     private func pullRequestRow(_ item: PullRequestListItem) -> some View {
         Button {
-            if let url = item.url { openURL(url) }
+            if let openPullRequest {
+                openPullRequest(item)
+            } else if let url = item.url {
+                openURL(url)
+            }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: CreateWorkspaceFormStyle.rowSpacing) {
                 Image(WorkspaceRowView.pillImage(for: item.status))

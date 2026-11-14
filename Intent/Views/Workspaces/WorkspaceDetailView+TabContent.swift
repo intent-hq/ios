@@ -46,8 +46,8 @@ extension WorkspaceDetailView {
             WorkspaceChangesView(
                 workspaceId: workspaceId,
                 store: changesStore,
-                pullRequests: workspace.map {
-                    PullRequestListItem.owned(by: $0, monitors: session.prMonitorsStore.monitors(for: workspaceId))
+                pullRequests: workspace.map { current in
+                    PullRequestListItem.owned(by: current, monitors: session.prMonitorsStore.monitors(for: workspaceId))
                 } ?? []
             )
         } else {
