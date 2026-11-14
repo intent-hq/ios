@@ -239,20 +239,17 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         option.tap()
     }
 
-    /// The picker sits below the pull requests, so it can be above or below the viewport.
     @MainActor
     @discardableResult
     private func revealRepositoryPicker(in app: XCUIApplication) -> XCUIElement {
         let picker = app.buttons["changes.repository"].firstMatch
-        if !(picker.exists && picker.isHittable) {
-            reveal(app.buttons["changes.section.pullRequests"].firstMatch, in: app, towardTop: true)
-            reveal(picker, in: app)
-        }
+        reveal(picker, in: app, towardTop: true, required: false)
+        reveal(picker, in: app)
         return picker
     }
 
     @MainActor
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false) {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false, required: Bool = true) {
         let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
         // On iPad the workspace can be beside a viewer; app-wide swipes target the viewer instead.
         let scrollTarget = UIDevice.current.userInterfaceIdiom == .pad && overview.exists ? overview : app
@@ -260,6 +257,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
             if element.exists, element.isHittable { return }
             if towardTop { scrollTarget.swipeDown() } else { scrollTarget.swipeUp() }
         }
+        guard required else { return }
         XCTAssertTrue(element.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(element.isHittable)
     }
@@ -411,6 +409,8 @@ extension WorkspaceChangesUITests {
         reveal(agents, in: app, towardTop: true)
         agents.tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
+        // Changes can leave the overview scrolled past the agent rows.
+        reveal(agent, in: app, towardTop: true, required: false)
         reveal(agent, in: app)
         agent.tap()
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
