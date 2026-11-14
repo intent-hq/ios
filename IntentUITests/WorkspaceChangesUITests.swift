@@ -440,12 +440,8 @@ extension WorkspaceChangesUITests {
             ? "changes.file.staged.Tests/MobileAnalyticsTests.swift"
             : "changes.file.unstaged.Sources/Analytics.swift"
         let file = app.buttons[identifier].firstMatch
-        let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
-        for _ in 0..<Fixture.scrollAttempts {
-            if file.exists, file.isHittable { break }
-            if staged { overview.swipeUp() } else { overview.swipeDown() }
-        }
-        XCTAssertTrue(file.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        reveal(file, in: app, towardTop: !staged, required: false)
+        reveal(file, in: app, towardTop: staged)
         file.tap()
         XCTAssertTrue(app.buttons["diff.back"].waitForExistence(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: staged ? "let mobileStaged = true" : "let mobile = true")
