@@ -298,18 +298,14 @@ extension WorkspaceChangesUITests {
             let section = app.buttons["changes.section.pullRequests"].firstMatch
             XCTAssertTrue(section.waitForExistence(timeout: Fixture.timeout))
             let open = app.buttons["changes.pullRequest.nova-labs/console#482"].firstMatch
-            XCTAssertTrue(open.exists)
-            XCTAssertTrue(app.buttons["changes.pullRequest.nova-labs/console#476"].exists)
+            XCTAssertTrue(open.exists && app.buttons["changes.pullRequest.nova-labs/console#476"].exists)
             XCTAssertLessThan(open.frame.minY, app.buttons["changes.section.unstaged"].firstMatch.frame.minY)
             capture(app, name: "changes-pull-requests-\(appearance)")
             section.tap()
             XCTAssertEqual(section.value as? String, "Collapsed")
             XCTAssertFalse(open.exists)
-            let repository = app.buttons["changes.section.repository"].firstMatch
-            if repository.exists {
-                repository.tap()
-                XCTAssertFalse(app.buttons["changes.repository"].exists)
-            }
+            app.buttons["changes.section.repository"].firstMatch.tap()
+            XCTAssertFalse(app.buttons["changes.repository"].exists)
             capture(app, name: "changes-pull-requests-collapsed-\(appearance)")
             app.terminate()
         }
