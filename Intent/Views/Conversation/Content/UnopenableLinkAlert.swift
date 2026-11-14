@@ -7,7 +7,7 @@ nonisolated struct UnopenableLink: Equatable {
         /// No scheme (a relative or absolute path), a `file://` link, or an
         /// app-internal scheme: iOS has nothing that opens it.
         case unsupportedLocation
-        /// An `intent://` link that is not a file, note, task or pairing link.
+        /// An `intent://` link that is not a file, note, task, pairing or invite link.
         /// iOS would route it back to the app, which ignores it.
         case unsupportedIntentLink
         /// The in-app browser could not open a local server link.
@@ -40,9 +40,9 @@ nonisolated struct UnopenableLink: Equatable {
         // A one-letter scheme is a Windows drive path such as `C:/Users/…`.
         if scheme.count == 1 || Self.unsupportedSchemes.contains(scheme) { return .unsupportedLocation }
         if scheme == "intent" {
-            // Pairing links are the only `intent://` links the app acts on
-            // when iOS hands them back (AppCoordinator.handleIncomingURL).
-            return url.host?.lowercased() == "pair" ? nil : .unsupportedIntentLink
+            // Pairing and invite links are the only `intent://` links the app
+            // acts on when iOS hands them back (AppCoordinator.handleIncomingURL).
+            return ["pair", "invite"].contains(url.host?.lowercased()) ? nil : .unsupportedIntentLink
         }
         return nil
     }

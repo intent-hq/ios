@@ -5,9 +5,29 @@ nonisolated struct ConnectionCapabilities: Equatable, Sendable {
     let protocolVersion: String?
     let scriptMonitorsVersion: Int?
     let scriptActiveListsVersion: Int?
+    /// `collaborationIdentity: 1` (§5.49): the separate `identity.*` sign-in.
+    var collaborationIdentityVersion: Int?
     private(set) var scriptMonitorsDisabled = false
 
     static let unknown = Self(protocolVersion: nil, scriptMonitorsVersion: nil, scriptActiveListsVersion: nil)
+
+    var supportsCollaborationIdentity: Bool { collaborationIdentityVersion == 1 }
+
+    /// Protocol 10.8 added GitLab identity proofs (`sourceControl.identityProof.*`).
+    var supportsIdentitySeam: Bool { Self.protocolVersion(protocolVersion, atLeast: Self.identitySeamVersion) }
+
+    private static let identitySeamMajor = 10
+    private static let identitySeamMinor = 8
+    private static let identitySeamVersion = (major: identitySeamMajor, minor: identitySeamMinor)
+
+    nonisolated static func protocolVersion(_ version: String?, atLeast minimum: (major: Int, minor: Int)) -> Bool {
+        guard let version else { return false }
+        let parts = version.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              parts.allSatisfy({ part in !part.isEmpty && part.allSatisfy { $0.isASCII && $0.isNumber } }),
+              let major = Int(parts[0]), let minor = Int(parts[1]) else { return false }
+        return major > minimum.major || (major == minimum.major && minor >= minimum.minor)
+    }
 
     /// Gated only on the advertised capabilities, never on a protocol-version maximum: the
     /// protocol major moves for unrelated changes (protocol 15 hid monitors, intent-hq/intent#7206).
@@ -30,6 +50,7 @@ nonisolated extension ConnectionCapabilities {
         protocolVersion = server?["protocolVersion"] as? String
         scriptMonitorsVersion = Self.integer(capabilities?["scriptMonitors"])
         scriptActiveListsVersion = Self.integer(capabilities?["scriptActiveLists"])
+        collaborationIdentityVersion = Self.integer(capabilities?["collaborationIdentity"])
     }
 
     private static func integer(_ value: Any?) -> Int? {

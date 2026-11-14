@@ -6,10 +6,19 @@ extension WebSocketConnection {
     nonisolated enum Endpoint: Sendable {
         case rpc
         case tunnel
+        /// The host's unauthenticated invite-join endpoint (no bearer token).
+        case invite
 
-        var path: String { self == .rpc ? "/ws" : "/tunnel" }
+        var path: String {
+            switch self {
+            case .rpc: "/ws"
+            case .tunnel: "/tunnel"
+            case .invite: "/invite"
+            }
+        }
+
         var maximumMessageSize: Int {
-            self == .rpc ? WebSocketConnection.maximumMessageSize : BrowserTunnelFrame.maximumMessageSize
+            self == .tunnel ? BrowserTunnelFrame.maximumMessageSize : WebSocketConnection.maximumMessageSize
         }
     }
 
@@ -71,8 +80,9 @@ extension WebSocketConnection {
         return url
     }
 
+    /// `/invite` callers hold no credential: an empty token sends no header.
     nonisolated static func additionalHeaders(token: String) -> [(name: String, value: String)] {
-        [(name: "Authorization", value: "Bearer \(token)")]
+        token.isEmpty ? [] : [(name: "Authorization", value: "Bearer \(token)")]
     }
 
     /// SHA-256 fingerprint of a DER-encoded certificate, formatted as

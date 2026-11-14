@@ -355,6 +355,11 @@ CAPTURES = {
             "Automated messages collapsed", "Automated messages agent expanded", "Automated messages final state",
         ),
     },
+    "InviteJoinUITests": {
+        "testFirstJoinAsksBeforeProvingThenJoins": ("Invite join confirm light", "Invite join confirm dark"),
+        "testInviteWithoutAnOwnMacExplainsAndOffersCopyLink": ("Invite join needs Mac light", "Invite join needs Mac dark"),
+        "testExpiredInviteExplainsWithoutRetry": ("Invite join expired light",),
+    },
     "TurnFailureNoticeUITests": {
         "testUsageLimitCardHidesRawDetailsUntilExpanded": tuple(
             f"Turn failure {state} {appearance}"

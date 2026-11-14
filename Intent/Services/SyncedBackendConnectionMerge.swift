@@ -170,7 +170,7 @@ enum SyncedBackendConnectionMerge {
     /// 17+'s lenient URL parser would percent-encode junk instead of
     /// failing, hiding the problem until connect. Spelling is preserved
     /// (`MAC.Local` stays as entered); callers dedup on `normalizeHost`.
-    static func usableHost(_ raw: String) -> String? {
+    nonisolated static func usableHost(_ raw: String) -> String? {
         guard !raw.isEmpty else { return nil }
         let inner: Substring
         if raw.hasPrefix("[") {
@@ -190,11 +190,11 @@ enum SyncedBackendConnectionMerge {
     }
 
     // RFC 1035 presentation-form limits.
-    private static let maxHostNameLength = 253
-    private static let maxHostLabelLength = 63
-    private static let ipv4OctetCount = 4
-    private static let maxIPv4OctetDigits = 3
-    private static let maxIPv4OctetValue = 255
+    nonisolated private static let maxHostNameLength = 253
+    nonisolated private static let maxHostLabelLength = 63
+    nonisolated private static let ipv4OctetCount = 4
+    nonisolated private static let maxIPv4OctetDigits = 3
+    nonisolated private static let maxIPv4OctetValue = 255
 
     /// Structural check for the non-IPv6 branch (ios#341). A DNS name is
     /// dot-separated labels of 1–63 ASCII letters/digits/hyphens/underscores
@@ -203,7 +203,7 @@ enum SyncedBackendConnectionMerge {
     /// leading, trailing or doubled dot — and at most 253 characters. A
     /// string made only of digits and dots is an IPv4 literal and must be a
     /// dotted quad with octets 0–255 and no leading zeros.
-    private static func isValidNameOrIPv4(_ raw: String) -> Bool {
+    nonisolated private static func isValidNameOrIPv4(_ raw: String) -> Bool {
         guard raw.count <= maxHostNameLength else { return false }
         let labels = raw.split(separator: ".", omittingEmptySubsequences: false)
         if raw.allSatisfy({ $0 == "." || $0.isNumber && $0.isASCII }) {
@@ -212,7 +212,7 @@ enum SyncedBackendConnectionMerge {
         return labels.allSatisfy(isDNSLabel)
     }
 
-    private static func isDNSLabel(_ label: Substring) -> Bool {
+    nonisolated private static func isDNSLabel(_ label: Substring) -> Bool {
         guard !label.isEmpty, label.count <= maxHostLabelLength,
             label.first != "-", label.last != "-"
         else { return false }
@@ -222,7 +222,7 @@ enum SyncedBackendConnectionMerge {
         }
     }
 
-    private static func isIPv4Octet(_ octet: Substring) -> Bool {
+    nonisolated private static func isIPv4Octet(_ octet: Substring) -> Bool {
         guard !octet.isEmpty, octet.count <= maxIPv4OctetDigits, let value = Int(octet), value <= maxIPv4OctetValue
         else { return false }
         return octet.count == 1 || octet.first != "0"
