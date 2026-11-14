@@ -149,10 +149,12 @@ struct InviteLinkTests {
     }
 
     @Test func capabilitiesReadCollaborationIdentityAndSeam() {
+        // fixture-protocol-version: brackets the 10.8 identity-proof cutoff
         let hello: [String: Any] = ["server": ["protocolVersion": "10.9", "capabilities": ["collaborationIdentity": 1]]]
         let capabilities = ConnectionCapabilities(hello: hello)
         #expect(capabilities.supportsCollaborationIdentity)
         #expect(capabilities.supportsIdentitySeam)
+        // fixture-protocol-version: older than the 10.8 identity-proof cutoff
         let older = ConnectionCapabilities(hello: ["server": ["protocolVersion": "10.7", "capabilities": [:]]])
         #expect(!older.supportsCollaborationIdentity)
         #expect(!older.supportsIdentitySeam)
