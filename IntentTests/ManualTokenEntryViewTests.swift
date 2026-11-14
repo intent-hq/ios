@@ -281,7 +281,7 @@ extension ManualTokenEntryViewTests {
         let tlsOptions = NWProtocolTLS.Options()
         let secIdentity = try #require(sec_identity_create(identity))
         sec_protocol_options_set_local_identity(tlsOptions.securityProtocolOptions, secIdentity)
-        let listener = try NWListener(using: NWParameters(tls: tlsOptions), on: .any)
+        let listener = try NWListener.loopback(using: NWParameters(tls: tlsOptions))
         let queue = DispatchQueue(label: "ManualTokenEntryViewTests.tls-listener")
         // Retain accepted connections for the listener's lifetime: an
         // unreferenced NWConnection can deallocate and cancel the handshake
@@ -344,7 +344,7 @@ extension ManualTokenEntryViewTests {
     nonisolated private static func startTCPListener(
         onAccept: @escaping @Sendable (NWConnection) -> Void
     ) async throws -> NWListener {
-        let listener = try NWListener(using: .tcp, on: .any)
+        let listener = try NWListener.loopback()
         let queue = DispatchQueue(label: "ManualTokenEntryViewTests.tcp-listener")
         let accepted = OSAllocatedUnfairLock(initialState: [NWConnection]())
         listener.newConnectionHandler = { connection in

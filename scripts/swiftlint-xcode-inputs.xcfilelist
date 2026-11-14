@@ -187,6 +187,7 @@ $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
 $(SRCROOT)/Intent/Presentation/SplashAnimation.swift
 $(SRCROOT)/Intent/Presentation/SplashPlaybackState.swift
+$(SRCROOT)/Intent/Presentation/StandaloneLinkRow.swift
 $(SRCROOT)/Intent/Presentation/SuggestedPromptLinks.swift
 $(SRCROOT)/Intent/Presentation/SuggestedPrompts.swift
 $(SRCROOT)/Intent/Presentation/ToolClassifier+Classification.swift
@@ -484,6 +485,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/PDFLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/PDFLinkPreviewView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalCardView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ProposalSelectionSwitch.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/StandaloneLinkRowView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/TextLinkPreviewView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/UnopenableLinkAlert.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/VideoLightboxView.swift
@@ -939,6 +941,7 @@ $(SRCROOT)/IntentTests/ListLoadPhaseTests.swift
 $(SRCROOT)/IntentTests/LiveSubscriptionStoreTests.swift
 $(SRCROOT)/IntentTests/LiveSubscriptionTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
+$(SRCROOT)/IntentTests/LoopbackTestListener.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownContentCacheTests.swift
@@ -1042,6 +1045,7 @@ $(SRCROOT)/IntentTests/SlashSkillContextTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerLoadingTests.swift
 $(SRCROOT)/IntentTests/SpecialistPickerSelectionTests.swift
 $(SRCROOT)/IntentTests/SplashAnimationTests.swift
+$(SRCROOT)/IntentTests/StandaloneLinkRowTests.swift
 $(SRCROOT)/IntentTests/StateFlagBudgetPolicyTests.swift
 $(SRCROOT)/IntentTests/StatusDerivationTests.swift
 $(SRCROOT)/IntentTests/SuggestedPromptsContractTests.swift
@@ -1196,6 +1200,7 @@ $(SRCROOT)/IntentUITests/AssistantNavigationUITests.swift
 $(SRCROOT)/IntentUITests/AssistantProposalUITests.swift
 $(SRCROOT)/IntentUITests/AssistantStateUITests.swift
 $(SRCROOT)/IntentUITests/AutomatedMessageUITests.swift
+$(SRCROOT)/IntentUITests/ChatLinkTapTargetUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionFailureRecoveryUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionLossContrastAssertions.swift
 $(SRCROOT)/IntentUITests/ConnectionLossReadOnlyPresentationUITests.swift

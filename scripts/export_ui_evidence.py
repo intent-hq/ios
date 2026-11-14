@@ -321,6 +321,9 @@ CAPTURES = {
             "HTML viewer from absolute path link light",
         ),
     },
+    "ChatLinkTapTargetUITests": {
+        "testLinkRowsInLightAndDark": ("Chat link rows light", "Chat link rows dark"),
+    },
     "UnopenableLinkUITests": {
         "testUnopenableLinksShowMessageWithCopyLink": (
             "Unopenable link message light", "In-app browser failure message light",

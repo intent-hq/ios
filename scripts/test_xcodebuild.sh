@@ -602,6 +602,32 @@ assert_eq "all four stub runs completed" "$(grep -c '^end ' "$STUB_LOG")" 4
 overlaps=$(awk '$1 == "start" { if (active) bad++; active = 1 } $1 == "end" { active = 0 } END { print bad + 0 }' "$STUB_LOG")
 assert_eq "no stub run started while another was active" "$overlaps" 0
 
+echo "# runs with different TMPDIRs and no SIM_LOCK_DIR share the per-user lock (ios#1001)"
+# A UDID of its own keeps this case off any real device's lock in the shared directory.
+shared_udid=00000000-0000-0000-0000-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')
+shared_lock=/tmp/intent-xcodebuild-locks-$(id -u)/xcodebuild-sim-$shared_udid.lock
+STUB_LOG=$work/timeline-tmpdirs
+mkdir -p "$work/tmp-a" "$work/tmp-b"
+env -u SIM_LOCK_DIR TMPDIR="$work/tmp-a/" SIM_UDID=$shared_udid STUB_LOG=$STUB_LOG STUB_SLEEP=3 \
+  "$SCRIPT" test-without-building > "$work/ta.out" 2>&1 &
+a=$!
+sleep 1
+env -u SIM_LOCK_DIR TMPDIR="$work/tmp-b/" SIM_UDID=$shared_udid STUB_LOG=$STUB_LOG STUB_SLEEP=1 \
+  "$SCRIPT" test-without-building > "$work/tb.out" 2>&1 &
+b=$!
+wait "$a" && pass "first run with its own TMPDIR exits 0" || fail "first run with its own TMPDIR failed"
+wait "$b" && pass "second run with its own TMPDIR exits 0" || fail "second run with its own TMPDIR failed"
+first_end=$(grep '^end ' "$STUB_LOG" | head -n 1 | cut -d' ' -f2)
+second_start=$(grep '^start ' "$STUB_LOG" | tail -n 1 | cut -d' ' -f2)
+if [ -n "$first_end" ] && [ -n "$second_start" ] && [ "$second_start" -ge "$first_end" ]; then
+  pass "runs with different TMPDIRs did not overlap on one simulator"
+else
+  fail "runs with different TMPDIRs overlapped: second started at $second_start, first ended at $first_end"; cat "$STUB_LOG"
+fi
+assert_contains "the second run waits on the shared per-user lock" "$(cat "$work/tb.out")" "lock $shared_lock is held by PID"
+assert_eq "no lock file lands in either TMPDIR" "$(find "$work/tmp-a" "$work/tmp-b" -name 'xcodebuild-sim-*' | wc -l | tr -d ' ')" 0
+rm -f "$shared_lock"
+
 echo "# lock timeout"
 hold_lock
 status=$(SIM_LOCK_TIMEOUT=1 run_wrapper "$work/timeout.out" test-without-building)

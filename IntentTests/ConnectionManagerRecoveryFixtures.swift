@@ -53,7 +53,7 @@ nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
             options.autoReplyPing = pongs == .automatic
             parameters.defaultProtocolStack.applicationProtocols.insert(options, at: 0)
             let server = RecoveryWebSocketServer(
-                listener: try NWListener(using: parameters, on: .any),
+                listener: try NWListener.loopback(using: parameters),
                 pongs: pongs
             )
             server.listener.newConnectionHandler = { [weak server] connection in

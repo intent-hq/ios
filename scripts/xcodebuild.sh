@@ -107,8 +107,10 @@
 #                         from the preflight; a missing xcframework then fails fast.
 #   SIM_LOCK_TIMEOUT      Seconds to wait for the simulator lock (below) before
 #                         giving up; default 1800. 0 fails immediately when held.
-#   SIM_LOCK_DIR          Directory holding simulator lock files; default $TMPDIR
-#                         (falling back to /tmp). Must be a local filesystem.
+#   SIM_LOCK_DIR          Directory holding simulator lock files; default
+#                         /tmp/intent-xcodebuild-locks-<uid>, shared by every
+#                         session of this user whatever its TMPDIR (ios#1001).
+#                         Must be a local filesystem.
 #   SIM_LOCK_KILL_GRACE   Seconds an xcodebuild orphaned by this script's death
 #                         (with every process under it), or stopped by the
 #                         launch watchdog, gets to exit after SIGTERM before the
@@ -139,8 +141,8 @@
 #
 # Simulator lock: test-without-building (and its unit/test-ios variants) holds
 # an exclusive lock on the chosen simulator for the duration of the xcodebuild
-# test run. Two runs driving one device concurrently (two agents in one
-# checkout, or two checkouts picking the same device) kill each other's test
+# test run. Two runs driving one device concurrently (two agents, sessions, or
+# checkouts picking the same device) kill each other's test
 # processes and produce disjoint, false "Failing tests" lists
 # (intent-hq/intent#4563). The lock is a kernel flock(2) on
 # <SIM_LOCK_DIR>/xcodebuild-sim-<UDID>.lock, taken by a small python3 keeper
@@ -153,7 +155,10 @@
 # state and nothing is ever reclaimed: the file persists (empty when free,
 # holding the owner's PID while held) and is harmless. A waiter prints who
 # holds the lock and polls once a second. CI runs one job per VM, so the lock
-# is never contended there.
+# is never contended there. The default directory deliberately ignores
+# TMPDIR: the Intent daemon gives every agent its own TMPDIR, and simulators
+# are per user, so a TMPDIR-relative lock let two agents drive one device at
+# once and SIGTERM each other's runs (ios#1001).
 #
 # Keyboard-resize UI test prerequisite (intent-hq/ios#385): the transcript
 # test enters a draft and requires a hittable software keyboard. An absent
@@ -582,7 +587,7 @@ SIM_LOCK_PATH=
 SIM_LOCK_KEEPER=
 acquire_simulator_lock() {
   local udid=$1 dir timeout grace fifo kind arg1 arg2 announced=0
-  dir=${SIM_LOCK_DIR:-${TMPDIR:-/tmp}}
+  dir=${SIM_LOCK_DIR:-}
   timeout=${SIM_LOCK_TIMEOUT:-1800}
   grace=${SIM_LOCK_KILL_GRACE:-30}
   case "$timeout" in
@@ -593,7 +598,14 @@ acquire_simulator_lock() {
   esac
   command -v python3 >/dev/null 2>&1 \
     || die "python3 is required for the simulator lock (on macOS it ships with Xcode's Command Line Tools)"
-  mkdir -p -- "$dir"
+  if [ -z "$dir" ]; then
+    dir=/tmp/intent-xcodebuild-locks-$(id -u)
+    mkdir -m 700 -p -- "$dir"
+    [ -O "$dir" ] && [ ! -L "$dir" ] \
+      || die "simulator lock directory $dir is not owned by this user; remove it or set SIM_LOCK_DIR"
+  else
+    mkdir -p -- "$dir"
+  fi
   SIM_LOCK_PATH="${dir%/}/xcodebuild-sim-$udid.lock"
   fifo=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-lock.XXXXXX")/status
   mkfifo "$fifo"
