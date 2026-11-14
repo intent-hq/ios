@@ -232,12 +232,23 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 
     @MainActor
     private func selectRepository(_ name: String, in app: XCUIApplication) {
-        let picker = app.buttons["changes.repository"].firstMatch
-        reveal(picker, in: app, towardTop: true)
+        let picker = revealRepositoryPicker(in: app)
         picker.tap()
         let option = app.buttons[name].firstMatch
         XCTAssertTrue(option.waitForExistence(timeout: Fixture.timeout))
         option.tap()
+    }
+
+    /// The picker sits below the pull requests, so it can be above or below the viewport.
+    @MainActor
+    @discardableResult
+    private func revealRepositoryPicker(in app: XCUIApplication) -> XCUIElement {
+        let picker = app.buttons["changes.repository"].firstMatch
+        if !(picker.exists && picker.isHittable) {
+            reveal(app.buttons["changes.section.pullRequests"].firstMatch, in: app, towardTop: true)
+            reveal(picker, in: app)
+        }
+        return picker
     }
 
     @MainActor
@@ -370,7 +381,7 @@ extension WorkspaceChangesUITests {
             assertIPadDiffPane(in: app)
             capture(app, name: "ipad-diff-portrait-\(appearance)")
             app.buttons["diff.back"].tap()
-            XCTAssertEqual(app.buttons["changes.repository"].value as? String, "ios")
+            XCTAssertEqual(revealRepositoryPicker(in: app).value as? String, "ios")
             XCUIDevice.shared.orientation = .landscapeLeft
             openIPadFileDiff(in: app, staged: true)
             XCTAssertEqual(app.staticTexts["workspace.change.title"].label, "Staged Changes")
@@ -388,8 +399,8 @@ extension WorkspaceChangesUITests {
             assertIPadCommitPane(in: app)
             capture(app, name: "ipad-commit-portrait-\(appearance)")
             app.buttons["commit.back"].tap()
-            XCTAssertTrue(app.buttons["changes.repository"].waitForExistence(timeout: Fixture.timeout))
-            XCTAssertEqual(app.buttons["changes.repository"].value as? String, "ios")
+            XCTAssertTrue(app.buttons["changes.section.pullRequests"].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertEqual(revealRepositoryPicker(in: app).value as? String, "ios")
 
             verifyIPadSidebarViewers(in: app, appearance: appearance)
             app.terminate()
@@ -412,8 +423,7 @@ extension WorkspaceChangesUITests {
         openIPadCommit(in: app)
         assertIPadCommitPane(in: app)
         // Reaching the commit can scroll the repository picker offscreen on a smaller iPad.
-        reveal(app.buttons["changes.repository"], in: app, towardTop: true)
-        XCTAssertTrue(app.buttons["changes.repository"].isHittable, "The sidebar stays interactive")
+        XCTAssertTrue(revealRepositoryPicker(in: app).isHittable, "The sidebar stays interactive")
         capture(app, name: "ipad-commit-from-sidebar-\(appearance)")
         openIPadFileDiff(in: app, staged: false)
         assertIPadDiffPane(in: app)
