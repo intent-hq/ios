@@ -150,4 +150,16 @@ extension AppCoordinatorTests {
             DispatchQueue.main.async { continuation.resume() }
         }
     }
+
+    @Test func cancelledConnectIsNeverShownAsAFailure() {
+        // A newer connect on the same session (e.g. a pairing link moving
+        // this window to another host) owns the screen.
+        #expect(ConnectingView.failureOutcome(for: CancellationError(), replacedByNewerAttempt: true) == .leave)
+        // Cancelled with no successor (sync refreshed the credentials during
+        // startup): connect again rather than stay on Connecting.
+        #expect(ConnectingView.failureOutcome(for: CancellationError(), replacedByNewerAttempt: false) == .retry)
+        #expect(ConnectingView.failureOutcome(for: DaemonStartupError.failed, replacedByNewerAttempt: false) == .leave)
+        let timedOut = WebSocketTransportError.timedOut(host: "studio")
+        #expect(ConnectingView.failureOutcome(for: timedOut, replacedByNewerAttempt: false) == .show(timedOut.localizedDescription))
+    }
 }

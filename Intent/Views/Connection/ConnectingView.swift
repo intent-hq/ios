@@ -95,6 +95,7 @@ struct ConnectingView: View {
             return false
         }
 
+        let attemptsBefore = session.connection.connectAttemptCount
         do {
             try await DiagnosticConnectContext.$origin.withValue(.saved) {
                 try await session.connection.connect(
@@ -110,14 +111,45 @@ struct ConnectingView: View {
             // replacement: the superseded attempt's failure must not stomp
             // the screen the restarted attempt (or the connected UI) owns.
             guard !Task.isCancelled else { return false }
-            if case DaemonStartupError.failed = error { return false }
-            coordinator.onConnectionFailed(error: error.localizedDescription)
+            // This connect started one attempt; any later one replaced it.
+            let replaced = session.connection.connectAttemptCount > attemptsBefore + 1
+            switch Self.failureOutcome(for: error, replacedByNewerAttempt: replaced) {
+            case .leave:
+                break
+            case .retry:
+                if case .connecting = coordinator.currentScreen { coordinator.restartConnectionAttempt() }
+            case .show(let message):
+                coordinator.onConnectionFailed(error: message)
+            }
             return false
         }
         if !PersistenceManager.shared.touchLastConnected(id: connection.id) {
             AppLog.connection.warning("[ConnectingView] Could not persist last-connected timestamp")
         }
         return true
+    }
+
+    enum FailureOutcome: Equatable {
+        /// Another owner routes the screen.
+        case leave
+        /// Connect again with the window's current saved record.
+        case retry
+        case show(String)
+    }
+
+    /// What a failed connect does to the screen. A cancellation is never a
+    /// connection failure, so its "CancellationError" text never shows:
+    /// - Replaced by a newer connect on this session (for example a pairing
+    ///   or invite link moving this window to another host): that attempt
+    ///   owns the screen.
+    /// - Cancelled with no successor (sync refreshed the saved login or route
+    ///   during startup admission): try again with the refreshed record, so
+    ///   the window is never left on Connecting.
+    /// A failed daemon startup is already shown by the startup screen.
+    nonisolated static func failureOutcome(for error: any Error, replacedByNewerAttempt: Bool) -> FailureOutcome {
+        if error is CancellationError { return replacedByNewerAttempt ? .leave : .retry }
+        if case DaemonStartupError.failed = error { return .leave }
+        return .show(error.localizedDescription)
     }
 
     private func attemptConnection() async {

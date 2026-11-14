@@ -33,6 +33,9 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     var lastConnectedPrincipal: ConnectionPrincipal? { get }
     var admission: ConnectionAdmission? { get }
     var pairingAttemptID: UUID? { get }
+    /// Counts connect attempts started on this session, so a caller whose
+    /// connect was cancelled can tell whether a newer attempt replaced it.
+    var connectAttemptCount: Int { get }
 
     func confirmedPrincipal() async throws -> ConnectionPrincipal
 
@@ -62,6 +65,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
 }
 
 extension SessionConnectionManaging {
+    var connectAttemptCount: Int { 0 }
     var startupState: DaemonStartupState? { nil }
     var lastConnectedPrincipal: ConnectionPrincipal? { nil }
     var reconnectStopReason: String? { nil }
