@@ -23,7 +23,13 @@ nonisolated final class IPadTypingFocusUITests: XCTestCase {
             composer.tap()
             composer.typeText("Check the iPad chat transition")
             let close = app.buttons["ipad.focus.close"]
-            XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            if app.usesIPadTypingFocus {
+                XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            } else {
+                XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+                XCTAssertFalse(close.exists, "Large windows keep the chat in place while typing")
+                XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+            }
             try app.buttons.matching(identifier: "composer.send").singleHittableElement().tap()
             XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
             XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
