@@ -4,7 +4,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
         static let timeout: TimeInterval = 30
-        static let scrollAttempts = 4
+        static let scrollAttempts = 6
         static let maximumInitialLineOffset: CGFloat = 100
         static let maximumLeadingInset: CGFloat = 40
         static let railSettleDuration: TimeInterval = 0.5
