@@ -9,8 +9,27 @@ struct IPadTypingFocus: ViewModifier {
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
     @Environment(\.usesIPadTypingFocus) private var usesTypingFocus
 
+    private var endsTypingInPlace: Bool { !usesTypingFocus && isFocused && isIPadPaneVisible && iPadFocusPresentation != nil }
+
     func body(content: Content) -> some View {
         content
+            .background {
+                // Without the focus card's close button, Esc still needs a way out of typing.
+                if endsTypingInPlace {
+                    Button("") { isFocused = false }
+                        .keyboardShortcut(.cancelAction)
+                        .frame(width: 0, height: 0)
+                        .opacity(0)
+                        .accessibilityHidden(true)
+                }
+            }
+            .accessibilityAction(.escape) {
+                if isFocused {
+                    isFocused = false
+                } else {
+                    iPadFocusPresentation?.wrappedValue = .normal
+                }
+            }
             .onChange(of: isFocused) { _, focused in
                 guard isIPadPaneVisible else { return }
                 if focused, usesTypingFocus {

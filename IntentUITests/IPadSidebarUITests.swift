@@ -223,8 +223,10 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, Self.draft)
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(keyboard.exists, "Rotation must not drop the keyboard")
-        try app.endIPadTyping()
+        XCTAssertTrue(keyboard.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), "Rotation must not drop the keyboard")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout), "Esc ends typing without the focus card")
+        XCTAssertEqual(composer.value as? String, Self.draft)
     }
 
     @MainActor

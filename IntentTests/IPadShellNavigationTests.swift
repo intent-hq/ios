@@ -239,6 +239,8 @@ extension AppCoordinatorTests {
         #expect(IPadShellLayout(width: IPadReference.smallWidth, isAccessibilitySize: false).usesTypingFocus)
         #expect(IPadShellLayout(width: IPadReference.windowWidth, isAccessibilitySize: false).usesTypingFocus)
         #expect(IPadShellLayout(width: IPadReference.portraitWidth, isAccessibilitySize: false).usesTypingFocus)
+        #expect(!IPadShellLayout(width: IPadShellLayout.largeWindowWidth, isAccessibilitySize: false).usesTypingFocus)
+        #expect(IPadShellLayout(width: IPadShellLayout.largeWindowWidth - 1, isAccessibilitySize: false).usesTypingFocus)
     }
 
     @Test(arguments: [true, false]) @MainActor
