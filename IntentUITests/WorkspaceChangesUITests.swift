@@ -4,7 +4,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
         static let timeout: TimeInterval = 30
-        static let scrollAttempts = 4
+        static let scrollAttempts = 6
         static let maximumInitialLineOffset: CGFloat = 100
         static let maximumLeadingInset: CGFloat = 40
         static let railSettleDuration: TimeInterval = 0.5
@@ -244,6 +244,11 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     private func revealRepositoryPicker(in app: XCUIApplication) -> XCUIElement {
         let picker = app.buttons["changes.repository"].firstMatch
         reveal(picker, in: app, towardTop: true, required: false)
+        // A short sidebar can swipe straight past the picker; collapsing the pull requests lifts it under their heading.
+        let pullRequests = app.buttons["changes.section.pullRequests"].firstMatch
+        if !(picker.exists && picker.isHittable), pullRequests.exists, pullRequests.isHittable, pullRequests.value as? String == "Expanded" {
+            pullRequests.tap()
+        }
         reveal(picker, in: app)
         return picker
     }
@@ -296,7 +301,7 @@ extension WorkspaceChangesUITests {
             let section = app.buttons["changes.section.pullRequests"].firstMatch
             XCTAssertTrue(section.waitForExistence(timeout: Fixture.timeout))
             let open = app.buttons["changes.pullRequest.nova-labs/console#482"].firstMatch
-            XCTAssertTrue(open.exists && app.buttons["changes.pullRequest.nova-labs/console#476"].exists)
+            XCTAssertTrue(open.exists && app.buttons["changes.pullRequest.nova-labs/analytics-sdk#31"].exists)
             XCTAssertLessThan(open.frame.minY, app.buttons["changes.section.unstaged"].firstMatch.frame.minY)
             capture(app, name: "changes-pull-requests-\(appearance)")
             section.tap()

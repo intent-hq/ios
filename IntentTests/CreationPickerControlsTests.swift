@@ -5,7 +5,7 @@ import Testing
 import UIKit
 
 // Hosted picker inspection and its geometry fixtures intentionally live together.
-// swiftlint:disable file_length type_body_length
+// swiftlint:disable type_body_length
 
 @MainActor
 @Suite(.serialized)
@@ -782,4 +782,4 @@ private struct PickerLayoutHost: View {
         selectedModel = nil
     }
 }
-// swiftlint:enable file_length type_body_length
+// swiftlint:enable type_body_length

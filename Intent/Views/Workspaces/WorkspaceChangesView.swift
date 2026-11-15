@@ -116,6 +116,7 @@ struct WorkspaceChangesView: View {
     @ViewBuilder
     private var pullRequestsSection: some View {
         if !pullRequests.isEmpty {
+            let showsRepository = Set(pullRequests.map { "\($0.owner)/\($0.repo)".lowercased() }).count > 1
             WorkspaceChangesSection(
                 title: "Pull Requests",
                 count: pullRequests.count,
@@ -124,7 +125,7 @@ struct WorkspaceChangesView: View {
             ) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(pullRequests) { item in
-                        pullRequestRow(item)
+                        pullRequestRow(item, showsRepository: showsRepository)
                             .overlay(alignment: .bottom) {
                                 if item.id != pullRequests.last?.id { rowDivider }
                             }
@@ -134,7 +135,7 @@ struct WorkspaceChangesView: View {
         }
     }
 
-    private func pullRequestRow(_ item: PullRequestListItem) -> some View {
+    private func pullRequestRow(_ item: PullRequestListItem, showsRepository: Bool) -> some View {
         Button {
             if let openPullRequest {
                 openPullRequest(item)
@@ -152,7 +153,7 @@ struct WorkspaceChangesView: View {
                     .accessibilityHidden(true)
                 WorkspaceChangesRow(title: item.title) {
                     HStack(spacing: WorkspaceChangesLayout.statsSpacing) {
-                        Text("#\(item.number)")
+                        Text(showsRepository ? "\(item.repo) #\(item.number)" : "#\(item.number)")
                         Text(item.status.rawValue.capitalized)
                         if let updated = ISO8601DateFormatter.lenientDate(from: item.updatedAt)?.relativeFormatted {
                             Text(updated)

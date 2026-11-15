@@ -137,7 +137,7 @@ line_length: 225
 type_body_length:
   warning: 300
 file_length:
-  warning: 500
+  warning: 1000
 type_name:
   min_length: 4
   max_length: 40

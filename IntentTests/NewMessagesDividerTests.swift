@@ -3,8 +3,6 @@ import Foundation
 import Testing
 import UIKit
 
-// swiftlint:disable file_length
-
 struct ConversationTranscriptScrollPolicyTests {
     private typealias Step = ConversationTranscriptScrollPolicy.InitialScrollStep
 

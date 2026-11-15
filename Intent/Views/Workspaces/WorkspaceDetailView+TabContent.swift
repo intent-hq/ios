@@ -47,7 +47,7 @@ extension WorkspaceDetailView {
                 workspaceId: workspaceId,
                 store: changesStore,
                 pullRequests: workspace.map { current in
-                    PullRequestListItem.owned(by: current, monitors: session.prMonitorsStore.monitors(for: workspaceId))
+                    PullRequestListItem.associated(with: current, monitors: session.prMonitorsStore.monitors(for: workspaceId))
                 } ?? []
             )
         } else {
