@@ -142,7 +142,7 @@ extension ConversationTranscriptScrollUITests {
             prompt.waitForNonExistence(timeout: 5),
             "suggested prompt rows stayed in the transcript after tapping one"
         )
-        let sentRow = message(in: app, containing: Fixture.firstSuggestedPrompt)
+        let sentRow = message(in: app, containing: Fixture.firstSuggestedPromptLabel)
         let thinkingIndicator = EndRow.thinkingIndicator(in: app)
 
         // 3. Still pinned: the send's forced follow reports with the
