@@ -464,6 +464,9 @@ $(SRCROOT)/Intent/Resources/Fonts/Inter
 $(SRCROOT)/Intent/Resources/Highlights
 $(SRCROOT)/Intent/Resources/Mermaid
 $(SRCROOT)/Intent/Services
+$(SRCROOT)/Intent/Services/AgentBrowserHost.swift
+$(SRCROOT)/Intent/Services/AgentBrowserScripts.swift
+$(SRCROOT)/Intent/Services/AgentBrowserTab.swift
 $(SRCROOT)/Intent/Services/AgentDetailRequestLimiter.swift
 $(SRCROOT)/Intent/Services/AgentDetailStore.swift
 $(SRCROOT)/Intent/Services/AgentHistoryStore.swift
@@ -558,6 +561,7 @@ $(SRCROOT)/Intent/Services/PullRequestDetailStore.swift
 $(SRCROOT)/Intent/Services/PullRequestListStore.swift
 $(SRCROOT)/Intent/Services/RecentRetention.swift
 $(SRCROOT)/Intent/Services/RemoteImageLoader.swift
+$(SRCROOT)/Intent/Services/ReverseRequest.swift
 $(SRCROOT)/Intent/Services/SkillCatalogStore.swift
 $(SRCROOT)/Intent/Services/SocketPathObservation.swift
 $(SRCROOT)/Intent/Services/SpeechDictationController.swift

@@ -41,6 +41,8 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
 
     func retryGlobalSubscription()
     func makeBrowserProxy() async throws -> any BrowserProxySession
+    /// Serves daemon-issued reverse RPCs (agent `browser.exec`) on this connection.
+    func setReverseRequestHandler(_ handler: ReverseRequestHandler?)
 
     func connect(
         hosts: [String],
@@ -73,6 +75,8 @@ extension SessionConnectionManaging {
     func makeBrowserProxy() throws -> any BrowserProxySession {
         throw BrowserTunnelError.unavailable
     }
+
+    func setReverseRequestHandler(_: ReverseRequestHandler?) {}
 }
 
 extension ConnectionManager: SessionConnectionManaging {}
@@ -115,6 +119,8 @@ final class BackendSession {
     let pullRequestListStore: PullRequestListStore
     let mobileTerminalStore: MobileTerminalStore
     let browserStore: WorkspaceBrowserStore
+    /// Hosts agent-controlled browser tabs on this device for workspaces pinned to it.
+    let agentBrowserHost: AgentBrowserHost
     let attachmentUploadService: AttachmentUploadService
     let workspaceFileImageLoader: WorkspaceFileImageLoader
     let attachmentImageLoader: AttachmentImageLoader
@@ -157,6 +163,7 @@ final class BackendSession {
             persistence: MobileTerminalPersistence(backendID: backendID)
         )
         browserStore = WorkspaceBrowserStore(connection: connection, backendID: backendID)
+        agentBrowserHost = AgentBrowserHost(connection: connection)
         self.attachmentUploadService = attachmentUploadService
         self.workspaceFileImageLoader = workspaceFileImageLoader
         self.attachmentImageLoader = attachmentImageLoader
@@ -229,6 +236,7 @@ final class BackendSession {
     /// Disconnects the backend connection. Called by the registry when the
     /// last window detaches from the session.
     func teardown() {
+        agentBrowserHost.reset()
         creationOptionsStore.reset()
         hooksStore.reset()
         prMonitorsStore.reset()

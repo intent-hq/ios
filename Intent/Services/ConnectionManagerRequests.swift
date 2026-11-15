@@ -205,6 +205,9 @@ extension ConnectionManager {
         }
         if let method = json["method"] as? String {
             let params = json["params"] as Any
+            if let id = json["id"] as? String {
+                return .request(id: id, method: method, params: InboundJSONValue(value: params))
+            }
             if let push = SubscriptionPush.parse(method: method, params: params) {
                 return .subscriptionPush(push)
             }
@@ -242,6 +245,8 @@ extension ConnectionManager {
             pendingRequests.removeValue(forKey: id)?.resume(throwing: error)
         case .subscriptionPush(let push):
             subscriptionRouter.route(push)
+        case let .request(id, method, params):
+            serveReverseRequest(id: id, method: method, params: params.value)
         case let .notification(method, params):
             invalidatePrincipalIfNeeded(method: method, params: params.value)
             if !subscriptionRouter.route(method: method, params: params.value) {

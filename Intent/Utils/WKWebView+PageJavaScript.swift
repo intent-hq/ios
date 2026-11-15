@@ -1,3 +1,4 @@
+import UIKit
 import WebKit
 
 extension WKWebView {
@@ -25,6 +26,37 @@ extension WKWebView {
             }
         }
         return result.value
+    }
+
+    /// Evaluates `expression` like a console entry and returns its value; `nil` for `undefined`
+    /// and for values WebKit cannot bridge. Uses the Objective-C method (see above).
+    func evaluateExpression(_ expression: String) async throws -> Any? {
+        let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JavaScriptResult, any Error>) in
+            evaluateJavaScript(expression) { result, error in
+                if let error = error as? NSError,
+                   !(error.domain == WKError.errorDomain && error.code == WKError.javaScriptResultTypeIsUnsupported.rawValue) {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: JavaScriptResult(value: result))
+                }
+            }
+        }
+        return result.value
+    }
+
+    /// Captures the visible web view. Uses the Objective-C method (see above).
+    func snapshot(_ configuration: WKSnapshotConfiguration) async throws -> UIImage {
+        let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<JavaScriptResult, any Error>) in
+            takeSnapshot(with: configuration) { image, error in
+                if let image {
+                    continuation.resume(returning: JavaScriptResult(value: image))
+                } else {
+                    continuation.resume(throwing: error ?? WKError(.unknown))
+                }
+            }
+        }
+        guard let image = result.value as? UIImage else { throw WKError(.unknown) }
+        return image
     }
 
     /// `@unchecked Sendable`: WebKit calls the completion handler on the main thread and the

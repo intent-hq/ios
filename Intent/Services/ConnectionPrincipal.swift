@@ -100,8 +100,19 @@ enum PairingClientIdentity {
         return created
     }
 
-    static func parameters(defaults: UserDefaults = .standard) -> [String: Any] {
-        ["clientId": identifier(defaults: defaults), "name": "Intent", "deviceKind": deviceKind, "capabilities": [String: Bool]()]
+    /// `browserHost` advertises pinned-only agent browser hosting; send it only to a
+    /// daemon whose hello carried `browserPinnedOnlyHosts: 1`.
+    static func parameters(defaults: UserDefaults = .standard, browserHost: Bool = false) -> [String: Any] {
+        let capabilities: [String: Bool] = browserHost ? ["browserExec": true, "browserExecPinnedOnly": true] : [:]
+        return ["clientId": identifier(defaults: defaults), "name": deviceName, "deviceKind": deviceKind, "capabilities": capabilities]
+    }
+
+    private static var deviceName: String {
+        switch UIDevice.current.userInterfaceIdiom {
+        case .pad: "Intent on iPad"
+        case .vision: "Intent on Vision Pro"
+        default: "Intent on iPhone"
+        }
     }
 
     private static var deviceKind: String {

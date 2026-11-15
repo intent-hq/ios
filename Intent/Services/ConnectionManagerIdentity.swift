@@ -87,6 +87,7 @@ extension ConnectionManager {
     }
 
     private func refreshPrincipal(after revision: Double, previous: ConnectionPrincipal?) {
+        let browserHost = reverseRequestHandler != nil && capabilities.supportsAgentBrowserHosting
         currentPrincipal = nil
         lastConnectedPrincipal = nil
         capabilities = .unknown
@@ -96,7 +97,7 @@ extension ConnectionManager {
         let task = Task { [weak self] in
             guard let self else { return }
             do {
-                let hello = try await request("client.hello", params: PairingClientIdentity.parameters())
+                let hello = try await request("client.hello", params: PairingClientIdentity.parameters(browserHost: browserHost))
                 let value = try await request("principal.me")
                 let principal = try ConnectionPrincipal.parse(value, hello: hello)
                 try Task.checkCancellation()

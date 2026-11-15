@@ -9,6 +9,7 @@ struct WorkspaceBrowserView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(BackendSession.self) private var session: BackendSession?
     @State private var page = WorkspaceBrowserPage()
     @State private var retry = UUID()
     @State private var addressInput = ""
@@ -17,6 +18,8 @@ struct WorkspaceBrowserView: View {
     @FocusState private var addressFocused: Bool
 
     private var isConnected: Bool { connection.connectionState == .connected }
+    /// An agent tab this device hosts: show its live web view instead of loading a copy.
+    private var hostedTab: AgentBrowserTab? { session?.agentBrowserHost.tab(forBrowserID: browser.id) }
     private var attachmentKey: String { "\(isConnected)-\(scenePhase == .background)-\(retry)" }
 
     var body: some View {
@@ -53,7 +56,9 @@ struct WorkspaceBrowserView: View {
 
     private var browserContent: some View {
         VStack(spacing: 0) {
-            if !isConnected {
+            if let hostedTab, let host = session?.agentBrowserHost {
+                HostedAgentTabView(tab: hostedTab, host: host)
+            } else if !isConnected {
                 unavailable("Reconnect to your machine to open this browser.")
             } else if let errorMessage = page.errorMessage {
                 unavailable(errorMessage)
@@ -135,7 +140,7 @@ struct WorkspaceBrowserView: View {
     }
 
     private func attach() async {
-        guard isConnected, scenePhase != .background else { page.stop(); return }
+        guard hostedTab == nil, isConnected, scenePhase != .background else { page.stop(); return }
         let address = targetAddress ?? browser.url
         if page.webView != nil, page.errorMessage == nil {
             do { try await page.navigate(to: address) } catch {
@@ -196,6 +201,47 @@ struct WorkspaceBrowserView: View {
             Button("Try again") { retry = UUID() }
                 .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .disabled(!isConnected)
+        }
+    }
+}
+
+/// Borrows a hosted agent tab's web view and parks it offscreen again on dismissal, so the
+/// agent keeps driving the same page the user watched.
+private struct HostedAgentTabView: UIViewRepresentable {
+    let tab: AgentBrowserTab
+    let host: AgentBrowserHost
+
+    func makeUIView(context _: Context) -> UIView {
+        let container = UIView()
+        tab.webView.removeFromSuperview()
+        tab.webView.frame = container.bounds
+        tab.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        container.addSubview(tab.webView)
+        return container
+    }
+
+    func updateUIView(_: UIView, context _: Context) {}
+
+    static func dismantleUIView(_: UIView, coordinator: Coordinator) {
+        coordinator.restore()
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(tab: tab, host: host) }
+
+    @MainActor
+    final class Coordinator {
+        let tab: AgentBrowserTab
+        let host: AgentBrowserHost
+
+        init(tab: AgentBrowserTab, host: AgentBrowserHost) {
+            self.tab = tab
+            self.host = host
+        }
+
+        func restore() {
+            tab.webView.autoresizingMask = []
+            tab.webView.frame.size = tab.emulatedSize ?? AgentBrowserTab.defaultSize
+            host.park(tab)
         }
     }
 }

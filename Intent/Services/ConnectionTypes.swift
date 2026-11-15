@@ -11,6 +11,8 @@ enum ConnectionState: Equatable {
 nonisolated enum InboundFrame: Sendable {
     case error(id: Int, error: NSError)
     case notification(method: String, params: InboundJSONValue)
+    /// A daemon-issued reverse RPC (`id: "rev-<n>"`) that this client must answer.
+    case request(id: String, method: String, params: InboundJSONValue)
     case response(id: Int, result: InboundJSONValue)
     case subscriptionPush(SubscriptionPush)
 
@@ -19,6 +21,7 @@ nonisolated enum InboundFrame: Sendable {
         case let .response(id, _), let .error(id, _): "id=\(id)"
         case .subscriptionPush: "method=subscription.push"
         case let .notification(method, _): "method=\(method)"
+        case let .request(id, method, _): "id=\(id) method=\(method)"
         }
     }
 }

@@ -5,9 +5,14 @@ nonisolated struct ConnectionCapabilities: Equatable, Sendable {
     let protocolVersion: String?
     let scriptMonitorsVersion: Int?
     let scriptActiveListsVersion: Int?
+    var browserPinnedOnlyHostsVersion: Int?
     private(set) var scriptMonitorsDisabled = false
 
     static let unknown = Self(protocolVersion: nil, scriptMonitorsVersion: nil, scriptActiveListsVersion: nil)
+
+    /// The daemon keeps a pinned-only browser host out of default routing, so this
+    /// device can offer agent tabs without taking a desktop's agent traffic.
+    var supportsAgentBrowserHosting: Bool { browserPinnedOnlyHostsVersion == 1 }
 
     /// Gated only on the advertised capabilities, never on a protocol-version maximum: the
     /// protocol major moves for unrelated changes (protocol 15 hid monitors, intent-hq/intent#7206).
@@ -30,6 +35,7 @@ nonisolated extension ConnectionCapabilities {
         protocolVersion = server?["protocolVersion"] as? String
         scriptMonitorsVersion = Self.integer(capabilities?["scriptMonitors"])
         scriptActiveListsVersion = Self.integer(capabilities?["scriptActiveLists"])
+        browserPinnedOnlyHostsVersion = Self.integer(capabilities?["browserPinnedOnlyHosts"])
     }
 
     private static func integer(_ value: Any?) -> Int? {

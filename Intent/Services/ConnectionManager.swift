@@ -144,6 +144,7 @@ import os
     #endif
 
     @ObservationIgnored var eventHandlers: [UUID: (String, Any) -> Void] = [:]
+    @ObservationIgnored var reverseRequestHandler: ReverseRequestHandler?
     @ObservationIgnored private let globalSubscriptionSubject = CurrentValueSubject<GlobalSubscriptionState, Never>(.idle)
     var globalSubscriptionState: GlobalSubscriptionState = .idle {
         didSet { globalSubscriptionSubject.send(globalSubscriptionState) }
