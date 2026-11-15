@@ -146,7 +146,9 @@ class KeyCommandTextView: UITextView {
                 return command
             }
         } else if endsEditingOnEscape {
-            commands = [UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(handleEscape))]
+            let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(handleEscape))
+            escape.wantsPriorityOverSystemBehavior = true
+            commands = [escape]
         }
         guard Self.returnSubmitsNow else { return commands }
         // Intercept bare Return (no modifiers) — calls handleReturn
