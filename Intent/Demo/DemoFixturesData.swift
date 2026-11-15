@@ -65,6 +65,7 @@ extension DemoFixtures {
                         "status": "Open",
                         "title": "feat: usage analytics dashboard with CSV export",
                         "url": "https://github.com/nova-labs/console/pull/482",
+                        "createdAt": iso(minutesAgo: 60 * 30),
                         "updatedAt": iso(minutesAgo: 25)
                     ],
                     [
@@ -73,6 +74,13 @@ extension DemoFixtures {
                         "title": "refactor: extract analytics event schema",
                         "url": "https://github.com/nova-labs/console/pull/476",
                         "updatedAt": iso(minutesAgo: 60 * 26)
+                    ],
+                    [
+                        "number": 31,
+                        "status": "Open",
+                        "title": "feat: export usage events from the SDK",
+                        "url": "https://github.com/nova-labs/analytics-sdk/pull/31",
+                        "updatedAt": iso(minutesAgo: 40)
                     ]
                 ] as [[String: Any]],
                 "activePullRequest": [

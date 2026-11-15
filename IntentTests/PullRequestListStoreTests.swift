@@ -56,7 +56,7 @@ struct PullRequestListStoreTests {
         #expect(links["acme/app#7"] == nil)
     }
 
-    @Test func ownedPullRequestsKeepTheWorkspaceRepositoryNewestFirst() {
+    @Test func associatedPullRequestsSpanRepositoriesAndMonitorsNewestFirst() {
         let workspace = Workspace(
             id: "ws",
             title: "Dashboard",
@@ -69,33 +69,46 @@ struct PullRequestListStoreTests {
             repositoryName: "App",
             pullRequests: [
                 WorkspacePullRequest(number: 3, status: "Merged", title: "", updatedAt: "2026-01-01T00:00:00Z"),
-                WorkspacePullRequest(number: 7, status: "Open", url: "https://github.com/acme/lib/pull/7"),
-                WorkspacePullRequest(number: 5, status: "Open", url: "https://github.com/acme/app/pull/5")
+                WorkspacePullRequest(
+                    number: 7,
+                    status: "Open",
+                    url: "https://github.com/acme/lib/pull/7",
+                    updatedAt: "2026-03-01T00:00:00Z"
+                )
             ],
-            activePullRequest: WorkspacePullRequest(number: 9, status: "Open")
+            activePullRequest: WorkspacePullRequest(number: 3, status: "Merged")
         )
-        let items = PullRequestListItem.owned(by: workspace)
-        #expect(items.map(\.id) == ["acme/app#3", "acme/app#5"])
-        #expect(items[0].title == "#3")
-        #expect(items[0].url?.absoluteString == "https://github.com/Acme/App/pull/3")
+        let monitors = [
+            monitor(repo: "acme/lib", number: 7, updatedAt: "2026-03-02T00:00:00Z"),
+            monitor(repo: "acme/app", number: 4, updatedAt: "2026-02-01T00:00:00Z"),
+            monitor(repo: "acme/ios", number: 9, state: .cancelled)
+        ]
+        let items = PullRequestListItem.associated(with: workspace, monitors: monitors)
+        #expect(items.map(\.id) == ["acme/lib#7", "acme/app#4", "acme/app#3"])
+        #expect(items[2].title == "#3")
+        #expect(items[2].url?.absoluteString == "https://github.com/Acme/App/pull/3")
     }
 
-    @Test func ownedPullRequestsFallBackToTheActivePullRequest() {
-        let workspace = Workspace(
-            id: "ws",
-            title: "Dashboard",
-            branch: nil,
-            baseRef: nil,
-            status: nil,
-            activity: nil,
-            displayStatus: nil,
-            repositoryOwner: "acme",
-            repositoryName: "app",
-            activePullRequest: WorkspacePullRequest(number: 9, status: "Draft", title: "feat: draft")
+    private func monitor(repo: String, number: Int, state: MonitoredPr.State = .completed, updatedAt: String? = nil) -> MonitoredPr {
+        MonitoredPr(
+            monitorId: "prm-\(repo)-\(number)",
+            workspaceId: "ws",
+            agentId: "agent",
+            repo: repo,
+            prNumber: number,
+            state: state,
+            pendingChanges: [],
+            hasPendingChanges: false,
+            createdAt: nil,
+            updatedAt: updatedAt,
+            pendingSince: nil,
+            lastChangeAt: nil,
+            lastPolledAt: nil,
+            lastError: nil,
+            title: nil,
+            url: nil,
+            lastSnapshot: nil
         )
-        let items = PullRequestListItem.owned(by: workspace)
-        #expect(items.map(\.id) == ["acme/app#9"])
-        #expect(items.first?.status == .draft)
     }
 
     @Test func onlyLinksToWorkspaceTrackedPullRequestsResolve() throws {
