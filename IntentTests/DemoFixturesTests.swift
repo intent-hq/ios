@@ -5,7 +5,7 @@ import Testing
 import UIKit
 
 // Protocol fixtures use exact wire literals and long end-to-end assertions.
-// swiftlint:disable file_length function_body_length
+// swiftlint:disable function_body_length
 // swiftlint:disable type_body_length
 
 @MainActor
@@ -864,4 +864,4 @@ extension DemoFixturesTests {
 }
 #endif
 // swiftlint:enable type_body_length
-// swiftlint:enable file_length function_body_length
+// swiftlint:enable function_body_length

@@ -1,8 +1,5 @@
 import XCTest
 
-// Shared diagnostics stay together so every failure reports the same state.
-// swiftlint:disable file_length
-
 @MainActor
 func transcriptScreenshot(in app: XCUIApplication, named name: String) -> XCTAttachment {
     let attachment = XCTAttachment(screenshot: app.screenshot())
@@ -996,5 +993,3 @@ extension ConversationTranscriptScrollUITests {
         add(attachment)
     }
 }
-
-// swiftlint:enable file_length
