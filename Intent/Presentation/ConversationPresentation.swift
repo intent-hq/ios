@@ -12,7 +12,6 @@ extension EnvironmentValues {
     @Entry var conversationBackgroundColor: Color?
     @Entry var conversationComposerBackgroundColor: Color?
     @Entry var iPadFocusPresentation: Binding<IPadFocusPresentation>?
-    @Entry var usesIPadTypingFocus = true
     /// Hidden iPad panes retain state but must relinquish keyboard focus.
     @Entry var isIPadPaneVisible = true
 }

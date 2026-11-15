@@ -234,15 +234,6 @@ extension AppCoordinatorTests {
         #expect(narrow.sidebarWidth <= narrow.contentWidth)
     }
 
-    @Test @MainActor func typingFocusIsOffOnlyInLargeWindows() {
-        #expect(!IPadShellLayout(width: IPadReference.largeWidth, isAccessibilitySize: false).usesTypingFocus)
-        #expect(IPadShellLayout(width: IPadReference.smallWidth, isAccessibilitySize: false).usesTypingFocus)
-        #expect(IPadShellLayout(width: IPadReference.windowWidth, isAccessibilitySize: false).usesTypingFocus)
-        #expect(IPadShellLayout(width: IPadReference.portraitWidth, isAccessibilitySize: false).usesTypingFocus)
-        #expect(!IPadShellLayout(width: IPadShellLayout.largeWindowWidth, isAccessibilitySize: false).usesTypingFocus)
-        #expect(IPadShellLayout(width: IPadShellLayout.largeWindowWidth - 1, isAccessibilitySize: false).usesTypingFocus)
-    }
-
     @Test(arguments: [true, false]) @MainActor
     func iPadFocusPreservesSidebarPreferenceAndConversation(expanded: Bool) {
         let coordinator = iPadCoordinator(connection: FakeConnectionManager())

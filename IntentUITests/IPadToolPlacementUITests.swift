@@ -18,7 +18,7 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
             composer.tap()
             composer.typeText("Keep this draft beside the preview")
-            try app.endIPadTyping()
+            app.buttons["ipad.focus.close"].tap()
             let browser = app.buttons["browser.row.tab:demo-agent-browser"]
             reveal(browser, in: app)
             capture(app, "ipad-tool-before-\(appearance)")
