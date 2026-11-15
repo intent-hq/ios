@@ -299,6 +299,7 @@ private extension WorkspaceDetailView {
             headingTopSpacing: sidebarHeadingTopSpacing ?? pageHeadingTopSpacing,
             usesLargeTitle: sidebar == nil && usesIPadPaneTitle,
             showsTitle: sidebar == nil,
+            isSidebar: sidebar != nil,
             onSaveTitle: saveTitle
         )
     }

@@ -18,7 +18,7 @@ struct IPadWorkspaceDetailView: View {
                 .paneSwipe(isSwiping: $isSwiping, onBack: swipeBack, onForward: swipeForward)
                 .onPreferenceChange(WorkspaceFirstAgentPreference.self) { firstAgent = $0 }
                 .navigationDestination(for: NoteDestination.self) { destination in
-                    note(destination, showsBackButton: true)
+                    note(destination) { notePath.removeLast() }
                 }
                 .navigationDestination(item: $coordinator.workspaceChange) { destination in
                     VStack(spacing: 0) {
@@ -97,15 +97,9 @@ struct IPadWorkspaceDetailView: View {
             .id(agentId)
             .transition(pageTransition(isOverview: false))
         case let .noteDetail(noteId, workspaceId, noteTitle):
-            note(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle), showsBackButton: false)
+            note(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle), backLabel: "Back to workspace", onBack: coordinator.onBackFromNote)
                 .id(noteId)
                 .transition(pageTransition(isOverview: false))
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        IntentIconButton(icon: .arrowLeft, label: "Back to workspace", action: coordinator.onBackFromNote)
-                    }
-                    .intentToolbarSurface()
-                }
         case let .workspaceDetail(workspaceId):
             WorkspaceDetailView(workspaceId: workspaceId, session: session, storesCache: coordinator.workspaceDetailStores)
                 .transition(pageTransition(isOverview: true))
@@ -142,16 +136,23 @@ struct IPadWorkspaceDetailView: View {
         return { coordinator.onSelectAgent(firstAgent.id, workspaceId: workspaceId, agentName: firstAgent.name) }
     }
 
-    private func note(_ destination: NoteDestination, showsBackButton: Bool) -> some View {
+    private func note(
+        _ destination: NoteDestination,
+        backLabel: LocalizedStringKey = "Back",
+        onBack: @escaping () -> Void
+    ) -> some View {
         NoteDetailView(
             noteId: destination.noteId,
             workspaceId: destination.workspaceId,
             noteTitle: destination.noteTitle,
             session: session,
-            showsBackButton: showsBackButton
-        ) { noteId, workspaceId, title in
-            notePath.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
-        }
+            showsBackButton: false,
+            onNavigateToNote: { noteId, workspaceId, title in
+                notePath.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
+            },
+            onInlineBack: onBack,
+            inlineBackLabel: backLabel
+        )
     }
 }
 

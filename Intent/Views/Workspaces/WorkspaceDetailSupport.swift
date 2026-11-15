@@ -289,6 +289,7 @@ struct WorkspaceDetailHeader: View {
     var headingTopSpacing: CGFloat?
     var usesLargeTitle = false
     var showsTitle = true
+    var isSidebar = false
     let onSaveTitle: () -> Void
 
     var body: some View {
@@ -308,7 +309,7 @@ struct WorkspaceDetailHeader: View {
             onSaveTitle: onSaveTitle
         )
         #if !os(visionOS)
-        WorkspaceContentTabs(selection: $selection)
+        WorkspaceContentTabs(selection: $selection, isSidebar: isSidebar)
             .padding(.horizontal, WorkspaceDetailStyle.pageInset)
             .padding(.top, Constants.WorkspaceDetail.tabVerticalPadding)
             .padding(.bottom, WorkspaceDetailStyle.sectionSpacing)

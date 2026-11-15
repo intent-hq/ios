@@ -24,11 +24,9 @@ enum Fixture {
     static let lastMessageFragment = "End of the flake investigation"
     static let goToEndIdentifier = "transcript.goToEnd"
     // ConversationTranscriptView.suggestedPromptsView's first button, and
-    // DemoFixtures.longConversationSuggestedPrompts[0] — the text of the
-    // optimistic user row the tap appends.
+    // DemoFixtures.longConversationSuggestedPrompts[0]. The chip and the
+    // optimistic user row the tap appends both render its Markdown as this label.
     static let firstSuggestedPromptIdentifier = "transcript.suggestedPrompt.0"
-    static let firstSuggestedPrompt =
-        "Open a [**PR**](https://github.com/intent-hq/ios) for the `deflake` changes"
     static let firstSuggestedPromptLabel = "Open a PR for the deflake changes"
     // The last of DemoFixtures.longConversationSuggestedPrompts (three
     // prompts): the transcript's final content row while no send is in

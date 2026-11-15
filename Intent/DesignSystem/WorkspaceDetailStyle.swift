@@ -92,6 +92,7 @@ struct ToolbarOverflowLabel: View {
 
 struct WorkspaceContentTabs: View {
     @Binding var selection: WorkspaceTab
+    var isSidebar = false
 
     var body: some View {
         IntentContentSwitcher(
@@ -102,7 +103,8 @@ struct WorkspaceContentTabs: View {
                 .init(value: .changes, title: "Changes")
             ],
             accessibilityLabel: "Workspace Content",
-            identifierPrefix: "workspace.content"
+            identifierPrefix: "workspace.content",
+            isSidebar: isSidebar
         )
     }
 }
@@ -117,6 +119,8 @@ struct IntentContentSwitcher<Value: Hashable>: View {
     let options: [Option]
     let accessibilityLabel: String
     let identifierPrefix: String
+    /// Matches the sidebar filter: no track, so the selected pill lines up with the column text.
+    var isSidebar = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionAnimation
@@ -130,12 +134,12 @@ struct IntentContentSwitcher<Value: Hashable>: View {
         .background {
             if options.contains(where: { $0.value == selection }) {
                 RoundedRectangle(cornerRadius: WorkspaceDetailStyle.selectedTabCornerRadius)
-                    .fill(WorkspaceDetailStyle.foreground(for: colorScheme))
+                    .fill(isSidebar ? IPadSidebarStyle.selection(for: colorScheme) : WorkspaceDetailStyle.foreground(for: colorScheme))
                     .matchedGeometryEffect(id: selection, in: selectionAnimation, isSource: false)
             }
         }
-        .padding(WorkspaceDetailStyle.tabInset)
-        .background(WorkspaceDetailStyle.surface(for: colorScheme), in: .rect(
+        .padding(isSidebar ? 0 : WorkspaceDetailStyle.tabInset)
+        .background(isSidebar ? .clear : WorkspaceDetailStyle.surface(for: colorScheme), in: .rect(
             cornerRadius: WorkspaceDetailStyle.tabCornerRadius
         ))
         .animation(reduceMotion ? nil : .snappy(duration: WorkspaceDetailStyle.selectionAnimationDuration), value: selection)
@@ -155,7 +159,7 @@ struct IntentContentSwitcher<Value: Hashable>: View {
                 .minimumScaleFactor(WorkspaceDetailStyle.tabLabelMinimumScale)
                 .padding(.vertical, WorkspaceDetailStyle.tabInset)
                 .frame(maxWidth: .infinity, minHeight: WorkspaceDetailStyle.controlSize)
-                .foregroundStyle(selection == value
+                .foregroundStyle(selection == value && !isSidebar
                     ? WorkspaceDetailStyle.surface(for: colorScheme)
                     : WorkspaceDetailStyle.foreground(for: colorScheme))
                 .contentShape(.rect)
