@@ -244,6 +244,11 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     private func revealRepositoryPicker(in app: XCUIApplication) -> XCUIElement {
         let picker = app.buttons["changes.repository"].firstMatch
         reveal(picker, in: app, towardTop: true, required: false)
+        // A short sidebar can swipe straight past the picker; collapsing the pull requests lifts it under their heading.
+        let pullRequests = app.buttons["changes.section.pullRequests"].firstMatch
+        if !(picker.exists && picker.isHittable), pullRequests.exists, pullRequests.isHittable, pullRequests.value as? String == "Expanded" {
+            pullRequests.tap()
+        }
         reveal(picker, in: app)
         return picker
     }
