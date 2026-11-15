@@ -166,70 +166,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     }
 
     @MainActor
-    private func verifyFocusCardTyping(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, background: TypingBackgroundControls, appearance: String) throws {
-        let close = app.buttons["ipad.focus.close"]
-        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        capture(app, name: "iPad focused typing \(appearance)")
-        let panel = try IPadFocusBackgroundTap.paneFrame("ipad.detail.panel", in: app)
-        XCTAssertEqual(panel.width, Self.focusPanelWidth, accuracy: 2, app.debugDescription)
-        XCTAssertEqual(panel.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
-        // The header is conditionally removed; retained background panes need an input test.
-        XCTAssertFalse(app.buttons["conversation.back"].exists)
-        XCTAssertEqual(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.filter { $0.isHittable }.count, 1)
-        XCTAssertTrue(try app.buttons.matching(identifier: "composer.send").singleHittableElement().isHittable)
-        XCTAssertTrue(try app.buttons.matching(identifier: "composer.attachment").singleHittableElement().isHittable)
-        let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
-        XCTAssertLessThanOrEqual(close.frame.maxY, keyboard.frame.minY)
-        try verifyBlockedTypingBackground(in: app, controls: background, panel: panel)
-        let transcript = try app.scrollViews.matching(identifier: "transcript.scrollView").singleHittableElement()
-        transcript.coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout), "Hiding the keyboard must restore the normal pane")
-        XCTAssertEqual(composer.value as? String, Self.draft)
-        capture(app, name: "iPad focused typing keyboard hidden \(appearance)")
-        try composerTap.activate(in: app)
-        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        XCUIDevice.shared.orientation = .portrait
-        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        XCTAssertEqual(composer.value as? String, Self.draft)
-        XCTAssertTrue(close.isHittable)
-        XCUIDevice.shared.orientation = .landscapeLeft
-        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        close.tap()
-    }
-
-    /// Windows at least `largeWindowWidth` wide keep the normal layout while typing; rotating
-    /// to a narrow window switches to the focus card without dropping the keyboard.
-    @MainActor
-    private func verifyInPlaceTyping(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, appearance: String) throws {
-        let close = app.buttons["ipad.focus.close"]
-        let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
-        XCTAssertFalse(close.exists, "Large windows keep the chat in place while typing")
-        capture(app, name: "iPad focused typing \(appearance)")
-        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
-        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].isHittable)
-        XCTAssertEqual(composer.value as? String, Self.draft)
-        XCTAssertTrue(try app.buttons.matching(identifier: "composer.send").singleHittableElement().isHittable)
-        XCTAssertTrue(try app.buttons.matching(identifier: "composer.attachment").singleHittableElement().isHittable)
-        try app.endIPadTyping()
-        XCTAssertEqual(composer.value as? String, Self.draft)
-        capture(app, name: "iPad focused typing keyboard hidden \(appearance)")
-        try composerTap.activate(in: app)
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
-        XCUIDevice.shared.orientation = .portrait
-        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        XCTAssertEqual(composer.value as? String, Self.draft)
-        XCUIDevice.shared.orientation = .landscapeLeft
-        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(keyboard.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), "Rotation must not drop the keyboard")
-        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout), "Esc ends typing without the focus card")
-        XCTAssertEqual(composer.value as? String, Self.draft)
-    }
-
-    @MainActor
     private func verifyPopulatedHistory(in app: XCUIApplication) {
         let reopensConversation = showWorkspaceList(in: app)
         app.buttons["workspaces.menu"].tap()
@@ -528,5 +464,71 @@ extension IPadSidebarUITests {
             XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
             app.terminate()
         }
+    }
+}
+
+extension IPadSidebarUITests {
+    @MainActor
+    private func verifyFocusCardTyping(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, background: TypingBackgroundControls, appearance: String) throws {
+        let close = app.buttons["ipad.focus.close"]
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        capture(app, name: "iPad focused typing \(appearance)")
+        let panel = try IPadFocusBackgroundTap.paneFrame("ipad.detail.panel", in: app)
+        XCTAssertEqual(panel.width, Self.focusPanelWidth, accuracy: 2, app.debugDescription)
+        XCTAssertEqual(panel.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
+        // The header is conditionally removed; retained background panes need an input test.
+        XCTAssertFalse(app.buttons["conversation.back"].exists)
+        XCTAssertEqual(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.filter { $0.isHittable }.count, 1)
+        XCTAssertTrue(try app.buttons.matching(identifier: "composer.send").singleHittableElement().isHittable)
+        XCTAssertTrue(try app.buttons.matching(identifier: "composer.attachment").singleHittableElement().isHittable)
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCTAssertLessThanOrEqual(close.frame.maxY, keyboard.frame.minY)
+        try verifyBlockedTypingBackground(in: app, controls: background, panel: panel)
+        let transcript = try app.scrollViews.matching(identifier: "transcript.scrollView").singleHittableElement()
+        transcript.coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout), "Hiding the keyboard must restore the normal pane")
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        capture(app, name: "iPad focused typing keyboard hidden \(appearance)")
+        try composerTap.activate(in: app)
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        XCTAssertTrue(close.isHittable)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        close.tap()
+    }
+
+    /// Windows at least `largeWindowWidth` wide keep the normal layout while typing; rotating
+    /// to a narrow window switches to the focus card without dropping the keyboard.
+    @MainActor
+    private func verifyInPlaceTyping(in app: XCUIApplication, composer: XCUIElement, composerTap: IPadFocusBackgroundTap, appearance: String) throws {
+        let close = app.buttons["ipad.focus.close"]
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(close.exists, "Large windows keep the chat in place while typing")
+        capture(app, name: "iPad focused typing \(appearance)")
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
+        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].isHittable)
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        XCTAssertTrue(try app.buttons.matching(identifier: "composer.send").singleHittableElement().isHittable)
+        XCTAssertTrue(try app.buttons.matching(identifier: "composer.attachment").singleHittableElement().isHittable)
+        try app.endIPadTyping()
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        capture(app, name: "iPad focused typing keyboard hidden \(appearance)")
+        try composerTap.activate(in: app)
+        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertEqual(composer.value as? String, Self.draft)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(keyboard.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), "Rotation must not drop the keyboard")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout), "Esc ends typing without the focus card")
+        XCTAssertEqual(composer.value as? String, Self.draft)
     }
 }
