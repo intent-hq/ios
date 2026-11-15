@@ -7,19 +7,25 @@ struct IPadTypingFocus: ViewModifier {
     let composerVisible: Bool
     @Environment(\.iPadFocusPresentation) private var iPadFocusPresentation
     @Environment(\.isIPadPaneVisible) private var isIPadPaneVisible
+    @Environment(\.usesIPadTypingFocus) private var usesTypingFocus
 
     func body(content: Content) -> some View {
         content
             .onChange(of: isFocused) { _, focused in
                 guard isIPadPaneVisible else { return }
-                if focused {
+                if focused, usesTypingFocus {
                     iPadFocusPresentation?.wrappedValue = .conversationEditing
-                } else if iPadFocusPresentation?.wrappedValue == .conversationEditing {
+                } else if !focused, iPadFocusPresentation?.wrappedValue == .conversationEditing {
                     iPadFocusPresentation?.wrappedValue = .normal
                 }
             }
             .onChange(of: iPadFocusPresentation?.wrappedValue) { _, focus in
-                if focus != .conversationEditing { isFocused = false }
+                // Without typing focus, a return to normal must not drop the keyboard.
+                if focus != .conversationEditing, usesTypingFocus || focus != .normal { isFocused = false }
+            }
+            .onChange(of: usesTypingFocus) { _, enabled in
+                guard isIPadPaneVisible, isFocused else { return }
+                iPadFocusPresentation?.wrappedValue = enabled ? .conversationEditing : .normal
             }
             .onChange(of: composerVisible) { _, visible in
                 if !visible, isIPadPaneVisible, iPadFocusPresentation?.wrappedValue == .conversationEditing {
