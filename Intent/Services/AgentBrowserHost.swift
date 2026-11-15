@@ -155,14 +155,15 @@ final class AgentBrowserHost {
         switch name {
         case "listTabs":
             let scope = action["scope"] as? String ?? "all"
-            return tabs.filter { tab in
+            let listed = tabs.filter { tab in
                 guard tab.workspaceId == request.workspaceId else { return false }
                 switch scope {
                 case "mine": return request.agentId != nil && tab.ownerAgentId == request.agentId
                 case "unclaimed": return tab.ownerAgentId == nil
                 default: return true
                 }
-            }.map(\.registryInput)
+            }
+            return listed.map(\.registryInput)
         case "openTab":
             return try await openTab(action, request: request)
         case "navigate":
@@ -226,16 +227,16 @@ final class AgentBrowserHost {
     private func openTab(_ action: [String: Any], request: AgentBrowserRequest) async throws -> Any {
         guard let workspaceId = request.workspaceId else { throw AgentBrowserActionError(message: "openTab requires a workspace") }
         guard let url = action["url"] as? String else { throw AgentBrowserActionError(message: "openTab requires url") }
-        if let existing = tabs.first(where: {
-            $0.workspaceId == workspaceId && $0.ownerAgentId == request.agentId && $0.requestedURL == url
+        if let existing = tabs.first(where: { tab in
+            tab.workspaceId == workspaceId && tab.ownerAgentId == request.agentId && tab.requestedURL == url
         }) {
             return ["tabId": existing.tabId, "url": existing.address, "requestedUrl": url, "reused": true]
         }
         guard tabs.count < Self.maximumTabs else {
             throw AgentBrowserActionError(message: "This device hosts at most \(Self.maximumTabs) agent tabs. Close one with { action: \"closeTab\" } first.")
         }
-        let size = Self.dimension(action["width"]).map {
-            CGSize(width: $0, height: Self.dimension(action["height"]) ?? AgentBrowserTab.defaultSize.height)
+        let size = Self.dimension(action["width"]).map { width in
+            CGSize(width: width, height: Self.dimension(action["height"]) ?? AgentBrowserTab.defaultSize.height)
         }
         let tab = AgentBrowserTab(
             tabId: "ios-\(UUID().uuidString.lowercased())",
@@ -293,9 +294,11 @@ final class AgentBrowserHost {
         return tab
     }
 
+    private static let maximumDimension = 4096.0
+
     private static func dimension(_ value: Any?) -> CGFloat? {
-        guard let number = value as? NSNumber, number.doubleValue >= 1, number.doubleValue <= 4096 else { return nil }
-        return CGFloat(number.doubleValue)
+        guard let number = value as? Double, number >= 1, number <= maximumDimension else { return nil }
+        return CGFloat(number)
     }
 }
 
@@ -326,8 +329,8 @@ struct AgentBrowserActionError: Error {
     }
 
     static func notOwner(tab: AgentBrowserTab) -> Self {
-        let message = tab.ownerAgentId.map {
-            "Tab \(tab.tabId) is owned by agent \($0). Agents may only manipulate tabs they own."
+        let message = tab.ownerAgentId.map { owner in
+            "Tab \(tab.tabId) is owned by agent \(owner). Agents may only manipulate tabs they own."
         } ?? "Tab \(tab.tabId) is not owned by you (it is unowned). Claim it first with { action: \"claimTab\" }."
         return Self(message: message, code: "not-owner", ownerAgentId: .some(tab.ownerAgentId))
     }

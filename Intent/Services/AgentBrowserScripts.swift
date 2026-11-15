@@ -6,12 +6,19 @@ nonisolated enum AgentBrowserJSON {
         switch value {
         case nil, is NSNull: NSNull()
         case let string as String: string
-        case let number as NSNumber: number.doubleValue.isFinite ? number : NSNull()
+        case let flag as Bool where isBoolean(value): flag
+        case let number as Double: number.isFinite ? number : NSNull()
         case let date as Date: ISO8601DateFormatter().string(from: date)
         case let array as [Any]: array.map { sanitize($0) }
         case let dictionary as [String: Any]: dictionary.mapValues { sanitize($0) }
         case let value?: String(describing: value)
         }
+    }
+
+    /// Bridged JavaScript numbers also cast to `Bool`; only a CFBoolean is a real boolean.
+    private static func isBoolean(_ value: Any?) -> Bool {
+        guard let value else { return false }
+        return CFGetTypeID(value as CFTypeRef) == CFBooleanGetTypeID()
     }
 }
 

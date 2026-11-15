@@ -5,8 +5,12 @@ import WebKit
 /// pages through its own browser tunnel, exactly like a user-opened workspace browser.
 @MainActor
 final class AgentBrowserTab: NSObject, WKNavigationDelegate, WKUIDelegate {
-    static let defaultSize = CGSize(width: 390, height: 844)
-    private static let navigationTimeout: Duration = .seconds(15)
+    /// An iPhone-sized viewport for tabs opened without a width.
+    static let defaultSize = CGSize(width: defaultWidth, height: defaultHeight)
+    private static let defaultWidth = 390.0
+    private static let defaultHeight = 844.0
+    private static let navigationTimeoutSeconds = 15
+    private static let navigationTimeout: Duration = .seconds(navigationTimeoutSeconds)
 
     let tabId: String
     let workspaceId: String

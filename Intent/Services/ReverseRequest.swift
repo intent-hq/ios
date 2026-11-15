@@ -5,9 +5,9 @@ import Foundation
 typealias ReverseRequestHandler = @MainActor (_ method: String, _ params: [String: Any]) async throws -> Any
 
 nonisolated struct ReverseRequestError: Error, Equatable {
-    static let methodNotFoundCode = -32601
-    static let invalidParamsCode = -32602
-    static let internalErrorCode = -32603
+    static let methodNotFoundCode = -32_601
+    static let invalidParamsCode = -32_602
+    static let internalErrorCode = -32_603
 
     let code: Int
     let message: String
