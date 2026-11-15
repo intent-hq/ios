@@ -28,8 +28,6 @@ class KeyCommandTextView: UITextView {
     var onPasteImages: (() -> Void)?
     weak var skillCompletion: ComposerSkillCompletion?
     var allowsImagePaste = true
-    /// Hardware Esc reaches the first responder before SwiftUI shortcuts, so the editor ends typing itself.
-    var endsEditingOnEscape = false
     var imagePasteboard: ImagePasteboard = .general
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
@@ -145,10 +143,6 @@ class KeyCommandTextView: UITextView {
                 command.wantsPriorityOverSystemBehavior = true
                 return command
             }
-        } else if endsEditingOnEscape {
-            let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(handleEscape))
-            escape.wantsPriorityOverSystemBehavior = true
-            commands = [escape]
         }
         guard Self.returnSubmitsNow else { return commands }
         // Intercept bare Return (no modifiers) — calls handleReturn
@@ -163,10 +157,6 @@ class KeyCommandTextView: UITextView {
     @objc private func handleReturn() {
         if skillCompletion?.acceptSelection() == true { return }
         onSubmit?()
-    }
-
-    @objc private func handleEscape() {
-        resignFirstResponder()
     }
 
     @objc private func handleSkillCommand(_ command: UIKeyCommand) {
@@ -232,7 +222,6 @@ struct SubmittableTextView: UIViewRepresentable {
     var textColor: UIColor?
     var skillCompletion: ComposerSkillCompletion?
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.iPadFocusPresentation) private var iPadFocusPresentation
 
     func makeUIView(context: Context) -> KeyCommandTextView {
         let textView = KeyCommandTextView()
@@ -288,7 +277,6 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.onPasteImages = onPasteImages
         textView.skillCompletion = skillCompletion
         textView.allowsImagePaste = isEnabled
-        textView.endsEditingOnEscape = iPadFocusPresentation != nil
         textView.accessibilityLabel = accessibilityLabel
         textView.updateTypography()
         if let textColor, textView.textColor != textColor {

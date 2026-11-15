@@ -95,7 +95,6 @@ struct IPadShellView: View {
         .environment(\.conversationPresentation, .iPad)
         .environment(\.usesDuoContextualRail, usesVerticalBar)
         .environment(\.iPadFocusPresentation, focusPresentation)
-        .environment(\.usesIPadTypingFocus, layout.usesTypingFocus)
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topSafeArea = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.trailing } action: { trailingSafeArea = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.leading } action: { leadingSafeArea = $0 }

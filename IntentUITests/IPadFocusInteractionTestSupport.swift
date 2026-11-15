@@ -143,30 +143,3 @@ struct IPadFocusBackgroundTap {
         return window.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: point.x - window.frame.minX, dy: point.y - window.frame.minY))
     }
 }
-
-extension XCUIApplication {
-    /// Mirrors `IPadShellLayout.largeWindowWidth`: windows at least this wide keep the
-    /// normal layout while typing instead of showing the focus card.
-    private static let largeWindowWidth: CGFloat = 1300
-    private static let transcriptTapX: CGFloat = 0.02
-
-    /// Whether typing in the current window orientation pulls the chat into the focus card.
-    var usesIPadTypingFocus: Bool { windows.firstMatch.frame.width < Self.largeWindowWidth }
-
-    /// Leaves composer typing: closes the focus card, or on large windows (no card) taps the
-    /// transcript to hide the keyboard. Either way the keyboard and card are gone afterwards.
-    @MainActor
-    func endIPadTyping(timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line) throws {
-        let close = buttons["ipad.focus.close"]
-        if usesIPadTypingFocus {
-            XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: timeout), file: file, line: line)
-            close.tap()
-        } else {
-            XCTAssertFalse(close.exists, "Large windows keep the layout while typing", file: file, line: line)
-            let transcript = try scrollViews.matching(identifier: "transcript.scrollView").singleHittableElement(file: file, line: line)
-            transcript.coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
-        }
-        XCTAssertTrue(close.waitForNonExistence(timeout: timeout), file: file, line: line)
-        XCTAssertTrue(keyboards.firstMatch.waitForNonExistence(timeout: timeout), file: file, line: line)
-    }
-}

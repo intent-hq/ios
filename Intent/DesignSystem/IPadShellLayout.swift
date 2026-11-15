@@ -61,8 +61,6 @@ struct IPadShellLayout: Equatable {
     var leadingInset: CGFloat { usesFoldableLayout && usesLeadingVerticalBar ? 0 : inset }
     var trailingInset: CGFloat { usesFoldableLayout && !usesLeadingVerticalBar ? 0 : inset }
     var railLeadingInset: CGFloat { usesCompactNavigation || usesFoldableLayout ? 0 : Self.railWidth + railGutter }
-    /// Large windows already give the chat a readable column, so typing stays in place.
-    var usesTypingFocus: Bool { width < Self.largeWindowWidth }
     var focusedPanelWidth: CGFloat { min(Self.focusPanelWidth, availableWidth) }
     var focusedPanelLeadingInset: CGFloat { (availableWidth - focusedPanelWidth) / 2 }
     var contentWidth: CGFloat { max(0, availableWidth - railLeadingInset) }

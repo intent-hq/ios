@@ -133,8 +133,11 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(send.isEnabled)
         XCTAssertTrue(send.isHittable)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad focused multiline draft")
-        verifyTypingChrome(in: app, rail: rail, send: send)
-        try app.endIPadTyping()
+        XCTAssertFalse(rail.exists, "Focused typing hides background navigation\n\(app.debugDescription)")
+        let closeFocus = app.buttons["ipad.focus.close"]
+        XCTAssertTrue(closeFocus.isHittable)
+        XCTAssertFalse(closeFocus.frame.intersects(send.frame))
+        closeFocus.tap()
         XCTAssertTrue(rail.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)
         app.hideWorkspaceSidebar()
@@ -158,19 +161,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad portrait conversation with draft")
         try verifySendAndBack(in: app, draft: draft)
-    }
-
-    @MainActor
-    private func verifyTypingChrome(in app: XCUIApplication, rail: XCUIElement, send: XCUIElement) {
-        let closeFocus = app.buttons["ipad.focus.close"]
-        if app.usesIPadTypingFocus {
-            XCTAssertFalse(rail.exists, "Focused typing hides background navigation\n\(app.debugDescription)")
-            XCTAssertTrue(closeFocus.isHittable)
-            XCTAssertFalse(closeFocus.frame.intersects(send.frame))
-        } else {
-            XCTAssertTrue(rail.isHittable, "Large windows keep the rail while typing")
-            XCTAssertFalse(closeFocus.exists)
-        }
     }
 
     @MainActor
