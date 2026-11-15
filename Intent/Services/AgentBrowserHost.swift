@@ -328,14 +328,14 @@ struct AgentBrowserActionError: Error {
         )
     }
 
-    static func notOwner(tab: AgentBrowserTab) -> Self {
+    @MainActor static func notOwner(tab: AgentBrowserTab) -> Self {
         let message = tab.ownerAgentId.map { owner in
             "Tab \(tab.tabId) is owned by agent \(owner). Agents may only manipulate tabs they own."
         } ?? "Tab \(tab.tabId) is not owned by you (it is unowned). Claim it first with { action: \"claimTab\" }."
         return Self(message: message, code: "not-owner", ownerAgentId: .some(tab.ownerAgentId))
     }
 
-    static func alreadyClaimed(tab: AgentBrowserTab) -> Self {
+    @MainActor static func alreadyClaimed(tab: AgentBrowserTab) -> Self {
         Self(
             message: "Tab \(tab.tabId) is already claimed by agent \(tab.ownerAgentId ?? "unknown").",
             code: "already-claimed",
