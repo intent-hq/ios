@@ -1,5 +1,6 @@
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
 
 struct ContextMentionTests {
@@ -194,6 +195,15 @@ struct ContextMentionTests {
     @Test func userTextRowsWithoutTokensIsSingleTextRow() {
         let text = "plain message"
         #expect(MessageView.userTextRows(text) == [.text(text)])
+    }
+
+    @Test func userDisplayTextRendersInlineLinksAndKeepsLineBreaks() throws {
+        let rendered = MessageView.userDisplayText("Merge [#1029](https://github.com/intent-hq/ios/pull/1029).\n- next")
+        #expect(String(rendered.characters) == "Merge #1029.\n- next")
+        let link = try #require(rendered.runs.first { $0.link != nil })
+        #expect(link.link == URL(string: "https://github.com/intent-hq/ios/pull/1029"))
+        #expect(String(rendered[link.range].characters) == "#1029")
+        #expect(link.underlineStyle == .single)
     }
 
     // MARK: - Chip presentation

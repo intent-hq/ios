@@ -304,12 +304,14 @@ struct UserMessageView: View {
     }
 
     private func userTextContent(_ text: String) -> some View {
-        Text(text)
+        let foreground = workspaceDesign
+            ? Design.Palette.foreground(for: colorScheme)
+            : Theme.foreground(for: colorScheme).opacity(Layout.textOpacity)
+        return Text(MessageView.userDisplayText(text))
             .interFont(workspaceDesign ? Constants.Typography.bodyS : Constants.Typography.bodyXS)
             .tracking(workspaceDesign ? Design.Typography.bodyTracking : 0)
-            .foregroundStyle(workspaceDesign
-                ? Design.Palette.foreground(for: colorScheme)
-                : Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
+            .foregroundStyle(foreground)
+            .tint(foreground)
             .textSelection(.enabled)
     }
 }
@@ -372,6 +374,19 @@ extension MessageView {
     enum UserTextRow: Equatable {
         case text(String)
         case chips([ContextMention])
+    }
+
+    /// Inline Markdown only, so typed line breaks and list markers stay as written.
+    /// Links keep the text color and read as links by underline, as in replies (#904).
+    static func userDisplayText(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        guard var rendered = try? AttributedString(markdown: text, options: options) else {
+            return AttributedString(text)
+        }
+        for run in rendered.runs where run.link != nil {
+            rendered[run.range].underlineStyle = .single
+        }
+        return rendered
     }
 
     static func userTextRows(_ text: String) -> [UserTextRow] {
