@@ -510,6 +510,10 @@ CAPTURES = {
             "submodule-changes", "submodule-unstaged-diff", "submodule-commit-diff",
         ),
         "testSectionsCollapseIndependentlyAndReopen": ("collapsed-changes-sections",),
+        "testPullRequestsLeadTheChangesTabInBothThemes": (
+            "changes-pull-requests-light", "changes-pull-requests-dark",
+            "changes-pull-requests-collapsed-light", "changes-pull-requests-collapsed-dark",
+        ),
         "testNestedFoldersPreserveCollapseUntilRepositoryChanges": ("nested-file-tree",),
     },
     "WorkspaceAgentGroupsUITests": {

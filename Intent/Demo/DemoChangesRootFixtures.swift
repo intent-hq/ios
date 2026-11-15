@@ -11,7 +11,7 @@ enum DemoChangesRootFixtures {
                 "gitRoots": [
                     [
                         "id": rootId, "path": "/workspace/packages/ios", "repoName": "ios",
-                        "source": "submodule", "branch": "feat/analytics", "registeredCommitSha": "base-ios"
+                        "source": "auto", "branch": "feat/analytics", "registeredCommitSha": "base-ios"
                     ]
                 ]
             ]

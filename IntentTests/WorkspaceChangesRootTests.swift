@@ -9,7 +9,8 @@ extension WorkspaceChangesFixture {
             "path": "/workspace/packages/\(id)",
             "repoName": "Repository \(id)",
             "branch": "feature/changes",
-            "registeredCommitSha": "base-\(id)"
+            "registeredCommitSha": "base-\(id)",
+            "source": "auto"
         ]
     }
 
@@ -40,6 +41,7 @@ extension WorkspaceChangesModelTests {
         fallback.removeValue(forKey: "repoName")
         fallback.removeValue(forKey: "branch")
         fallback.removeValue(forKey: "registeredCommitSha")
+        fallback["source"] = "agent"
         let roots = try WorkspaceGitRoot.parseList(["gitRoots": [WorkspaceChangesFixture.root(), fallback]])
         #expect(roots[0].displayName == "Repository root-a")
         #expect(roots[0].branch == "feature/changes")
@@ -47,6 +49,8 @@ extension WorkspaceChangesModelTests {
         #expect(roots[1].displayName == "root-b")
         #expect(roots[1].branch == nil)
         #expect(roots[1].registeredCommitSha == nil)
+        #expect(roots[0].isSubmodule)
+        #expect(!roots[1].isSubmodule)
         #expect(throws: WorkspaceChangesDecodingError.self) {
             try WorkspaceGitRoot.parseList(["gitRoots": [["id": "incomplete"]]])
         }

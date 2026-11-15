@@ -59,6 +59,22 @@ extension DemoFixtures {
                         ]
                     ] as [[String: Any]]
                 ] as [String: Any],
+                "pullRequests": [
+                    [
+                        "number": 482,
+                        "status": "Open",
+                        "title": "feat: usage analytics dashboard with CSV export",
+                        "url": "https://github.com/nova-labs/console/pull/482",
+                        "updatedAt": iso(minutesAgo: 25)
+                    ],
+                    [
+                        "number": 476,
+                        "status": "Merged",
+                        "title": "refactor: extract analytics event schema",
+                        "url": "https://github.com/nova-labs/console/pull/476",
+                        "updatedAt": iso(minutesAgo: 60 * 26)
+                    ]
+                ] as [[String: Any]],
                 "activePullRequest": [
                     "number": 482,
                     "status": "Open",

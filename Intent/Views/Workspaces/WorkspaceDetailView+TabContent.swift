@@ -43,7 +43,13 @@ extension WorkspaceDetailView {
                 agentListContent
             }
         } else if currentTab == .changes {
-            WorkspaceChangesView(workspaceId: workspaceId, store: changesStore)
+            WorkspaceChangesView(
+                workspaceId: workspaceId,
+                store: changesStore,
+                pullRequests: workspace.map { current in
+                    PullRequestListItem.owned(by: current, monitors: session.prMonitorsStore.monitors(for: workspaceId))
+                } ?? []
+            )
         } else {
             WorkspaceContextView(workspaceId: workspaceId, noteStore: noteStore, filesStore: filesStore, notesExpanded: notesExpansion, filesExpanded: filesExpansion)
         }

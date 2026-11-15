@@ -146,6 +146,53 @@ struct PullRequestListItem: Identifiable, Hashable {
         return nil
     }
 
+    /// The workspace's own pull requests, as the Cloudlands Changes sidebar
+    /// lists them: the detected pool (the active PR only when the pool is
+    /// empty) in the workspace repository, plus same-repository monitored
+    /// PRs, newest-updated first. Needs the workspace repository.
+    static func owned(by workspace: Workspace, monitors: [MonitoredPr] = []) -> [Self] {
+        guard let owner = workspace.repositoryOwner, let repo = workspace.repositoryName,
+              !owner.isEmpty, !repo.isEmpty else { return [] }
+        let repoKey = "\(owner)/\(repo)".lowercased()
+        let pulls = workspace.pullRequests.isEmpty
+            ? [workspace.activePullRequest].compactMap { $0 }
+            : workspace.pullRequests
+        var items: [Self] = pulls.compactMap { pull in
+            let link = pull.url.flatMap(URL.init(string:)).flatMap(Self.init(githubURL:))
+            if let link, "\(link.owner)/\(link.repo)".lowercased() != repoKey { return nil }
+            return Self(
+                owner: owner,
+                repo: repo,
+                number: pull.number,
+                title: pull.title.flatMap { $0.isEmpty ? nil : $0 } ?? "#\(pull.number)",
+                url: link?.url ?? URL(string: "https://github.com/\(owner)/\(repo)/pull/\(pull.number)"),
+                status: WorkspacePrPill.Status(wire: pull.status),
+                updatedAt: pull.updatedAt
+            )
+        }
+        for monitor in monitors where monitor.state != .cancelled && monitor.repo.lowercased() == repoKey {
+            guard !items.contains(where: { $0.number == monitor.prNumber }) else { continue }
+            items.append(Self(
+                owner: owner,
+                repo: repo,
+                number: monitor.prNumber,
+                title: monitor.title.flatMap { $0.isEmpty ? nil : $0 } ?? "#\(monitor.prNumber)",
+                url: monitor.url.flatMap(URL.init(string:))
+                    ?? URL(string: "https://github.com/\(owner)/\(repo)/pull/\(monitor.prNumber)"),
+                status: WorkspacePrPill.monitorDisplayStatus(monitor),
+                updatedAt: monitor.updatedAt
+            ))
+        }
+        return items.sorted { lhs, rhs in
+            switch (lhs.updatedAt.flatMap { $0.isEmpty ? nil : $0 }, rhs.updatedAt.flatMap { $0.isEmpty ? nil : $0 }) {
+            case let (left?, right?) where left != right: left > right
+            case (.some, .none): true
+            case (.none, .some): false
+            default: lhs.number > rhs.number
+            }
+        }
+    }
+
     private static func linkKey(_ pull: WorkspacePullRequest, workspace: Workspace) -> String? {
         if let link = pull.url.flatMap(URL.init(string:)).flatMap(Self.init(githubURL:)) {
             return link.id

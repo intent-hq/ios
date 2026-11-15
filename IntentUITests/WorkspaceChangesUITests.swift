@@ -8,6 +8,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         static let maximumInitialLineOffset: CGFloat = 100
         static let maximumLeadingInset: CGFloat = 40
         static let railSettleDuration: TimeInterval = 0.5
+        static let tabSwitchTimeout: TimeInterval = 5
     }
 
     override func setUpWithError() throws {
@@ -232,16 +233,23 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 
     @MainActor
     private func selectRepository(_ name: String, in app: XCUIApplication) {
-        let picker = app.buttons["changes.repository"].firstMatch
-        reveal(picker, in: app, towardTop: true)
+        let picker = revealRepositoryPicker(in: app)
         picker.tap()
         let option = app.buttons[name].firstMatch
         XCTAssertTrue(option.waitForExistence(timeout: Fixture.timeout))
         option.tap()
     }
 
+    @MainActor @discardableResult
+    private func revealRepositoryPicker(in app: XCUIApplication) -> XCUIElement {
+        let picker = app.buttons["changes.repository"].firstMatch
+        reveal(picker, in: app, towardTop: true, required: false)
+        reveal(picker, in: app)
+        return picker
+    }
+
     @MainActor
-    private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false) {
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false, required: Bool = true) {
         let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
         // On iPad the workspace can be beside a viewer; app-wide swipes target the viewer instead.
         let scrollTarget = UIDevice.current.userInterfaceIdiom == .pad && overview.exists ? overview : app
@@ -249,6 +257,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
             if element.exists, element.isHittable { return }
             if towardTop { scrollTarget.swipeDown() } else { scrollTarget.swipeUp() }
         }
+        guard required else { return }
         XCTAssertTrue(element.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(element.isHittable)
     }
@@ -280,6 +289,26 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 }
 
 extension WorkspaceChangesUITests {
+    @MainActor
+    func testPullRequestsLeadTheChangesTabInBothThemes() {
+        for appearance in ["light", "dark"] {
+            let app = openChanges(launchArguments: ["-appThemePreference", appearance])
+            let section = app.buttons["changes.section.pullRequests"].firstMatch
+            XCTAssertTrue(section.waitForExistence(timeout: Fixture.timeout))
+            let open = app.buttons["changes.pullRequest.nova-labs/console#482"].firstMatch
+            XCTAssertTrue(open.exists && app.buttons["changes.pullRequest.nova-labs/console#476"].exists)
+            XCTAssertLessThan(open.frame.minY, app.buttons["changes.section.unstaged"].firstMatch.frame.minY)
+            capture(app, name: "changes-pull-requests-\(appearance)")
+            section.tap()
+            XCTAssertEqual(section.value as? String, "Collapsed")
+            XCTAssertFalse(open.exists)
+            app.buttons["changes.section.repository"].firstMatch.tap()
+            XCTAssertFalse(app.buttons["changes.repository"].exists)
+            capture(app, name: "changes-pull-requests-collapsed-\(appearance)")
+            app.terminate()
+        }
+    }
+
     @MainActor
     func testCommitFilenamesStayPinnedWhileScrollingInBothThemes() {
         // Exercise the narrow iPad launch without depending on the previous test's orientation.
@@ -346,7 +375,7 @@ extension WorkspaceChangesUITests {
             assertIPadDiffPane(in: app)
             capture(app, name: "ipad-diff-portrait-\(appearance)")
             app.buttons["diff.back"].tap()
-            XCTAssertEqual(app.buttons["changes.repository"].value as? String, "ios")
+            XCTAssertEqual(revealRepositoryPicker(in: app).value as? String, "ios")
             XCUIDevice.shared.orientation = .landscapeLeft
             openIPadFileDiff(in: app, staged: true)
             XCTAssertEqual(app.staticTexts["workspace.change.title"].label, "Staged Changes")
@@ -364,8 +393,8 @@ extension WorkspaceChangesUITests {
             assertIPadCommitPane(in: app)
             capture(app, name: "ipad-commit-portrait-\(appearance)")
             app.buttons["commit.back"].tap()
-            XCTAssertTrue(app.buttons["changes.repository"].waitForExistence(timeout: Fixture.timeout))
-            XCTAssertEqual(app.buttons["changes.repository"].value as? String, "ios")
+            XCTAssertTrue(app.buttons["changes.section.pullRequests"].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertEqual(revealRepositoryPicker(in: app).value as? String, "ios")
 
             verifyIPadSidebarViewers(in: app, appearance: appearance)
             app.terminate()
@@ -379,6 +408,8 @@ extension WorkspaceChangesUITests {
         let agents = app.buttons["Agents"].firstMatch
         reveal(agents, in: app, towardTop: true)
         agents.tap()
+        // A tap that only stops the overview's scroll momentum leaves Changes selected; tap again.
+        if !app.buttons["changes.section.pullRequests"].waitForNonExistence(timeout: Fixture.tabSwitchTimeout) { agents.tap() }
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         reveal(agent, in: app)
         agent.tap()
@@ -388,8 +419,7 @@ extension WorkspaceChangesUITests {
         openIPadCommit(in: app)
         assertIPadCommitPane(in: app)
         // Reaching the commit can scroll the repository picker offscreen on a smaller iPad.
-        reveal(app.buttons["changes.repository"], in: app, towardTop: true)
-        XCTAssertTrue(app.buttons["changes.repository"].isHittable, "The sidebar stays interactive")
+        XCTAssertTrue(revealRepositoryPicker(in: app).isHittable, "The sidebar stays interactive")
         capture(app, name: "ipad-commit-from-sidebar-\(appearance)")
         openIPadFileDiff(in: app, staged: false)
         assertIPadDiffPane(in: app)
@@ -410,12 +440,8 @@ extension WorkspaceChangesUITests {
             ? "changes.file.staged.Tests/MobileAnalyticsTests.swift"
             : "changes.file.unstaged.Sources/Analytics.swift"
         let file = app.buttons[identifier].firstMatch
-        let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
-        for _ in 0..<Fixture.scrollAttempts {
-            if file.exists, file.isHittable { break }
-            if staged { overview.swipeUp() } else { overview.swipeDown() }
-        }
-        XCTAssertTrue(file.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
+        reveal(file, in: app, towardTop: !staged, required: false)
+        reveal(file, in: app, towardTop: staged)
         file.tap()
         XCTAssertTrue(app.buttons["diff.back"].waitForExistence(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: staged ? "let mobileStaged = true" : "let mobile = true")
