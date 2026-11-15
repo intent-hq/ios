@@ -147,11 +147,12 @@ struct IPadWorkspaceDetailView: View {
             noteTitle: destination.noteTitle,
             session: session,
             showsBackButton: false,
+            onNavigateToNote: { noteId, workspaceId, title in
+                notePath.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
+            },
             onInlineBack: onBack,
             inlineBackLabel: backLabel
-        ) { noteId, workspaceId, title in
-            notePath.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
-        }
+        )
     }
 }
 

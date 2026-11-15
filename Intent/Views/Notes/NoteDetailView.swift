@@ -30,9 +30,9 @@ struct NoteDetailView: View {
         noteTitle: String,
         session: BackendSession,
         showsBackButton: Bool = true,
+        onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
         onInlineBack: (() -> Void)? = nil,
-        inlineBackLabel: LocalizedStringKey = "Back",
-        onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
+        inlineBackLabel: LocalizedStringKey = "Back"
     ) {
         self.noteId = noteId
         self.workspaceId = workspaceId
