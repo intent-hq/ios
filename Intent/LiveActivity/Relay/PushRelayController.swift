@@ -272,7 +272,11 @@ final class PushRelayController {
         guard state.isRelayDriven, isEnabled, let client = makeClient() else { return }
         do {
             let snapshot = try await client.snapshot()
-            guard snapshot.contentState.runningCount > 0 else { return }
+            guard snapshot.contentState.runningCount > 0 else {
+                // Nothing runs: clear a card the relay's end push did not remove.
+                await Self.endAll()
+                return
+            }
             let content = ActivityContent(
                 state: snapshot.contentState,
                 staleDate: .now.addingTimeInterval(Self.snapshotStaleAfter)
@@ -324,6 +328,12 @@ final class PushRelayController {
         guard let activity = Activity<AgentActivityAttributes>.activities.first(where: { $0.id == activityID }) else { return }
         for await state in activity.activityStateUpdates where state == .ended || state == .dismissed {
             return
+        }
+    }
+
+    nonisolated private static func endAll() async {
+        for activity in Activity<AgentActivityAttributes>.activities {
+            await activity.end(nil, dismissalPolicy: .immediate)
         }
     }
 
