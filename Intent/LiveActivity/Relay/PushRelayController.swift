@@ -227,9 +227,13 @@ final class PushRelayController {
         let client = try makeClient(baseURL: relayURL)
         let device = currentDevice()
         let forgotten = try await serialized { [self] in
+            // Forgotten while the link token was in flight: never register it.
+            guard !removedConnections.contains(connectionId) else { return false }
             let registration = try await client.register(linkToken: linkToken, connectionId: connectionId, device: device)
             let link = RelayLink(connectionId: connectionId, daemonId: registration.daemonId, relayURL: relayURL)
             guard !removedConnections.contains(connectionId) else {
+                // A current link for the daemon is a newer generation; leave it.
+                guard state.links.allSatisfy({ $0.daemonId != link.daemonId }) else { return false }
                 state.queueUnlink(link)
                 state.save(to: defaults)
                 return true
