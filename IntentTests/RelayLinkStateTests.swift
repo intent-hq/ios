@@ -31,8 +31,39 @@ struct RelayLinkStateTests {
         #expect(!RelayLinkState().isRelayDriven)
         var state = linked(machine)
         #expect(state.isRelayDriven)
-        state.remove(connectionId: machine)
+        state.queueUnlink(connectionId: machine)
         #expect(!state.isRelayDriven)
+    }
+
+    @Test func forgottenLinksStayQueuedUntilTheRelayConfirms() throws {
+        var state = linked(machine)
+        state.queueUnlink(connectionId: machine)
+        state.queueUnlink(connectionId: machine)
+        #expect(state.pendingUnlinks.map(\.daemonId) == ["d1"])
+
+        let defaults = try #require(UserDefaults(suiteName: "relay-link-state-\(UUID())"))
+        state.save(to: defaults)
+        #expect(RelayLinkState.load(from: defaults).pendingUnlinks.map(\.daemonId) == ["d1"])
+
+        state.unlinkConfirmed(daemonId: "d1")
+        #expect(state.pendingUnlinks.isEmpty)
+    }
+
+    @Test func linkingTheSameMachineAgainCancelsItsQueuedUnlink() {
+        var state = linked(machine)
+        state.queueUnlink(connectionId: machine)
+        state.record(RelayLink(connectionId: other, daemonId: "d1", relayURL: relay))
+        #expect(state.pendingUnlinks.isEmpty)
+        #expect(state.link(for: other)?.daemonId == "d1")
+    }
+
+    @Test func stateSavedBeforeQueuedUnlinksStillLoads() throws {
+        let defaults = try #require(UserDefaults(suiteName: "relay-link-state-\(UUID())"))
+        let old = #"{"links":[{"connectionId":"6F9619FF-8B86-D011-B42D-00C04FC964FF","daemonId":"d1","relayURL":"https:\/\/push.intentapp.dev"}]}"#
+        defaults.set(Data(old.utf8), forKey: RelayLinkState.defaultsKey)
+        let state = RelayLinkState.load(from: defaults)
+        #expect(state.links.map(\.daemonId) == ["d1"])
+        #expect(state.pendingUnlinks.isEmpty)
     }
 
     @Test func acceptsOnlyTheIntentRelay() throws {

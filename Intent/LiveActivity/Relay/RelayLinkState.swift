@@ -21,6 +21,8 @@ nonisolated struct RelayLinkState: Codable, Equatable, Sendable {
     var links: [RelayLink] = []
     /// The device description the relay last accepted; nil before the first link.
     var sentDevice: RelayDeviceInfo?
+    /// Forgotten machines whose relay link is not confirmed gone yet.
+    var pendingUnlinks: [RelayLink] = []
 
     /// With any machine linked, the relay owns the Live Activity and the app
     /// stops writing it.
@@ -71,11 +73,25 @@ nonisolated struct RelayLinkState: Codable, Equatable, Sendable {
     /// The relay keys a link by daemon, so a re-paired machine replaces its old link.
     mutating func record(_ link: RelayLink) {
         links.removeAll { $0.connectionId == link.connectionId || $0.daemonId == link.daemonId }
+        pendingUnlinks.removeAll { $0.daemonId == link.daemonId }
         links.append(link)
     }
 
-    mutating func remove(connectionId: UUID) {
+    /// The machine was forgotten: stop using its link and keep it until the
+    /// relay confirms the unlink.
+    mutating func queueUnlink(connectionId: UUID) {
+        guard let link = link(for: connectionId) else { return }
         links.removeAll { $0.connectionId == connectionId }
+        queueUnlink(link)
+    }
+
+    mutating func queueUnlink(_ link: RelayLink) {
+        guard !pendingUnlinks.contains(where: { $0.daemonId == link.daemonId }) else { return }
+        pendingUnlinks.append(link)
+    }
+
+    mutating func unlinkConfirmed(daemonId: String) {
+        pendingUnlinks.removeAll { $0.daemonId == daemonId }
     }
 
     /// Links saved before the relay check (or to any other relay) are dropped,
@@ -84,12 +100,22 @@ nonisolated struct RelayLinkState: Codable, Equatable, Sendable {
         let saved = defaults.data(forKey: defaultsKey).flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
         var state = saved ?? Self()
         state.links.removeAll { !isTrustedRelay($0.relayURL) }
+        state.pendingUnlinks.removeAll { !isTrustedRelay($0.relayURL) }
         return state
     }
 
     func save(to defaults: UserDefaults) {
         guard let data = try? JSONEncoder().encode(self) else { return }
         defaults.set(data, forKey: Self.defaultsKey)
+    }
+}
+/// State saved before `pendingUnlinks` existed still decodes.
+extension RelayLinkState {
+    nonisolated init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        links = try container.decodeIfPresent([RelayLink].self, forKey: .links) ?? []
+        sentDevice = try container.decodeIfPresent(RelayDeviceInfo.self, forKey: .sentDevice)
+        pendingUnlinks = try container.decodeIfPresent([RelayLink].self, forKey: .pendingUnlinks) ?? []
     }
 }
 #endif

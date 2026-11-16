@@ -24,6 +24,8 @@ final class PushRelayController {
     /// Machines that could not link; cleared each time the app becomes active.
     private var declined: Set<UUID> = []
     private var linking: Set<UUID> = []
+    /// Machines forgotten this run; a registration that finishes later is undone.
+    private var removedConnections: Set<UUID> = []
     private var pushToken: String?
     private var pushToStartToken: String?
     /// The Live Activity whose push token the relay holds.
@@ -85,6 +87,7 @@ final class PushRelayController {
     /// The saved connections were removed: revoke their links.
     func connectionsRemoved(_ backendIDs: [BackendID]) {
         for backendID in backendIDs {
+            removedConnections.insert(backendID.connectionID)
             Task { await unlink(connectionId: backendID.connectionID) }
         }
     }
@@ -222,8 +225,15 @@ final class PushRelayController {
         let client = try makeClient(baseURL: relayURL)
         let device = currentDevice()
         let registration = try await client.register(linkToken: linkToken, connectionId: connectionId, device: device)
+        let link = RelayLink(connectionId: connectionId, daemonId: registration.daemonId, relayURL: relayURL)
+        guard !removedConnections.contains(connectionId) else {
+            state.queueUnlink(link)
+            state.save(to: defaults)
+            await retryPendingUnlinks()
+            return
+        }
         let wasRelayDriven = state.isRelayDriven
-        state.record(RelayLink(connectionId: connectionId, daemonId: registration.daemonId, relayURL: relayURL))
+        state.record(link)
         state.sentDevice = device
         state.save(to: defaults)
         if !wasRelayDriven {
@@ -233,9 +243,8 @@ final class PushRelayController {
     }
 
     private func unlink(connectionId: UUID) async {
-        guard let link = state.link(for: connectionId) else { return }
-        let client = try? makeClient(baseURL: link.relayURL)
-        state.remove(connectionId: connectionId)
+        guard state.link(for: connectionId) != nil else { return }
+        state.queueUnlink(connectionId: connectionId)
         state.save(to: defaults)
         if !state.isRelayDriven {
             AgentLiveActivityController.shared.setRelayDriven(false)
@@ -243,12 +252,23 @@ final class PushRelayController {
         if let connection = sessions[connectionId]?.connection, connection.connectionState == .connected {
             _ = try? await connection.request("push.revokeLink", params: [:], timeout: ConnectionManager.defaultRequestTimeout)
         }
-        do {
-            try await client?.unlink(daemonId: link.daemonId)
-        } catch RelayClientError.status(Self.relayNotFoundStatus, _) {
-            return
-        } catch {
-            AppLog.notifications.warning("[PushRelay] Unlink failed: \(error)")
+        await retryPendingUnlinks()
+    }
+
+    /// Each forgotten link stays queued until the relay confirms it is gone.
+    private func retryPendingUnlinks() async {
+        for link in state.pendingUnlinks {
+            guard let client = try? makeClient(baseURL: link.relayURL) else { continue }
+            do {
+                try await client.unlink(daemonId: link.daemonId)
+            } catch RelayClientError.status(Self.relayNotFoundStatus, _) {
+                // Already gone at the relay.
+            } catch {
+                AppLog.notifications.warning("[PushRelay] Unlink will retry: \(error)")
+                continue
+            }
+            state.unlinkConfirmed(daemonId: link.daemonId)
+            state.save(to: defaults)
         }
     }
 
@@ -261,6 +281,7 @@ final class PushRelayController {
                 Task { await unlink(connectionId: link.connectionId) }
             }
         }
+        Task { await retryPendingUnlinks() }
         for connectionId in sessions.keys { linkIfNeeded(connectionId) }
         scheduleDeviceSync()
         Task { await applySnapshot() }
