@@ -34,14 +34,6 @@ enum ConnectionFailureRetryPolicy: Equatable {
     case manualLogOff
 }
 
-/// A pairing request delivered via an `intent://pair` deep link, awaiting
-/// explicit user confirmation before any connection is attempted — unlike the
-/// in-app camera scan, a deep link can be triggered by any web page.
-struct DeepLinkPairingRequest: Identifiable, Equatable {
-    let id = UUID()
-    let payload: PairingPayload
-}
-
 struct AppCoordinatorDependencies {
     let workspaceStore: WorkspaceStore
     let connection: any SessionConnectionManaging
@@ -109,9 +101,9 @@ class AppCoordinator {
     var savedConnectionsUndecodable = false
     /// Settings' snapshot, refreshed after the existing local/iCloud merge.
     var savedConnections: [StoredConnection] = []
-    /// Deep-link pairing awaiting user confirmation; drives the
-    /// DeepLinkPairingView sheet in RootView.
-    var pendingDeepLinkPairing: DeepLinkPairingRequest?
+    /// Deep link awaiting user confirmation; drives the DeepLinkPairingView
+    /// or InviteJoinView sheet in RootView.
+    var pendingDeepLink: DeepLinkRequest?
     /// Keys ConnectingView's one-shot connection-attempt task. Bumped by
     /// onSwitchConnection so a switch performed while currentScreen is
     /// already .connecting (e.g. a deep-link pairing confirmed over the
