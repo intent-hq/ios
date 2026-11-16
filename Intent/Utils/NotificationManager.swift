@@ -81,7 +81,7 @@ struct ToastInfo: Equatable {
     @ObservationIgnored let applicationState: () -> UIApplication.State
     @ObservationIgnored let presentFeedback: () -> Void
     /// Whether the push relay already alerts for a connection's agents.
-    @ObservationIgnored let relayDeliversAlerts: (UUID) -> Bool
+    @ObservationIgnored let relayDeliversAlerts: @MainActor (UUID) -> Bool
     /// Whether the source window's scene emits the feedback sound instead of
     /// the system notification service. True on visionOS, where the
     /// global system sound is non-spatial: emitting from the source window's
@@ -139,7 +139,7 @@ struct ToastInfo: Equatable {
             HapticManager.notification(.success)
         },
         windowEmitsFeedbackSound: Bool = NotificationManager.platformWindowEmitsFeedbackSound,
-        relayDeliversAlerts: @escaping (UUID) -> Bool = NotificationManager.platformRelayDeliversAlerts,
+        relayDeliversAlerts: @escaping @MainActor (UUID) -> Bool = NotificationManager.platformRelayDeliversAlerts,
         connection: ConnectionManagerRouting = ConnectionManager.shared,
         workspaceStore: WorkspaceStore = WorkspaceStore.shared,
         registerEvents: Bool = true
