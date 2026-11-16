@@ -38,6 +38,35 @@ extension NotificationManagerTests {
         #expect(center.requests.count == 1)
     }
 
+    @Test @MainActor func relayLinkedConnectionLeavesTheAlertToTheRelay() {
+        let (manager, center) = makeNotificationManager(state: .background, relayDeliversAlerts: true)
+
+        manager.presentIdleAlert(
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
+
+        #expect(center.requests.isEmpty)
+    }
+
+    @Test @MainActor func relayLinkedConnectionDoesNotToastTheIdleEventInForeground() {
+        var feedbackCount = 0
+        let (manager, center) = makeNotificationManager(state: .active, relayDeliversAlerts: true) {
+            feedbackCount += 1
+        }
+
+        manager.presentIdleAlert(
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
+
+        #expect(center.requests.isEmpty)
+        #expect(manager.currentToast == nil)
+        #expect(feedbackCount == 0)
+    }
+
     @Test @MainActor func activeAppPostsSystemSoundAndKeepsFeedbackAndToast() {
         var feedbackCount = 0
         let (manager, center) = makeNotificationManager(state: .active) {

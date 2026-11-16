@@ -70,6 +70,9 @@ extension NotificationManager {
         sourceBackendID: BackendID?
     ) {
         guard sourceStillCurrent(sourceBackendID, connectionId: connectionId) else { return }
+        // The relay's remote alert stands in for this one; in the foreground
+        // it reaches `handleForegroundNotification` and toasts there.
+        guard !relayDeliversAlerts(connectionId) else { return }
         // Look up workspace name in the source session's store
         let workspaceName = workspaceStore(for: sourceBackendID).workspaces
             .first { $0.id == workspaceId }?.title ?? "Workspace"

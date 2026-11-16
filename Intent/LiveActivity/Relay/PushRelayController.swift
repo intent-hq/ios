@@ -38,6 +38,12 @@ final class PushRelayController {
 
     var isRelayDriven: Bool { state.isRelayDriven }
 
+    /// A linked machine's agent alerts come from the relay as remote
+    /// notifications, so the app does not post its own for that machine.
+    func deliversAlerts(for connectionId: UUID) -> Bool {
+        state.link(for: connectionId) != nil
+    }
+
     /// Starts token streams and launch work. Call once at app launch.
     func start() {
         AgentLiveActivityController.shared.setRelayDriven(state.isRelayDriven)
