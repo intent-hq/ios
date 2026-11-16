@@ -63,6 +63,14 @@ extension WorkspaceDetailView {
         }
     }
 
+    /// Owners (and host members, who manage every workspace) can share while
+    /// connected; the host still refuses anyone it doesn't allow.
+    private var canShare: Bool {
+        session.connection.connectionState == .connected
+            && session.connection.currentPrincipal?.canManageWorkspaces == true
+            && workspaceId != Workspace.chiefWorkspaceId
+    }
+
     var workspaceActionsMenu: some View {
         WorkspaceActionsMenu(
             workspaceId: workspaceId,
@@ -73,6 +81,7 @@ extension WorkspaceDetailView {
             onCreateBrowser: { presentation.showNewBrowser = true },
             onTransfer: session.connection.currentPrincipal?.isOwner == true
                 && session.connection.connectionState == .connected ? { presentation.showTransferWorkspace = true } : nil,
+            onShare: canShare ? { presentation.shareRequest = ShareWorkspaceRequest(workspaceId: workspaceId, workspaceTitle: workspaceName) } : nil,
             onCollapseSidebar: usesVerticalBar ? nil : sidebar?.onCollapse,
             onArchive: { presentation.showArchiveConfirmation = true },
             onDelete: { presentation.showDeleteConfirmation = true }

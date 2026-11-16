@@ -208,6 +208,7 @@ struct WorkspaceDetailView: View {
             onBrowserCreated: { selectedTab = .agents },
             agentStore: agentStore
         ))
+        .modifier(ShareWorkspaceSheet(presentation: presentation))
     }
 }
 

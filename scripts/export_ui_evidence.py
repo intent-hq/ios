@@ -360,6 +360,13 @@ CAPTURES = {
         "testInviteWithoutAnOwnMacExplainsAndOffersCopyLink": ("Invite join needs Mac light", "Invite join needs Mac dark"),
         "testExpiredInviteExplainsWithoutRetry": ("Invite join expired light",),
     },
+    "ShareWorkspaceUITests": {
+        "testShareSheetCreatesInviteLinks": tuple(
+            f"Share workspace{step} {appearance}"
+            for appearance in ("light", "dark")
+            for step in ("", " link created", " one person")
+        ),
+    },
     "TurnFailureNoticeUITests": {
         "testUsageLimitCardHidesRawDetailsUntilExpanded": tuple(
             f"Turn failure {state} {appearance}"
