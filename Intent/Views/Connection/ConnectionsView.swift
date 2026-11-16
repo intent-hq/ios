@@ -324,7 +324,7 @@ private struct ConnectionPairingActions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Constants.Connections.rowSpacing) {
-            Text(isEmbedded ? "PAIR NEW" : "Add Connection")
+            Text(isEmbedded ? "NEW CONNECTION" : "Add Connection")
                 .interFont(Constants.Typography.eyebrow)
                 .foregroundStyle(Constants.Connections.sectionForeground(for: colorScheme, contrast: contrast))
                 .fixedSize(horizontal: false, vertical: true)

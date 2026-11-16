@@ -9,7 +9,7 @@ struct SettingsPairingSection: View {
     var onManualPairing: (() -> Void)?
 
     var body: some View {
-        SettingsSection(title: "PAIR NEW") {
+        SettingsSection(title: "NEW CONNECTION") {
             ConnectionPairingButtons(
                 qrTitle: "QR Code",
                 accessibilityPrefix: "settings.pairing",

@@ -6,10 +6,10 @@ struct SettingsSupportSection: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            #if os(iOS)
-            SettingsLiveActivityRow()
+            Button { showingDiagnosticLogs = true } label: {
+                SettingsActionLabel(title: "Export logs", image: .downloadFile)
+            }
             Divider()
-            #endif
             NavigationLink {
                 AcknowledgementsView()
                     .environment(\.colorScheme, colorScheme)
@@ -17,10 +17,6 @@ struct SettingsSupportSection: View {
                     .toolbar(.visible, for: .navigationBar)
             } label: {
                 SettingsActionLabel(title: "Acknowledgements", image: .file)
-            }
-            Divider()
-            Button { showingDiagnosticLogs = true } label: {
-                SettingsActionLabel(title: "Export logs", image: .downloadFile)
             }
         }
         .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct LogOffConfirmationSheet: View {
+    var machineName: String?
     let onLogOff: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -28,10 +29,15 @@ struct LogOffConfirmationSheet: View {
         .accessibilityAction(.escape) { dismiss() }
     }
 
+    private var title: LocalizedStringKey {
+        if let machineName { return "Disconnect from \(machineName)?" }
+        return "Disconnect?"
+    }
+
     private var heading: some View {
         VStack(spacing: SettingsStyle.sectionHeaderSpacing) {
             ConnectionSheetText(
-                "Disconnect?",
+                title,
                 style: Constants.Typography.heading2,
                 tracking: Constants.Connections.headingTracking
             )
@@ -90,11 +96,11 @@ struct LogOffConfirmationSheet: View {
 }
 
 #Preview("Disconnect - Light") {
-    LogOffConfirmationSheet {}
+    LogOffConfirmationSheet(machineName: "Studio Mac") {}
         .environment(\.colorScheme, .light)
 }
 
 #Preview("Disconnect - Dark") {
-    LogOffConfirmationSheet {}
+    LogOffConfirmationSheet(machineName: "Studio Mac") {}
         .environment(\.colorScheme, .dark)
 }

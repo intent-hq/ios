@@ -11,8 +11,9 @@ nonisolated final class SettingsUITests: XCTestCase {
             let app = launch(themePreference: appearance.lowercased())
             openSettings(app)
             let settings = app.scrollViews["settings.scroll"]
-            XCTAssertTrue(settings.staticTexts["PAIR NEW"].exists)
+            XCTAssertTrue(settings.staticTexts["NEW CONNECTION"].exists)
             XCTAssertFalse(settings.staticTexts["CONNECTIONS"].exists)
+            XCTAssertEqual(settings.staticTexts["settings.connection.name"].label, "Studio Mac")
             for name in ["Studio Mac", "Travel Mac"] {
                 XCTAssertFalse(settings.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch.exists)
             }
@@ -101,7 +102,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         acknowledgements.buttons.firstMatch.tap()
         XCTAssertTrue(acknowledgements.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        XCTAssertTrue(app.staticTexts["PAIR NEW"].exists)
+        XCTAssertTrue(app.staticTexts["NEW CONNECTION"].exists)
         XCTAssertTrue(app.buttons["settings.close"].isHittable)
     }
 
@@ -112,6 +113,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         capture(app, named: "Settings-LargeText-Top")
         assertScrollingLogOffAndRevealActions(app)
         capture(app, named: "Settings-LargeText-Actions")
+        scrollToTop(app)
         app.buttons["Disconnect"].tap()
         let confirmation = app.staticTexts["log-off.title"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
@@ -119,7 +121,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["log-off.cancel"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        XCTAssertTrue(app.staticTexts["PAIR NEW"].exists)
+        XCTAssertTrue(app.staticTexts["NEW CONNECTION"].exists)
     }
 
     @MainActor
@@ -131,6 +133,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         logOff.tap()
         let confirmation = app.staticTexts["log-off.title"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertEqual(confirmation.label, "Disconnect from Studio Mac?")
         app.buttons["log-off.cancel"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         reveal(logOff, in: app)
@@ -139,7 +142,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        XCTAssertTrue(app.staticTexts["PAIR NEW"].exists)
+        XCTAssertTrue(app.staticTexts["NEW CONNECTION"].exists)
     }
 
     @MainActor
@@ -164,27 +167,27 @@ nonisolated final class SettingsUITests: XCTestCase {
     private func assertScrollingLogOffAndRevealActions(_ app: XCUIApplication) {
         let close = app.buttons["settings.close"]
         let initialCloseY = close.frame.minY
-        for title in ["Manual Connection", "Acknowledgements", "Export logs"] {
+        for title in ["Disconnect", "Manual Connection", "Export logs"] {
             let button = app.buttons[title]
             reveal(button, in: app)
             XCTAssertGreaterThanOrEqual(button.frame.height, 44)
         }
-        let logOff = app.buttons["Disconnect"]
-        reveal(logOff, in: app)
-        XCTAssertGreaterThanOrEqual(logOff.frame.height, 44)
+        let acknowledgements = app.buttons["Acknowledgements"]
+        reveal(acknowledgements, in: app)
+        XCTAssertGreaterThanOrEqual(acknowledgements.frame.height, 44)
         XCTAssertLessThanOrEqual(
             app.buttons["Export logs"].frame.maxY,
-            logOff.frame.minY,
-            "Disconnect must follow the support actions without overlap"
+            acknowledgements.frame.minY,
+            "Acknowledgements must come last, without overlap"
         )
         if !close.isHittable || close.frame.minY < initialCloseY - 1 {
-            let lowerFrame = logOff.frame
+            let lowerFrame = acknowledgements.frame
             scrollToTop(app)
             XCTAssertTrue(
-                !logOff.isHittable || logOff.frame.minY > lowerFrame.minY + 1,
-                "Disconnect must move with Settings content, not stay pinned to the viewport"
+                !acknowledgements.isHittable || acknowledgements.frame.minY > lowerFrame.minY + 1,
+                "Support actions must move with Settings content, not stay pinned to the viewport"
             )
-            reveal(logOff, in: app)
+            reveal(acknowledgements, in: app)
         }
     }
 
