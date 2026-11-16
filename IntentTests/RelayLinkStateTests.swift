@@ -48,7 +48,7 @@ struct RelayLinkStateTests {
             "https://push.intentapp.dev/v1",
             "https://push.intentapp.dev?x=1",
             "https://intent-push.example.workers.dev",
-            "http://127.0.0.1:8787",
+            "http://127.0.0.1:8787"
         ]
         for text in refused {
             let url = try #require(URL(string: text))
