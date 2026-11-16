@@ -26,6 +26,8 @@ final class PushRelayController {
     private var linking: Set<UUID> = []
     /// Machines forgotten this run; a registration that finishes later is undone.
     private var removedConnections: Set<UUID> = []
+    /// Tail of the relay registration and unlink chain.
+    private var relayOperations: Task<Void, Never>?
     private var pushToken: String?
     private var pushToStartToken: String?
     /// The Live Activity whose push token the relay holds.
@@ -224,22 +226,37 @@ final class PushRelayController {
         }
         let client = try makeClient(baseURL: relayURL)
         let device = currentDevice()
-        let registration = try await client.register(linkToken: linkToken, connectionId: connectionId, device: device)
-        let link = RelayLink(connectionId: connectionId, daemonId: registration.daemonId, relayURL: relayURL)
-        guard !removedConnections.contains(connectionId) else {
-            state.queueUnlink(link)
+        let forgotten = try await serialized { [self] in
+            let registration = try await client.register(linkToken: linkToken, connectionId: connectionId, device: device)
+            let link = RelayLink(connectionId: connectionId, daemonId: registration.daemonId, relayURL: relayURL)
+            guard !removedConnections.contains(connectionId) else {
+                state.queueUnlink(link)
+                state.save(to: defaults)
+                return true
+            }
+            let wasRelayDriven = state.isRelayDriven
+            state.record(link)
+            state.sentDevice = device
             state.save(to: defaults)
-            await retryPendingUnlinks()
-            return
+            if !wasRelayDriven {
+                AgentLiveActivityController.shared.setRelayDriven(true)
+                if let liveActivity { sendActivityToken(liveActivity.token) }
+            }
+            return false
         }
-        let wasRelayDriven = state.isRelayDriven
-        state.record(link)
-        state.sentDevice = device
-        state.save(to: defaults)
-        if !wasRelayDriven {
-            AgentLiveActivityController.shared.setRelayDriven(true)
-            if let liveActivity { sendActivityToken(liveActivity.token) }
+        if forgotten { await retryPendingUnlinks() }
+    }
+
+    /// Registrations and unlinks reach the relay one at a time, so an unlink
+    /// already on the wire cannot revoke the registration that replaced it.
+    private func serialized<T: Sendable>(_ operation: @escaping @MainActor () async throws -> T) async throws -> T {
+        let previous = relayOperations
+        let task = Task { @MainActor in
+            await previous?.value
+            return try await operation()
         }
+        relayOperations = Task { _ = try? await task.value }
+        return try await task.value
     }
 
     private func unlink(connectionId: UUID) async {
@@ -257,19 +274,28 @@ final class PushRelayController {
 
     /// Each forgotten link stays queued until the relay confirms it is gone.
     private func retryPendingUnlinks() async {
-        for link in state.pendingUnlinks {
-            guard let client = try? makeClient(baseURL: link.relayURL) else { continue }
-            do {
-                try await client.unlink(daemonId: link.daemonId)
-            } catch RelayClientError.status(Self.relayNotFoundStatus, _) {
-                // Already gone at the relay.
-            } catch {
-                AppLog.notifications.warning("[PushRelay] Unlink will retry: \(error)")
-                continue
+        try? await serialized { [self] in
+            for link in state.pendingUnlinks {
+                await sendUnlink(link)
             }
-            state.unlinkConfirmed(daemonId: link.daemonId)
-            state.save(to: defaults)
         }
+    }
+
+    private func sendUnlink(_ link: RelayLink) async {
+        // Re-pairing removes the entry; never revoke the replacement.
+        guard state.pendingUnlinks.contains(link),
+              let client = try? makeClient(baseURL: link.relayURL)
+        else { return }
+        do {
+            try await client.unlink(daemonId: link.daemonId)
+        } catch RelayClientError.status(Self.relayNotFoundStatus, _) {
+            // Already gone at the relay.
+        } catch {
+            AppLog.notifications.warning("[PushRelay] Unlink will retry: \(error)")
+            return
+        }
+        state.unlinkConfirmed(daemonId: link.daemonId)
+        state.save(to: defaults)
     }
 
     // MARK: - Launch and foreground
