@@ -48,7 +48,7 @@ struct PushRelayContractTests {
                      "title":"Fix reconnect","agentId":"a1","agentName":"Coder"}}
         """#
         let state = try JSONDecoder().decode(AgentActivityAttributes.ContentState.self, from: Data(json.utf8))
-        #expect(state.headline == "Finished")
+        #expect(state.headline == "Fix reconnect")
         #expect(state.displayRows.map(\.workspaceId) == ["w1"])
         #expect(state.firstLinkURL == state.finished?.link?.url)
 

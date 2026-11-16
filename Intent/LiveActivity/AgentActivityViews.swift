@@ -16,6 +16,8 @@ enum AgentActivityStyle {
     static let contentPadding: CGFloat = 16
     static let islandInset: CGFloat = 4
     static let staleOpacity = 0.6
+    static let summaryLines = 3
+    static let compactSummaryLines = 2
 
     private static let runningRGB: UInt32 = 0xDDEC61
     private static let byteMask: UInt32 = 0xFF
@@ -35,7 +37,7 @@ extension AgentActivityAttributes.ContentState {
     /// The finished agent, shown only once nothing runs.
     var shownFinished: AgentActivityRow? { runningCount == 0 ? finished : nil }
 
-    var headline: String { shownFinished == nil ? "\(runningCount) running" : "Finished" }
+    var headline: String { shownFinished?.title ?? "\(runningCount) running" }
 
     var displayRows: [AgentActivityRow] { shownFinished.map { [$0] } ?? rows }
 
@@ -68,8 +70,10 @@ struct AgentActivityLockScreenView: View {
                     .frame(width: AgentActivityStyle.markSize, height: AgentActivityStyle.markSize)
                 Text(state.headline)
                     .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .layoutPriority(1)
                 Spacer(minLength: AgentActivityStyle.headerSpacing)
-                if isStale {
+                if isStale, state.shownFinished == nil {
                     Text("Updated \(state.updatedDate, style: .time)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -104,10 +108,16 @@ struct AgentActivityRowView: View {
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - AgentActivityStyle.dotBaselineOffset }
             }
             VStack(alignment: .leading, spacing: AgentActivityStyle.rowTextSpacing) {
-                Text(row.title)
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                if showsDetail, let detail = isFinished ? row.agentName : row.detail {
+                if isFinished {
+                    Text(row.detail ?? "Finished")
+                        .font(.subheadline)
+                        .lineLimit(showsDetail ? AgentActivityStyle.summaryLines : AgentActivityStyle.compactSummaryLines)
+                } else {
+                    Text(row.title)
+                        .font(.subheadline.weight(.medium))
+                        .lineLimit(1)
+                }
+                if showsDetail, !isFinished, let detail = row.detail {
                     Text(detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -168,7 +178,7 @@ struct AgentActivityExpandedHeadline: View {
             Text(state.headline)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
-                .fixedSize()
+                .fixedSize(horizontal: state.shownFinished == nil, vertical: false)
         }
         .padding(.leading, AgentActivityStyle.islandInset)
     }

@@ -153,7 +153,14 @@ final class AgentLiveActivityController {
             var finished = state
             finished.rows = []
             finished.runningCount = 0
-            finished.finished = row
+            finished.finished = AgentActivityRow(
+                connectionId: row.connectionId,
+                workspaceId: row.workspaceId,
+                title: row.title,
+                detail: row.detail ?? "Reconnect storm fixed: retries now back off with jitter and the flaky test passes.",
+                agentId: row.agentId,
+                agentName: row.agentName
+            )
             return finished
         }
         #endif
