@@ -35,11 +35,38 @@ struct RelayLinkStateTests {
         #expect(!state.isRelayDriven)
     }
 
-    @Test func firstLinkPicksTheRelay() throws {
-        let elsewhere = try #require(URL(string: "https://relay.example.com"))
-        #expect(RelayLinkState().accepts(relayURL: elsewhere))
+    @Test func acceptsOnlyTheIntentRelay() throws {
+        #expect(RelayLinkState().accepts(relayURL: relay))
         #expect(linked(machine).accepts(relayURL: relay))
-        #expect(!linked(machine).accepts(relayURL: elsewhere))
+        #expect(RelayLinkState().accepts(relayURL: try #require(URL(string: "https://PUSH.intentapp.dev/"))))
+        let refused = [
+            "https://relay.example.com",
+            "http://push.intentapp.dev",
+            "https://push.intentapp.dev:8443",
+            "https://push.intentapp.dev.example.com",
+            "https://evil@push.intentapp.dev",
+            "https://push.intentapp.dev/v1",
+            "https://push.intentapp.dev?x=1",
+            "https://intent-push.example.workers.dev",
+            "http://127.0.0.1:8787",
+        ]
+        for text in refused {
+            let url = try #require(URL(string: text))
+            #expect(!RelayLinkState().accepts(relayURL: url), "\(text)")
+            #expect(!linked(machine).accepts(relayURL: url), "\(text)")
+        }
+    }
+
+    @Test func dropsSavedLinksToOtherRelays() throws {
+        let defaults = try #require(UserDefaults(suiteName: "RelayLinkStateTests-\(UUID().uuidString)"))
+        // The untrusted link comes first, so it would otherwise pick the relay.
+        var state = RelayLinkState()
+        state.links.append(RelayLink(connectionId: other, daemonId: "d2", relayURL: try #require(URL(string: "https://relay.example.com"))))
+        state.record(RelayLink(connectionId: machine, daemonId: "d1", relayURL: relay))
+        state.save(to: defaults)
+        let loaded = RelayLinkState.load(from: defaults)
+        #expect(loaded.links.map(\.connectionId) == [machine])
+        #expect(loaded.relayURL == relay)
     }
 
     @Test func repairedMachineReplacesItsLink() {

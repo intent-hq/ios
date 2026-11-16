@@ -13,6 +13,10 @@ nonisolated struct RelayLink: Codable, Equatable, Sendable {
 /// follow from it. Persisted as JSON in `UserDefaults`.
 nonisolated struct RelayLinkState: Codable, Equatable, Sendable {
     static let defaultsKey = "pushRelayLinkState"
+    /// The only relay the phone sends its push tokens to. A machine names the
+    /// relay in `push.createLink`, so any other origin is refused: a hostile
+    /// machine could otherwise collect the tokens and push through the real relay.
+    static let trustedRelayHost = "push.intentapp.dev"
 
     var links: [RelayLink] = []
     /// The device description the relay last accepted; nil before the first link.
@@ -36,7 +40,20 @@ nonisolated struct RelayLinkState: Codable, Equatable, Sendable {
     }
 
     func accepts(relayURL url: URL) -> Bool {
-        relayURL.map { $0 == url } ?? true
+        Self.isTrustedRelay(url) && (relayURL.map { $0 == url } ?? true)
+    }
+
+    /// `https://push.intentapp.dev` exactly: no port, user, path, query or fragment.
+    static func isTrustedRelay(_ url: URL) -> Bool {
+        guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
+        return parts.scheme?.lowercased() == "https"
+            && parts.host?.lowercased() == trustedRelayHost
+            && parts.port == nil
+            && parts.user == nil
+            && parts.password == nil
+            && (parts.path.isEmpty || parts.path == "/")
+            && parts.query == nil
+            && parts.fragment == nil
     }
 
     /// Links whose saved connection is gone.
@@ -61,8 +78,13 @@ nonisolated struct RelayLinkState: Codable, Equatable, Sendable {
         links.removeAll { $0.connectionId == connectionId }
     }
 
+    /// Links saved before the relay check (or to any other relay) are dropped,
+    /// so no further tokens go there and honest machines can link again.
     static func load(from defaults: UserDefaults) -> Self {
-        defaults.data(forKey: defaultsKey).flatMap { try? JSONDecoder().decode(Self.self, from: $0) } ?? Self()
+        let saved = defaults.data(forKey: defaultsKey).flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
+        var state = saved ?? Self()
+        state.links.removeAll { !isTrustedRelay($0.relayURL) }
+        return state
     }
 
     func save(to defaults: UserDefaults) {
