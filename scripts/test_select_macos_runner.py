@@ -54,7 +54,7 @@ class RunnerSelectionTests(unittest.TestCase):
         paths = [*(root / ".github").rglob("*.yml"), *(root / ".github").rglob("*.yaml"), *(root / ".github").rglob("*.sh")]
         for path in paths:
             self.assertEqual(re.findall(r"(?<![\w-])macos-(?:\d+|latest)(?:-(?:large|xlarge|intel))?(?![\w-])",
-                                        path.read_text()), [], str(path))
+                                        path.read_text(), re.IGNORECASE), [], str(path))
 
     def select(self, runners, token="fixture", curl_status=0, raw=None, pool_label="intent-ios", reservations=None):
         with tempfile.TemporaryDirectory() as directory:
