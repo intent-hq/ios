@@ -12,7 +12,7 @@ import zlib
 
 SELECTOR = Path(__file__).resolve().parents[1] / ".github/scripts/select-macos-runner.sh"
 REQUIRED = ["self-hosted", "macOS", "ARM64", "intent-ios"]
-HOSTED = '"macos-26-xlarge"'
+HOSTED = '"warp-macos-26-arm64-6x"'
 
 
 def routing_id(name):
@@ -39,13 +39,22 @@ def runner(name, status="online", labels=None, busy=False, routing=True):
 
 class RunnerSelectionTests(unittest.TestCase):
     def test_no_depot_runner_labels(self):
-        # Depot was retired; hosted fallbacks are GitHub-hosted labels.
+        # Depot was retired; hosted fallbacks are WarpBuild labels.
         import re
         root = SELECTOR.parents[2]
         paths = [*(root / ".github").rglob("*.yml"), *(root / ".github").rglob("*.yaml"), *(root / ".github").rglob("*.sh")]
         self.assertIn(SELECTOR, paths)
         for path in paths:
             self.assertEqual(re.findall(r"depot-(?:ubuntu|windows|macos)[\w.-]*", path.read_text()), [], str(path))
+
+    def test_no_github_hosted_mac_labels(self):
+        # GitHub bills hosted macOS minutes even on public repositories; overflow goes to WarpBuild.
+        import re
+        root = SELECTOR.parents[2]
+        paths = [*(root / ".github").rglob("*.yml"), *(root / ".github").rglob("*.yaml"), *(root / ".github").rglob("*.sh")]
+        for path in paths:
+            self.assertEqual(re.findall(r"(?<![\w-])macos-(?:\d+|latest)(?:-(?:large|xlarge|intel))?(?![\w-])",
+                                        path.read_text()), [], str(path))
 
     def select(self, runners, token="fixture", curl_status=0, raw=None, pool_label="intent-ios", reservations=None):
         with tempfile.TemporaryDirectory() as directory:

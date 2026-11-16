@@ -3,8 +3,8 @@ set -euo pipefail
 
 # GITHUB_TOKEN cannot read repository runner status. RUNNER_STATUS_TOKEN needs
 # only Administration: read for this repository. When it is unavailable (for
-# example on a fork PR), use a GitHub-hosted Mac.
-hosted='"macos-26-xlarge"'
+# example on a fork PR), use a WarpBuild Mac.
+hosted='"warp-macos-26-arm64-6x"'
 local_runner='["self-hosted","macOS","ARM64","intent-ios"]'
 pool_label=${RUNNER_POOL_LABEL:-intent-ios}
 preferred_runner=$(jq -cn --arg pool "$pool_label" '["self-hosted","macOS","ARM64",$pool]')
@@ -30,7 +30,7 @@ available_runner() {
 }
 
 if [ -z "${RUNNER_STATUS_TOKEN:-}" ]; then
-  echo '::notice::RUNNER_STATUS_TOKEN is unavailable; using macos-26-xlarge'
+  echo '::notice::RUNNER_STATUS_TOKEN is unavailable; using WarpBuild warp-macos-26-arm64-6x'
 else
   response=$(mktemp)
   trap 'rm -f "$response"' EXIT
@@ -46,10 +46,10 @@ else
       selected="$local_runner"
       echo '::notice::Build pool unavailable; using the intent-ios runner pool'
     else
-      echo '::notice::No unallocated matching Mac is online and idle; using macos-26-xlarge'
+      echo '::notice::No unallocated matching Mac is online and idle; using WarpBuild warp-macos-26-arm64-6x'
     fi
   else
-    echo '::warning::Could not check local Mac status; using macos-26-xlarge'
+    echo '::warning::Could not check local Mac status; using WarpBuild warp-macos-26-arm64-6x'
   fi
 fi
 

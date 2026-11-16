@@ -316,8 +316,8 @@ remain separate evidence for the prototype.
 
 - For app builds: macOS with Xcode and its command-line tools. Tests require an available iPhone
   simulator by default; use `SIM_UDID` to select an iPad. Every CI Mac selects its
-  newest installed GA Xcode 26 (betas and release candidates are skipped); on
-  GitHub-hosted `macos-26-xlarge` that is Xcode 26.6 (the local iPhone pool runs 26.3).
+  newest installed GA Xcode 26 (betas and release candidates are skipped); the local
+  iPhone pool runs 26.3, and WarpBuild overflow Macs use their image's newest Xcode 26.
 - Network access for the first Swift package resolution and pinned Go tool download.
 - A Go toolchain compatible with the version in `TailcatKit/go.mod`. iOS commands
   automatically run `TailcatKit/build_xcframework.sh` when the gitignored framework
@@ -536,7 +536,7 @@ all eleven focused iPad regressions: sidebar and rail navigation, search, the
 Pull Requests section, the empty detail-pane placeholder, and commit and file
 diff viewing in the main pane. Each lane owns its build directory,
 disposable simulator, results, and evidence. All lanes prefer an idle
-self-hosted Mac; GitHub-hosted Macs handle overflow when the local pool is busy.
+self-hosted Mac; WarpBuild Macs handle overflow when the local pool is busy.
 Matrix fail-fast is
 disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
 Go tests, wrapper self-tests, and the strict SwiftLint gate run on Linux.
@@ -722,10 +722,11 @@ before the move to GitHub-hosted runners) for iPad and 26.3 on the local iPhone 
 The pools do not guarantee the same toolchain or simulator runtime. Record the
 runner, Xcode, and runtime when comparing timings or investigating failures.
 Selectors (`.github/scripts/select-macos-runner.sh`) use `RUNNER_STATUS_TOKEN` to inspect the pools and fall back to
-GitHub-hosted `macos-26-xlarge` (Apple Silicon) when every matching local runner is
+WarpBuild `warp-macos-26-arm64-6x` (Apple Silicon) when every matching local runner is
 busy or offline, or runner status cannot be read. Selection uses a snapshot of
 runner availability. CI allocates each idle service once across builds and UI
-lanes, then sends remaining jobs to hosted Macs. Independent workflows can still
+lanes, then sends remaining jobs to WarpBuild Macs. GitHub-hosted macOS labels
+are not used because GitHub bills them even on public repositories. Independent workflows can still
 race for the same capacity before GitHub assigns them.
 Each local registration must carry `intent-ios-runner-<id>`, using its GitHub
 runner ID. The selector verifies that label is unique and includes it in the
