@@ -32,10 +32,15 @@ enum AgentActivityStyle {
 }
 
 extension AgentActivityAttributes.ContentState {
-    var headline: String { "\(runningCount) running" }
+    /// The finished agent, shown only once nothing runs.
+    var shownFinished: AgentActivityRow? { runningCount == 0 ? finished : nil }
+
+    var headline: String { shownFinished == nil ? "\(runningCount) running" : "Finished" }
+
+    var displayRows: [AgentActivityRow] { shownFinished.map { [$0] } ?? rows }
 
     var firstLinkURL: URL? {
-        rows.lazy.compactMap { $0.link?.url }.first
+        displayRows.lazy.compactMap { $0.link?.url }.first
     }
 }
 
@@ -71,9 +76,9 @@ struct AgentActivityLockScreenView: View {
                 }
             }
             VStack(alignment: .leading, spacing: AgentActivityStyle.rowSpacing) {
-                ForEach(state.rows) { row in
+                ForEach(state.displayRows) { row in
                     AgentActivityRowLink(row: row) {
-                        AgentActivityRowView(row: row, showsDetail: true)
+                        AgentActivityRowView(row: row, showsDetail: true, isFinished: state.shownFinished != nil)
                     }
                 }
             }
@@ -86,18 +91,23 @@ struct AgentActivityLockScreenView: View {
 struct AgentActivityRowView: View {
     let row: AgentActivityRow
     let showsDetail: Bool
+    var isFinished = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: AgentActivityStyle.rowSpacing) {
-            Circle()
-                .fill(AgentActivityStyle.running)
-                .frame(width: AgentActivityStyle.dotSize, height: AgentActivityStyle.dotSize)
-                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - AgentActivityStyle.dotBaselineOffset }
+            if isFinished {
+                AgentActivityCheck()
+            } else {
+                Circle()
+                    .fill(AgentActivityStyle.running)
+                    .frame(width: AgentActivityStyle.dotSize, height: AgentActivityStyle.dotSize)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - AgentActivityStyle.dotBaselineOffset }
+            }
             VStack(alignment: .leading, spacing: AgentActivityStyle.rowTextSpacing) {
                 Text(row.title)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
-                if showsDetail, let detail = row.detail {
+                if showsDetail, let detail = isFinished ? row.agentName : row.detail {
                     Text(detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -107,6 +117,15 @@ struct AgentActivityRowView: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+struct AgentActivityCheck: View {
+    var body: some View {
+        Image(systemName: "checkmark")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(AgentActivityStyle.running)
+            .accessibilityLabel("Finished")
     }
 }
 
@@ -128,9 +147,13 @@ struct AgentActivityCompactCount: View {
     let state: AgentActivityAttributes.ContentState
 
     var body: some View {
-        Text("\(state.runningCount)")
-            .font(.subheadline.weight(.semibold).monospacedDigit())
-            .foregroundStyle(AgentActivityStyle.running)
+        if state.shownFinished != nil {
+            AgentActivityCheck()
+        } else {
+            Text("\(state.runningCount)")
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(AgentActivityStyle.running)
+        }
     }
 }
 
@@ -156,9 +179,9 @@ struct AgentActivityExpandedRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AgentActivityStyle.compactRowSpacing) {
-            ForEach(state.rows) { row in
+            ForEach(state.displayRows) { row in
                 AgentActivityRowLink(row: row) {
-                    AgentActivityRowView(row: row, showsDetail: false)
+                    AgentActivityRowView(row: row, showsDetail: false, isFinished: state.shownFinished != nil)
                 }
             }
         }

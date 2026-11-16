@@ -126,7 +126,7 @@ final class AgentLiveActivityController {
                 store.workspaces.map { AgentActivityContent.Entry(connectionId: backendID.connectionID, workspace: $0) }
             }
         let result = AgentActivityContent.make(from: entries, now: .now)
-        let content = ActivityContent(state: result.state, staleDate: .now.addingTimeInterval(Self.staleAfter))
+        let content = ActivityContent(state: Self.demoState(result.state), staleDate: .now.addingTimeInterval(Self.staleAfter))
 
         let activityState = activityID.flatMap(Self.state(id:))
         if activityState == .dismissed {
@@ -144,6 +144,20 @@ final class AgentLiveActivityController {
             return
         }
         await Self.update(id: id, content: content)
+    }
+
+    /// `--demo-live-activity-finished` shows the relay's finished card for screenshots.
+    private static func demoState(_ state: AgentActivityAttributes.ContentState) -> AgentActivityAttributes.ContentState {
+        #if DEBUG
+        if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-live-activity-finished"), let row = state.rows.first {
+            var finished = state
+            finished.rows = []
+            finished.runningCount = 0
+            finished.finished = row
+            return finished
+        }
+        #endif
+        return state
     }
 
     // Activities are not Sendable: each helper looks one up and uses it

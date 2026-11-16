@@ -41,6 +41,27 @@ struct PushRelayContractTests {
         #expect(state.rows[1].link == nil)
     }
 
+    @Test func finishedContentStateShowsTheFinishedAgentOnceNothingRuns() throws {
+        let json = #"""
+        {"rows":[],"runningCount":0,"updatedAt":1800000000,
+         "finished":{"connectionId":"6F9619FF-8B86-D011-B42D-00C04FC964FF","workspaceId":"w1",
+                     "title":"Fix reconnect","agentId":"a1","agentName":"Coder"}}
+        """#
+        let state = try JSONDecoder().decode(AgentActivityAttributes.ContentState.self, from: Data(json.utf8))
+        #expect(state.headline == "Finished")
+        #expect(state.displayRows.map(\.workspaceId) == ["w1"])
+        #expect(state.firstLinkURL == state.finished?.link?.url)
+
+        var running = state
+        running.runningCount = 1
+        running.rows = [try #require(state.finished)]
+        running.finished = AgentActivityRow(
+            connectionId: UUID(), workspaceId: "old", title: "Old", detail: nil, agentId: nil, agentName: nil
+        )
+        #expect(running.headline == "1 running")
+        #expect(running.displayRows.map(\.workspaceId) == ["w1"])
+    }
+
     @Test func publicKeyAndDeviceIdMatchRelayDerivation() {
         #expect(signer.publicKeyX963.count == 65)
         #expect(signer.publicKey == "BFFcPW6545a5BNP-yn9U_c0MwemXvzddylFa0KbDtANfRTa-OlDzGPv5pUdZAqIhUCvvDVfgjFOyzApW8X2fk1Q")

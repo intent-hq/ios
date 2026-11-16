@@ -85,6 +85,8 @@ nonisolated struct AgentActivityAttributes: ActivityAttributes, Sendable {
         var runningCount: Int
         /// Unix seconds, so the push relay's JSON decodes without a date strategy.
         var updatedAt: Double
+        /// The agent that just finished; the relay sets it when the last one stops.
+        var finished: AgentActivityRow?
 
         var updatedDate: Date { Date(timeIntervalSince1970: updatedAt) }
     }
