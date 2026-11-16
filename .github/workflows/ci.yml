@@ -80,8 +80,8 @@ jobs:
     name: Select macOS runner
     runs-on: ubuntu-24.04
     outputs:
-      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"macos-26-xlarge"' }}
-      runs-on: ${{ steps.select.outputs.runs-on || '"macos-26-xlarge"' }}
+      build-runs-on: ${{ steps.select-build.outputs.runs-on || '"warp-macos-26-arm64-6x"' }}
+      runs-on: ${{ steps.select.outputs.runs-on || '"warp-macos-26-arm64-6x"' }}
       fixture-capture-repetitions: ${{ steps.capture-contract.outputs.repetitions || '2' }}
       ui-matrix: ${{ steps.ui-lanes.outputs.matrix }}
     steps:
@@ -272,7 +272,7 @@ jobs:
     # step below waits for those jobs and fails this one if either did not
     # succeed. All three jobs still run in parallel.
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"macos-26-xlarge"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.runs-on || '"warp-macos-26-arm64-6x"') }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.pre_pr_gate && 120 || 45 }}
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -1052,7 +1052,7 @@ jobs:
     # dispatch to save runner time.
     if: ${{ !cancelled() && !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     needs: select-macos-runner
-    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"macos-26-xlarge"') }}
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"warp-macos-26-arm64-6x"') }}
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'

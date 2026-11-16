@@ -518,7 +518,7 @@ class OrdinaryCITests(unittest.TestCase):
                                         text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 lanes = json.loads(output.read_text().removeprefix("matrix="))["include"]
-                self.assertTrue(all(lane["runs-on"] == "macos-26-xlarge" for lane in lanes))
+                self.assertTrue(all(lane["runs-on"] == "warp-macos-26-arm64-6x" for lane in lanes))
                 self.assertEqual(len({lane["lane"] for lane in lanes}), len(lanes))
                 phones = [lane for lane in lanes if lane["family"] == "iphone"]
                 self.assertEqual(sorted(lane["shard"] for lane in phones), [1, 2])
@@ -578,7 +578,7 @@ class OrdinaryCITests(unittest.TestCase):
                                         .removeprefix("runs-on="))
                     lanes = json.loads(execute("Select UI test lanes").removeprefix("matrix="))["include"]
                     choices = [build, vision, *[lane["runs-on"] for lane in lanes]]
-                    hosted = [choice for choice in choices if choice == "macos-26-xlarge"]
+                    hosted = [choice for choice in choices if choice == "warp-macos-26-arm64-6x"]
                     self.assertEqual(len(hosted), len(choices) if busy else len(choices) - 4)
                     allocation = Path(env["RUNNER_RESERVATIONS_FILE"])
                     reserved = json.loads(allocation.read_text()) if allocation.exists() else []
@@ -587,7 +587,7 @@ class OrdinaryCITests(unittest.TestCase):
                     runners = json.loads(fixture.read_text())["runners"]
                     targets = []
                     for choice in choices:
-                        if choice == "macos-26-xlarge":
+                        if choice == "warp-macos-26-arm64-6x":
                             continue
                         matches = [item["name"] for item in runners
                                    if set(choice) <= {label["name"] for label in item["labels"]}]
