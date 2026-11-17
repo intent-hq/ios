@@ -56,6 +56,7 @@ struct NotificationManagerTests {
     func makeNotificationManager(
         state: UIApplication.State,
         windowEmitsFeedbackSound: Bool = false,
+        relayDeliversAlerts: Bool = false,
         feedback: @escaping () -> Void = {}
     ) -> (NotificationManager, NotificationManagerFakeCenter) {
         let center = NotificationManagerFakeCenter()
@@ -66,6 +67,7 @@ struct NotificationManagerTests {
             activeConnectionId: { Self.connectionId },
             presentFeedback: feedback,
             windowEmitsFeedbackSound: windowEmitsFeedbackSound,
+            relayDeliversAlerts: { _ in relayDeliversAlerts },
             registerEvents: false
         )
         return (manager, center)

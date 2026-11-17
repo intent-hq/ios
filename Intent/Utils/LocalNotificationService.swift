@@ -79,6 +79,8 @@ final class LocalNotificationService: NSObject {
 
     var onWillPresentNotification: ((Response) -> UNNotificationPresentationOptions)?
     var onNotificationResponse: ((Response) -> Void)?
+    /// Runs once alerts are allowed, so the app can register for remote alerts.
+    var onAuthorized: (() -> Void)?
 
     private let center: any LocalNotificationCenter
     private let soundPolicy: NotificationSoundPolicy
@@ -104,8 +106,17 @@ final class LocalNotificationService: NSObject {
 
     func requestAuthorizationIfNeeded() {
         center.getAuthorizationStatus { [weak self] status in
-            guard status == .notDetermined else { return }
-            self?.center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+            switch status {
+            case .notDetermined:
+                self?.center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                    guard granted else { return }
+                    Task { @MainActor in self?.onAuthorized?() }
+                }
+            case .denied:
+                return
+            default:
+                self?.onAuthorized?()
+            }
         }
     }
 

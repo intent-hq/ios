@@ -15,6 +15,7 @@
 		AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000003AAAA000000000003 /* Info-visionOS.plist */; };
 		AC000014AAAA000000000014 /* IntentUITests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000005AAAA000000000005 /* IntentUITests */; };
 		AD000003AAAA000000000003 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = AD000001AAAA000000000001 /* SwiftTerm */; };
+		AE00000BAAAA00000000000B /* IntentWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AE000001AAAA000000000001 /* IntentWidgets.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -33,6 +34,13 @@
 			remoteGlobalIDString = EB655EC82F669E6B00176730;
 			remoteInfo = Intent;
 		};
+		AE00000CAAAA00000000000C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EB655EC12F669E6B00176730 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AE000002AAAA000000000002;
+			remoteInfo = IntentWidgets;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,6 +58,17 @@
 			name = "Copy Test Source Inputs";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE00000AAAAA00000000000A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AE00000BAAAA00000000000B /* IntentWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +77,7 @@
 		AC000002AAAA000000000002 /* IntentTests */ = {isa = PBXFileReference; lastKnownFileType = folder; path = IntentTests; sourceTree = SOURCE_ROOT; };
 		AC000003AAAA000000000003 /* Info-visionOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-visionOS.plist"; sourceTree = SOURCE_ROOT; };
 		AC000005AAAA000000000005 /* IntentUITests */ = {isa = PBXFileReference; lastKnownFileType = folder; path = IntentUITests; sourceTree = SOURCE_ROOT; };
+		AE000001AAAA000000000001 /* IntentWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = IntentWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EC92F669E6B00176730 /* Intent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EDA2F669E6C00176730 /* IntentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EE42F669E6C00176730 /* IntentUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -68,8 +88,21 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				LiveActivity/Widget/Info.plist,
+				LiveActivity/Widget/IntentWidgetsBundle.swift,
+				LiveActivity/Widget/Widget.xcassets,
 			);
 			target = EB655EC82F669E6B00176730 /* Intent */;
+		};
+		AE000009AAAA000000000009 /* Exceptions for "Intent" folder in "IntentWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				LiveActivity/AgentActivityAttributes.swift,
+				LiveActivity/AgentActivityViews.swift,
+				LiveActivity/Widget/IntentWidgetsBundle.swift,
+				LiveActivity/Widget/Widget.xcassets,
+			);
+			target = AE000002AAAA000000000002 /* IntentWidgets */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -78,6 +111,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				EB655ECC2F669E6B00176730 /* Exceptions for "Intent" folder in "Intent" target */,
+				AE000009AAAA000000000009 /* Exceptions for "Intent" folder in "IntentWidgets" target */,
 			);
 			explicitFolders = (
 				Resources/Highlights,
@@ -125,6 +159,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE000004AAAA000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -157,6 +198,7 @@
 				EB655EC92F669E6B00176730 /* Intent.app */,
 				EB655EDA2F669E6C00176730 /* IntentTests.xctest */,
 				EB655EE42F669E6C00176730 /* IntentUITests.xctest */,
+				AE000001AAAA000000000001 /* IntentWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -172,10 +214,12 @@
 				EB655EC52F669E6B00176730 /* Sources */,
 				EB655EC62F669E6B00176730 /* Frameworks */,
 				EB655EC72F669E6B00176730 /* Resources */,
+				AE00000AAAAA00000000000A /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AE00000DAAAA00000000000D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				EB655ECB2F669E6B00176730 /* Intent */,
@@ -234,6 +278,23 @@
 			productReference = EB655EE42F669E6C00176730 /* IntentUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		AE000002AAAA000000000002 /* IntentWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AE000006AAAA000000000006 /* Build configuration list for PBXNativeTarget "IntentWidgets" */;
+			buildPhases = (
+				AE000003AAAA000000000003 /* Sources */,
+				AE000004AAAA000000000004 /* Frameworks */,
+				AE000005AAAA000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = IntentWidgets;
+			productName = IntentWidgets;
+			productReference = AE000001AAAA000000000001 /* IntentWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -254,6 +315,9 @@
 					EB655EE32F669E6C00176730 = {
 						CreatedOnToolsVersion = 16.3;
 						TestTargetID = EB655EC82F669E6B00176730;
+					};
+					AE000002AAAA000000000002 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -279,6 +343,7 @@
 				EB655EC82F669E6B00176730 /* Intent */,
 				EB655ED92F669E6C00176730 /* IntentTests */,
 				EB655EE32F669E6C00176730 /* IntentUITests */,
+				AE000002AAAA000000000002 /* IntentWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -299,6 +364,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		EB655EE22F669E6C00176730 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AE000005AAAA000000000005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -384,6 +456,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AE000003AAAA000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -397,12 +476,19 @@
 			target = EB655EC82F669E6B00176730 /* Intent */;
 			targetProxy = EB655EE52F669E6C00176730 /* PBXContainerItemProxy */;
 		};
+		AE00000DAAAA00000000000D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = AE000002AAAA000000000002 /* IntentWidgets */;
+			targetProxy = AE00000CAAAA00000000000C /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		EB655EEE2F669E6C00176730 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Intent/Intent.entitlements;
@@ -423,6 +509,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				"INFOPLIST_KEY_NSSupportsLiveActivities[sdk=iphone*]" = YES;
+				"INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates[sdk=iphone*]" = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Intent saves images from your conversations to your photo library when you choose Save Image.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -452,6 +540,7 @@
 		EB655EEF2F669E6C00176730 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Intent/Intent.entitlements;
@@ -472,6 +561,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				"INFOPLIST_KEY_NSSupportsLiveActivities[sdk=iphone*]" = YES;
+				"INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates[sdk=iphone*]" = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Intent saves images from your conversations to your photo library when you choose Save Image.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -722,6 +813,72 @@
 			};
 			name = Release;
 		};
+		AE000007AAAA000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = C26QN7DD6G;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Intent/LiveActivity/Widget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Intent;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.9;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AE000008AAAA000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = C26QN7DD6G;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Intent/LiveActivity/Widget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Intent;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.9;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -757,6 +914,15 @@
 			buildConfigurations = (
 				EB655EF62F669E6C00176730 /* Debug */,
 				EB655EF72F669E6C00176730 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AE000006AAAA000000000006 /* Build configuration list for PBXNativeTarget "IntentWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AE000007AAAA000000000007 /* Debug */,
+				AE000008AAAA000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

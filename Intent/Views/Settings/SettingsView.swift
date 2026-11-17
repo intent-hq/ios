@@ -65,7 +65,6 @@ private struct SettingsContent: View {
     @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
     @State private var showLogOffConfirmation = false
-    @ScaledMetric(relativeTo: .callout) private var iconSize = SettingsStyle.iconWidth
     var presentedAsSheet = false
     var isEmbedded = false
     var onCollapse: (() -> Void)?
@@ -78,7 +77,7 @@ private struct SettingsContent: View {
         }
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showLogOffConfirmation) {
-                LogOffConfirmationSheet { coordinator.onLogOff() }
+                LogOffConfirmationSheet(machineName: coordinator.connectionDisplayName) { coordinator.onLogOff() }
                     .environment(\.colorScheme, colorScheme)
             }
     }
@@ -108,13 +107,17 @@ private struct SettingsContent: View {
         if !session.connection.certMismatches.isEmpty {
             CertMismatchListView(mismatches: session.connection.certMismatches)
         }
-        SettingsPairingSection(onScanQR: onScanQR, onManualPairing: onManualPairing)
-        if isEmbedded {
-            SettingsSection(title: "SETTINGS") { SettingsSupportSection() }
-        } else {
-            SettingsSupportSection()
+        SettingsConnectionSection(machineName: coordinator.connectionDisplayName) {
+            showLogOffConfirmation = true
         }
-        logOffButton
+        SettingsPairingSection(onScanQR: onScanQR, onManualPairing: onManualPairing)
+        #if os(iOS)
+        SettingsSection(title: "NOTIFICATIONS") {
+            SettingsLiveActivityRow()
+                .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))
+        }
+        #endif
+        SettingsSection(title: "SUPPORT") { SettingsSupportSection() }
     }
 
     private var settingsSurface: some View {
@@ -150,26 +153,6 @@ private struct SettingsContent: View {
 
     private var outerBackground: Color {
         presentedAsSheet ? .clear : (colorScheme == .dark ? SettingsStyle.charcoal : SettingsStyle.lightChrome)
-    }
-
-    private var logOffButton: some View {
-        Button { showLogOffConfirmation = true } label: {
-            Label {
-                Text("Disconnect").interFont(Constants.Typography.bodySEmphasized)
-            } icon: {
-                Image(.logout)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: iconSize, height: iconSize)
-            }
-                .font(.callout.weight(.medium))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.vertical, SettingsStyle.rowVerticalPadding)
-                .frame(maxWidth: .infinity, minHeight: SettingsStyle.rowHeight)
-                .foregroundStyle(SettingsStyle.lightForeground)
-                .background(SettingsStyle.accent, in: .rect(cornerRadius: SettingsStyle.cardRadius))
-                .contentShape(.rect(cornerRadius: SettingsStyle.cardRadius))
-        }
     }
 }
 

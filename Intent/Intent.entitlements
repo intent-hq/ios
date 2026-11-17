@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>aps-environment</key>
+	<string>$(APS_ENVIRONMENT)</string>
 	<!-- App-identifier group FIRST: with keychain-access-groups present, the
 	     first entry becomes the default group for unscoped writes, so the
 	     existing com.intent.companion items keep landing where they always

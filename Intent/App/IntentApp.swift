@@ -3,6 +3,10 @@ import UIKit
 
 @main
 struct IntentApp: App {
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(RemoteNotificationsAppDelegate.self) private var appDelegate
+    #endif
+
     init() {
         ConversationTrace.emit("AppStarted", "")
         LifecycleDiagnostics.sessionStarted()
@@ -11,6 +15,11 @@ struct IntentApp: App {
         DemoSettings.seedConnectionsIfNeeded()
         DemoStartupConnection.seedSavedMachineIfNeeded()
         #endif
+        #if os(iOS)
+        LocalNotificationService.shared.onAuthorized = {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+        #endif
         _ = NotificationManager.shared
         // Aggregate agent alerts across every live backend session: each
         // session attaches an observer on creation and detaches on
@@ -18,12 +27,26 @@ struct IntentApp: App {
         // session; transient pairing sessions carry no backend to observe).
         BackendSessionRegistry.shared.onSessionCreated = { session in
             NotificationManager.shared.attachSessionObserver(for: session)
+            #if os(iOS)
+            AgentLiveActivityController.shared.attach(session)
+            PushRelayController.shared.attach(session)
+            #endif
         }
         BackendSessionRegistry.shared.onSessionTeardown = { session in
             if let backendID = session.backendID {
                 NotificationManager.shared.detachSessionObserver(for: backendID)
+                #if os(iOS)
+                AgentLiveActivityController.shared.detach(backendID)
+                PushRelayController.shared.detach(backendID)
+                #endif
             }
         }
+        #if os(iOS)
+        BackendSessionRegistry.shared.onBackendsRemoved = { backendIDs in
+            PushRelayController.shared.connectionsRemoved(backendIDs)
+        }
+        PushRelayController.shared.start()
+        #endif
     }
 
     var body: some Scene {
@@ -124,7 +147,16 @@ struct SessionWindowRoot: View {
                 coordinator.returnWindowToSavedMachines = returnToSavedMachines
             }
             .onOpenURL { url in
-                coordinator.handleIncomingURL(url)
+                if let link = AgentActivityLink(url: url) {
+                    NotificationManager.shared.routeAgentSelection(
+                        agentId: link.agentId,
+                        workspaceId: link.workspaceId,
+                        agentName: link.agentName,
+                        connectionId: link.connectionId
+                    )
+                } else {
+                    coordinator.handleIncomingURL(url)
+                }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
