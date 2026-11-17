@@ -49,7 +49,7 @@ struct PushRelayContractTests {
         """#
         let state = try JSONDecoder().decode(AgentActivityAttributes.ContentState.self, from: Data(json.utf8))
         #expect(state.headline == "Fix reconnect")
-        #expect(state.displayRows.map(\.workspaceId) == ["w1"])
+        #expect(state.displayRows.map(\.row.workspaceId) == ["w1"])
         #expect(state.firstLinkURL == state.finished?.link?.url)
 
         var running = state
@@ -59,7 +59,8 @@ struct PushRelayContractTests {
             connectionId: UUID(), workspaceId: "old", title: "Old", detail: nil, agentId: nil, agentName: nil
         )
         #expect(running.headline == "1 running")
-        #expect(running.displayRows.map(\.workspaceId) == ["w1"])
+        #expect(running.displayRows.map(\.row.workspaceId) == ["old", "w1"])
+        #expect(running.displayRows.map(\.style) == [.finished, .running])
     }
 
     @Test func publicKeyAndDeviceIdMatchRelayDerivation() {

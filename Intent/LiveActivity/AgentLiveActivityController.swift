@@ -149,6 +149,18 @@ final class AgentLiveActivityController {
     /// `--demo-live-activity-finished` shows the relay's finished card for screenshots.
     private static func demoState(_ state: AgentActivityAttributes.ContentState) -> AgentActivityAttributes.ContentState {
         #if DEBUG
+        if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-live-activity-finished-running"), let row = state.rows.first {
+            var mixed = state
+            mixed.finished = AgentActivityRow(
+                connectionId: row.connectionId,
+                workspaceId: "demo-finished",
+                title: "Docs pass",
+                detail: "README and setup guide updated for the new relay.",
+                agentId: nil,
+                agentName: "Writer"
+            )
+            return mixed
+        }
         if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-live-activity-finished"), let row = state.rows.first {
             var finished = state
             finished.rows = []

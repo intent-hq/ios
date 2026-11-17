@@ -18,6 +18,7 @@ enum AgentActivityStyle {
     static let staleOpacity = 0.6
     static let summaryLines = 3
     static let compactSummaryLines = 2
+    static let maxRows = 3
 
     private static let runningRGB: UInt32 = 0xDDEC61
     private static let byteMask: UInt32 = 0xFF
@@ -33,16 +34,40 @@ enum AgentActivityStyle {
     }
 }
 
+/// How a row on the card is drawn.
+enum AgentActivityRowStyle {
+    case running
+    /// Finished while others still run: a check, its title and summary.
+    case finished
+    /// The last agent finished: its summary under the workspace headline.
+    case summary
+}
+
+struct AgentActivityDisplayRow: Identifiable {
+    let row: AgentActivityRow
+    let style: AgentActivityRowStyle
+
+    var id: String { "\(style)/\(row.id)" }
+}
+
 extension AgentActivityAttributes.ContentState {
-    /// The finished agent, shown only once nothing runs.
-    var shownFinished: AgentActivityRow? { runningCount == 0 ? finished : nil }
+    /// Nothing runs and the relay sent the agent that finished last.
+    var isAllFinished: Bool { runningCount == 0 && finished != nil }
 
-    var headline: String { shownFinished?.title ?? "\(runningCount) running" }
+    var headline: String {
+        if runningCount == 0, let finished { return finished.title }
+        return "\(runningCount) running"
+    }
 
-    var displayRows: [AgentActivityRow] { shownFinished.map { [$0] } ?? rows }
+    var displayRows: [AgentActivityDisplayRow] {
+        if runningCount == 0, let finished { return [AgentActivityDisplayRow(row: finished, style: .summary)] }
+        let done = finished.map { [AgentActivityDisplayRow(row: $0, style: .finished)] } ?? []
+        let running = rows.map { AgentActivityDisplayRow(row: $0, style: .running) }
+        return Array((done + running).prefix(AgentActivityStyle.maxRows))
+    }
 
     var firstLinkURL: URL? {
-        displayRows.lazy.compactMap { $0.link?.url }.first
+        displayRows.lazy.compactMap { $0.row.link?.url }.first
     }
 }
 
@@ -73,16 +98,16 @@ struct AgentActivityLockScreenView: View {
                     .lineLimit(1)
                     .layoutPriority(1)
                 Spacer(minLength: AgentActivityStyle.headerSpacing)
-                if isStale, state.shownFinished == nil {
+                if isStale, !state.isAllFinished {
                     Text("Updated \(state.updatedDate, style: .time)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             VStack(alignment: .leading, spacing: AgentActivityStyle.rowSpacing) {
-                ForEach(state.displayRows) { row in
-                    AgentActivityRowLink(row: row) {
-                        AgentActivityRowView(row: row, showsDetail: true, isFinished: state.shownFinished != nil)
+                ForEach(state.displayRows) { item in
+                    AgentActivityRowLink(row: item.row) {
+                        AgentActivityRowView(row: item.row, showsDetail: true, style: item.style)
                     }
                 }
             }
@@ -95,11 +120,11 @@ struct AgentActivityLockScreenView: View {
 struct AgentActivityRowView: View {
     let row: AgentActivityRow
     let showsDetail: Bool
-    var isFinished = false
+    var style: AgentActivityRowStyle = .running
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: AgentActivityStyle.rowSpacing) {
-            if isFinished {
+            if style != .running {
                 AgentActivityCheck()
             } else {
                 Circle()
@@ -108,7 +133,7 @@ struct AgentActivityRowView: View {
                     .alignmentGuide(.firstTextBaseline) { $0[.bottom] - AgentActivityStyle.dotBaselineOffset }
             }
             VStack(alignment: .leading, spacing: AgentActivityStyle.rowTextSpacing) {
-                if isFinished {
+                if style == .summary {
                     Text(row.detail ?? "Finished")
                         .font(.subheadline)
                         .lineLimit(showsDetail ? AgentActivityStyle.summaryLines : AgentActivityStyle.compactSummaryLines)
@@ -117,7 +142,7 @@ struct AgentActivityRowView: View {
                         .font(.subheadline.weight(.medium))
                         .lineLimit(1)
                 }
-                if showsDetail, !isFinished, let detail = row.detail {
+                if showsDetail, style != .summary, let detail = row.detail {
                     Text(detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -157,7 +182,7 @@ struct AgentActivityCompactCount: View {
     let state: AgentActivityAttributes.ContentState
 
     var body: some View {
-        if state.shownFinished != nil {
+        if state.isAllFinished {
             AgentActivityCheck()
         } else {
             Text("\(state.runningCount)")
@@ -178,7 +203,7 @@ struct AgentActivityExpandedHeadline: View {
             Text(state.headline)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
-                .fixedSize(horizontal: state.shownFinished == nil, vertical: false)
+                .fixedSize(horizontal: !state.isAllFinished, vertical: false)
         }
         .padding(.leading, AgentActivityStyle.islandInset)
     }
@@ -189,9 +214,9 @@ struct AgentActivityExpandedRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AgentActivityStyle.compactRowSpacing) {
-            ForEach(state.displayRows) { row in
-                AgentActivityRowLink(row: row) {
-                    AgentActivityRowView(row: row, showsDetail: false, isFinished: state.shownFinished != nil)
+            ForEach(state.displayRows) { item in
+                AgentActivityRowLink(row: item.row) {
+                    AgentActivityRowView(row: item.row, showsDetail: false, style: item.style)
                 }
             }
         }
