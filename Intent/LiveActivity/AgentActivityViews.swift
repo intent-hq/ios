@@ -38,9 +38,9 @@ enum AgentActivityStyle {
 
 /// How a row on the card is drawn.
 enum AgentActivityRowStyle {
-    case running
     /// Finished while others still run: a check, its title and summary.
     case finished
+    case running
     /// The last agent finished: its summary under the workspace headline.
     case summary
 }
