@@ -12,14 +12,6 @@ import Observation
 final class WorkspaceSharingModel {
     typealias Request = @MainActor (String, [String: Any]) async throws -> Any
 
-    /// A link the host just created.
-    struct InviteLink: Equatable {
-        let url: URL
-        let expiresAt: Date?
-        /// The one account that can use it; nil when anyone can.
-        let pinLogin: String?
-    }
-
     /// Who can use the next link.
     enum Audience: Equatable {
         case anyone
@@ -29,7 +21,8 @@ final class WorkspaceSharingModel {
     enum Phase: Equatable {
         case idle
         case creating
-        case created(InviteLink)
+        /// The `intent://invite` link the host just created.
+        case created(URL)
         case failed(String)
     }
 
@@ -76,7 +69,7 @@ final class WorkspaceSharingModel {
         phase = .creating
         do {
             let result = try await request("workspace.invite.create", params) as? [String: Any] ?? [:]
-            guard let link = Self.inviteLink(from: result) else {
+            guard let link = Self.inviteURL(from: result) else {
                 phase = .failed(SharingFailure.genericMessage)
                 return
             }
@@ -86,32 +79,17 @@ final class WorkspaceSharingModel {
         }
     }
 
-    /// Back to the form for another link (one per person for a pinned link).
-    func startOver() {
-        guard phase != .creating else { return }
-        phase = .idle
-        pinLogin = ""
-    }
-
     /// Trims and drops a leading `@`, so `@octo` and `octo` are one account.
     nonisolated static func normalized(_ login: String) -> String {
         let trimmed = login.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
     }
 
-    /// `{ invite: { expiresAt }, url }`; only an `intent://` link is shared.
-    nonisolated static func inviteLink(from result: [String: Any]) -> InviteLink? {
+    /// The result's `url`; only an `intent://` link is shared.
+    nonisolated static func inviteURL(from result: [String: Any]) -> URL? {
         guard let text = result["url"] as? String,
               let url = URL(string: text), url.scheme?.lowercased() == "intent" else { return nil }
-        let invite = result["invite"] as? [String: Any]
-        let pinLogin = (invite?["pinLogin"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        return InviteLink(url: url, expiresAt: (invite?["expiresAt"] as? String).flatMap(date), pinLogin: pinLogin)
-    }
-
-    nonisolated static func date(_ text: String) -> Date? {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+        return url
     }
 }
 

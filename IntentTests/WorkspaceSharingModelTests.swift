@@ -34,22 +34,17 @@ struct WorkspaceSharingModelTests {
         NSError(domain: "test", code: rpc, userInfo: [NSError.intentErrorDataCodeKey: code])
     }
 
-    @Test func createSendsOnlyTheWorkspaceAndShowsTheLink() async {
+    @Test func createSendsOnlyTheWorkspaceAndShowsTheLink() async throws {
         let host = Host()
         let model = Self.model(host)
         await model.createLink()
         #expect(host.calls.map(\.method) == ["workspace.invite.create"])
         #expect(host.calls.first?.params.keys.sorted() == ["workspaceId"], "A link anyone can use: no pin")
         #expect(host.calls.first?.params["workspaceId"] as? String == "ws-1")
-        guard case .created(let link) = model.phase else {
-            Issue.record("Expected a created link, got \(model.phase)")
-            return
-        }
-        #expect(link.url.absoluteString == "intent://invite?inviteId=inv-2")
-        #expect(link.expiresAt == WorkspaceSharingModel.date("2026-11-23T10:00:00Z"))
+        #expect(model.phase == .created(try #require(URL(string: "intent://invite?inviteId=inv-2"))))
     }
 
-    @Test func onePersonLinksPinTheNormalizedLoginThenStartOver() async {
+    @Test func onePersonLinksPinTheNormalizedLogin() async throws {
         let host = Host()
         host.result = [
             "invite": ["id": "inv-3", "pinLogin": "grace", "reusable": false],
@@ -62,13 +57,7 @@ struct WorkspaceSharingModelTests {
         await model.createLink()
         #expect(host.calls.first?.params["pinLogin"] as? String == "grace")
         #expect(host.calls.first?.params["pinProvider"] as? String == "github", "A GitLab-identity host must not resolve it on GitLab")
-        guard case .created(let link) = model.phase else {
-            Issue.record("Expected a created link, got \(model.phase)")
-            return
-        }
-        #expect(link.pinLogin == "grace")
-        model.startOver()
-        #expect(model.phase == .idle && model.pinLogin.isEmpty && model.audience == .person, "Ready for the next person")
+        #expect(model.phase == .created(try #require(URL(string: "intent://invite?inviteId=inv-3"))))
     }
 
     @Test func olderHostsGetNoProviderAndVersionsParse() async {

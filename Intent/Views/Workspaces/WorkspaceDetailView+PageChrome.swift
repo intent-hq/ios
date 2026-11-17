@@ -81,7 +81,7 @@ extension WorkspaceDetailView {
             onCreateBrowser: { presentation.showNewBrowser = true },
             onTransfer: session.connection.currentPrincipal?.isOwner == true
                 && session.connection.connectionState == .connected ? { presentation.showTransferWorkspace = true } : nil,
-            onShare: canShare ? { presentation.shareRequest = ShareWorkspaceRequest(workspaceId: workspaceId, workspaceTitle: workspaceName) } : nil,
+            onShare: canShare ? { presentation.shareRequest = ShareWorkspaceRequest(workspaceId: workspaceId) } : nil,
             onCollapseSidebar: usesVerticalBar ? nil : sidebar?.onCollapse,
             onArchive: { presentation.showArchiveConfirmation = true },
             onDelete: { presentation.showDeleteConfirmation = true }

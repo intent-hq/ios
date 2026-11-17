@@ -3,7 +3,6 @@ import SwiftUI
 /// Opens the Share sheet for one workspace.
 struct ShareWorkspaceRequest: Identifiable, Equatable {
     let workspaceId: String
-    let workspaceTitle: String
 
     var id: String { workspaceId }
 }
@@ -15,10 +14,7 @@ struct ShareWorkspaceView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: WorkspaceSharingModel
 
-    let workspaceTitle: String
-
-    init(request: ShareWorkspaceRequest, model: WorkspaceSharingModel) {
-        workspaceTitle = request.workspaceTitle
+    init(model: WorkspaceSharingModel) {
         _model = State(initialValue: model)
     }
 
@@ -26,12 +22,8 @@ struct ShareWorkspaceView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: ShareLayout.sectionSpacing) {
-                    Text("Invite people to \(workspaceTitle). They join by opening the link you send them.")
-                        .interFont(Constants.Typography.bodyS)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if case .created(let link) = model.phase {
-                        ShareCreatedLink(link: link) { model.startOver() }
+                    if case .created(let url) = model.phase {
+                        ShareCreatedLink(url: url)
                     } else {
                         ShareLinkForm(model: model)
                     }
@@ -110,31 +102,25 @@ private struct ShareLinkForm: View {
     private var footer: String {
         model.audience == .anyone
             ? "Anyone with the link can join until it expires."
-            : "Only this GitHub account can use the link, once. To invite a few people, make a link for each."
+            : "Only this GitHub account can use the link, once."
     }
 }
 
 /// The new link: send it through the share sheet or copy it.
 private struct ShareCreatedLink: View {
-    let link: WorkspaceSharingModel.InviteLink
-    let onCreateAnother: () -> Void
+    let url: URL
     @State private var copied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: ShareLayout.itemSpacing) {
-            Text(summary)
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("share-invite-summary")
-            ShareLink(item: link.url, message: Text("Join my workspace in Intent")) {
+            ShareLink(item: url, message: Text("Join my workspace in Intent")) {
                 Label { Text("Send Invite Link").interFont(Constants.Typography.bodySEmphasized) } icon: { Image(.upload) }
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(IntentButtonStyle())
             .accessibilityIdentifier("share-invite-send")
             Button {
-                UIPasteboard.general.url = link.url
+                UIPasteboard.general.url = url
                 HapticManager.notification(.success)
                 copied = true
             } label: {
@@ -144,20 +130,7 @@ private struct ShareCreatedLink: View {
             }
             .buttonStyle(IntentButtonStyle(variant: .secondary))
             .accessibilityIdentifier("share-invite-copy")
-            Button(action: onCreateAnother) {
-                Text("Create Another Link")
-                    .interFont(Constants.Typography.bodyS)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(IntentContentButtonStyle())
-            .accessibilityIdentifier("share-create-another")
         }
-    }
-
-    private var summary: String {
-        let who = link.pinLogin.map { "Only @\($0) can use this link, once." } ?? "Anyone with this link can join."
-        guard let expiresAt = link.expiresAt else { return who }
-        return "\(who) It expires \(expiresAt.formatted(.relative(presentation: .named)))."
     }
 }
 

@@ -1,8 +1,8 @@
 import XCTest
 
 /// The workspace Share sheet against demo fixtures (DemoSharingFixtures):
-/// create a link anyone can use, then one only a single GitHub account can
-/// use. Nobody is added without a link.
+/// create a link anyone can use, then (reopened) one only a single GitHub
+/// account can use. Nobody is added without a link.
 nonisolated final class ShareWorkspaceUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let workspaceRow = "workspace.row.demo-ws-dashboard"
@@ -20,19 +20,18 @@ nonisolated final class ShareWorkspaceUITests: XCTestCase {
             app.buttons["share-invite-copy"].tap()
             XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: Self.timeout))
             capture(app, name: "Share workspace link created \(appearance)")
+            app.terminate()
 
-            app.buttons["share-create-another"].tap()
-            app.buttons["One person"].tap()
-            let login = app.textFields["share-pin-login"]
+            let again = openShareSheet(appearance: appearance)
+            again.buttons["One person"].tap()
+            let login = again.textFields["share-pin-login"]
             XCTAssertTrue(login.waitForExistence(timeout: Self.timeout))
             login.tap()
             login.typeText("grace")
-            app.buttons["share-create-link"].tap()
-            let summary = app.staticTexts["share-invite-summary"]
-            XCTAssertTrue(summary.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(summary.label.hasPrefix("Only @grace can use this link, once."), summary.label)
-            capture(app, name: "Share workspace one person \(appearance)")
-            app.terminate()
+            capture(again, name: "Share workspace one person \(appearance)")
+            again.buttons["share-create-link"].tap()
+            XCTAssertTrue(again.buttons["share-invite-send"].waitForExistence(timeout: Self.timeout), "One-person link created")
+            again.terminate()
         }
     }
 

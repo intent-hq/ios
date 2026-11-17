@@ -154,7 +154,6 @@ struct ShareWorkspaceSheet: ViewModifier {
     func body(content: Content) -> some View {
         content.sheet(item: $presentation.shareRequest) { request in
             ShareWorkspaceView(
-                request: request,
                 model: WorkspaceSharingModel(
                     workspaceId: request.workspaceId,
                     namesPinProvider: WorkspaceSharingModel.namesPinProvider(
