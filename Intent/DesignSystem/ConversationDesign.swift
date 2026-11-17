@@ -19,6 +19,8 @@ extension Constants.Conversation {
 extension Constants.Conversation.Design {
     enum IPad {
         static let readableWidth: CGFloat = 560
+        /// The chat fills the panel, as in portrait, until lines get too long to scan.
+        static let conversationMaximumWidth: CGFloat = 1040
         static let userBubbleMaximumWidth: CGFloat = 270
         static let minimumHorizontalInset: CGFloat = 16
         static let horizontalInset: CGFloat = 24

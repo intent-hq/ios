@@ -3,7 +3,7 @@ import SwiftUI
 extension View {
     /// Constrain the transcript and composer; navigation stays outside this column.
     func conversationReadableColumn() -> some View {
-        modifier(ConversationReadableColumn())
+        modifier(ConversationReadableColumn(readableWidth: Constants.Conversation.Design.IPad.conversationMaximumWidth))
     }
 
     /// Detail children already own their page inset, so count it outside the readable body.
@@ -13,6 +13,7 @@ extension View {
 }
 
 private struct ConversationReadableColumn: ViewModifier {
+    var readableWidth = Constants.Conversation.Design.IPad.readableWidth
     var contentHorizontalInset: CGFloat = 0
     var isEnabled = true
     @Environment(\.conversationPresentation) private var presentation
@@ -23,7 +24,7 @@ private struct ConversationReadableColumn: ViewModifier {
 
     private var maximumWidth: CGFloat {
         isEnabled && presentation == .iPad && !dynamicTypeSize.isAccessibilitySize
-            ? Layout.readableWidth + 2 * contentHorizontalInset : .infinity
+            ? readableWidth + 2 * contentHorizontalInset : .infinity
     }
 
     private var horizontalInset: CGFloat {
