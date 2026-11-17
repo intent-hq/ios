@@ -19,6 +19,8 @@ enum AgentActivityStyle {
     static let summaryLines = 3
     static let compactSummaryLines = 2
     static let maxRows = 3
+    /// Dots and checks share one column so row titles line up.
+    static let markerWidth: CGFloat = 12
 
     private static let runningRGB: UInt32 = 0xDDEC61
     private static let byteMask: UInt32 = 0xFF
@@ -124,14 +126,17 @@ struct AgentActivityRowView: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: AgentActivityStyle.rowSpacing) {
-            if style != .running {
-                AgentActivityCheck()
-            } else {
-                Circle()
-                    .fill(AgentActivityStyle.running)
-                    .frame(width: AgentActivityStyle.dotSize, height: AgentActivityStyle.dotSize)
-                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - AgentActivityStyle.dotBaselineOffset }
+            Group {
+                if style != .running {
+                    AgentActivityCheck()
+                } else {
+                    Circle()
+                        .fill(AgentActivityStyle.running)
+                        .frame(width: AgentActivityStyle.dotSize, height: AgentActivityStyle.dotSize)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - AgentActivityStyle.dotBaselineOffset }
+                }
             }
+            .frame(width: AgentActivityStyle.markerWidth)
             VStack(alignment: .leading, spacing: AgentActivityStyle.rowTextSpacing) {
                 if style == .summary {
                     Text(row.detail ?? "Finished")
