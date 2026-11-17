@@ -224,6 +224,7 @@ struct WorkspaceActionsMenu: View {
     let onCreateTerminal: () -> Void
     let onCreateBrowser: () -> Void
     var onTransfer: (() -> Void)?
+    var onShare: (() -> Void)?
     var onCollapseSidebar: (() -> Void)?
     let onArchive: () -> Void
     let onDelete: () -> Void
@@ -244,14 +245,7 @@ struct WorkspaceActionsMenu: View {
             }
             WorkspaceScriptsMenu(workspaceId: workspaceId, store: scriptStore)
             Divider()
-            if let onTransfer {
-                Button(action: onTransfer) {
-                    Label { Text("Transfer workspace").interFont(Constants.Typography.bodyS) } icon: {
-                        Image(.truckOne)
-                    }
-                }
-                .accessibilityIdentifier("workspace.transfer")
-            }
+            ownerActions
             Button(action: onArchive) {
                 Label { Text("Archive").interFont(Constants.Typography.bodyS) } icon: { Image(.archive) }
             }
@@ -265,6 +259,24 @@ struct WorkspaceActionsMenu: View {
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Workspace actions")
+    }
+
+    @ViewBuilder
+    private var ownerActions: some View {
+        if let onShare {
+            Button(action: onShare) {
+                Label { Text("Share…").interFont(Constants.Typography.bodyS) } icon: { Image(.upload) }
+            }
+            .accessibilityIdentifier("workspace.share")
+        }
+        if let onTransfer {
+            Button(action: onTransfer) {
+                Label { Text("Transfer workspace").interFont(Constants.Typography.bodyS) } icon: {
+                    Image(.truckOne)
+                }
+            }
+            .accessibilityIdentifier("workspace.transfer")
+        }
     }
 
     @ViewBuilder

@@ -17,6 +17,8 @@ final class WorkspaceDetailPresentation {
     /// The browser made in the creation sheet, opened once the sheet has dismissed.
     var createdBrowser: WorkspaceBrowser?
     var terminalCreationRequest: UUID?
+    /// The Share sheet, when open.
+    var shareRequest: ShareWorkspaceRequest?
     /// The message of the last failed archive or delete, shown until dismissed.
     var actionError: String?
 
@@ -28,6 +30,7 @@ final class WorkspaceDetailPresentation {
         createdBrowser = nil
         showNewBrowser = false
         showTransferWorkspace = false
+        shareRequest = nil
     }
 
     /// Archives or deletes through the store. The page leaves as soon as the store removes the

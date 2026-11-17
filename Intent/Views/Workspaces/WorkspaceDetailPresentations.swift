@@ -145,3 +145,25 @@ private struct WorkspaceDetailAlerts: ViewModifier {
             }
     }
 }
+
+/// The Share sheet, wired to this window's connection.
+struct ShareWorkspaceSheet: ViewModifier {
+    @Bindable var presentation: WorkspaceDetailPresentation
+    @Environment(BackendSession.self) private var session
+
+    func body(content: Content) -> some View {
+        content.sheet(item: $presentation.shareRequest) { request in
+            ShareWorkspaceView(
+                model: WorkspaceSharingModel(
+                    workspaceId: request.workspaceId,
+                    namesPinProvider: WorkspaceSharingModel.namesPinProvider(
+                        protocolVersion: session.connection.capabilities.protocolVersion
+                    )
+                ) { [connection = session.connection] method, params in
+                    try await connection.request(method, params: params, timeout: ConnectionManager.defaultRequestTimeout)
+                }
+            )
+            .id(request.workspaceId)
+        }
+    }
+}
