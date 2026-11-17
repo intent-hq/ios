@@ -17,8 +17,6 @@ nonisolated final class ShareWorkspaceUITests: XCTestCase {
             capture(app, name: "Share workspace \(appearance)")
             create.tap()
             XCTAssertTrue(app.buttons["share-invite-send"].waitForExistence(timeout: Self.timeout), "Send the new link")
-            app.buttons["share-invite-copy"].tap()
-            XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: Self.timeout))
             capture(app, name: "Share workspace link created \(appearance)")
             app.terminate()
 

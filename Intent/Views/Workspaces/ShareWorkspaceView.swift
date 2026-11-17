@@ -106,31 +106,17 @@ private struct ShareLinkForm: View {
     }
 }
 
-/// The new link: send it through the share sheet or copy it.
+/// The new link, sent through the system share sheet (which also copies it).
 private struct ShareCreatedLink: View {
     let url: URL
-    @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ShareLayout.itemSpacing) {
-            ShareLink(item: url, message: Text("Join my workspace in Intent")) {
-                Label { Text("Send Invite Link").interFont(Constants.Typography.bodySEmphasized) } icon: { Image(.upload) }
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(IntentButtonStyle())
-            .accessibilityIdentifier("share-invite-send")
-            Button {
-                UIPasteboard.general.url = url
-                HapticManager.notification(.success)
-                copied = true
-            } label: {
-                Text(copied ? "Copied" : "Copy Link")
-                    .interFont(Constants.Typography.bodySEmphasized)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(IntentButtonStyle(variant: .secondary))
-            .accessibilityIdentifier("share-invite-copy")
+        ShareLink(item: url, message: Text("Join my workspace in Intent")) {
+            Label { Text("Send Invite Link").interFont(Constants.Typography.bodySEmphasized) } icon: { Image(.upload) }
+                .frame(maxWidth: .infinity)
         }
+        .buttonStyle(IntentButtonStyle())
+        .accessibilityIdentifier("share-invite-send")
     }
 }
 
