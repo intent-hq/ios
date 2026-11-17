@@ -12,6 +12,14 @@ import Observation
 final class WorkspaceSharingModel {
     typealias Request = @MainActor (String, [String: Any]) async throws -> Any
 
+    /// A link the host just created.
+    struct InviteLink: Equatable {
+        let url: URL
+        let expiresAt: Date?
+        /// The one account that can use it; nil when anyone can.
+        let pinLogin: String?
+    }
+
     /// Who can use the next link.
     enum Audience: Equatable {
         case anyone
@@ -21,8 +29,7 @@ final class WorkspaceSharingModel {
     enum Phase: Equatable {
         case idle
         case creating
-        /// The `intent://invite` link the host just created.
-        case created(URL)
+        case created(InviteLink)
         case failed(String)
     }
 
@@ -69,7 +76,7 @@ final class WorkspaceSharingModel {
         phase = .creating
         do {
             let result = try await request("workspace.invite.create", params) as? [String: Any] ?? [:]
-            guard let link = Self.inviteURL(from: result) else {
+            guard let link = Self.inviteLink(from: result) else {
                 phase = .failed(SharingFailure.genericMessage)
                 return
             }
@@ -85,11 +92,31 @@ final class WorkspaceSharingModel {
         return trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
     }
 
-    /// The result's `url`; only an `intent://` link is shared.
-    nonisolated static func inviteURL(from result: [String: Any]) -> URL? {
+    /// `{ invite: { expiresAt, pinLogin? }, url }`; only an `intent://` link is shared.
+    nonisolated static func inviteLink(from result: [String: Any]) -> InviteLink? {
         guard let text = result["url"] as? String,
               let url = URL(string: text), url.scheme?.lowercased() == "intent" else { return nil }
-        return url
+        let invite = result["invite"] as? [String: Any]
+        let pinLogin = (invite?["pinLogin"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return InviteLink(url: url, expiresAt: (invite?["expiresAt"] as? String).flatMap(date), pinLogin: pinLogin)
+    }
+
+    nonisolated private static let secondsPerDay: TimeInterval = 86_400
+
+    /// "Expires in 7 days." A link minted a moment ago for a week still reads
+    /// as 7 days, so partial days round up; under a day reads as today.
+    nonisolated static func expiryText(_ expiresAt: Date, now: Date = .now) -> String {
+        let remaining = expiresAt.timeIntervalSince(now)
+        guard remaining > 0 else { return "Expired." }
+        guard remaining >= secondsPerDay else { return "Expires today." }
+        let days = Int((remaining / secondsPerDay).rounded(.up))
+        return days == 1 ? "Expires in 1 day." : "Expires in \(days) days."
+    }
+
+    nonisolated static func date(_ text: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 }
 

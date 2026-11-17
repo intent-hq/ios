@@ -8,42 +8,46 @@ struct ShareWorkspaceRequest: Identifiable, Equatable {
 }
 
 /// Share sheet: create an invite link (for anyone, or for one GitHub account)
-/// and send it. People only join by opening a link; members and open links
-/// are managed in Intent on the Mac.
+/// and send or copy it. People only join by opening a link; members and open
+/// links are managed in Intent on the Mac. The sheet is as tall as its content.
 struct ShareWorkspaceView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: WorkspaceSharingModel
+    @State private var contentHeight: CGFloat = 0
 
     init(model: WorkspaceSharingModel) {
         _model = State(initialValue: model)
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: ShareLayout.sectionSpacing) {
-                    if case .created(let url) = model.phase {
-                        ShareCreatedLink(url: url)
-                    } else {
-                        ShareLinkForm(model: model)
-                    }
-                    Text("To remove people or turn off a link, use Intent on your Mac.")
-                        .interFont(Constants.Typography.subtextXXS)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(ShareLayout.padding)
-            }
-            .accessibilityIdentifier("share-workspace")
-            .navigationTitle("Share Workspace")
-            .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    IntentIconButton(icon: .close, label: "Close") { dismiss() }
-                }
-                .intentToolbarSurface()
+        VStack(spacing: ShareLayout.sectionSpacing) {
+            header
+            if case .created(let link) = model.phase {
+                ShareCreatedLink(link: link)
+            } else {
+                ShareLinkForm(model: model)
             }
         }
-        .presentationDetents([.medium, .large])
+        .padding(.horizontal, ShareLayout.padding)
+        .padding(.top, ShareLayout.topPadding)
+        .padding(.bottom, ShareLayout.bottomPadding)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("share-workspace")
+        .presentationDetents([.height(contentHeight > 0 ? contentHeight : ShareLayout.initialHeight)])
+    }
+
+    private var header: some View {
+        ZStack {
+            Text("Share Workspace")
+                .interFont(Constants.Typography.bodySEmphasized)
+                .accessibilityAddTraits(.isHeader)
+            HStack {
+                IntentIconButton(icon: .close, label: "Close") { dismiss() }
+                Spacer()
+            }
+        }
     }
 }
 
@@ -52,7 +56,7 @@ private struct ShareLinkForm: View {
     @Bindable var model: WorkspaceSharingModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ShareLayout.itemSpacing) {
+        VStack(spacing: ShareLayout.itemSpacing) {
             Picker("Who can join", selection: $model.audience) {
                 Text("Anyone with the link").tag(WorkspaceSharingModel.Audience.anyone)
                 Text("One person").tag(WorkspaceSharingModel.Audience.person)
@@ -68,18 +72,16 @@ private struct ShareLinkForm: View {
                     .textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("share-pin-login")
             }
-            Text(footer)
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            createButton
             if case .failed(let message) = model.phase {
                 Text(message)
-                    .interFont(Constants.Typography.bodyS)
+                    .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("share-error")
             }
-            createButton
+            ShareCaption(text: caption)
         }
     }
 
@@ -89,7 +91,7 @@ private struct ShareLinkForm: View {
         } label: {
             HStack {
                 if model.phase == .creating { ProgressView() }
-                Text(model.phase == .creating ? "Creating…" : "Create Invite Link")
+                Text(model.phase == .creating ? "Creating…" : "Create Link")
                     .interFont(Constants.Typography.bodySEmphasized)
             }
             .frame(maxWidth: .infinity)
@@ -99,29 +101,74 @@ private struct ShareLinkForm: View {
         .accessibilityIdentifier("share-create-link")
     }
 
-    private var footer: String {
+    private var caption: String {
         model.audience == .anyone
             ? "Anyone with the link can join until it expires."
             : "Only this GitHub account can use the link, once."
     }
 }
 
-/// The new link, sent through the system share sheet (which also copies it).
+/// The new link: send it through the share sheet, or copy it.
 private struct ShareCreatedLink: View {
-    let url: URL
+    let link: WorkspaceSharingModel.InviteLink
+    @State private var copied = false
 
     var body: some View {
-        ShareLink(item: url, message: Text("Join my workspace in Intent")) {
-            Label { Text("Send Invite Link").interFont(Constants.Typography.bodySEmphasized) } icon: { Image(.upload) }
-                .frame(maxWidth: .infinity)
+        VStack(spacing: ShareLayout.itemSpacing) {
+            ShareLink(item: link.url, message: Text("Join my workspace in Intent")) {
+                Text("Send Link")
+                    .interFont(Constants.Typography.bodySEmphasized)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(IntentButtonStyle())
+            .accessibilityIdentifier("share-invite-send")
+            Button {
+                UIPasteboard.general.url = link.url
+                HapticManager.notification(.success)
+                copied = true
+            } label: {
+                Text(copied ? "Copied" : "Copy Link")
+                    .interFont(Constants.Typography.bodySEmphasized)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(IntentButtonStyle(variant: .secondary))
+            .accessibilityIdentifier("share-invite-copy")
+            .task(id: copied) {
+                guard copied else { return }
+                try? await Task.sleep(for: ShareLayout.copiedDuration)
+                copied = false
+            }
+            ShareCaption(text: caption)
+                .accessibilityIdentifier("share-invite-summary")
         }
-        .buttonStyle(IntentButtonStyle())
-        .accessibilityIdentifier("share-invite-send")
+    }
+
+    private var caption: String {
+        let who = link.pinLogin.map { "Only @\($0) can use this link, once." } ?? "Anyone with the link can join."
+        guard let expiresAt = link.expiresAt else { return who }
+        return "\(who) \(WorkspaceSharingModel.expiryText(expiresAt))"
+    }
+}
+
+private struct ShareCaption: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .interFont(Constants.Typography.subtextXXS)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
     }
 }
 
 private enum ShareLayout {
     static let padding: CGFloat = 20
-    static let sectionSpacing: CGFloat = 16
+    static let topPadding: CGFloat = 16
+    static let bottomPadding: CGFloat = 24
+    static let sectionSpacing: CGFloat = 20
     static let itemSpacing: CGFloat = 12
+    static let initialHeight: CGFloat = 280
+    static let copiedDuration: Duration = .seconds(2)
 }

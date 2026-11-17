@@ -17,6 +17,9 @@ nonisolated final class ShareWorkspaceUITests: XCTestCase {
             capture(app, name: "Share workspace \(appearance)")
             create.tap()
             XCTAssertTrue(app.buttons["share-invite-send"].waitForExistence(timeout: Self.timeout), "Send the new link")
+            app.buttons["share-invite-copy"].tap()
+            XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: Self.timeout), "Copy confirms")
+            XCTAssertTrue(app.staticTexts["share-invite-summary"].label.hasSuffix("Expires in 7 days."), app.staticTexts["share-invite-summary"].label)
             capture(app, name: "Share workspace link created \(appearance)")
             app.terminate()
 
@@ -29,6 +32,7 @@ nonisolated final class ShareWorkspaceUITests: XCTestCase {
             capture(again, name: "Share workspace one person \(appearance)")
             again.buttons["share-create-link"].tap()
             XCTAssertTrue(again.buttons["share-invite-send"].waitForExistence(timeout: Self.timeout), "One-person link created")
+            XCTAssertTrue(again.staticTexts["share-invite-summary"].label.hasPrefix("Only @grace can use this link, once."))
             again.terminate()
         }
     }

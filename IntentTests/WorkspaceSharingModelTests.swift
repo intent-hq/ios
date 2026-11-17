@@ -34,17 +34,23 @@ struct WorkspaceSharingModelTests {
         NSError(domain: "test", code: rpc, userInfo: [NSError.intentErrorDataCodeKey: code])
     }
 
-    @Test func createSendsOnlyTheWorkspaceAndShowsTheLink() async throws {
+    @Test func createSendsOnlyTheWorkspaceAndShowsTheLink() async {
         let host = Host()
         let model = Self.model(host)
         await model.createLink()
         #expect(host.calls.map(\.method) == ["workspace.invite.create"])
         #expect(host.calls.first?.params.keys.sorted() == ["workspaceId"], "A link anyone can use: no pin")
         #expect(host.calls.first?.params["workspaceId"] as? String == "ws-1")
-        #expect(model.phase == .created(try #require(URL(string: "intent://invite?inviteId=inv-2"))))
+        guard case .created(let link) = model.phase else {
+            Issue.record("Expected a created link, got \(model.phase)")
+            return
+        }
+        #expect(link.url == URL(string: "intent://invite?inviteId=inv-2"))
+        #expect(link.expiresAt == WorkspaceSharingModel.date("2026-11-23T10:00:00Z"))
+        #expect(link.pinLogin == nil)
     }
 
-    @Test func onePersonLinksPinTheNormalizedLogin() async throws {
+    @Test func onePersonLinksPinTheNormalizedLogin() async {
         let host = Host()
         host.result = [
             "invite": ["id": "inv-3", "pinLogin": "grace", "reusable": false],
@@ -57,7 +63,21 @@ struct WorkspaceSharingModelTests {
         await model.createLink()
         #expect(host.calls.first?.params["pinLogin"] as? String == "grace")
         #expect(host.calls.first?.params["pinProvider"] as? String == "github", "A GitLab-identity host must not resolve it on GitLab")
-        #expect(model.phase == .created(try #require(URL(string: "intent://invite?inviteId=inv-3"))))
+        guard case .created(let link) = model.phase else {
+            Issue.record("Expected a created link, got \(model.phase)")
+            return
+        }
+        #expect(link.pinLogin == "grace")
+    }
+
+    @Test func expiryReadsInWholeDays() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        let day: TimeInterval = 86_400
+        #expect(WorkspaceSharingModel.expiryText(now.addingTimeInterval(7 * day - 5), now: now) == "Expires in 7 days.")
+        #expect(WorkspaceSharingModel.expiryText(now.addingTimeInterval(day + 60), now: now) == "Expires in 2 days.")
+        #expect(WorkspaceSharingModel.expiryText(now.addingTimeInterval(day), now: now) == "Expires in 1 day.")
+        #expect(WorkspaceSharingModel.expiryText(now.addingTimeInterval(3600), now: now) == "Expires today.")
+        #expect(WorkspaceSharingModel.expiryText(now.addingTimeInterval(-1), now: now) == "Expired.")
     }
 
     @Test func olderHostsGetNoProviderAndVersionsParse() async {
