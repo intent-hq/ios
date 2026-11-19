@@ -5,6 +5,8 @@ import SwiftUI
 /// gated by `.equatable()` and only re-renders when its message, workspace,
 /// or hydration set actually changed — not on every streaming delta.
 struct MessageView: View {
+    @Environment(\.collapseToolActivity) private var collapseToolActivity
+
     let message: ConversationMessage
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
@@ -25,6 +27,7 @@ struct MessageView: View {
             onNavigateToNote: onNavigateToNote,
             onNavigateToAgent: onNavigateToAgent,
             hydratingBlockIds: hydratingBlockIds,
+            collapseToolActivity: message.role == .assistant && collapseToolActivity,
             onLayoutChange: onLayoutChange,
             onHydrateBlock: onHydrateBlock
         )
@@ -39,6 +42,7 @@ struct MessageRowContent: View, Equatable {
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
     var hydratingBlockIds: Set<String>
+    var collapseToolActivity = true
     var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
@@ -48,6 +52,7 @@ struct MessageRowContent: View, Equatable {
         lhs.message == rhs.message
             && lhs.workspaceId == rhs.workspaceId
             && lhs.hydratingBlockIds == rhs.hydratingBlockIds
+            && lhs.collapseToolActivity == rhs.collapseToolActivity
     }
 
     private var isUser: Bool { message.role == .user }
@@ -81,6 +86,7 @@ struct MessageRowContent: View, Equatable {
                     workspaceId: workspaceId,
                     onNavigateToNote: onNavigateToNote,
                     hydratingBlockIds: hydratingBlockIds,
+                    collapseToolActivity: collapseToolActivity,
                     onLayoutChange: onLayoutChange,
                     onHydrateBlock: onHydrateBlock
                 )

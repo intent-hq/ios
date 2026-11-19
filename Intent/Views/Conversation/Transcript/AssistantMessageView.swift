@@ -27,6 +27,7 @@ struct AssistantMessageView: View {
         workspaceId: String,
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?,
         hydratingBlockIds: Set<String>,
+        collapseToolActivity: Bool = true,
         onLayoutChange: (() -> Void)? = nil,
         onHydrateBlock: ((_ blockId: String) -> Void)?
     ) {
@@ -42,7 +43,8 @@ struct AssistantMessageView: View {
         self.hasStrippedPrompts = strippedBlocks != blocks
         self.renderBlocks = MessageBlockPartitioning.groupContentBlocks(
             workspaceId == Workspace.chiefWorkspaceId ? WorkspaceLinks.coalescingTextBlocks(strippedBlocks) : strippedBlocks,
-            isStreaming: message.isStreaming
+            isStreaming: message.isStreaming,
+            collapseToolActivity: collapseToolActivity
         )
         self.toolResults = MessageBlockPartitioning.pairToolResults(blocks)
         self.copyText = MessageBlockPartitioning.assistantCopyText(from: blocks)
@@ -88,7 +90,7 @@ struct AssistantMessageView: View {
                         let inputs = groupInputs(group)
                         ResponseGroupView(
                             group: group,
-                            isLast: isLastGroup(at: index),
+                            isLast: group.activity == nil && isLastGroup(at: index),
                             workspaceId: workspaceId,
                             onNavigateToNote: onNavigateToNote,
                             toolResults: inputs.toolResults,
@@ -125,7 +127,7 @@ struct AssistantMessageView: View {
 
     private func isLastGroup(at index: Int) -> Bool {
         !renderBlocks.suffix(from: index + 1).contains { candidate in
-            if case .group = candidate { return true }
+            if case .group(let group) = candidate { return group.activity == nil }
             return false
         }
     }

@@ -18,6 +18,7 @@ struct ConversationTranscriptView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.collapseToolActivity) private var collapseToolActivity
     @Environment(\.workspaceTranscriptDesign) var usesWorkspaceDesign
     @Environment(\.conversationPresentation) var presentation
     @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -213,6 +214,9 @@ private extension ConversationTranscriptView {
         )
         #endif
         .onChange(of: dynamicTypeSize) { _, _ in
+            scrollState.rowHeightCache.invalidateAll()
+        }
+        .onChange(of: collapseToolActivity) { _, _ in
             scrollState.rowHeightCache.invalidateAll()
         }
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
