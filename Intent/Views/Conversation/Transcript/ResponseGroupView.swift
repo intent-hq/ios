@@ -189,7 +189,7 @@ struct ResponseGroupBody: View, Equatable {
             }
             .foregroundStyle(isExpanded ? Design.Palette.foreground(for: colorScheme)
                 : Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
-            .opacity(group.activity != nil && !isExpanded && contrast == .standard ? 0.85 : 1)
+            .opacity(collapsedHeaderOpacity)
             .frame(minHeight: Design.minimumTapTarget)
             .contentShape(Rectangle())
         } else {
@@ -222,6 +222,11 @@ struct ResponseGroupBody: View, Equatable {
             }
             .padding(.vertical, Layout.headerVerticalPadding)
         }
+    }
+
+    private var collapsedHeaderOpacity: Double {
+        guard group.activity != nil, !isExpanded, contrast == .standard else { return 1 }
+        return colorScheme == .dark ? 0.9 : 0.85
     }
 
     @ViewBuilder
