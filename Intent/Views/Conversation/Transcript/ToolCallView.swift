@@ -3,13 +3,8 @@ import SwiftUI
 struct ToolCallView: View {
     let block: ContentBlock
     let toolResult: ContentBlock?
-    /// True while a slim-truncated body (input or output) is being hydrated
-    /// via agent.getMessageBlock (PROTOCOL §5.5).
     var isHydrating: Bool = false
-    /// Invalidates the transcript's settled row height before disclosure.
     var onLayoutChange: (() -> Void)?
-    /// Fetch the full bodies of this row's slim-truncated blocks; absent →
-    /// no hydration (the bounded preview stays).
     var onHydrate: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @ScaledMetric(relativeTo: .caption2) private var iconSize = Constants.Conversation.ToolCall.iconSize
@@ -40,8 +35,6 @@ struct ToolCallView: View {
         block.resolvedName ?? "tool"
     }
 
-    /// A slim-served row: the input and/or output is a bounded preview
-    /// (PROTOCOL §5.5); expanding triggers the on-demand full fetch.
     private var isTruncated: Bool {
         block.inputTruncation.isTruncated || toolResult?.outputTruncation.isTruncated == true
     }
@@ -50,20 +43,14 @@ struct ToolCallView: View {
         toolResult?.resolvedErrorOutcome.isFailure == true
     }
 
-    // MARK: - Tool Classification
-
     private var classified: ToolClassifier.ToolDisplay {
         ToolClassifier.classify(name: toolName, input: block.input)
     }
-
-    // MARK: - Border Color (status indicator)
 
     private var borderColor: Color {
         if toolResult == nil { return Color.blue }
         return hasError ? Theme.destructive(for: colorScheme) : Color.green.opacity(Layout.successBorderOpacity)
     }
-
-    // MARK: - Body
 
     var body: some View {
         VStack(alignment: .leading, spacing: workspaceDesign ? Design.Transcript.toolRowSpacing : 0) {

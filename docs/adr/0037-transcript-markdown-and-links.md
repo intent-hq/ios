@@ -19,7 +19,8 @@ Assistant text is Markdown rendered by Textual. Agents write links to workspace 
    1. Only well-formed suggested-prompts blocks are removed (`SuggestedPrompts`). Body text that only looks like one stays.
    2. The HTML-comment pass skips suggested-prompts openers, so a malformed opener cannot capture body text up to an embedded `-->`, such as a Mermaid edge.
 7. **Task lists.** Textual's parser (Foundation, cmark-based) has no task-list extension. `replacingTaskListMarkers(_:)` swaps `[ ]` and `[x]` for checkbox glyphs, and skips fenced and indented code. It tracks list continuation, so a nested item indented four or more columns is not read as indented code. A tab advances to the next multiple of 4, the CommonMark tab stop.
-8. **Context mentions.** `ContextMentionChipView` matches the desktop `ContextChip`. A chip opens its `url` only when it passes the `ExternalLink` allowlist; otherwise it is static. The title is cut at about 30 characters (the desktop uses a CSS max width). The icon follows the desktop provider map: GitHub, Linear, Sentry, and a link icon for the rest.
+8. **User text.** User messages parse inline Markdown only (`userDisplayText(_:)`), so typed line breaks and list markers stay as written. Links follow the same look as replies (#904).
+9. **Context mentions.** `ContextMentionChipView` matches the desktop `ContextChip`. A chip opens its `url` only when it passes the `ExternalLink` allowlist; otherwise it is static. The title is cut at about 30 characters (the desktop uses a CSS max width). The icon follows the desktop provider map: GitHub, Linear, Sentry, and a link icon for the rest.
 
 ## Consequences
 
@@ -33,3 +34,4 @@ Assistant text is Markdown rendered by Textual. Agents write links to workspace 
 - `ContentBlockView`: `textURLRoute(for:workspaceId:)`, `TextURLRoute`, `stripSuggestedPrompts(_:)`
 - `UnopenableLink`: `reason(for:)`, `unopenableLinkAlert(_:)`
 - `ContextMentionChipView`: `displayTitle(_:)`, `iconName(for:)`
+- `UserMessageView`: `userDisplayText(_:)`

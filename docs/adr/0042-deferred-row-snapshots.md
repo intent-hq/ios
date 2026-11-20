@@ -24,4 +24,4 @@ SwiftUI can call row builders on its async renderer. Plain `ForEach` content is 
 - `ForEach`: `init(snapshots:id:content:)`
 - `AgentHistoryRowSnapshot`, `AgentHistoryRow`, `AgentHistoryList`
 - `WorkspaceAgentListEntry`, `WorkspaceAgentListRow`
-- Conversation rows with `@Sendable` builders over prepared values: `AssistantHistoryMenu`, `WorkspaceQuestionAnswerCards`, `AgentWaitingView`, `ProposalCardView`, `WorkspaceLinkedTextView`
+- Conversation rows with `@Sendable` builders over prepared values: `AssistantHistoryMenu`, `WorkspaceQuestionAnswerCards`, `AgentWaitingView`, `ProposalCardView`, `WorkspaceLinkedTextView`, `ConversationTranscriptView` (transcript rows and their restoration markers, #737)

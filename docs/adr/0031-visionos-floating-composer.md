@@ -27,7 +27,8 @@ On visionOS the chat composer floats in a glass ornament below the window. A win
    3. When the text changes outside dictation (typing, or a send that clears it), that edit wins and dictation stops.
    4. A send stops dictation before it reads the text, so a late final result cannot bring the sent text back.
 7. **Suggested prompts** on visionOS are large chips above the field, sized for gaze (at least 60 pt). The transcript's inline prompt list is off on visionOS.
-8. **Hover.** The text view's hover effect uses the field's rounded corners (`hoverStyle`), because the outer SwiftUI clip does not shape it.
+8. **Question sheet.** On visionOS, structured questions show in a deliberate sheet, not in the composer slot. The slot shows only an opener banner (`QuestionWizardCollapsedBanner`). The sheet opens on a new question set and closes when the set clears (answered or dismissed elsewhere, or replaced), unless a submit is in progress. The composer stays available under the opener and hides only during marker recovery. A derived question set implies that recovery is not loading (`PendingQuestionRecoveryExclusivityTests`), so the view does not check both. The column measures the top of the status rows on visionOS only, so the launcher stays above them.
+9. **Hover.** The text view's hover effect uses the field's rounded corners (`hoverStyle`), because the outer SwiftUI clip does not shape it.
 9. **No launcher gap** (from test comments). The transcript keeps no launcher-tall padding under the last row; the launcher floats over it. The bottom padding (`bottomAnchorPadding`) sits on the end marker, so follow landings still reach the true end.
 10. **Source wiring tests** (from test comments). visionOS branches cannot run in the iOS test host, so `FloatingComposerPolicyTests` checks the wiring in source: exactly two `MessageInputView` construction sites (the inline host, gated off on visionOS, and the ornament host), and every modal that can open over a chat registers as a covering layer.
 
@@ -44,3 +45,4 @@ On visionOS the chat composer floats in a glass ornament below the window. A win
 - `ComposerCoverage`: `isForemost(depth:)`, `composerLayerDepth`, `coversConversationComposers()`, `coversConversationComposers(while:)`
 - `MessageInputView`: `dictationButton`, `suggestedPromptChipsRow`
 - `SubmittableTextView`: `hoverCornerRadius`
+- `ConversationColumnView`: `composerVisible`, `questionSheetPresented`, `accessoryRowsTop`

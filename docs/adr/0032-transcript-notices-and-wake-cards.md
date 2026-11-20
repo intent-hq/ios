@@ -26,6 +26,7 @@ The daemon persists rows that are not chat messages: attention requests, turn fa
    3. `ScriptMonitorWakeAttributionView` shows the script name and the monitor outcome.
    4. In `AgentMessageAttributionView`, sender navigation and message disclosure are separate tap targets.
 4. **Icon alignment.** `CapHeightIconSlot` is as tall as the text style's cap height, so an icon centers on the first line's capitals without changing the row height.
+5. **Row dispatch.** `MessageView` checks metadata before the role, as the desktop `ChatMessage` does. A `questions_dismissed` row and a `model_changed` row render as divider chips whatever their persisted role. A user-role event-notification wake renders as `EventWakeBannerView`, because its whole body is machine text (desktop: `EventWakeupBanner`). A system row with an attention notice renders as `AttentionNoticeView`; every other system row renders as `SystemNoticeBannerView`. Agent-to-agent rows and automated wake cards start collapsed (desktop: `isAgentMessageExpanded`, `isAutomatedWakeExpanded`).
 
 ## Consequences
 
@@ -38,3 +39,4 @@ The daemon persists rows that are not chat messages: attention requests, turn fa
 - `ModelChangeNoticeView`, `QuestionsDismissedNoticeView`, `SystemNoticeBannerView`, `NewMessagesDividerView`
 - `WakeCardDisclosureHeader`, `WakeCardHeaderRow`, `PrMonitorWakeAttributionView`, `ScriptMonitorWakeAttributionView`, `AgentMessageAttributionView`
 - `CapHeightIconSlot`
+- `MessageView`, `MessageRowContent`, `UserMessageView`, `EventWakeBannerView`
