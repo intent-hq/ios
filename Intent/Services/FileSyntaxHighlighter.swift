@@ -70,7 +70,6 @@ final class FileSyntaxHighlighter: NSObject, WKNavigationDelegate {
                 "return JSON.stringify(await window.intentHighlights.highlight(request));",
                 arguments: ["request": ["source": source, "path": path, "dark": dark]]
             )
-            // Decoding a large file's runs takes tens of milliseconds; keep it off the main thread.
             let runs = await Task.detached(priority: .userInitiated) {
                 result.map { FileSyntaxRun.decode($0, source: source) } ?? []
             }.value

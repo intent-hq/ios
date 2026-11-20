@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Archive and delete go through the workspace store, which removes the row. The page then leaves
-/// for the workspace list; a failure keeps the page open and shows the server's message.
 extension WorkspaceDetailView {
     func deleteWorkspace() { performWorkspaceAction(.delete) }
 

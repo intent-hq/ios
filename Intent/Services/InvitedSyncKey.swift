@@ -1,8 +1,6 @@
 import CryptoKit
 import Foundation
 
-/// §5.49 byte encoding. Swift String equality normalizes Unicode, so identity
-/// and set operations here deliberately operate on UTF-8 bytes instead.
 nonisolated enum InvitedSyncKey {
     enum Invalid: Error { case input }
 
@@ -69,7 +67,6 @@ nonisolated enum InvitedSyncKey {
         var index = hex.startIndex
         while index < hex.endIndex {
             let end = hex.index(index, offsetBy: hexWidth)
-            // Base 16 is intrinsic to this hexadecimal byte decoder, not a configurable limit.
             if let byte = UInt8(hex[index..<end], radix: 16) { bytes.append(byte) } // swiftlint:disable:this no_magic_numbers
             index = end
         }

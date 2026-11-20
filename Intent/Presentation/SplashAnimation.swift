@@ -1,8 +1,6 @@
 import Foundation
 import Lottie
 
-/// The supplied compositions, decoded without Lottie's process-wide cache so
-/// their lifetime remains bounded by the visible splash's lease (ios#256).
 struct SplashAnimation {
     enum PlaybackMode {
         case twistThenPulse
@@ -30,8 +28,6 @@ struct SplashAnimation {
         self.pulse = pulse
     }
 
-    /// Play the selected sequence using each JSON's own timing.
-    /// Pulse's first frame is a complete mark; twist's first frame is empty.
     func frame(
         at elapsedTime: TimeInterval, animated: Bool, mode: PlaybackMode = .twistThenPulse
     ) -> (animation: LottieAnimation, frame: AnimationFrameTime) {
@@ -39,7 +35,6 @@ struct SplashAnimation {
         let elapsed = elapsedTime.isFinite ? max(0, elapsedTime) : 0
         if mode == .twistLoop {
             let loopTime = elapsed.truncatingRemainder(dividingBy: twist.duration)
-            // Skip the empty opening frame without changing the composition's duration.
             let firstVisibleFrame = twist.startFrame + 1
             return (twist, max(firstVisibleFrame, twist.frameTime(forTime: loopTime)))
         }
@@ -52,7 +47,6 @@ struct SplashAnimation {
     }
 }
 
-/// Keeps one decoded `SplashAnimation` alive for as long as the owner holds it.
 final class SplashAnimationLease {
     let animation: SplashAnimation
 
@@ -61,9 +55,6 @@ final class SplashAnimationLease {
     }
 }
 
-/// Bounds the decoded compositions' lifetime to their owners (ios#256): concurrent
-/// owners share one decode, and the compositions are released with the last lease
-/// instead of living for the whole process.
 final class SplashAnimationStore {
     static let shared = SplashAnimationStore { SplashAnimation() }
 

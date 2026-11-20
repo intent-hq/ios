@@ -79,7 +79,6 @@ final class WorkspaceTransferStore {
             self?.canCancel = canCancel
         }
         self.relay = relay
-        // This owned task survives a view task's cancellation during commit.
         let task = Task {
             defer { self.finish() }
             do {

@@ -3,7 +3,6 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Classifies and loads picked library videos, which import as files.
 struct PhotoLibraryVideos {
     var isVideo: (PhotosPickerItem) -> Bool
     var load: (PhotosPickerItem) async throws -> ImportedPhotoVideo?
@@ -29,8 +28,6 @@ extension ConversationAttachmentPipeline {
             guard let self else { return }
             await loadSelectedPhotos(workspaceId: workspaceId)
             photoImportTask = nil
-            // A new visible composer can select a batch while cancellation of
-            // the previous import is unwinding. Do not discard that selection.
             startLoadingSelectedPhotos(workspaceId: workspaceId)
         }
     }
@@ -44,18 +41,12 @@ extension ConversationAttachmentPipeline {
         guard !isLoadingPhotos, !Task.isCancelled else { return }
         isLoadingPhotos = true
         defer { isLoadingPhotos = false }
-        // Consume each batch before suspending. Picker changes can otherwise
-        // load a selection twice, or erase another selection made during import.
         while !selectedPhotoItems.isEmpty {
             guard !Task.isCancelled else { return }
             let items = selectedPhotoItems
             selectedPhotoItems.removeAll()
-            // A new pick replaces any earlier import warning; the question
-            // tray shows it inline with no dismissal to clear it.
             attachmentImportError = nil
             let imageCount = items.filter { !photoVideos.isVideo($0) }.count
-            // Videos never use image slots. A batch with too many images keeps
-            // its videos but rejects all of its images, with the limit alert.
             let imagesFit = canImportPhotoImages(imageCount)
             guard imagesFit || imageCount < items.count else { continue }
             if imagesFit, maximumPhotoImageCount != nil {
@@ -76,14 +67,10 @@ extension ConversationAttachmentPipeline {
         }
     }
 
-    /// Returns false only for a transfer or decode failure worth reporting;
-    /// cancellation stays silent.
     private func loadPhotoImage(_ item: PhotosPickerItem) async -> Bool {
         guard let data = await loadPhotoData(item), let image = UIImage(data: data) else {
             return Task.isCancelled
         }
-        // Paste or another selection can consume capacity while
-        // Photos is loading the transferable data.
         if !Task.isCancelled, canImportPhotoImages(1) { pendingImages.append(image) }
         return true
     }
@@ -91,7 +78,6 @@ extension ConversationAttachmentPipeline {
     static let photoImportFailureMessage = "Couldn't add some of the selected photos. Try selecting them again."
     static let fileImportFailureMessage = "Couldn't add some of the selected files. Try selecting them again."
 
-    /// The file importer reports a failure; user cancellation stays silent.
     func reportFileImportFailure(_ error: Error) {
         if (error as? CocoaError)?.code == .userCancelled { return }
         attachmentImportError = Self.fileImportFailureMessage
@@ -124,8 +110,6 @@ extension ConversationAttachmentPipeline {
             guard workspaceId != Workspace.chiefWorkspaceId else {
                 throw FilePlacementError.videoUnavailableInAssistant
             }
-            // Files can grow after selection. Check disk metadata again before
-            // starting any upload, rather than relying only on the picked size.
             var url = file.url
             url.removeAllCachedResourceValues()
             let currentSize = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
@@ -156,7 +140,6 @@ extension ConversationAttachmentPipeline {
 }
 
 extension View {
-    /// Picked photos/files that failed to load; successful picks stay attached (#463).
     func attachmentImportAlert(_ pipeline: ConversationAttachmentPipeline) -> some View {
         alert(
             "Couldn't Add Attachments",

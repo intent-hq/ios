@@ -1,8 +1,6 @@
 import Combine
 import Foundation
 
-/// Keeps the event registration alive before starting the export. Terminal events
-/// can precede the start reply; only the reply's export ID selects the result.
 @MainActor
 final class WorkspaceTransferExport {
     private static let eventTypes = [

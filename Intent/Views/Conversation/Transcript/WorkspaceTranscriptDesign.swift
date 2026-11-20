@@ -1,11 +1,9 @@
 import SwiftUI
 
 extension EnvironmentValues {
-    /// Opt in only at the approved workspace transcript root. Shared callers keep their existing UI.
     @Entry var workspaceTranscriptDesign = false
 }
 
-/// Measures a trailing bubble against its actual proposal, without fixed heights or screen-size reads.
 struct WorkspaceUserBubbleLayout: Layout {
     var usesFullWidth: Bool
     var layoutDirection: LayoutDirection
@@ -90,7 +88,6 @@ struct WorkspaceThinkingView: View {
     }
 }
 
-/// Shared alignment for persisted thinking disclosures and the live activity row.
 struct WorkspaceThinkingLabel: View {
     let title: LocalizedStringKey
     var isExpanded = false

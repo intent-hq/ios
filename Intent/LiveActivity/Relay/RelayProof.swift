@@ -1,11 +1,9 @@
 import CryptoKit
 import Foundation
 
-/// Signs push relay requests: an ES256 key whose public half identifies the device.
 nonisolated protocol RelaySigner: Sendable {
-    /// Uncompressed X9.63 P-256 public key (65 bytes).
     var publicKeyX963: Data { get }
-    /// ECDSA P-256 / SHA-256 signature as raw r‖s (64 bytes).
+
     func sign(_ message: Data) throws -> Data
 }
 
@@ -32,9 +30,6 @@ nonisolated enum Base64URL {
     }
 }
 
-/// The `Authorization: IntentProof <JWS>` value from the relay contract
-/// (services/push-relay/README.md): a compact JWS binding method, path, body
-/// hash, time and a single-use id.
 nonisolated enum RelayProof {
     static let scheme = "IntentProof"
 

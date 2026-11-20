@@ -1,15 +1,11 @@
 import Foundation
 
 extension ConversationViewModel {
-    /// Local ownership is installed before launching independent remote work.
-    /// Repeated SwiftUI tasks and connected publisher replay share the same load.
     func load() async {
         guard !Task.isCancelled, validateWorkspaceIfKnown() else { return }
         if activeLiveStoreActivation == nil {
             liveStoreActivationGeneration &+= 1
             activeLiveStoreActivation = liveStoreActivationGeneration
-            // The same retained view keeps its authoritative divider while its
-            // live subscriptions revalidate. A changed store clears the latch.
             detailConsumer = agentDetails.retain(agentId: agentId)
             if streamingObserverId == nil { observeStreaming() }
             store.retainConversation(conversationConsumer, agentId: agentId, workspaceId: workspaceId)
@@ -38,12 +34,8 @@ extension ConversationViewModel {
         }
     }
 
-    /// Rendering can start at the snapshot. Entry positioning waits for the
-    /// authoritative marker, so a slow detail read cannot land at a wrong anchor.
     var isEntryScrollReady: Bool { hasLatchedNewMessagesDividerAnchor }
 
-    /// Route validation belongs to this window, never to the shared agent.
-    /// A stale route releases only its own lease after authority arrives.
     @discardableResult
     func validateWorkspaceIfKnown() -> Bool {
         guard let detail = agentDetails.cached(agentId: agentId) else { return true }
@@ -105,7 +97,6 @@ extension ConversationViewModel {
         isOnScreen = true
     }
 
-    /// A retained iPad pane has left sight, but its draft and live leases stay mounted.
     func conversationCovered() {
         guard isOnScreen else { return }
         isOnScreen = false
@@ -200,8 +191,6 @@ extension ConversationViewModel {
                 guard !Task.isCancelled,
                       generation != optionsStore.loadGeneration || epoch != agentDetails.connectionEpoch else { throw error }
             }
-            // A connection change already invalidated shared detail. A catalog
-            // invalidation on the same connection requires explicit revalidation.
             needsRefresh = epoch == agentDetails.connectionEpoch
             generation = optionsStore.loadGeneration
             epoch = agentDetails.connectionEpoch

@@ -1,17 +1,11 @@
 import Foundation
 
 extension AgentStore {
-    /// Refresh the visible list and only the groups the user has requested.
-    /// Every read walks all `agent.list` pages of its variant; a failed page
-    /// fails the read, so a partial list never replaces a whole one.
-    /// Per-scope request tickets prevent older reads from winning a race;
-    /// the epoch also protects a workspace A → B → A navigation sequence.
     func _fetchAgents(workspaceId: String) async {
         guard self.workspaceId == workspaceId, !Task.isCancelled else { return }
         let epoch = list.epoch
         let sequence = list.beginRead()
         list.topLevelRequest = sequence
-        // Only the first read shows loading; refreshes keep the list as is.
         if !hasLoaded { setLoadPhase(loadPhase.beginning()) }
         defer {
             if list.epoch == epoch, list.topLevelRequest == sequence { setLoadPhase(loadPhase.settled()) }
@@ -33,7 +27,6 @@ extension AgentStore {
             if !hasLoaded { setLoadPhase(.loaded(Date())) }
             await refreshRequestedGroups(workspaceId: workspaceId, epoch: epoch, sequence: sequence)
         } catch is CancellationError {
-            // A disappearing view must not publish a late response.
         } catch {
             AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
             if list.epoch == epoch, list.topLevelRequest == sequence { setLoadPhase(loadPhase.failing(error)) }
@@ -56,15 +49,12 @@ extension AgentStore {
         }
     }
 
-    /// Legacy daemons already returned every active row in the initial read.
     func isAgentGroupLoaded(_ group: AgentListGroup) -> Bool {
         if group != .retired, hasLoaded, !scopedLoading || list.scopeCounts == nil { return true }
         return list.loadedGroups.contains(group)
     }
 
     private func refreshRequestedGroups(workspaceId: String, epoch: UUID, sequence: Int) async {
-        // Groups requested during this read own a newer snapshot; leave them
-        // alone. Older in-flight reads are superseded by the refresh.
         for group in orderedRequestedGroups {
             guard list.epoch == epoch, list.topLevelRequest == sequence, !Task.isCancelled else { return }
             if (list.groupRequests[group] ?? 0) > sequence { continue }
@@ -72,8 +62,6 @@ extension AgentStore {
         }
     }
 
-    /// Expansion is idempotent; failed and cancelled sections can be retried.
-    /// Callers use list.loadingGroups, loadedGroups and errors for section UI.
     func loadAgentGroup(_ group: AgentListGroup, workspaceId: String) async {
         guard self.workspaceId == workspaceId, hasLoaded else { return }
         list.requestedGroups.insert(group)
@@ -84,8 +72,6 @@ extension AgentStore {
         guard !Task.isCancelled else { return }
         if !refresh, list.loadingGroups.contains(group) { return }
         if !refresh, list.loadedGroups.contains(group), list.errors[group] == nil { return }
-        // A pre-scope daemon already returned all active rows. Retired rows
-        // are still separate and can be fetched on explicit expansion.
         guard group == .retired || (scopedLoading && list.scopeCounts != nil) else { return }
         let epoch = list.epoch
         let sequence = list.beginRead()
@@ -109,7 +95,6 @@ extension AgentStore {
             replaceRows(rows, group: group, sequence: sequence, orphanOnly: orphanOnly)
             list.loadedGroups.insert(group)
         } catch is CancellationError {
-            // Keep the section retryable.
         } catch {
             guard list.epoch == epoch, list.groupRequests[group] == sequence else { return }
             list.errors[group] = error.localizedDescription
@@ -138,8 +123,6 @@ extension AgentStore {
         return (response, rows)
     }
 
-    /// Stable refresh order also makes retire/restore reconciliation prefer
-    /// the retired read, which is the last snapshot taken in a refresh.
     private var orderedRequestedGroups: [AgentListGroup] {
         list.requestedGroups.sorted { groupOrder($0) < groupOrder($1) }
     }
@@ -166,14 +149,9 @@ extension AgentStore {
         if let group {
             list.members[group] = Set(incomingIds.filter { (list.rowSequences[$0] ?? 0) <= sequence })
         }
-        // Parent and orphan snapshots can overlap across retire/restore.
-        // Dropping one membership must preserve rows still owned by another
-        // requested group; deletion converges once every owning scope drops it.
         var active = agents
         var retired = list.retiredAgents
         invalidateCoveredMemberships(scope, incomingIds: incomingIds, sequence: sequence)
-        // A scope snapshot can remove its old rows, but cannot erase a row
-        // obtained by a newer overlapping read (including retirement moves).
         let removed = (active + retired).filter { row in
             !incomingIds.contains(row.id) && !retainedByAnotherGroup(row, excluding: group)
                 && (list.rowSequences[row.id] ?? 0) <= sequence

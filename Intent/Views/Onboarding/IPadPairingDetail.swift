@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// A temporary pairing connection leaves the window's current backend untouched
-/// until pairing succeeds. Cancel only removes this detail overlay.
 struct IPadPairingDetail: View {
     static let scannerWindowSize: CGFloat = 350
     let mode: IPadPairingMode

@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// A pull request row with the workspace list's leading swipe: the state
-/// icon grows into "Open agent" when a workspace tracks the pull request,
-/// otherwise "New workspace", and a completed swipe performs it.
 struct PullRequestSwipeRow<MenuItems: View>: View {
     let item: PullRequestListItem
     let showsRepository: Bool

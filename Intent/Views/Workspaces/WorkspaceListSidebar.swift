@@ -196,8 +196,6 @@ extension WorkspaceListSidebar {
     private var workspaceList: some View {
         Group {
             if isEmbedded {
-                // Sidebar list styling clips section edges to the system radius.
-                // The persistent sidebar uses the same custom radius for every row.
                 workspaceListContent.listStyle(.plain)
                     .environment(\.defaultMinListRowHeight, 0)
             } else {
@@ -207,24 +205,17 @@ extension WorkspaceListSidebar {
         .environment(\.defaultMinListHeaderHeight, isEmbedded ? 0 : nil)
         .listRowSpacing(isEmbedded ? 0 : nil)
         #if !os(visionOS)
-        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
-        // Custom row backgrounds already mark selection; suppress the system
-        // keyboard-focus halo (ios#339).
         .focusEffectDisabled()
         #endif
         .scrollContentBackground(isEmbedded ? .hidden : .automatic)
         .accessibilityIdentifier("workspaces.list")
         .contentMargins(.horizontal, isEmbedded ? contentInset : nil, for: .scrollContent)
-        // Keep the filter gap scrollable so it cannot consume the reduced
-        // viewport above the keyboard; the final row retains bottom clearance.
         .contentMargins(.top, isEmbedded ? filterListSpacing : Constants.WorkspaceList.sidebarTopContentMargin, for: .scrollContent)
         .contentMargins(.bottom, isEmbedded ? IPadSidebarStyle.inset : (isSearching ? 0 : AssistantLaunchButton.scrollClearance), for: .scrollContent)
         .mask(alignment: .top) { scrollFadeMask }
     }
 
-    /// Rows dissolve under the filter control instead of clipping. The fade fits inside the
-    /// list's top margin, so resting rows stay fully opaque.
     private var scrollFadeMask: some View {
         VStack(spacing: 0) {
             LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
@@ -301,8 +292,6 @@ extension WorkspaceListSidebar {
     ) -> some View {
         let isExpanded = viewModel.isGroupExpanded(key, in: mode)
         if isEmbedded {
-            // Ordinary header rows avoid the List's implicit section padding.
-            // The scroll-content top margin is the entire filter-to-label gap.
             let insets = EdgeInsets(
                 top: isFirst ? 0 : IPadSidebarStyle.sectionSpacing,
                 leading: IPadSidebarStyle.rowInset,
@@ -329,7 +318,6 @@ extension WorkspaceListSidebar {
         insets: EdgeInsets,
         label: Label
     ) -> some View {
-        // Bottom alignment keeps the label-to-rows gap when the tap target is taller.
         CollapsibleSectionHeader(
             isExpanded: isExpanded,
             insets: insets,
@@ -345,7 +333,6 @@ extension WorkspaceListSidebar {
     }
 
     private func sidebarRows(_ workspaces: [Workspace], showRepo: Bool = true) -> some View {
-        // Snapshot selection, updating state and bindings outside every row provider.
         let rows = workspaces.indices.map { index in
             let workspace = workspaces[index]
             let nextID = index + 1 < workspaces.count ? workspaces[index + 1].id : nil
@@ -354,13 +341,6 @@ extension WorkspaceListSidebar {
         return ForEach(rows, id: \.id) { @Sendable row in row.content }
     }
 
-    /// Shared row modifiers for every view mode. The explicit row background
-    /// replaces the sidebar list's accent-tinted selection with a neutral grey.
-    /// On visionOS that custom background also replaces the system row
-    /// background that drew the gaze highlight (ios#339), so the hover effect
-    /// is reapplied to the row. Hover and selection share one shape (HIG):
-    /// the row insets move inside the highlight so it covers the whole cell
-    /// the selection fills, and the selection stays a persistent fill under it.
     private func sidebarRow(_ workspace: Workspace, nextWorkspaceId: String?, showRepo: Bool = true) -> some View {
         sidebarRowContent(workspace, nextWorkspaceId: nextWorkspaceId, showRepo: showRepo)
             #if os(visionOS)
@@ -416,7 +396,6 @@ extension WorkspaceListSidebar {
         isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset
     }
 
-    /// visionOS pads the row content itself (see `sidebarRow`).
     private var sidebarRowCellInsets: EdgeInsets {
         #if os(visionOS)
         EdgeInsets()
@@ -433,7 +412,6 @@ extension WorkspaceListSidebar {
         isEmbedded ? IPadSidebarStyle.rowRadius : Constants.WorkspaceList.sidebarSelectionCornerRadius
     }
 
-    /// Swipe rows draw their own highlight so it moves with the row.
     private func listSelectionOpacity(for workspaceId: String) -> Double {
         #if os(visionOS)
         1

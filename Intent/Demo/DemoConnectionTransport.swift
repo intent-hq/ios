@@ -2,15 +2,11 @@
 import Foundation
 
 extension ConnectionManager {
-    /// Debug-only: demo sessions use fixture pushes instead of a socket's feed.
-    /// Keep readiness tied to the same connection transitions as their stores.
     func connectDemo(serveFixtures: Bool) {
         connectInProcess(using: Self.makeInProcessTransport(serveFixtures: serveFixtures))
     }
 }
 
-/// Debug-only demo transport: fixture responses and scripted script-monitor
-/// events. Release builds compile this out with the rest of `Intent/Demo/`.
 final class DemoConnectionTransport: ConnectionRequestTransport {
     let scriptMonitors: DemoScriptMonitorFixtures?
 
@@ -18,8 +14,6 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
         self.scriptMonitors = scriptMonitors
     }
 
-    /// `--demo-data` launches serve fixtures from every connection; an
-    /// explicit fixture connection also enables scripted script monitors.
     static func make(serveFixtures: Bool, arguments: [String]) -> DemoConnectionTransport? {
         if serveFixtures {
             return DemoConnectionTransport(scriptMonitors: DemoScriptMonitorFixtures.configured(arguments: arguments))
@@ -27,8 +21,6 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
         return DemoMode.isEnabled ? DemoConnectionTransport(scriptMonitors: nil) : nil
     }
 
-    /// Startup UI tests admit the real loopback daemon's principal instead.
-    /// Like production, a scripted drop clears the live principal until recovery.
     nonisolated(unsafe) static var isDropped = false
     var principal: ConnectionPrincipal? {
         DemoMode.isEnabled && !DemoStartupConnection.isEnabled && !Self.isDropped ? .demoOwner : nil
@@ -46,7 +38,6 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
     }
 
     func response(for method: String, params: [String: Any], on connection: ConnectionManager) async throws -> Any {
-        // Startup UI tests serve fixtures only after a fresh daemon hello.
         if DemoStartupConnection.isEnabled, connection.connectionState != .connected {
             throw ConnectionManager.notConnectedRequestError()
         }
@@ -60,8 +51,6 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
             try await DemoFixtures.wait(for: gate)
         }
         let response = DemoFixtures.response(for: method, params: params)
-        // Routed ahead of the ack: the router buffers it until the caller
-        // registers its handler, the same order a live daemon can produce.
         if let push = DemoFixtures.subscriptionPush(for: method, params: params) {
             connection.subscriptionRouter.route(push)
         }
@@ -73,8 +62,6 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
 }
 
 extension ConnectionManager {
-    /// Test convenience: the scripted script-monitor fixture of the installed
-    /// demo transport, if any.
     var demoScriptMonitorFixtures: DemoScriptMonitorFixtures? {
         (requestTransport as? DemoConnectionTransport)?.scriptMonitors
     }

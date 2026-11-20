@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// Shown only when reconnection stopped for good (revoked access, a different
-/// person, an incompatible host); ordinary drops use `ReadOnlyBanner`.
-/// Only the backdrop ignores safe areas. Content and the action scroll together
-/// when large text or certificate warnings need more than the available height.
 struct ConnectionLossOverlay: View {
     private enum Layout {
         static let maximumContentWidth: CGFloat = 354
@@ -14,7 +10,6 @@ struct ConnectionLossOverlay: View {
         static let actionSpacing: CGFloat = 40
         static let actionHeight: CGFloat = 48
         static let backdropOpacity = 0.65
-        // Resolved in Figma frame 2989:20669; keep these local to this overlay.
         static let titleTracking: CGFloat = -0.36
         static let bodyTracking: CGFloat = -0.16
         static let actionTracking: CGFloat = -0.28
@@ -27,7 +22,6 @@ struct ConnectionLossOverlay: View {
     var machineName: String?
     var reason: String?
     var networkStatus: NetworkAvailability.Status = .unknown
-    // The source page can be light even though this overlay always renders dark.
     var sourceColorScheme: ColorScheme = .dark
     let onHome: () -> Void
 
@@ -47,8 +41,6 @@ struct ConnectionLossOverlay: View {
             .multilineTextAlignment(.center)
             .frame(maxWidth: Layout.maximumContentWidth)
             .padding(Layout.contentPadding)
-            // Balance the artwork around the full window center, not the
-            // asymmetric status-bar/home-indicator safe-area center.
             .padding(.bottom, bottomBalancePadding)
             .frame(maxWidth: .infinity, minHeight: viewportHeight)
         }
@@ -69,8 +61,6 @@ struct ConnectionLossOverlay: View {
                     .ignoresSafeArea()
             }
         }
-        // Override the source environment copied by the presenter, as well as
-        // this window's appearance, so refreshed warnings and chrome stay dark.
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .transaction { transaction in

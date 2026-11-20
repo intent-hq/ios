@@ -11,13 +11,10 @@ import Observation
     private var index = AgentListIndex(agents: [])
     let list: AgentListState
     var expandedGroups: Set<AgentListGroup> = []
-    /// The selection whose sections a sidebar list finished opening and loading.
     var completedReveal: String?
 
     init(list: AgentListState = AgentListState()) { self.list = list }
 
-    /// Matches desktop agentDelegationParentOf: nonempty canonical parent,
-    /// then nonempty legacy creator, including when the wire parent is null.
     static func parent(of agent: AgentSession) -> String? {
         if let parent = agent.parentAgentId, !parent.isEmpty { return parent }
         if let creator = agent.createdByAgentId, !creator.isEmpty { return creator }
@@ -28,7 +25,6 @@ import Observation
 
     private func isRoot(_ agent: AgentSession) -> Bool {
         guard let parent = Self.parent(of: agent) else { return true }
-        // Only a complete legacy response can infer a missing parent.
         return list.scopeCounts == nil && index.byID[parent] == nil
     }
 
@@ -49,14 +45,9 @@ import Observation
         if list.delegatedCounts?.orphaned != nil {
             return activeAgents.filter { agent in
                 guard list.orphanedAgentIds.contains(agent.id), let parent = Self.parent(of: agent) else { return false }
-                // A restored parent may arrive while the orphan refresh is
-                // pending or failed. Stale membership must not duplicate its
-                // children; cache absence alone still never adds an orphan.
                 return index.byID[parent] == nil
             }
         }
-        // Old scoped daemons return the whole delegated bin. Its roots may
-        // have unloaded parents, or background parents in a collapsed bin.
         let hiddenBackground = !expandedGroups.contains(.background)
         return activeAgents.filter { agent in
             guard let parent = Self.parent(of: agent) else { return false }
@@ -117,7 +108,6 @@ import Observation
         } else if !expandedGroups.insert(group).inserted { expandedGroups.remove(group) }
     }
 
-    /// Which sections are open, so another list of the same workspace can match it.
     struct Expansion: Equatable {
         var groups: Set<AgentListGroup> = []
         var collapsedLegacyParents: Set<AgentListGroup> = []
@@ -143,8 +133,6 @@ import Observation
         var id: String { agent.id }
     }
 
-    /// Flatten only expanded branches, preserving ordering and bounding bad
-    /// cyclic data without recursive SwiftUI view construction.
     func visibleTree(_ roots: [AgentSession]) -> [TreeRow] {
         var result: [TreeRow] = []
         var visited: Set<String> = []
@@ -161,9 +149,6 @@ import Observation
         return result
     }
 
-    /// Sort rank for agents whose avatar state `needsUser`: blocker (0),
-    /// question (1), discussion (2); every other state ranks last (3), mirroring
-    /// the cloudlands hover card that groups attention rows above the rest.
     static func attentionRank(_ agent: AgentSession) -> Int {
         let state = AgentAvatarState.state(for: agent)
         guard state.needsUser else { return Self.noAttentionRank }
@@ -174,7 +159,6 @@ import Observation
         }
     }
 
-    /// Floats agents needing the user first, then falls back to `byLastActivity`.
     private static func byAttentionThenLastActivity(_ firstAgent: AgentSession, _ secondAgent: AgentSession) -> Bool {
         let rankA = attentionRank(firstAgent)
         let rankB = attentionRank(secondAgent)
@@ -182,11 +166,6 @@ import Observation
         return byLastActivity(firstAgent, secondAgent)
     }
 
-    /// Orders agents by `bestTimestamp` descending (most recent first),
-    /// parsing timestamps leniently since the daemon emits both fractional-
-    /// and whole-second RFC-3339 forms (which string comparison misorders).
-    /// Agents with no parseable timestamp sort last, with id as a stable
-    /// tiebreak.
     static func byLastActivity(_ firstAgent: AgentSession, _ secondAgent: AgentSession) -> Bool {
         let dateA = ISO8601DateFormatter.lenientDate(from: firstAgent.bestTimestamp)
         let dateB = ISO8601DateFormatter.lenientDate(from: secondAgent.bestTimestamp)

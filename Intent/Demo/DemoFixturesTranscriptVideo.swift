@@ -47,9 +47,6 @@ extension DemoFixtures {
         }
     }
 
-    // Two-second H.264 MP4, 160×90: yellow square on steel-blue background.
-    // Generated once with ffmpeg color + drawbox, libx264, yuv420p, +faststart.
-    // Inline bytes keep the opt-in demo independent of network and bundle lookup.
     private static let transcriptVideoBytes = Data(
         base64Encoded: transcriptVideoBase64,
         options: .ignoreUnknownCharacters

@@ -1,7 +1,6 @@
 import Foundation
 import Network
 
-/// Copy only. General-path evidence never decides whether remote UI is blocked.
 struct ConnectionNetworkMessage {
     let status: NetworkAvailability.Status
 

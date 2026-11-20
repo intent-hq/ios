@@ -55,7 +55,6 @@ struct AgentWaitingView: View {
     }
 
     private var waitingList: some View {
-        // Snapshot errors and prepare views before SwiftUI requests rows off-main.
         let coordinator = store.watchedAgentCoordinator
         let rows = coordinator.rows.map { row in
             let content = watchedAgentRow(row, hasError: coordinator.errors[row.id] != nil)

@@ -1,7 +1,5 @@
 import Foundation
 
-/// A phase can be a transcript stage or a daemon startup phase. Progress resets
-/// only the idle clock; elapsed time always uses the conversation's start date.
 struct ConversationConnectionStatusTiming<Phase: Equatable> {
     let startedAt: Date
     private var phase: Phase
@@ -28,7 +26,6 @@ struct ConversationConnectionStatusTiming<Phase: Equatable> {
     }
 
     func isDelayed(phase: Phase, at date: Date) -> Bool {
-        // Hide immediately on a new input, before SwiftUI delivers onChange.
         phase == self.phase
             && date.timeIntervalSince(lastProgressAt) >= Constants.Conversation.Column.Loading.slowThreshold
     }

@@ -1,8 +1,6 @@
 #if os(iOS)
 import SwiftUI
 
-/// Live Activity metrics and colors, shared by the widget extension and the
-/// app.
 enum AgentActivityStyle {
     static let markSize: CGFloat = 16
     static let minimalMarkSize: CGFloat = 14
@@ -19,7 +17,6 @@ enum AgentActivityStyle {
     static let summaryLines = 3
     static let compactSummaryLines = 2
     static let maxRows = 3
-    /// Dots and checks share one column so row titles line up.
     static let markerWidth: CGFloat = 12
 
     private static let runningRGB: UInt32 = 0xDDEC61
@@ -27,7 +24,6 @@ enum AgentActivityStyle {
     private static let redShift: UInt32 = 16
     private static let greenShift: UInt32 = 8
 
-    /// The workspace list's running dot.
     static let running = color(runningRGB)
 
     private static func color(_ rgb: UInt32) -> Color {
@@ -36,12 +32,9 @@ enum AgentActivityStyle {
     }
 }
 
-/// How a row on the card is drawn.
 enum AgentActivityRowStyle {
-    /// Finished while others still run: a check, its title and summary.
     case finished
     case running
-    /// The last agent finished: its summary under the workspace headline.
     case summary
 }
 
@@ -53,7 +46,6 @@ struct AgentActivityDisplayRow: Identifiable {
 }
 
 extension AgentActivityAttributes.ContentState {
-    /// Nothing runs and the relay sent the agent that finished last.
     var isAllFinished: Bool { runningCount == 0 && finished != nil }
 
     var headline: String {
@@ -169,7 +161,6 @@ struct AgentActivityCheck: View {
     }
 }
 
-/// Wraps a row in a link to its agent when one is known.
 struct AgentActivityRowLink<Content: View>: View {
     let row: AgentActivityRow
     @ViewBuilder let content: () -> Content
@@ -197,7 +188,6 @@ struct AgentActivityCompactCount: View {
     }
 }
 
-/// Expanded Dynamic Island: the headline on the leading edge, rows below.
 struct AgentActivityExpandedHeadline: View {
     let state: AgentActivityAttributes.ContentState
 

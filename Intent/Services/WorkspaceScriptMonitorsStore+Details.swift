@@ -81,8 +81,6 @@ extension WorkspaceScriptMonitorsStore {
 
     private func readDetail(_ selection: Selection, id: UUID, generation: Int, retry: Bool) async {
         do {
-            // A selected sheet shares the acknowledged feed; reconnect seeds page one
-            // before revalidating an off-page selection, without treating absence as terminal.
             let repairFeed = retry && (cache.feeds[selection.workspaceId]?.id == nil
                 || cache.buckets[selection.workspaceId]?.accessBlocked == true)
             await cache.load(workspaceId: selection.workspaceId, refresh: repairFeed)
@@ -128,8 +126,6 @@ extension WorkspaceScriptMonitorsStore {
     }
 
     func revalidateDetails(workspaceId: String) {
-        // Only open sheets re-read details. A replacement page may omit an active
-        // selection through pagination, so absence cannot establish its outcome.
         for (id, selection) in selections where selection.workspaceId == workspaceId
             && selection.runId != nil && !selection.terminal {
             selection.summary = rows(for: workspaceId).first { $0.monitorId == selection.monitorId }

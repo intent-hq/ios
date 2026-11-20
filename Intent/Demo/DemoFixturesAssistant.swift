@@ -83,7 +83,6 @@ extension DemoFixtures {
         return ["agent": agent]
     }
 
-    /// Exercise the Assistant's real loading, retry and first-conversation flow.
     static func assistantListGate(for method: String, params: [String: Any]) -> ResponseGate? {
         guard method == "agent.list", params["workspaceId"] as? String == Workspace.chiefWorkspaceId else { return nil }
         return triggerFile(from: LaunchOptions.current.arguments, prefix: "--demo-assistant-list-trigger-file=").map(ResponseGate.triggerFile)

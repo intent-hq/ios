@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Pull request rows for the workspace list page. A changed query reloads
-/// (search text debounced); an unchanged query keeps the cached rows when
-/// switching back from workspaces.
 struct PullRequestListContent: View {
     let store: PullRequestListStore
     let query: PullRequestListStore.Query
@@ -29,8 +26,6 @@ struct PullRequestListContent: View {
                     ForEach(PullRequestListItem.groupedByProject(store.items)) { group in
                         groupHeading(group.title)
                         ForEach(group.items) { item in
-                            // Distinct from the flat list's ids so the lazy
-                            // stack cannot reuse a row that shows the repository.
                             row(item, linkedWorkspace: links[item.id], showsRepository: false)
                                 .id("grouped:\(item.id)")
                         }
@@ -45,7 +40,6 @@ struct PullRequestListContent: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Constants.WorkspaceRow.spaciousPadding)
                 } else if isRemoteReadOnly {
-                    // A drop is not an error; the list reloads on reconnect.
                 } else if case .failed(let error) = store.phase {
                     failureRow(error) { await store.load(query) }
                 } else if let error = store.loadMoreError {
@@ -63,8 +57,6 @@ struct PullRequestListContent: View {
         }
     }
 
-    /// Run from `.task(id: query)` on the page; rows are lazy, so the
-    /// trigger cannot live on them.
     static func sync(_ store: PullRequestListStore, to query: PullRequestListStore.Query) async {
         guard store.loadedQuery != query || store.phase != .ready else { return }
         if let loaded = store.loadedQuery, loaded.text != query.text {
@@ -99,7 +91,6 @@ struct PullRequestListContent: View {
         }
         .visionListRowHitTarget()
         .onAppear {
-            // After a failed page, only Retry asks again.
             if item.id == store.items.last?.id, store.loadMoreError == nil, !isRemoteReadOnly { Task { await store.loadMore() } }
         }
     }
@@ -143,7 +134,6 @@ struct PullRequestListContent: View {
         .accessibilityIdentifier("pullRequests.placeholder")
     }
 
-    /// Inline error under rows that stay visible, with its own Retry.
     private func failureRow(_ error: String, retry: @escaping @MainActor () async -> Void) -> some View {
         VStack(spacing: Constants.WorkspaceSearch.contentSpacing) {
             message(error)

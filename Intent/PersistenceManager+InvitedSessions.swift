@@ -19,8 +19,6 @@ extension PersistenceManager {
         }
     }
 
-    /// Refuse migration/alias changes if the local provenance write was rejected.
-    /// Readback confirms acceptance by the injected/defaults store, not an fsync.
     func persistInvitedMigrationJournal(_ journal: InvitedSyncJournal) -> Bool {
         guard invitedJournalAvailable, let data = try? JSONEncoder().encode(journal) else { return false }
         defaults.set(data, forKey: Self.invitedJournalKey)
@@ -35,8 +33,6 @@ extension PersistenceManager {
         }
     }
 
-    /// Called only after explicit pairing and authoritative identity discovery.
-    /// A successful full read is required before a new intent can beat removals.
     func prepareInvitedPairing(_ connection: inout StoredConnection, hostname: String? = nil) throws {
         guard let principal = connection.principal, !principal.isOwner else { return }
         guard invitedJournalAvailable, let key = connection.invitedPersonKey, let pin = connection.server.certFingerprint,
@@ -94,8 +90,6 @@ extension PersistenceManager {
         return connection.server.tcAddress ?? fallback
     }
 
-    /// Every attempt begins by folding removals, including observed future
-    /// pairing/route clocks. Failure never acknowledges or restamps the intent.
     func publishPendingInvitedSessions() {
         guard invitedJournalAvailable, let registry = invitedRegistry, let snapshot = registry.read(), !snapshot.removalStateUnknown,
               var connections = loadConnectionsWithOutcome().connections else { return }
@@ -112,7 +106,6 @@ extension PersistenceManager {
                     rememberedFloor: journal.floors[local.account] ?? 0
                   ) else { continue }
             if !merged.live || merged.token != connections[index].token || merged.pairedAt != local.pairedAt { continue }
-            // A route patch merges with remote credentials before publication.
             if registry.writeMutable(merged, snapshot: snapshot) {
                 connections[index].invitedSyncPayload = merged.data
                 connections[index].pendingSyncUpdatedAt = nil
@@ -126,16 +119,12 @@ extension PersistenceManager {
     private func publishInvitedRemovals(_ registry: InvitedSessionRegistry, journal: InvitedSyncJournal) -> Bool {
         for (account, data) in journal.removals {
             guard let removal = InvitedSyncRecord.parse(account: account, data: data), registry.insertRemoval(removal) else { return false }
-            // Inserting the immutable removal changes the registry signature.
-            // Re-read both groups before repair, including any concurrent re-pair
-            // or removal, while retaining writeMutable's final snapshot guard.
             guard let snapshot = registry.read(), !snapshot.removalStateUnknown else { return false }
             var observed = invitedJournal
             observed.observe(snapshot.records)
             guard persistInvitedMigrationJournal(observed) else { return false }
             guard let key = removal.personKey, !snapshot.frozen(key) else { continue }
             let existing = snapshot.records.filter { $0.personKey == removal.personKey }
-            // A later authenticated re-pair is kept; the independent removal stays.
             if let merged = InvitedSyncMerge.person(existing + [removal], rememberedFloor: observed.floors[key] ?? 0), !merged.live {
                 guard registry.writeMutable(merged, snapshot: snapshot) else { return false }
             }
@@ -153,8 +142,6 @@ extension PersistenceManager {
         }
     }
 
-    /// Local suppression precedes credential deletion and cloud insertion.
-    /// Retries reuse this exact UUID, floor and alias snapshot after relaunch.
     func rememberInvitedRemoval(_ connection: StoredConnection) -> Bool {
         guard invitedJournalAvailable, let local = Self.invitedRecord(connection), let key = local.personKey else { return false }
         var journal = invitedJournal

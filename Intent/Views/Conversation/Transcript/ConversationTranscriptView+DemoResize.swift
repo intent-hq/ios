@@ -1,7 +1,6 @@
 import SwiftUI
 
 extension ConversationTranscriptScrollState {
-    /// A receipt of actual geometry, never an input to recovery decisions.
     struct DemoRecoveryResize {
         let token: ConversationTranscriptRecoveryLifecycle.RecoveryToken
         let pageUp: ConversationTranscriptScrollPolicy.ViewportGeometry
@@ -13,9 +12,6 @@ extension ConversationTranscriptScrollState {
 }
 
 extension ConversationTranscriptView {
-    /// Only the disposable demo control installs this overlap. The fixture
-    /// releases the real hook.list response after the real recovery's page
-    /// up has moved the live scroll view; it never changes recovery timing.
     private var demoRecoveryResizeEnabled: Bool {
         #if DEBUG
         DemoMode.isEnabled && LaunchOptions.current.contains("--demo-hooks-row-during-recovery")
@@ -40,8 +36,6 @@ extension ConversationTranscriptView {
     }
     #endif
 
-    /// The geometry callback is evidence that the footer actually resized
-    /// the container while the same recovery still owned the page-up.
     func recordDemoRecoveryResize(from oldHeight: CGFloat, to newHeight: CGFloat) {
         guard demoRecoveryResizeEnabled, var receipt = scrollState.demoRecoveryResize,
               !receipt.followBackObserved, newHeight < oldHeight,
@@ -52,8 +46,6 @@ extension ConversationTranscriptView {
         AppLog.userInterface.debug("[SCROLL] Demo: footer resized during recovery \(receipt.token): \(oldHeight)->\(newHeight)")
     }
 
-    /// Runs before the lifecycle's follow-back effect. A later resize or a
-    /// different owner cannot earn overlap credit for this correction.
     func recordDemoRecoveryResizeFollowBack(_ event: Lifecycle.Event) {
         guard demoRecoveryResizeEnabled, case .recoveryPagedUp(let token, _) = event,
               var receipt = scrollState.demoRecoveryResize, receipt.token == token,

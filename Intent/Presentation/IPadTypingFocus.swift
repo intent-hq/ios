@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Input focus controls the retained iPad conversation pane.
 struct IPadTypingFocus: ViewModifier {
     @Binding var isFocused: Bool
     let composerVisible: Bool
@@ -35,7 +34,6 @@ struct IPadTypingFocus: ViewModifier {
     }
 }
 
-/// Keeps the same editor subtree while its adjacent close control appears.
 struct IPadTypingFocusRow<Content: View>: View {
     @Binding var isFocused: Bool
     @ViewBuilder let content: Content
@@ -77,7 +75,6 @@ struct IPadTypingFocusRow<Content: View>: View {
     }
 }
 
-/// Hides only navigation chrome while the existing conversation fills its focus panel.
 struct ConversationFocusHeaderInset<Header: View>: ViewModifier {
     let isEnabled: Bool
     var floats = false

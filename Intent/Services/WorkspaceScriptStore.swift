@@ -2,7 +2,6 @@ import Combine
 import Foundation
 import Observation
 
-/// Owned by one workspace view so only the launching window presents its browser.
 @MainActor
 @Observable
 final class WorkspaceScriptStore {
@@ -124,8 +123,6 @@ final class WorkspaceScriptStore {
         await refreshTask(workspaceId: workspaceId).value
     }
 
-    /// Pauses background subscriptions and reconnect refreshes while cached
-    /// offscreen in `WorkspaceDetailStoresCache`, keeping known definitions.
     func suspendObservation() {
         generation += 1
         subscriptionTask?.cancel()
@@ -139,8 +136,6 @@ final class WorkspaceScriptStore {
         }
         for task in refreshTasks.values { task.cancel() }
         refreshTasks.removeAll()
-        // Retire view actions, but keep sent starts until they settle so a
-        // subsequent stop/remove still waits for them before sending its request.
         updates.removeAll()
         pending.removeAll()
         presentations.removeAll()
@@ -152,7 +147,6 @@ final class WorkspaceScriptStore {
         cancellable = nil
     }
 
-    /// Restores event and connection observation when the workspace reappears.
     func resumeObservation() {
         isConnected = connection.connectionState == .connected
         if eventHandlerId == nil {
@@ -194,7 +188,6 @@ final class WorkspaceScriptStore {
         try await ensureSubscribed(generation: currentGeneration)
         guard owns(launch, workspaceId: workspaceId, generation: currentGeneration) else { return }
         guard let script = try await registeredScript(script, launch: launch, generation: currentGeneration) else { return }
-        // Reselecting a script whose start is in flight shares that request.
         let key = ScriptKey(workspaceId: workspaceId, scriptId: script.id)
         let existingStart = startTasks[key]
         if let existingStart { try await existingStart.task.value }
@@ -247,7 +240,6 @@ final class WorkspaceScriptStore {
             var current = definitions[workspaceId]?.first { $0.id == script.id } ?? script
             current.apply(runtime: runtime)
             update(current)
-            // A list captured before this authoritative status must not restore old fields.
             revisions[workspaceId, default: 0] += 1
             return current
         }

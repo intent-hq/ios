@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Figma anchors adapted to this window's safe-area width and text size.
 struct IPadShellLayout: Equatable {
     static let focusLayer: Double = 3
     static let focusPanelWidth: CGFloat = 624
@@ -19,7 +18,6 @@ struct IPadShellLayout: Equatable {
     static let cornerRadius: CGFloat = 20
     static let largeWindowWidth: CGFloat = 1300
     static let compactWindowWidth: CGFloat = 600
-    /// Between the iPad mini's 744 pt short side and the 820 pt of the 11-inch iPads.
     static let tightRailShortSide: CGFloat = 800
     static let outerInset: CGFloat = 16
     static let largeSidebarWidth: CGFloat = 400
@@ -65,7 +63,6 @@ struct IPadShellLayout: Equatable {
     var focusedPanelLeadingInset: CGFloat { (availableWidth - focusedPanelWidth) / 2 }
     var contentWidth: CGFloat { max(0, availableWidth - railLeadingInset) }
     var sidebarWidth: CGFloat { usesCompactNavigation ? contentWidth : min(preferredSidebarWidth, contentWidth) }
-    /// Small windows let the sidebar meet the rail; it shares the shell background, so its content inset does the spacing.
     var sidebarLeadingInset: CGFloat {
         windowShortSide < Self.tightRailShortSide ? max(0, railLeadingInset - railGutter) : railLeadingInset
     }
@@ -80,8 +77,6 @@ struct IPadShellLayout: Equatable {
     }
 }
 
-/// iPad shell roles keep the surrounding chrome distinct from the main panel.
-/// Reuse the approved colors without changing connection or onboarding palettes.
 enum IPadShellStyle {
     static func background(for scheme: ColorScheme) -> Color {
         Constants.Conversation.Design.Palette.surface(for: scheme)

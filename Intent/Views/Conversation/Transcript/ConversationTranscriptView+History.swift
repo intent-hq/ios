@@ -62,9 +62,6 @@ extension ConversationTranscriptView {
     }
 
     private func preserveHistoryPosition() {
-        // Called synchronously at page acceptance, before observable rows change.
-        // Request-time frames may be stale if the reader continued scrolling;
-        // post-await frames may already describe the newly inserted history.
         guard lifecycle.isVisible, hasInitiallyScrolled, userIsScrolledAway,
               !isFollowing, !isUserInteracting else { return }
         scrollState.suspendViewport()

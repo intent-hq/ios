@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// A label and growing native editor surface, never a fixed-height text clip.
 struct ManualConnectionField<Content: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     let label: LocalizedStringKey

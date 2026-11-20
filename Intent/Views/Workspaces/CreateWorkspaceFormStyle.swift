@@ -35,7 +35,6 @@ enum CreateWorkspaceFormStyle {
     static let primary = Color(red: primaryRed, green: primaryGreen, blue: primaryBlue)
     static let primaryForeground = Color(white: primaryTextWhite)
 
-    // Resolve Figma 2989:23630's disabled colors over the form without fading the button.
     static func disabledBackground(for scheme: ColorScheme) -> Color {
         CreateWorkspaceRepoStyle.background(for: scheme).mix(
             with: Constants.ConnectionSheet.disabledBackground(for: scheme),
@@ -86,7 +85,6 @@ struct CreateWorkspaceControlShadow: ViewModifier {
     }
 }
 
-/// Shared presentation for repository and branch selection.
 enum CreateWorkspaceRepoStyle {
     static let titleSpacing: CGFloat = 56
     static let sectionSpacing: CGFloat = 32

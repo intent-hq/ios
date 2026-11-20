@@ -1,6 +1,5 @@
 import Foundation
 
-/// The /tunnel wire format is independent of JSON-RPC (protocol §1.4).
 nonisolated struct BrowserTunnelFrame: Equatable, Sendable {
     enum Opcode: UInt8, Sendable {
         case open = 0x01
@@ -29,7 +28,6 @@ nonisolated struct BrowserTunnelFrame: Equatable, Sendable {
         self.payload = payload
     }
 
-    // Exhaustive validation follows the protocol opcode table.
     init(decoding data: Data) throws {
         guard (Self.headerSize...Self.maximumMessageSize).contains(data.count),
               let first = data.first, let opcode = Opcode(rawValue: first) else {

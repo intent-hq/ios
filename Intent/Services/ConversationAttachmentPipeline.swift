@@ -15,25 +15,16 @@ enum ComposerImageRecovery {
     }
 }
 
-/// Main-actor-owned composer attachment state and send-time placement logic.
-/// Security-scoped access begins when a file is added and remains held until
-/// removal, clear after a successful send/queue, or deinitialization.
 @MainActor
 @Observable final class ConversationAttachmentPipeline {
-    // Keep MiB conversions and the ordered JPEG quality ladder together as named encoding policy.
     // swiftlint:disable no_magic_numbers
-    // This named aggregate limit mirrors the daemon-facing image contract.
     static let maxImageReferenceBytes = 30 * 1024 * 1024
-    // Conservative client budgets leave room for base64 and provider context;
-    // they are not a guarantee against any provider's total request limit.
     nonisolated private static let maxOutgoingImageBytes = 1024 * 1024
-    // Scale the aggregate with the selection limit so every allowed image keeps its 1 MiB share.
     private static let maxOutgoingImagesBytes = Constants.Conversation.Composer.maximumImageSelectionCount * maxOutgoingImageBytes
     nonisolated private static let maxOutgoingPixelSize: CGFloat = 2048
     nonisolated private static let maximumResizePasses = 3
     nonisolated private static let compressionQualities: [CGFloat] = [Constants.Conversation.Composer.imageCompressionQuality, 0.6, 0.4]
     // swiftlint:enable no_magic_numbers
-    // Date.timeIntervalSince1970 is expressed in seconds.
     private static let millisecondsPerSecond: TimeInterval = 1000
 
     enum ImagePlacementError: LocalizedError {
@@ -80,19 +71,13 @@ enum ComposerImageRecovery {
     var selectedPhotoItems: [PhotosPickerItem] = []
     var isLoadingPhotos = false
     @ObservationIgnored var photoImportTask: Task<Void, Never>?
-    /// Loads one picked photo's bytes. A seam so tests can hold an import in
-    /// flight; production reads the item's transferable data.
     @ObservationIgnored var loadPhotoData: (PhotosPickerItem) async -> Data? = { try? await $0.loadTransferable(type: Data.self) }
-    /// A seam so tests can pick library videos, which import as files.
     @ObservationIgnored var photoVideos = PhotoLibraryVideos.live
-    /// Encodes one outgoing photo. A seam so tests can observe where encoding
-    /// runs; production always uses the bounded resize/JPEG ladder.
     @ObservationIgnored var encodeOutgoingJPEG: @Sendable (UIImage) -> Data? = ConversationAttachmentPipeline.outgoingJPEGData(for:)
     var pendingFiles: [PendingFile] = []
     var fileUploadProgress: [UUID: Double] = [:]
     var imagePlacementError: String?
     var filePlacementError: String?
-    /// Picked photos or files that could not be added to the composer (#463).
     var attachmentImportError: String?
 
     var hasPendingAttachments: Bool { !pendingImages.isEmpty || !pendingFiles.isEmpty }
@@ -128,8 +113,6 @@ enum ComposerImageRecovery {
         }
     }
 
-    /// Called only by the native Paste action. Snapshot each image item before
-    /// returning to the run loop, while lazy clipboard providers are available.
     func pasteImages() {
         let pasteboard = imagePasteboard
         let imageTypes = pasteboard.itemTypes().enumerated().compactMap { index, types in
@@ -162,7 +145,6 @@ enum ComposerImageRecovery {
             }
             images.append(image)
         }
-        // Commit the batch atomically; never silently drop an unreadable item.
         pendingImages.append(contentsOf: images)
         imagePlacementError = nil
     }
@@ -196,16 +178,12 @@ enum ComposerImageRecovery {
         for url in urls { stopSecurityScopedAccessIfOwed(for: url) }
     }
 
-    /// Only consume this send's selection, not files added while awaiting RPCs.
     func clearPendingFiles(ids: Set<UUID>) {
         let urls = pendingFiles.filter { ids.contains($0.id) }.map(\.url)
         pendingFiles.removeAll { ids.contains($0.id) }
         for url in urls { stopSecurityScopedAccessIfOwed(for: url) }
     }
 
-    /// Keep the captured selection readable even if it is removed from the
-    /// composer while another attachment is uploading. These are extra leases,
-    /// balanced independently of the composer's own security-scoped access.
     func retainFileAccess(for files: [PendingFile]) -> ConversationSendFileAccess {
         ConversationSendFileAccess(
             urls: files.map(\.url).filter { startSecurityScopedAccess($0) },
@@ -226,7 +204,6 @@ enum ComposerImageRecovery {
         var totalBytes = 0
         let encoder = encodeOutgoingJPEG
         for (index, image) in images.enumerated() {
-            // Stop before encoding the next photo once the send is cancelled.
             try Task.checkCancellation()
             guard let data = await Self.encodeOffMainActor(image, using: encoder) else {
                 throw ImagePlacementError.encodingFailed(index: index + 1)
@@ -239,8 +216,6 @@ enum ComposerImageRecovery {
             payloads.append(data)
         }
 
-        // The Assistant has no filesystem root for attachment placement (#619).
-        // Inline image blocks are a supported protocol arm, not an error fallback.
         if workspaceId == Workspace.chiefWorkspaceId {
             return .inline(payloads.map { data in
                 ["type": "image", "data": data.base64EncodedString(), "mimeType": "image/jpeg"]
@@ -326,7 +301,6 @@ enum ComposerImageRecovery {
         imageRecovery: ComposerImageRecovery,
         messageText: inout String
     ) {
-        // A drop restores the draft silently; read-only mode explains it.
         imagePlacementError = DiagnosticErrorOwnership.alertMessage(for: error)
         if messageText.isEmpty { messageText = content }
         imageRecovery.apply(to: &pendingImages)
@@ -344,10 +318,7 @@ enum ComposerImageRecovery {
     }
 }
 
-// Send-time photo encoding, kept nonisolated so it never runs on the main actor.
 extension ConversationAttachmentPipeline {
-    /// Resizing and JPEG encoding can take hundreds of milliseconds per large
-    /// photo, so run it on the concurrent pool instead of the main actor.
     @concurrent
     nonisolated private static func encodeOffMainActor(
         _ image: UIImage,
@@ -356,8 +327,6 @@ extension ConversationAttachmentPipeline {
         encoder(image)
     }
 
-    /// Bake orientation into bounded pixel dimensions before JPEG encoding.
-    /// Never modify the original image retained by the draft/send attempt.
     nonisolated static func outgoingJPEGData(for image: UIImage) -> Data? {
         let pixels = CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale)
         guard pixels.width.isFinite, pixels.height.isFinite, pixels.width > 0, pixels.height > 0 else { return nil }
@@ -388,7 +357,6 @@ extension ConversationAttachmentPipeline {
             lastData = data
             size = CGSize(width: max(1, floor(size.width / 2)), height: max(1, floor(size.height / 2)))
         }
-        // The caller rejects any remaining over-budget data before any RPC.
         return lastData
     }
 }

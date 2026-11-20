@@ -165,8 +165,6 @@ import SwiftUI
             self?.notifyEntryStateChanged()
         }
         liveTranscript.onAuthoritativeMessages = { [weak self] messages, hasActivityState in
-            // A user-row delta confirms delivery, not the end of a turn.
-            // Only a snapshot or assistant activity replaces optimistic Thinking.
             if hasActivityState { self?.sendThinkingMessageIds.removeAll() }
             self?.reconcileSendAttempts(messages: messages)
         }

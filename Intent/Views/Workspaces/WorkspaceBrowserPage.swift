@@ -6,7 +6,6 @@ import WebKit
 @Observable
 final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     private(set) var webView: WKWebView?
-    /// The main-frame load. A failure replaces the page until the next load or Reload.
     private(set) var loadPhase = LoadPhase.idle
     private(set) var canGoBack = false
     private(set) var canGoForward = false
@@ -148,7 +147,6 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, didFinish _: WKNavigation?) {
         guard webView === self.webView else { return }
-        // A failure reported mid-load (a cross-origin subframe) stays on screen.
         if case .loading = loadPhase { loadPhase = .loaded(Date()) } else { loadPhase = loadPhase.settled() }
         updateNavigation(webView)
     }
@@ -186,8 +184,6 @@ final class WorkspaceBrowserPage: NSObject, WKNavigationDelegate, WKUIDelegate {
         updateNavigation(webView)
     }
 
-    /// A subframe asked for a different local server. A main frame still loading
-    /// keeps its spinner behind the message until `didFinish`.
     func reportCrossOriginSubframe() {
         let message = "This embedded page uses a different local server. Open its address in a new browser."
         loadPhase = loadPhase.isLoading ? loadPhase.failingDuringRead(message) : loadPhase.failingVisibly(message)

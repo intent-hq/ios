@@ -1,10 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Brings this window's own scene forward. Raising by `openWindow(value:)`
-/// is unreliable: a window switched to another backend in place keeps the
-/// scene value it was created with, so raising by its current backend can
-/// open a duplicate window instead.
 @MainActor
 final class WindowSceneActivator {
     weak var scene: UIWindowScene?
@@ -24,15 +20,12 @@ final class WindowSceneActivator {
         self.activate = activate
     }
 
-    /// No-op for the window the user is already in, including a window that
-    /// just switched backends in place to deliver this selection.
     func raiseIfNeeded() {
         guard let state = activationState(), state != .foregroundActive else { return }
         activate()
     }
 }
 
-/// Feeds the hosting scene to a `WindowSceneActivator`.
 struct WindowSceneReader: UIViewRepresentable {
     let activator: WindowSceneActivator
 
@@ -65,8 +58,6 @@ struct WindowSceneReader: UIViewRepresentable {
 }
 
 extension AppCoordinator {
-    /// This window's agent-selection handler: bring the window forward where
-    /// several windows exist, then navigate it to the selected agent.
     func agentSelectionHandler(
         raising activator: WindowSceneActivator?
     ) -> (String, String, String, UUID) -> Void {

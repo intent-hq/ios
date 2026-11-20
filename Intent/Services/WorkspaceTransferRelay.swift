@@ -1,9 +1,6 @@
 import Combine
 import Foundation
 
-/// A single attempt owns a temporary destination socket and all staging IDs.
-/// Cancellation never cancels a mutating RPC: its reply may hold an ID needed
-/// for cleanup. Commit is an explicit point after which cancellation is refused.
 @MainActor
 final class WorkspaceTransferRelay {
     let workspaceId: String
@@ -40,7 +37,6 @@ final class WorkspaceTransferRelay {
         preflightTask?.cancel()
     }
 
-    /// A returned warning means import succeeded but source finalization failed.
     func run(destination: StoredConnection, archiveSource: Bool) async throws -> String? {
         guard source !== target else {
             throw WorkspaceTransferError.message("Choose a different machine for the transfer.")
@@ -154,8 +150,6 @@ final class WorkspaceTransferRelay {
         return plan
     }
 
-    /// Every destination workspace row (bounded reads): a duplicate can sit
-    /// past the first page, and a walk that cannot finish fails closed.
     private func destinationWorkspaceRows() async throws -> [[String: Any]] {
         var listedShape = true
         let rows: [[String: Any]]

@@ -7,11 +7,9 @@ import Observation
     private(set) var stagedChanges: [WorkspaceChange] = []
     private(set) var unstagedChanges: [WorkspaceChange] = []
     private(set) var commits: [WorkspaceCommit] = []
-    /// The snapshot read. A failed refresh keeps the rows and its message.
     private(set) var loadPhase = LoadPhase.idle
     private(set) var isTruncated = false
     private(set) var isLoadingMore = false
-    /// The last Load More failure, independent of the snapshot read.
     private(set) var pageFailure: String?
     var isLoading: Bool { loadPhase.isLoading }
     var hasLoaded: Bool { loadPhase.hasLoaded }
@@ -29,8 +27,6 @@ import Observation
     @ObservationIgnored private var registration = 0
     @ObservationIgnored private var subscriptionId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
-    /// Event-driven refreshes. An event while one runs earns a trailing
-    /// refresh, and one during that refresh another, until events settle.
     @ObservationIgnored let eventRefreshes = CoalescedRead()
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
     let connectionManager: ConnectionManagerRouting
@@ -47,7 +43,6 @@ import Observation
                 guard state == .connected else { return }
                 Task { @MainActor [weak self] in
                     guard let self, isObserving, let workspaceId else { return }
-                    // Remote subscriptions do not survive a connection loss.
                     subscriptionId = nil
                     await startObserving(workspaceId: workspaceId)
                 }
@@ -61,13 +56,11 @@ import Observation
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
     }
 
-    /// Replaces both lists together. A later refresh, navigation, or change event invalidates the result.
     func refresh(workspaceId: String) async {
         guard !Task.isCancelled else { return }
         bind(workspaceId)
         revision &+= 1
         let requestRevision = revision
-        // A shown failure stays through Retry and event refreshes until a read ends.
         loadPhase = loadPhase.beginningKeepingFailure()
         isLoadingMore = false
         defer {
@@ -105,7 +98,6 @@ import Observation
         guard selectedRootId != id else { return }
         revision &+= 1
         selectedRootId = id
-        // This refresh supersedes any event refresh; drop its trailing pass.
         eventRefreshes.cancel()
         clearRows()
         await refresh(workspaceId: workspaceId)
@@ -122,7 +114,6 @@ import Observation
         do {
             let page = try await fetchCommits(workspaceId: workspaceId, root: selectedRoot, nextToken: token)
             guard owns(requestRevision), !Task.isCancelled else { return }
-            // A rebase may move the boundary while a page is loading. Restart the bounded walk.
             guard page.boundarySha == boundarySha else {
                 await refresh(workspaceId: workspaceId)
                 return
@@ -178,7 +169,6 @@ import Observation
         return commits.filter { hashes.insert($0.hash).inserted }
     }
 
-    /// The event handler is installed exactly while observing.
     private var isObserving: Bool { eventHandlerId != nil }
 
     private func owns(_ requestRevision: Int) -> Bool {
@@ -191,7 +181,6 @@ import Observation
         self.workspaceId = workspaceId
     }
 
-    /// Invalidates pending reads synchronously so a disappearing screen cannot be repopulated.
     func stopObserving(preservingSnapshot: Bool = false) {
         registration &+= 1
         revision &+= 1
@@ -200,7 +189,6 @@ import Observation
         eventHandlerId = nil
         if let subscriptionId { Self.release(subscriptionId, via: connectionManager) }
         subscriptionId = nil
-        // A commit pushed over Changes keeps its repository and rows for Back.
         guard !preservingSnapshot else { return }
         workspaceId = nil
         roots = []
@@ -223,7 +211,6 @@ import Observation
 }
 
 extension WorkspaceChangesStore {
-    /// Install the event handler before subscribing, then seed after the acknowledgement.
     func startObserving(workspaceId: String) async {
         guard !Task.isCancelled else { return }
         bind(workspaceId)
@@ -269,7 +256,6 @@ extension WorkspaceChangesStore {
             }
             subscriptionId = remoteId
         } catch {
-            // Keep the one-shot snapshot and pull-to-refresh usable when subscription setup fails.
             if registration == currentRegistration, !Task.isCancelled {
                 AppLog.workspace.error("[WorkspaceChangesStore] events.subscribe failed: \(error)")
             }
@@ -287,7 +273,6 @@ extension WorkspaceChangesStore {
               (data["workspaceId"] as? String ?? event["workspaceId"] as? String) == workspaceId else { return }
         if let subscriptionId, let receivedId = envelope["subscriptionId"] as? String,
            receivedId != subscriptionId { return }
-        // Rootless events invalidate the workspace; inventory events may change the selection.
         if !type.hasPrefix("gitRoot:"),
            let rootId = data["gitRootId"] as? String, rootId != selectedRootId { return }
         queueRefresh(workspaceId: workspaceId)
@@ -333,7 +318,6 @@ extension WorkspaceChangesStore {
             }
         } catch {
             guard owns(requestRevision), !Task.isCancelled, !(error is CancellationError) else { return }
-            // An inventory outage must not erase known roots or prevent the primary snapshot from loading.
             repositoryErrorMessage = "Could not load repositories: \(error.localizedDescription)"
         }
     }

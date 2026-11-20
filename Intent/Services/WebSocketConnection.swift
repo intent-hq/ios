@@ -2,20 +2,9 @@ import Foundation
 import Network
 import os
 
-/// WebSocket transport over a Network.framework TLS byte stream. The RFC 6455
-/// handshake and framing, and RFC 7692 permessage-deflate, run in Swift
-/// (`WebSocketHandshake`, `WebSocketFrameCodec`, `PerMessageDeflate`) because
-/// `NWProtocolWebSocket` aborts any handshake in which the server accepts an
-/// extension, so it cannot compress.
-/// URLSession is deliberately not used: App Transport Security applies to URLSession
-/// connections and blocks pinned self-signed wss connections to non-local hosts
-/// (public IPs, Tailscale), while Network.framework leaves trust to the verify block
-/// below — the SHA-256 certificate fingerprint is the sole trust decision.
 actor WebSocketConnection {
     nonisolated let host: String
     nonisolated let pathObservation: SocketPathObservation
-    /// The extension the server accepted, for logs and tests; nil when the
-    /// connection is uncompressed.
     nonisolated let negotiatedDeflate: PerMessageDeflateParameters?
     private let connection: NWConnection
     private let queue: DispatchQueue
@@ -25,13 +14,8 @@ actor WebSocketConnection {
     private var pendingPings: [Data: WebSocketPingSupport.PendingPing] = [:]
     private var nextPingID: UInt64 = 0
 
-    /// Offer permessage-deflate on every connection. Setting this to false
-    /// restores a plain RFC 6455 connection (no extension header), the
-    /// rollback path for compression.
     nonisolated static let offersPermessageDeflate = true
 
-    /// Connect handshake deadline, matching the URLRequest.timeoutInterval the
-    /// URLSession-based transport used. Covers TCP, TLS, and the HTTP upgrade.
     private static let connectTimeoutSeconds: Int = 4
     static let connectTimeout: Duration = .seconds(connectTimeoutSeconds)
     private static let maximumMessageSizeMebibytes: Int = 40
@@ -41,8 +25,6 @@ actor WebSocketConnection {
         maximumMessageSizeMebibytes * kibibytesPerMebibyte * bytesPerKibibyte
     static let readChunkSize = 65_536
 
-    /// Socket lifecycle shared with nonisolated teardown paths: a close frame
-    /// is sent only once, and only after the upgrade completed.
     nonisolated enum SocketState: Sendable {
         case connecting
         case open
@@ -88,9 +70,6 @@ actor WebSocketConnection {
     ) -> NWParameters {
         guard let pinned = trustedPin(certFingerprint) else { return NWParameters.tcp }
         let tlsOptions = NWProtocolTLS.Options()
-        // Fingerprint pinning is the sole trust decision: the verify block
-        // replaces default chain evaluation entirely (the daemon's cert is
-        // self-signed), so SecTrustEvaluate is deliberately not called.
         sec_protocol_options_set_verify_block(
             tlsOptions.securityProtocolOptions,
             { @Sendable _, trustRef, complete in
@@ -132,7 +111,6 @@ actor WebSocketConnection {
         connection.viabilityUpdateHandler = { @Sendable isViable in
             pathObservation.viabilityChanged(isViable)
         }
-        // Preserve lifecycle ordering while retaining typed failure provenance.
         connection.stateUpdateHandler = { @Sendable [weak connection] state in
             switch state {
             case .setup, .preparing:
@@ -180,8 +158,7 @@ actor WebSocketConnection {
         ))
     }
 
-    // Starts the connection and, once TCP/TLS is ready, runs `upgrade`, all
-    // within `connectTimeout`. Teardown on cancellation needs the connection,
+    // Teardown on cancellation needs the connection,
     // lifecycle, and queue independently.
     // swiftlint:disable:next function_parameter_count
     nonisolated private static func awaitOpening(
@@ -216,10 +193,6 @@ actor WebSocketConnection {
                     group.cancelAll()
                     return result
                 } catch {
-                    // The upgrade child may be parked in a raw read or write,
-                    // which ignores task cancellation, and the group waits for
-                    // every child before returning. Cancelling the connection
-                    // completes that I/O so the timeout is honoured.
                     connection.cancel()
                     group.cancelAll()
                     throw error
@@ -230,8 +203,7 @@ actor WebSocketConnection {
         }
     }
 
-    // The public entry point keeps its long-standing parameter list; the
-    // compression flag defaults to the kill switch.
+    // The public entry point keeps its long-standing parameter list.
     // swiftlint:disable:next function_body_length
     nonisolated static func connect(
         host: String,
@@ -326,8 +298,6 @@ extension WebSocketConnection {
                 case .message(let message):
                     return message
                 case .ping(let payload):
-                    // Reply to daemon pings automatically; the app's own
-                    // liveness pings stay explicit via sendPing().
                     _ = Self.enqueueWhileOpen(Self.encodeControl(.pong, payload: payload), to: connection, lifecycle: lifecycle) { _ in }
                 case .pong(let payload):
                     resolvePong(payload)
@@ -344,8 +314,6 @@ extension WebSocketConnection {
                 Self.close(connection, lifecycle: lifecycle, code: WebSocketCloseCode.normalClosure, queue: queue)
             }
             guard let chunk else {
-                // The stream ended without a close frame (RFC 6455 abnormal
-                // closure).
                 throw WebSocketTransportError.disconnected(
                     host: host,
                     code: Int(WebSocketCloseCode.abnormalClosure),
@@ -356,8 +324,6 @@ extension WebSocketConnection {
         }
     }
 
-    /// The next decoded event; protocol violations fail the connection with
-    /// the matching close code (1002, 1007, or 1009).
     private func nextInboundEvent() throws -> InboundEvent? {
         do {
             return try inbound.nextEvent()
@@ -385,9 +351,6 @@ extension WebSocketConnection {
         try await sendPayload(data, opcode: .binary)
     }
 
-    /// Compresses (when negotiated and worthwhile) and writes one unfragmented
-    /// message. Compression and the enqueue happen before the first
-    /// suspension, so deflate context order always matches wire order.
     private func sendPayload(_ data: Data, opcode: WebSocketOpcode) async throws {
         let compressed = deflate?.compressIfWorthwhile(data)
         let frame = WebSocketFrame(opcode: opcode, payload: compressed ?? data, isCompressed: compressed != nil)
@@ -442,8 +405,6 @@ extension WebSocketConnection {
         }
     }
 
-    /// Completes the `sendPing()` waiting for this payload; unsolicited pongs
-    /// are ignored (RFC 6455 §5.5.3).
     private func resolvePong(_ payload: Data) {
         guard let pending = pendingPings.removeValue(forKey: payload) else { return }
         WebSocketPingSupport.takePending(pending)?.resume(returning: ())

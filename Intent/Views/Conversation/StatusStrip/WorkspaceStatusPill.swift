@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Capsule shared by the status pills above the workspace composer. Pills hug
-/// their content so several can share one row.
 struct WorkspaceStatusPill<Trailing: View>: View {
     let icon: ImageResource
     let text: Text
@@ -45,7 +43,6 @@ extension WorkspaceStatusPill where Trailing == EmptyView {
     }
 }
 
-// Generic types cannot hold static stored properties, so the timing lives here.
 private enum MarqueeMotion {
     static let pointsPerSecond: Double = 60
     static let maximumDuration: Double = 3
@@ -55,8 +52,6 @@ private enum MarqueeMotion {
     static let overlayDelaySeconds: Double = 0.05
 }
 
-/// One line that scrolls once to show an overflowing end, then returns to its truncated start.
-/// Reduce Motion keeps it truncated; a single pass keeps UI tests idle afterwards.
 struct MarqueeText<Content: View>: View {
     @ViewBuilder let text: Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -87,7 +82,6 @@ struct MarqueeText<Content: View>: View {
                         .lineLimit(1)
                         .fixedSize()
                         .offset(x: isScrolled ? -overflow : 0)
-                        // Declared on the moving text so a parent's animation reset cannot remove it.
                         .animation(.linear(duration: scrollDuration), value: isScrolled)
                         .accessibilityHidden(true)
                 }
@@ -109,12 +103,10 @@ struct MarqueeText<Content: View>: View {
         isRevealing = true
         try? await Task.sleep(for: .seconds(MarqueeMotion.overlayDelaySeconds))
         isScrolled = true
-        // The deferred reset returns to the truncated start without scrolling back.
         try? await Task.sleep(for: .seconds(duration + MarqueeMotion.endPauseSeconds))
     }
 }
 
-/// One row above the workspace composer: PR monitors first, then script watches.
 struct WorkspaceStatusPillsRow: View {
     let viewModel: ConversationViewModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -145,7 +137,6 @@ struct WorkspaceStatusPillsRow: View {
     }
 }
 
-/// Equal width limits keep short pills compact; rows stack when minimum widths cannot fit.
 struct WorkspaceStatusPillsLayout: Layout {
     var spacing: CGFloat
     var layoutDirection: LayoutDirection

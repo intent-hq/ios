@@ -25,8 +25,6 @@ struct WorkspaceStatusSwipeBadge: View {
     }
 }
 
-/// A row's leading icon that grows into a labelled pill as the row is
-/// swiped right, naming the action the completed swipe performs.
 struct SwipeMorphBadge<Dot: View>: View {
     let fill: Color
     let image: ImageResource

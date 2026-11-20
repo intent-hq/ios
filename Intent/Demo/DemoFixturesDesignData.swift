@@ -13,7 +13,6 @@ extension DemoDesignFixtures {
     | Baseline with descriptive theme names and a separate validation pass for every incoming document | 120 | 62.2% | 58.4% | 12 | 4.9 min | 512 MB |
     | Batched setup with shared context | 124 | 91.3% | 87.6% | 0 | 2.1 min | 384 MB |
     """
-    // Four long parallel paths keep both axes larger than the inline phone viewport.
     static let mermaidDiagram = """
     Before the interactive diagram.
 
@@ -39,7 +38,6 @@ extension DemoDesignFixtures {
     changes will be attempted.
     """
 
-    /// The raw reason intentd persisted for a Codex usage-limit turn failure.
     static let turnFailureText = #"internal error: session/prompt failed: JSON-RPC error -32603: Internal error: "#
         + #"{"message":"You've hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits "#
         + #"or try again at Nov 14th, 2026 8:07 AM.","codexErrorInfo":"usageLimitExceeded"}"#

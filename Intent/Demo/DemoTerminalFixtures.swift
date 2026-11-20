@@ -4,7 +4,6 @@ import Foundation
 enum DemoTerminalFixtures {
     private static var terminals: [String: String] = [:]
     private static let bootId = UUID().uuidString
-    // A steady cursor lets UI automation reach idle while preserving real keyboard interactions.
     private static let buffer = "\u{1b}[2 qDemo workspace terminal\r\n$ "
 
     static func response(for method: String, params: [String: Any]) -> Any? {

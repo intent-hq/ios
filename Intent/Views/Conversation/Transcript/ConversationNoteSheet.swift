@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// Note sheet opened from a transcript note reference. Note-to-note links that
-/// target the hidden global Assistant workspace push inside the sheet: that
-/// workspace has no place in the Workspaces tab, so the coordinator route would
-/// replace the user's open workspace screen with it. Other links keep the
-/// coordinator route.
 struct ConversationNoteSheet: View {
     let noteInfo: NoteSheetInfo
     let session: BackendSession

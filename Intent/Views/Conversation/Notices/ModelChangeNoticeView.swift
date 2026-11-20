@@ -1,14 +1,7 @@
 import SwiftUI
 
-/// Centered inline divider chip for daemon-persisted model-change transcript
-/// rows (metadata `{ type: "model_changed", from, to, fromProvider,
-/// toProvider }`). Informational styling, visually distinct from both chat
-/// bubbles and the amber warning banner — the row was never sent to the
-/// provider (FE parity: ModelChangeNotice.svelte).
 struct ModelChangeNoticeView: View {
     let notice: ModelChangeNotice
-    /// Fallback text (the row's text content) when the metadata fields are
-    /// absent.
     let fallbackText: String
     @Environment(\.colorScheme) var colorScheme
     @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 11

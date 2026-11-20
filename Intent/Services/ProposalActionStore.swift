@@ -117,7 +117,6 @@ final class ProposalActionStore {
         await loadIfNeeded()
     }
 
-    /// Card appearance and metadata-generation view tasks reuse settled detail.
     func loadIfNeeded() async {
         guard !isBusy else { return }
         do { try await load(refresh: false) } catch { loadError = error.localizedDescription }

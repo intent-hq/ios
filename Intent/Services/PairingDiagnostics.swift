@@ -30,7 +30,6 @@ nonisolated enum PairingDiagnostics {
         phase(.input, .failed, failure: DiagnosticFailure(origin: .localOperation, classification: .invalidInput), store: store)
     }
 
-    /// Receives closed capability/failure values, not camera errors or QR text.
     static func scanner(
         _ operation: DiagnosticOperation,
         failure: DiagnosticFailure.Classification,

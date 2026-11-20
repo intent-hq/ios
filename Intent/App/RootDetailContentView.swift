@@ -46,8 +46,6 @@ extension RootView {
                 }
             }
             .onChange(of: navigation.conversationPhase) { oldPhase, newPhase in
-                // Only user-initiated back transitions `.presented` -> `.hidden` while
-                // `currentScreen` is `.agentConversation`; programmatic re-push uses `.repushing`.
                 if oldPhase == .presented, newPhase == .hidden, case .agentConversation = coordinator.currentScreen {
                     coordinator.onBackToWorkspaceDetail()
                 }
@@ -62,7 +60,6 @@ extension RootView {
         }
     }
 
-    /// iPad split-view detail placeholder shown when no workspace is selected.
     var emptyDetailPlaceholder: some View {
         ZStack {
             WorkspaceDetailStyle.background(for: colorScheme).ignoresSafeArea()
@@ -71,7 +68,6 @@ extension RootView {
     }
 }
 
-/// Detail-pane empty state for wide layouts with no workspace selected (#908).
 struct WorkspaceDetailPlaceholder: View {
     @ScaledMetric(relativeTo: .title) private var iconSize: CGFloat = 48
 

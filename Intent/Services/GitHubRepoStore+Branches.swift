@@ -3,28 +3,14 @@ import Foundation
 extension GitHubRepoStore {
     // MARK: - Branches
 
-    /// The branch step's state for `owner/repo`; empty (loading) until a
-    /// load has been asked for.
     func branchState(owner: String, repo: String) -> GitHubBranchLoadState {
         branchStates[Self.branchKey(owner: owner, repo: repo)] ?? GitHubBranchLoadState()
     }
 
-    /// The authoritative listing cached for `owner/repo`, if this session
-    /// has loaded one; nil means the branch step must load.
     func cachedBranchListing(owner: String, repo: String) -> GitHubBranchListing? {
         branchStates[Self.branchKey(owner: owner, repo: repo)]?.listing
     }
 
-    /// Loads the authoritative listing for one repo — the repo's default
-    /// branch (`defaultBranch` when the picker already knows it, else
-    /// `github.repos.get`) plus the first page of `github.branches.list` —
-    /// and publishes it in `branchStates`. Single-flight per repo; a
-    /// completion from before an `invalidate()` is returned but not
-    /// published. Cold (no listing yet): clears the error, paints the
-    /// daemon's local cache (`github.branches.listCached`) as soon as it
-    /// answers, and on failure publishes the error for every consumer. A
-    /// failed refresh keeps the cached listing and stays silent. Throws so a
-    /// direct caller can react too.
     @discardableResult
     func loadBranchListing(
         owner: String, repo: String, defaultBranch: String? = nil
@@ -66,10 +52,6 @@ extension GitHubRepoStore {
         }
     }
 
-    /// The cached-first paint for a cold load: published only while the
-    /// same generation is still waiting on the authoritative read (no
-    /// listing, no error yet), so a late answer from before a reconnect or
-    /// after the authoritative outcome cannot land.
     private func paintCachedBranches(owner: String, repo: String, key: String, generation: Int) {
         latestBranchPaintTask = Task { [self] in
             guard let paint = await fetchCachedBranches(owner: owner, repo: repo),
@@ -80,11 +62,6 @@ extension GitHubRepoStore {
         }
     }
 
-    /// `github.branches.listCached` — the daemon's local repo cache (or its
-    /// one-shot `ls-remote` fallback), for a first paint before the
-    /// authoritative read lands. Never an error authority: a transport
-    /// failure, a `-32601` from an older daemon, or an empty listing all
-    /// read as a cache miss (nil). Never promoted to `listing`.
     func fetchCachedBranches(owner: String, repo: String) async -> GitHubBranchListing? {
         do {
             let result = try await connectionManager.request("github.branches.listCached", params: [
@@ -104,12 +81,6 @@ extension GitHubRepoStore {
         }
     }
 
-    /// `repo.warmCache` — fire-and-forget refresh of the daemon's repo cache
-    /// so the later `workspace.create` hydrates from a fresh cache (PROTOCOL
-    /// §5.11). Best-effort: every failure (warm already in flight, `-32601`
-    /// on an older daemon, offline) is logged only. At most one request per
-    /// repo per session. Returns the request's task (nil when deduplicated)
-    /// so tests can await its completion; callers need not keep it.
     @discardableResult
     func warmRepoCache(owner: String, repo: String) -> Task<Void, Never>? {
         guard warmedRepos.insert(Self.branchKey(owner: owner, repo: repo)).inserted else { return nil }
@@ -128,12 +99,6 @@ extension GitHubRepoStore {
         "\(owner)/\(repo)"
     }
 
-    /// `github.branches.list` — a single page (`branchesLimit`) of remote
-    /// branch names, optionally narrowed server-side by `prefix` (omitted
-    /// when nil/blank). Deliberately not paginated: the branch picker pins
-    /// the default branch on top and prefix search covers the rest. Throws
-    /// on transport failure so callers can distinguish "no branches" from
-    /// an error.
     func fetchRemoteBranches(owner: String, repo: String, prefix: String? = nil) async throws -> [String] {
         var params: [String: Any] = [
             "owner": owner,
@@ -149,10 +114,6 @@ extension GitHubRepoStore {
 
     // MARK: - Query rewrite
 
-    /// Rewrite raw repo-search input into GitHub `/search/repositories`
-    /// syntax (parity with the daemon/FE `build_repo_search_query`):
-    /// `owner/name` → `name user:owner`, `owner/` → `user:owner`,
-    /// `/name` → `name`, bare text → unchanged.
     static func rewriteSearchQuery(_ input: String) -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }

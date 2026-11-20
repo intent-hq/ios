@@ -1,9 +1,6 @@
 import SwiftUI
 
 extension View {
-    /// A horizontal page swipe across a navigation pane: right goes back, left goes forward.
-    /// Nested horizontal interactions (row swipe actions, sideways scrolling) keep priority.
-    /// `isSwiping` stays true until a committed swipe finishes animating, so pages can slide.
     func paneSwipe(isSwiping: Binding<Bool>, onBack: (() -> Void)?, onForward: (() -> Void)?) -> some View {
         modifier(PaneSwipeGesture(isSwiping: isSwiping, onBack: onBack, onForward: onForward))
     }
@@ -72,20 +69,16 @@ nonisolated enum PaneSwipePolicy {
     static let animation = Animation.snappy(duration: animationDuration)
     static let commitDistance: CGFloat = 96
     static let commitVelocity: CGFloat = 640
-    /// Horizontal speed must dominate vertical speed by this factor before the pane claims a drag.
     static let horizontalDominance: CGFloat = 1.5
     private static let resistance: CGFloat = 0.35
     private static let maximumOffset: CGFloat = 56
-    /// Content wider than its viewport by more than rounding scrolls sideways.
     static let horizontalScrollTolerance: CGFloat = 1
 
-    /// The pane only hints at the drag; the destination replaces it once committed.
     static func resistedOffset(for translation: CGFloat) -> CGFloat {
         max(-maximumOffset, min(maximumOffset, translation * resistance))
     }
 
     static func outcome(translation: CGFloat, velocity: CGFloat) -> Outcome {
-        // A fast flick commits in its own direction; a slow drag needs distance and must not be reversing.
         if velocity >= commitVelocity || (translation >= commitDistance && velocity >= 0) { return .back }
         if velocity <= -commitVelocity || (translation <= -commitDistance && velocity <= 0) { return .forward }
         return .none
@@ -139,12 +132,10 @@ private struct PanePan: UIGestureRecognizerRepresentable {
             return velocity.x > 0 ? allowsBack : allowsForward
         }
 
-        /// Edge pops, row swipe actions and sideways-scrolling content inside the pane win.
         func gestureRecognizer(
             _ gestureRecognizer: UIGestureRecognizer,
             shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            // The navigation stack's interactive edge pop keeps its own edge.
             if otherGestureRecognizer is UIScreenEdgePanGestureRecognizer { return true }
             guard let view = gestureRecognizer.view, let otherView = otherGestureRecognizer.view,
                   otherView !== view, otherView.isDescendant(of: view) else { return false }
@@ -154,7 +145,6 @@ private struct PanePan: UIGestureRecognizerRepresentable {
             return otherGestureRecognizer is UIPanGestureRecognizer
         }
 
-        /// Vertical scrolling waits until a horizontal page swipe is ruled out.
         func gestureRecognizer(
             _: UIGestureRecognizer,
             shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer

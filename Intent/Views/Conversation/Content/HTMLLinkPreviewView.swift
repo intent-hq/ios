@@ -107,7 +107,6 @@ struct HTMLLinkPreviewView: View {
         hasFailed = false
         do {
             let loaded = try await fileLoader.text(workspaceId: link.workspaceId, path: link.path)
-            // Fail closed: never mount untrusted HTML without its resource blocker.
             let blocker = try await HTMLFileWebView.blockingRules()
             try Task.checkCancellation()
             rules = blocker

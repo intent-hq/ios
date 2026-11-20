@@ -1,7 +1,5 @@
 import Foundation
 
-/// One observed per-host certificate mismatch: the candidate host and the
-/// fingerprint it actually presented (vs the pinned one).
 nonisolated struct HostCertMismatch: Equatable, Hashable, Sendable {
     let host: String
     let fingerprint: String
@@ -9,16 +7,11 @@ nonisolated struct HostCertMismatch: Equatable, Hashable, Sendable {
 
 nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
     case certificateMismatch(host: String, fingerprint: String)
-    /// Aggregate thrown when a host race finds no winner and at least one
-    /// candidate presented a wrong certificate — carries every observed
-    /// per-host mismatch instead of just the last one.
     case certificateMismatches(mismatches: [HostCertMismatch])
     case disconnected(host: String, code: Int, reason: String)
     case failed(host: String, message: String,
                 diagnosticFailure: DiagnosticFailure = DiagnosticFailure(origin: .transport, classification: .transportUnknown))
     case invalidURL(host: String)
-    /// The record has no trusted certificate pin, so the connection is refused
-    /// before any bearer token can be sent over a socket.
     case missingCertificatePin(host: String)
     case timedOut(host: String)
 
@@ -55,8 +48,6 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
         return false
     }
 
-    /// Changes a single-route error's label without changing its failure details.
-    /// Aggregate mismatches retain each candidate's original host.
     func relabeled(host: String) -> Self {
         switch self {
         case .certificateMismatch(_, let fingerprint):

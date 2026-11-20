@@ -1,12 +1,6 @@
 import SwiftUI
 
-/// Generic muted banner for system-role rows that are not classified
-/// attention notices — e.g. `meta.kind = "interruption"` restart notices or
-/// unknown future kinds — so they still render instead of disappearing.
-/// FE parity: InterruptionNotice.svelte (ChatMessage.svelte system-branch
-/// fallback).
 struct SystemNoticeBannerView: View {
-    /// The system message text; empty falls back to the default restart notice.
     let message: String
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast

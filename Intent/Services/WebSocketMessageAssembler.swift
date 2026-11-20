@@ -18,12 +18,6 @@ extension WebSocketConnection {
         case continuation
     }
 
-    /// Reassembles fragmented websocket messages into whole messages. Pure and
-    /// unit-testable; text is UTF-8-decoded only once the message is complete
-    /// (and inflated) so multi-byte characters split across fragments stay
-    /// intact. A message whose first frame had RSV1 set is inflated with the
-    /// negotiated permessage-deflate context after reassembly; both the
-    /// buffered and the inflated size are capped at `maximumMessageSize`.
     nonisolated struct MessageAssembler {
         var diagnostics: DiagnosticStore
         let maximumMessageSize: Int
@@ -38,7 +32,6 @@ extension WebSocketConnection {
             self.deflate = deflate
         }
 
-        /// Whether a fragmented message is waiting for its final frame.
         var hasPendingMessage: Bool { pendingKind != .none }
 
         mutating func consume(
@@ -57,8 +50,6 @@ extension WebSocketConnection {
                 pendingCompressed = isCompressed
                 buffer = data
             case .continuation:
-                // A continuation with no message in progress is a protocol
-                // violation; drop it rather than fabricate a message.
                 guard pendingKind != .none else {
                     recordFailure()
                     return nil
@@ -115,7 +106,6 @@ extension WebSocketConnection {
         }
     }
 
-    /// What the receive path should do next with the decoded stream.
     nonisolated enum InboundEvent: Sendable {
         case close(code: Int, reason: String)
         case message(URLSessionWebSocketTask.Message)
@@ -123,9 +113,6 @@ extension WebSocketConnection {
         case pong(Data)
     }
 
-    /// Turns raw socket bytes into messages and control events: frame
-    /// decoding, RFC 6455 fragmentation rules, and permessage-deflate. Pure;
-    /// the connection feeds bytes and acts on events (pong replies, close).
     nonisolated struct InboundStream {
         private var decoder: WebSocketFrameDecoder
         private var assembler: MessageAssembler
@@ -143,8 +130,6 @@ extension WebSocketConnection {
             decoder.append(bytes)
         }
 
-        /// The next event, nil when more bytes are needed. Throws a
-        /// `MessageAssemblyError` when the peer must be failed.
         mutating func nextEvent() throws -> InboundEvent? {
             while true {
                 let frame: WebSocketFrame
@@ -178,7 +163,6 @@ extension WebSocketConnection {
                 )
                 return message.map(InboundEvent.message)
             case .continuation:
-                // RSV1 marks only a message's first frame (RFC 7692 §6.1).
                 guard assembler.hasPendingMessage, !frame.isCompressed else {
                     throw MessageAssemblyError.protocolViolation(
                         frame.isCompressed ? .reservedBitsSet : .unexpectedContinuation
@@ -200,8 +184,6 @@ extension WebSocketConnection {
             }
             let start = payload.startIndex
             let code = UInt16(payload[start]) << WebSocketFrameLayout.bitsPerByte | UInt16(payload[start + 1])
-            // Network.framework used to enforce these; the peer must not send
-            // reserved or out-of-range codes (RFC 6455 §7.4.1, §7.4.2).
             guard WebSocketCloseCode.isSendable(code) else {
                 throw MessageAssemblyError.protocolViolation(.invalidCloseFrame)
             }

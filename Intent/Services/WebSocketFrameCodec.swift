@@ -1,6 +1,5 @@
 import Foundation
 
-/// RFC 6455 §5.2 opcodes. Values outside this set fail the connection.
 nonisolated enum WebSocketOpcode: UInt8, Sendable {
     case binary = 0x2
     case close = 0x8
@@ -9,12 +8,9 @@ nonisolated enum WebSocketOpcode: UInt8, Sendable {
     case pong = 0xA
     case text = 0x1
 
-    /// Control opcodes have the high bit of the opcode nibble set (§5.5).
     var isControl: Bool { rawValue & WebSocketFrameLayout.controlOpcodeBit != 0 }
 }
 
-/// One RFC 6455 frame. `isCompressed` is the RSV1 bit, which RFC 7692 assigns
-/// to permessage-deflate: set on the first frame of a compressed message.
 nonisolated struct WebSocketFrame: Equatable, Sendable {
     var isFinal: Bool
     var isCompressed: Bool
@@ -29,8 +25,6 @@ nonisolated struct WebSocketFrame: Equatable, Sendable {
     }
 }
 
-/// A peer behaviour that RFC 6455 or RFC 7692 requires the endpoint to fail
-/// the connection for. `closeCode` is the status code sent in the close frame.
 nonisolated enum WebSocketProtocolViolation: Error, Equatable, Sendable {
     case controlFrameTooLong
     case fragmentedControlFrame
@@ -45,7 +39,6 @@ nonisolated enum WebSocketProtocolViolation: Error, Equatable, Sendable {
     case unexpectedDataFrame
     case unknownOpcode
 
-    /// RFC 6455 §7.4.1 status code for this violation.
     var closeCode: UInt16 {
         switch self {
         case .frameTooLarge, .messageTooLarge:
@@ -59,7 +52,6 @@ nonisolated enum WebSocketProtocolViolation: Error, Equatable, Sendable {
     }
 }
 
-/// RFC 6455 §7.4.1 status codes the client sends or interprets.
 nonisolated enum WebSocketCloseCode {
     static let normalClosure: UInt16 = 1000
     static let goingAway: UInt16 = 1001
@@ -73,9 +65,6 @@ nonisolated enum WebSocketCloseCode {
     static let firstRegistered: UInt16 = 3000
     static let lastIANAProtocol: UInt16 = 1014
 
-    /// Whether `code` may appear in a close frame on the wire: the defined
-    /// protocol codes (excluding 1004 and the local-only 1005, 1006 and 1015)
-    /// and the registered/private ranges 3000–4999.
     static func isSendable(_ code: UInt16) -> Bool {
         switch code {
         case normalClosure...unsupportedData, invalidFramePayloadData...lastIANAProtocol, firstRegistered...maximumApplication:
@@ -86,7 +75,6 @@ nonisolated enum WebSocketCloseCode {
     }
 }
 
-/// Bit layout of the RFC 6455 §5.2 base framing protocol.
 nonisolated enum WebSocketFrameLayout {
     static let finBit: UInt8 = 0x80
     static let rsv1Bit: UInt8 = 0x40
@@ -106,7 +94,6 @@ nonisolated enum WebSocketFrameLayout {
     static let maximumControlPayload = 125
 }
 
-/// The 4-byte client masking key (§5.3).
 nonisolated struct WebSocketMaskingKey: Equatable, Sendable {
     let bytes: [UInt8]
 
@@ -114,7 +101,6 @@ nonisolated struct WebSocketMaskingKey: Equatable, Sendable {
         bytes = [first, second, third, fourth]
     }
 
-    /// Callers pass exactly `maskingKeySize` bytes read from a frame header.
     init(bytes: [UInt8]) {
         self.bytes = bytes
     }
@@ -129,15 +115,11 @@ nonisolated struct WebSocketMaskingKey: Equatable, Sendable {
         )
     }
 
-    /// XORs `buffer` with the repeating key. Masking and unmasking are the
-    /// same operation.
     func apply(to buffer: UnsafeMutableRawBufferPointer) {
         typealias Word = UInt64
         let wordSize = MemoryLayout<Word>.size
         var offset = 0
         if let base = buffer.baseAddress, buffer.count >= wordSize {
-            // The key repeated across a word; the word size is a multiple of
-            // the key size, so the key phase stays aligned with `offset`.
             var pattern = Word.zero
             withUnsafeMutableBytes(of: &pattern) { raw in
                 for index in raw.indices { raw[index] = bytes[index % WebSocketFrameLayout.maskingKeySize] }
@@ -155,8 +137,6 @@ nonisolated struct WebSocketMaskingKey: Equatable, Sendable {
     }
 }
 
-/// Encodes frames for the wire. Client frames are always masked (§5.3);
-/// passing a nil key produces an unmasked server frame, used by test servers.
 nonisolated enum WebSocketFrameEncoder {
     static func encode(_ frame: WebSocketFrame, maskingKey: WebSocketMaskingKey?) -> Data {
         typealias Layout = WebSocketFrameLayout
@@ -199,13 +179,7 @@ nonisolated enum WebSocketFrameEncoder {
     }
 }
 
-/// Incremental frame decoder: append bytes as they arrive from the socket and
-/// pull complete frames. Header-level checks (reserved bits, masking, control
-/// frame rules, and the frame size cap) run as soon as the header is buffered,
-/// so an oversized frame fails before any of its payload is buffered.
 nonisolated struct WebSocketFrameDecoder {
-    /// Which side of the connection decodes. Server frames must be unmasked;
-    /// client frames must be masked (§5.1).
     enum Role: Sendable {
         case client
         case server
@@ -215,7 +189,6 @@ nonisolated struct WebSocketFrameDecoder {
 
     let role: Role
     let maximumFrameSize: Int
-    /// Whether RSV1 is meaningful (permessage-deflate negotiated).
     var allowsCompressedFrames: Bool
     private var buffer = Data()
     private var offset = 0
@@ -236,8 +209,6 @@ nonisolated struct WebSocketFrameDecoder {
         buffer.append(bytes)
     }
 
-    /// Returns the next complete frame, nil when more bytes are needed, or
-    /// throws when the buffered header violates the protocol.
     mutating func nextFrame() throws -> WebSocketFrame? {
         guard let header = try parseHeader() else { return nil }
         let payloadStart = buffer.startIndex + offset + header.size
@@ -293,7 +264,6 @@ nonisolated struct WebSocketFrameDecoder {
         )
     }
 
-    /// Checks the first two header bytes against §5.2 and §5.5 rules.
     private func validatedOpcode(first: UInt8, second: UInt8) throws -> WebSocketOpcode {
         typealias Layout = WebSocketFrameLayout
         guard first & Layout.rsv2And3Bits == 0 else { throw WebSocketProtocolViolation.reservedBitsSet }
@@ -313,8 +283,6 @@ nonisolated struct WebSocketFrameDecoder {
         return opcode
     }
 
-    /// The payload length and the header size up to the masking key, or nil
-    /// while the extended length bytes are not yet buffered.
     private func readPayloadLength(inlineLength: UInt8) -> (value: UInt64, headerSize: Int)? {
         typealias Layout = WebSocketFrameLayout
         let extendedSize: Int

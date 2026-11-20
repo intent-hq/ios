@@ -1,8 +1,6 @@
 import Foundation
 import Security
 
-/// The existing desktop invited-session service, using the same Security seam
-/// and access group as owner sync. Its v2 dispatch never changes owner v1.
 struct InvitedSessionRegistry {
     static let service = "com.cloudlands.intent.guest-sessions"
     let keychain: any SyncedKeychainWriting
@@ -39,7 +37,6 @@ struct InvitedSessionRegistry {
         }
     }
 
-    /// Both groups must be readable before any migration or live publication.
     func read() -> Snapshot? {
         guard enabled, let accessGroup else { return nil }
         var entries: [Entry] = []
@@ -62,8 +59,6 @@ struct InvitedSessionRegistry {
         return Snapshot(entries: entries)
     }
 
-    /// Removal insertion is create-only. Even the duplicate path never updates
-    /// a row; equal known fields acknowledge it while preserving unknown bytes.
     func insertRemoval(_ record: InvitedSyncRecord) -> Bool {
         guard enabled, let accessGroup, record.kind == "removal", let data = record.data,
               InvitedSyncRecord.parse(account: record.account, data: data) != nil else { return false }
@@ -78,8 +73,6 @@ struct InvitedSessionRegistry {
         let copies = snapshot.entries.filter { $0.account == record.account && $0.group == accessGroup }
         return !copies.isEmpty && copies.allSatisfy { entry in
             guard let old = entry.record else { return false }
-            // The account hashes every immutable field; re-derivation above
-            // establishes equality without rewriting unknown extension fields.
             return old.kind == "removal" && old.account == record.account
         }
     }
@@ -104,7 +97,6 @@ struct InvitedSessionRegistry {
             status = keychain.add(attributes)
         }
         guard status == errSecSuccess else { return false }
-        // Only clean up a classified legacy-group copy AFTER destination save.
         for copy in copies where copy.group != accessGroup && copy.record != nil {
             guard let group = copy.group else { continue }
             _ = keychain.delete(matching: itemQuery(account: copy.account, group: group))

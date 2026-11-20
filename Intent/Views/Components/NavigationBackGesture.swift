@@ -54,7 +54,6 @@ private struct IntentNavigationBackButtonModifier: ViewModifier {
     }
 }
 
-/// One vertical group keeps Back above the screen's overflow menu, below system status chrome.
 struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
     let isEnabled: Bool
     var showsBackButton = true
@@ -81,7 +80,6 @@ struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
             .contentMarginsRemoved()
         }
         #else
-        // Legacy ToolbarContentBuilder requires an expression even when the group has no items.
         ToolbarItemGroup(placement: .automatic) { EmptyView() }
         #endif
     }

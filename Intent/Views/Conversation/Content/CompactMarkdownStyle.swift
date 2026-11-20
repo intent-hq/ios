@@ -1,10 +1,7 @@
 import SwiftUI
 import Textual
 
-/// Textual port of the app's previous compact markdown theme: same relative font
-/// scales, weights, margins, and paddings, expressed as a `StructuredText.Style`.
 struct CompactMarkdownStyle: StructuredText.Style {
-    /// Inline-code colors from the old `.markdownTextStyle(\.code)` override.
     static let codeForeground = DynamicColor(
         light: Constants.Colors.Markdown.inlineCodeForeground(for: .light),
         dark: Constants.Colors.Markdown.inlineCodeForeground(for: .dark)
@@ -16,13 +13,11 @@ struct CompactMarkdownStyle: StructuredText.Style {
 
     let inlineStyle = InlineStyle()
         .code(
-            // Inter has no monospaced design; select the system code font explicitly.
             .font(.system(.body, design: .monospaced)),
             .fontScale(Constants.Markdown.codeFontScale),
             .foregroundColor(Self.codeForeground),
             .backgroundColor(Self.codeBackground)
         )
-        // Links keep the surrounding text color and read as links by underline (#904).
         .link(.underlineStyle(.single))
     let headingStyle = CompactHeadingStyle()
     let paragraphStyle = CompactParagraphStyle()
@@ -44,9 +39,6 @@ struct CompactMarkdownStyle: StructuredText.Style {
     }
 }
 
-/// How Markdown links are laid out: `.plain` for notes and pull requests,
-/// `.chat` for transcript messages, where single-link lines become
-/// full-width rows. Both keep links underlined in the text color (#904).
 enum MarkdownLinkStyle {
     case chat
     case plain
@@ -56,8 +48,6 @@ extension StructuredText.Style where Self == CompactMarkdownStyle {
     static var compact: Self { .init() }
 }
 
-/// Keep the compact heading ratios and margins, using the Inter body baseline
-/// and real semibold/medium faces rather than changing the prose scaling role.
 struct CompactHeadingStyle: StructuredText.HeadingStyle {
     private static let maximumHeadingLevel = 6
     private static let arrayIndexOffset = 1
@@ -94,8 +84,6 @@ struct CompactBlockQuoteStyle: StructuredText.BlockQuoteStyle {
     }
 }
 
-/// The old `.markdownBlockStyle(\.codeBlock)` override: 12pt padding, muted
-/// rounded box, monospaced 0.85em, no horizontal scroller.
 struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
     private static let background = DynamicColor(
         light: Constants.Colors.Markdown.codeBlockBackground(for: .light),
@@ -127,7 +115,6 @@ struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
             MermaidStreamingPlaceholder()
                 .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
         } else if let language = configuration.languageHint, let source = sources[language] {
-            // Overflow excludes this region from the surrounding text-selection overlay.
             Overflow { overflow in
                 MermaidDiagramView(source: source)
                     .frame(width: overflow.containerWidth)
@@ -140,8 +127,6 @@ struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
     }
 }
 
-/// Keep the GitHub grid decoration, but let columns size independently of the
-/// transcript width. Textual's overflow container preserves selection gestures.
 struct CompactTableStyle: StructuredText.TableStyle {
     func makeBody(configuration: Configuration) -> some View {
         Overflow {
@@ -153,7 +138,6 @@ struct CompactTableStyle: StructuredText.TableStyle {
     }
 }
 
-/// Inter body cells, a semibold header row, and the existing 0.72em/0.35em padding.
 struct CompactTableCellStyle: StructuredText.TableCellStyle {
     @ScaledMetric(relativeTo: .body) private var maximumWidth = Constants.Markdown.TableCell.maximumWidth
 
@@ -168,8 +152,6 @@ struct CompactTableCellStyle: StructuredText.TableCellStyle {
     }
 }
 
-/// Measure and place with the same width proposal: capping an already measured
-/// ideal-width cell would leave its wrapped text taller than the grid row.
 private struct CompactTableCellLayout: Layout {
     let maximumWidth: CGFloat
 

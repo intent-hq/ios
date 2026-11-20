@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Open-source acknowledgements shown from Settings. Each entry
-/// reproduces the dependency's license text in full, as its terms
-/// require for binary distribution.
 struct AcknowledgementsView: View {
     private typealias Layout = Constants.Settings.Acknowledgements
 

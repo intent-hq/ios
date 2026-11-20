@@ -1,14 +1,6 @@
 import Foundation
 import SwiftUI
 
-/// Inline markdown `[label](url)` links inside a suggested prompt, ported from
-/// the desktop's `suggested-prompt-markdown-links.ts` so both clients measure
-/// and split prompts the same way (shared cases: monorepo
-/// `docs/protocol/suggested-prompts.md`).
-///
-/// Only well-formed inline links with a non-empty label and an `http://`,
-/// `https://` or `intent://` destination count. Images, other schemes,
-/// reference-style links and unbalanced brackets stay literal text.
 enum SuggestedPromptLinks {
     private enum Part {
         case link(label: [Unicode.Scalar], url: [Unicode.Scalar])
@@ -17,19 +9,15 @@ enum SuggestedPromptLinks {
 
     private struct Destination {
         let url: [Unicode.Scalar]
-        /// Index just past the closing parenthesis.
         let end: Int
     }
 
     private struct Construct {
-        /// Index just past the construct (or past the literal span it collapses to).
         let end: Int
         let label: [Unicode.Scalar]
-        /// Destination of a complete `[label](url)`; nil when there is none.
         let destination: Destination?
     }
 
-    /// The text a user sees: link labels in place of their markdown.
     static func visibleText(_ prompt: String) -> String {
         var scalars = String.UnicodeScalarView()
         for part in parts(Array(prompt.unicodeScalars)) {
@@ -41,8 +29,6 @@ enum SuggestedPromptLinks {
         return String(scalars)
     }
 
-    /// Text after the legacy `Label|` delimiter — the first `|` outside any
-    /// inline link — or nil when the line has none.
     static func textAfterLabel(_ line: String) -> String? {
         let scalars = Array(line.unicodeScalars)
         var offset = 0
@@ -60,7 +46,6 @@ enum SuggestedPromptLinks {
         return nil
     }
 
-    /// `[`, `]`, `(` and `)` around a link's label and destination.
     private static let linkSyntaxLength = 4
     private static let linkSchemes = ["http://", "https://", "intent://"]
 
@@ -86,8 +71,6 @@ enum SuggestedPromptLinks {
         return result
     }
 
-    /// Nested brackets are tracked so a rejected outer construct is consumed
-    /// whole; a bracket that never closes swallows the rest of its line.
     private static func bracketConstruct(_ prompt: [Unicode.Scalar], open: Int) -> Construct {
         var depth = 0
         var close = open
@@ -111,7 +94,6 @@ enum SuggestedPromptLinks {
         return Construct(end: destination.end, label: label, destination: destination)
     }
 
-    /// No whitespace or angle brackets; one level of balanced parentheses.
     private static func destination(_ prompt: [Unicode.Scalar], start: Int) -> Destination? {
         var depth = 0
         var index = start
@@ -144,9 +126,6 @@ enum SuggestedPromptLinks {
 }
 
 extension SuggestedPromptLinks {
-    /// A prompt chip's label: inline markdown rendered, with links underlined
-    /// in the chip's own text color. The chip sends the prompt on tap, so its
-    /// links are not separately tappable and carry no link attribute.
     static func displayText(_ prompt: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         var text = (try? AttributedString(markdown: prompt, options: options)) ?? AttributedString(prompt)

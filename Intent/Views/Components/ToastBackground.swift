@@ -1,8 +1,6 @@
 import SwiftUI
 
 extension View {
-    /// Light mode uses frosted Liquid Glass so the banner separates from light content;
-    /// dark mode keeps the thin material, which already contrasts.
     func toastBackground() -> some View {
         modifier(ToastBackground())
     }
@@ -49,7 +47,6 @@ private struct ToastBackground: ViewModifier {
     }
 }
 
-/// Interactive glass gives its own press feedback, so only the material banner dims.
 struct ToastButtonStyle: ButtonStyle {
     let dimsOnPress: Bool
 

@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// A pull request in the spacious workspace-list row style: state icon,
-/// title with update time, then number, repository, author and the linked
-/// workspace.
 struct PullRequestRowView: View {
     let item: PullRequestListItem
     var showsRepository = true
@@ -22,7 +19,6 @@ struct PullRequestRowView: View {
     }
 
     var body: some View {
-        // Sits the icon's centre on the title's first line, like the status icon.
         let iconBaseline = iconSize * Self.iconBaselineRatio
         let rowSpace = item.id
         HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.spaciousRowSpacing) {

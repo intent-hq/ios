@@ -3,10 +3,7 @@ import CoreTransferable
 import UIKit
 import UniformTypeIdentifiers
 
-/// Owns a disk-backed Photos export. Composer selections and send attempts share
-/// this owner so removing a preview cannot delete a file still being uploaded.
 nonisolated final class ImportedPhotoVideo: Transferable, Sendable, Equatable {
-    // Keep the shared 200 MiB composer/transcript cap explicit; all other files retain the 1 GiB cap.
     static let maxBytes = 200 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
 
     enum ImportError: LocalizedError, Equatable {
@@ -41,9 +38,6 @@ nonisolated final class ImportedPhotoVideo: Transferable, Sendable, Equatable {
         }
     }
 
-    /// Copy before the Photos transfer callback returns: its source URL is only
-    /// valid inside that callback. Neither copying nor poster creation reads the
-    /// whole movie into Data, and both run off the UI actor.
     @concurrent
     static func importFile(at source: URL) async throws -> ImportedPhotoVideo {
         try Task.checkCancellation()

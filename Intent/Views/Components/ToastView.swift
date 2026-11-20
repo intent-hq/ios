@@ -38,7 +38,7 @@ struct ToastView: View {
         .toastBackground()
         .frame(maxWidth: Constants.Toast.maximumWidth)
         .padding(.horizontal, Constants.Toast.outerHorizontalPadding)
-        .offset(y: min(dragOffset, 0)) // Only allow upward drag
+        .offset(y: min(dragOffset, 0))
         .highPriorityGesture(
             DragGesture()
                 .onChanged { value in
@@ -65,7 +65,6 @@ struct ToastView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
-    /// Light glass washes out the lime outline, so light mode uses the completed-task fill.
     @ViewBuilder private var completionIcon: some View {
         if colorScheme == .light {
             Circle()

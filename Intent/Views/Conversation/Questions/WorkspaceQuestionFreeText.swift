@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Lets the native field lay out its prompt, caret, and multiline answer together.
 struct WorkspaceQuestionFreeText: View {
     @Binding var text: String
     @Binding var focused: Bool

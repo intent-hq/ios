@@ -2,8 +2,6 @@ import Combine
 import Foundation
 import Observation
 
-/// Shared status ownership for one backend. Hook feeds are workspace scoped;
-/// the PR monitor feed is global, with the same per-workspace seed lifecycle.
 @MainActor
 @Observable final class WorkspaceStatusStore<Row> {
     typealias Fold = ([Row], String, [String: Any]) -> (rows: [Row], needsRefetch: Bool)
@@ -52,8 +50,6 @@ import Observation
         init(epoch: Int) { self.epoch = epoch }
     }
 
-    /// Queued cleanup retains this observer, even after the store dies, so a
-    /// reconnect between scheduling and issuing cleanup invalidates the ID.
     final class ConnectionLifetime {
         var epoch = 0
         var observation: AnyCancellable?
@@ -74,7 +70,6 @@ import Observation
     let removalEvents: Set<String>
     let parse: ([String: Any]) -> Row?
     let fold: Fold
-    /// Optional bounded summary contract. Legacy hook/PR paths remain unchanged.
     var pageAdapter: WorkspaceStatusPageAdapter<Row>?
 
     init(
@@ -129,8 +124,6 @@ import Observation
         return consumer
     }
 
-    /// Remove this consumer synchronously. Pending ACKs are left alive so their
-    /// captured remote IDs can be released without touching a successor feed.
     @discardableResult
     func release(workspaceId: String, consumer: UUID) -> Task<Void, Never>? {
         guard let bucket = buckets[workspaceId], bucket.consumers.remove(consumer) != nil,
@@ -155,7 +148,6 @@ import Observation
 
     func invalidateConnection() {
         for bucket in buckets.values { invalidate(bucket) }
-        // The old socket owns these IDs. Never unsubscribe them on a new socket.
         feeds = [:]
         removeHandler()
     }
@@ -170,8 +162,6 @@ import Observation
 
     private func invalidate(_ bucket: Bucket) {
         bucket.generation &+= 1
-        // The independent feed task must survive cancellation to release late
-        // ACKs; list reads have no remote ownership and can be cancelled now.
         bucket.loadTask?.cancel()
         bucket.loadTask = nil
         bucket.loadCompletion?.finish(())

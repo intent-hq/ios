@@ -66,11 +66,8 @@ enum ConversationConstants {
         static let followLandingPollMilliseconds = 50
         /// Longest a forced follow keeps verifying its landing.
         static let followLandingTimeoutMilliseconds = 3000
-        /// Maximum distance from the bottom for a completed forced follow.
         static let followLandingTolerance: CGFloat = 1
-        /// Minimum spacing between follow-to-bottom streaming scrolls.
         static let streamingFollowMinimumInterval: TimeInterval = 0.5
-        /// Maximum pinned-viewport drift before a streaming follow scrolls.
         static let streamingFollowDriftTolerance: CGFloat = 1
         /// Delay before rechecking geometry that briefly reads past the end.
         static let pastEndSettleMilliseconds = 150
@@ -136,8 +133,6 @@ enum Constants {
         nonisolated static let logPreviewCharacterLimit = 100
         static let reconnectBackoffExponentCap = 5
         static let reconnectBackoffMaximum: Double = 30
-        /// An inbound frame whose off-main parse or MainActor dispatch takes
-        /// longer than this (one 60 Hz frame) is logged as a slow frame.
         nonisolated static let slowFrameLogThreshold: TimeInterval = 0.016
     }
 

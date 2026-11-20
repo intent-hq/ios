@@ -107,19 +107,11 @@ struct WorkspaceFilePreview: View {
 }
 
 extension WorkspaceFilePreview {
-    /// Why a media preview failed, so the message names the real cause
-    /// instead of always blaming the connection.
     enum Failure: Equatable {
-        /// Over the loader's size cap (in bytes); retrying cannot help.
         case tooLarge(limit: Int)
-        /// A type this device cannot show at all (WebM video).
         case unsupported
-        /// A supported type whose bytes did not decode; refetching returns
-        /// the same bytes, so retrying cannot help.
         case damaged
-        /// The reply arrived but was not the shape the app expects.
         case unexpectedResponse
-        /// The request itself failed (timeout, disconnect, server error).
         case unavailable
 
         init(_ error: any Error, isImage: Bool, path: String) {
@@ -129,8 +121,6 @@ extension WorkspaceFilePreview {
             case .notAVideo where WorkspaceVideo.isWebM(path: path):
                 self = .unsupported
             case .notAnImage, .notAVideo:
-                // Every extension routed to the media preview is one this
-                // device decodes, so a decode failure means bad bytes.
                 self = .damaged
             case .malformedResponse:
                 self = .unexpectedResponse

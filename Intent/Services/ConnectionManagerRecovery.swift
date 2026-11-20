@@ -23,10 +23,6 @@ extension ConnectionManager {
     }
 
     // MARK: - Host Racing
-    /// A won race: the winner plus the background drain of the candidates
-    /// still in flight (`HostRaceOutcome.drain`). The drain is handed to the
-    /// caller because only it knows which connection generation the drain's
-    /// late mismatches belong to (see `recordLateCertMismatches`).
     typealias WonHostRace = (
         winner: RacedConnection,
         drain: Task<[HostCertMismatch], Never>?
@@ -71,8 +67,6 @@ extension ConnectionManager {
             AppLog.connection.debug("[ConnectionManager] Host \(candidate) connected in \(elapsed)ms")
             return RacedConnection(socket: connection, tunnel: nil, host: candidate)
         }
-        // Surface every observed mismatch — even when a winner settled —
-        // unless a newer connect()/disconnect() superseded this race.
         if connectionGeneration == myGeneration {
             recordCertMismatches(outcome.mismatches)
         }
@@ -86,10 +80,6 @@ extension ConnectionManager {
         )
     }
 
-    /// Records the mismatches from candidates still in flight when a race
-    /// settled, once the background drain finishes — unless
-    /// `connectionGeneration` moved past `generation` by then (a newer
-    /// connect() or disconnect() superseded the race).
     func recordLateCertMismatches(
         from drain: Task<[HostCertMismatch], Never>?,
         generation: Int
@@ -102,11 +92,6 @@ extension ConnectionManager {
         }
     }
 
-    /// One tunnel race candidate: establishes the tailcat tunnel (including
-    /// its slow first-use warm-up), then completes the normal pinned WSS
-    /// handshake through the tunnel's loopback forwarder. The tunnel is
-    /// closed on any post-establishment failure so a lost race never leaks
-    /// the session. Static + injected dialer for test visibility.
     nonisolated static func connectViaTunnel(
         dialer: any TunnelDialing,
         tcAddress: String,
@@ -137,10 +122,6 @@ extension ConnectionManager {
             )
         } catch {
             await tunnel.close()
-            // Re-label loopback transport errors to the tunnel candidate so
-            // failures surface against the route the user can recognize (and
-            // a cert mismatch never collides with a real "127.0.0.1" host
-            // entry).
             if let transportError = error as? WebSocketTransportError {
                 throw transportError.relabeled(host: tunnelCandidateLabel)
             }
@@ -148,8 +129,7 @@ extension ConnectionManager {
         }
     }
 
-    /// Merges newly observed per-host mismatches into `certMismatches`,
-    /// replacing a host's entry with its latest fingerprint. Internal for
+    /// Internal for
     /// test visibility.
     func recordCertMismatches(_ observed: [HostCertMismatch]) {
         guard !observed.isEmpty else { return }
@@ -459,8 +439,6 @@ extension ConnectionManager {
         guard pathMonitorID == monitorID, pathMonitor != nil else { return }
         let previous = lastPathSnapshot
         lastPathSnapshot = snapshot
-        // An embedded tunnel's local socket cannot observe its remote underlay.
-        // Direct sockets (including system VPNs) use only their endpoint evidence.
         guard connectionState == .connected, socket != nil, activeTunnel != nil else { return }
 
         let pathDied: Bool
@@ -469,7 +447,6 @@ extension ConnectionManager {
         } else {
             pathDied = !snapshot.isSatisfied
         }
-        // Preference/virtual-name changes alone do not invalidate a serving tunnel.
         let previousPhysicalInterface = previous?.physicalInterfaces.first
         let physicalInterfaceLost = previousPhysicalInterface.map { interface in
             snapshot.isSatisfied && !snapshot.availableInterfaces.contains(interface)

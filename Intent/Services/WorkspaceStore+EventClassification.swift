@@ -3,8 +3,6 @@ import Foundation
 extension WorkspaceStore {
     // MARK: - Event classification
 
-    /// The workspace an event deletes or archives: `workspace:deleted`, or a
-    /// `workspace:updated` whose delta sets `archived: true`.
     nonisolated static func removedWorkspaceId(type: String, workspaceId: String?, data: [String: Any]) -> String? {
         let id = (data["workspaceId"] as? String) ?? workspaceId
         switch type {
@@ -18,7 +16,6 @@ extension WorkspaceStore {
         }
     }
 
-    /// A trailing colon denotes a channel prefix; other entries name exact events.
     nonisolated static let handledChannels = ["workspace:", "agent:", "host:members-changed"]
 
     nonisolated static let refetchEventTypes: Set<String> = [
@@ -75,7 +72,6 @@ extension WorkspaceStore {
 
     nonisolated static func classify(
         type: String,
-        // The shared classifier signature accepts absent event data without inventing a payload.
         data: [String: Any]? // swiftlint:disable:this discouraged_optional_collection
     ) -> EventClassification? {
         if refetchEventTypes.contains(type) { return .refetch }

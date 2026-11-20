@@ -1,13 +1,8 @@
 import SwiftUI
 
-/// A list's first read failed (ios#462): says so and offers Retry, instead of
-/// an endless loading placeholder or an empty state. Disconnected read-only
-/// sessions show the usual "available when reconnected" message instead.
 struct LoadFailureView: View {
-    /// Plural noun for the headline, e.g. "Notes" in "Couldn't Load Notes".
     let subject: String
     let message: String
-    /// Prefix for the `<prefix>.loadFailure` and `<prefix>.loadFailure.retry` identifiers.
     let identifier: String
     var isCompact = false
     let retry: @MainActor () async -> Void

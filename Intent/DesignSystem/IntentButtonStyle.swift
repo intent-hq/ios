@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// For controls whose labels own their layout and enabled/disabled colors.
-/// On visionOS it adds the gaze highlight the system styles would draw;
-/// labels shape it with `visionHoverShape(_:)`.
 struct IntentContentButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.visionContainerDrawsHover) private var containerDrawsHover
@@ -44,7 +41,6 @@ struct IntentIconButton: View {
     }
 }
 
-/// Filled actions from the Intent button palette, with explicit interaction states.
 struct IntentButtonStyle: ButtonStyle {
     enum Variant {
         case muted

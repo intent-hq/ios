@@ -111,8 +111,6 @@ struct WorkspaceSwipeRow: View {
         }
     }
 
-    /// The iPad sidebar row owns its highlight; the compact sidebar's list background
-    /// owns it at rest and hands it to the moving row as the swipe progresses.
     private func selectionOpacity(swipeProgress: CGFloat) -> Double {
         guard isSelected else { return 0 }
         return isSidebar ? 1 : Double(swipeProgress)

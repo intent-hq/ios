@@ -62,7 +62,6 @@ struct QuestionWizardFooterRow: View {
         .disabled(submitted || dismissed)
     }
 
-    /// Skip and Send on the last step send the answers to the Mac.
     private var sendsAnswers: Bool { isLast }
 
     private var legacyFooter: some View {

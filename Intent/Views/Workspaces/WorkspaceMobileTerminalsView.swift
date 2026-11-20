@@ -161,7 +161,6 @@ private struct WorkspaceTerminalRow: View {
     }
 }
 
-/// Names a terminal; an empty name returns it to automatic naming.
 struct TerminalRenameAlert: ViewModifier {
     @Binding var isPresented: Bool
     let terminal: MobileTerminal

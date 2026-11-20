@@ -2,7 +2,6 @@ import Combine
 import Foundation
 import Observation
 
-/// Session-owned active summaries. Only visible conversations retain a lease.
 @MainActor
 @Observable final class WorkspaceScriptMonitorsStore {
     let cache: WorkspaceStatusStore<ScriptMonitorSummary>

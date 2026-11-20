@@ -1,12 +1,9 @@
 import Network
 import SwiftUI
 
-/// Copy for the read-only banner. It follows `ConnectionNetworkMessage` so a
-/// phone-side problem names its fix instead of blaming the Mac.
 struct ReadOnlyBannerMessage {
     let networkStatus: NetworkAvailability.Status
     let machineName: String?
-    /// The desktop's startup phase while it is still starting up (R1.7).
     var startupState: DaemonStartupState?
 
     private var network: ConnectionNetworkMessage { ConnectionNetworkMessage(status: networkStatus) }
@@ -32,7 +29,6 @@ struct ReadOnlyBannerMessage {
         }
     }
 
-    /// Full sentence for the expanded card and VoiceOver.
     var title: String {
         switch situation {
         case .localNetworkDenied: String(localized: "Local Network access needed · Read-only")
@@ -51,7 +47,6 @@ struct ReadOnlyBannerMessage {
         }
     }
 
-    /// A few words for the collapsed pill.
     var shortTitle: String {
         switch situation {
         case .localNetworkDenied: String(localized: "Local Network off")
@@ -72,10 +67,6 @@ struct ReadOnlyBannerMessage {
     }
 }
 
-/// Floating, non-blocking pill shown while reconnection keeps trying. It sits at
-/// the bottom of the window, above any composer or floating button reported to
-/// `ReadOnlyPillClearance`, without reserving space; tapping it opens a card
-/// with guidance, certificate warnings, Retry and Back to Home.
 struct ReadOnlyBanner: View {
     private enum Layout {
         static let collapsedMaximumWidth: CGFloat = 300
@@ -86,10 +77,8 @@ struct ReadOnlyBanner: View {
         static let verticalPadding: CGFloat = 11
         static let detailPadding: CGFloat = 16
         static let expandedCornerRadius: CGFloat = 22
-        /// Larger than half the pill's height; the shape clamps it into a capsule.
         static let capsuleCornerRadius: CGFloat = 100
         static let outerPadding: CGFloat = 8
-        /// Space between the pill and the safe area or the chrome below it.
         static let bottomGap: CGFloat = 8
         static let actionHeight: CGFloat = 40
         static let actionCornerRadius: CGFloat = 12
@@ -102,15 +91,12 @@ struct ReadOnlyBanner: View {
     @Environment(ReadOnlyPillClearance.self) private var clearance: ReadOnlyPillClearance?
     @Environment(ComposerCoverage.self) private var coverage: ComposerCoverage?
     @State private var isExpanded = false
-    /// The safe area in window coordinates: it ends above the home indicator and keyboard.
     @State private var safeArea = CGRect.zero
     @State private var span: ClosedRange<CGFloat> = 0...0
     let message: ReadOnlyBannerMessage
     let mismatches: [HostCertMismatch]
     let onHome: () -> Void
     var onRetry: (() -> Void)?
-    /// Reports the banner's frame in window coordinates so the hosting window
-    /// passes every other touch through to the app below.
     var onInteractiveFrameChange: (CGRect) -> Void = { _ in }
 
     var body: some View {
@@ -129,13 +115,11 @@ struct ReadOnlyBanner: View {
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { safeArea = $0 }
     }
 
-    /// Distance from the safe area's bottom to the pill's bottom edge.
     private var bottomPadding: CGFloat {
         let chromeTop = clearance?.top(under: span, windowBottom: safeArea.maxY, coverage: coverage) ?? safeArea.maxY
         return max(0, safeArea.maxY - chromeTop) + Layout.bottomGap
     }
 
-    /// The content panel the pill centres on, when the layout has one (the iPad shell).
     private var anchor: CGRect? {
         clearance?.anchor(coverage: coverage)
     }
@@ -155,7 +139,6 @@ struct ReadOnlyBanner: View {
                 if canRetry, !isExpanded { inlineRetryButton }
             }
             if isExpanded {
-                // Large type can outgrow the screen; the details then scroll.
                 ViewThatFits(in: .vertical) {
                     details
                     ScrollView { details }.scrollBounceBehavior(.basedOnSize)
@@ -267,8 +250,6 @@ struct ReadOnlyBanner: View {
     }
 }
 
-/// Caps the proposed width but, unlike `frame(maxWidth:)`, takes its content's
-/// size, so the collapsed pill hugs short text and truncates long text.
 private struct WidthCap: Layout {
     let maxWidth: CGFloat
 

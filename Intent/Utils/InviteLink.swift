@@ -1,13 +1,5 @@
 import Foundation
 
-/// A parsed `intent://invite` link: the share link `workspace.invite.create`
-/// mints (`intent://invite?v=1&port=<p>&fp=<sha256>&inviteId=<id>&secret=<s>&tc=<addr>`).
-///
-/// The envelope is the pairing link minus the bearer token. Its `secret` only
-/// redeems the invite over the host's unauthenticated `/invite` endpoint, but
-/// it still must never be logged or shown. Current links carry no `host=` and
-/// dial through `tc`; links minted before the envelope became tunnel-only may
-/// still carry `host=<ip[,ip…]>`.
 nonisolated struct InviteLink: Equatable, Sendable {
     enum Scope: String, Equatable, Sendable {
         case workspace
@@ -17,21 +9,15 @@ nonisolated struct InviteLink: Equatable, Sendable {
     let scope: Scope
     let hosts: [String]
     let port: Int
-    /// SHA-256 of the host's TLS certificate as the link wrote it (validated;
-    /// compare with `InvitedSyncKey.sameFingerprint`).
     let fingerprint: String
     let tcAddress: String?
     let inviteId: String
     let secret: String
 
-    /// Whether `url` is an invite link at all, well-formed or not. Scheme and
-    /// host compare case-insensitively (ios#406).
     static func isInviteURL(_ url: URL) -> Bool {
         url.scheme?.lowercased() == "intent" && url.host?.lowercased() == "invite"
     }
 
-    /// Parses an invite link; nil when it is not one or a required field is
-    /// missing or invalid.
     static func parse(_ url: URL) -> Self? {
         guard isInviteURL(url),
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -39,7 +25,6 @@ nonisolated struct InviteLink: Equatable, Sendable {
               components.path.isEmpty || components.path == "/" else { return nil }
         let items = components.queryItems ?? []
         let names = ["v", "scope", "host", "port", "fp", "inviteId", "secret", "tc"]
-        // A repeated field is ambiguous; refuse rather than pick one.
         guard names.allSatisfy({ name in items.filter { $0.name == name }.count <= 1 }) else { return nil }
         func value(_ name: String) -> String? {
             items.first { $0.name == name }?.value?.trimmingCharacters(in: .whitespaces).nonEmpty
@@ -69,7 +54,6 @@ nonisolated struct InviteLink: Equatable, Sendable {
 }
 
 extension InviteLink {
-    /// The link in its canonical form, for Copy Link.
     var url: URL? {
         var components = URLComponents()
         components.scheme = "intent"

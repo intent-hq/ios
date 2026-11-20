@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// Collapsible header for hook, PR-monitor and script-monitor wake cards; the
-/// body stays hidden until expanded (FE parity: `AutomatedWakeCardHeader`,
-/// collapsed by default). Headers without their own controls make the whole
-/// row one button. A header with its own control (the PR chip) keeps it and
-/// gets a separate chevron button, since buttons cannot nest.
 struct WakeCardDisclosureHeader<Header: View>: View {
     private typealias Design = Constants.Conversation.Design
 
@@ -65,9 +60,6 @@ struct WakeCardDisclosureHeader<Header: View>: View {
     }
 }
 
-/// Icon plus title and status lines for a wake card header. The text is
-/// measured from the title's cap top to the last baseline so the card padding
-/// reads evenly, and the icon centres on the title's first line.
 struct WakeCardHeaderRow<Content: View>: View {
     private typealias Design = Constants.Conversation.Design
 

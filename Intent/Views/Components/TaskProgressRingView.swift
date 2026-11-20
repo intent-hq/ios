@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// Circular linked-task progress ring matching the fe sidebar's NotesPanel
-/// ring: a muted track, a green arc for the completed fraction, and a blue
-/// arc for the in-progress fraction drawn immediately after the completed
-/// one. Arcs start at 12 o'clock and run clockwise.
 struct TaskProgressRingView: View {
     private typealias Geometry = Constants.TaskProgressRing
 
@@ -23,11 +19,8 @@ struct TaskProgressRingView: View {
     }
 
     private enum Palette {
-        // Track: same muted gray as TaskStatusIconView outlines (#99999966).
         static let track = Constants.Colors.TaskProgress.track
-        // fe's emerald-500 (#10b981) completed arc.
         static let green = Constants.Colors.TaskProgress.complete
-        // In-progress arc: the app's in-progress blue (#00BCFF).
         static let blue = Constants.Colors.TaskProgress.inProgress
     }
 
@@ -62,9 +55,7 @@ struct TaskProgressRingView: View {
                     .frame(width: diameter, height: diameter)
             }
         }
-        // SwiftUI trims start at 3 o'clock; the fe ring starts at 12.
         .rotationEffect(Geometry.startAngle)
-        // Keep the arc geometry stable under RTL layout mirroring.
         .environment(\.layoutDirection, .leftToRight)
         .frame(width: size, height: size)
         .accessibilityLabel(accessibilityText)

@@ -1,13 +1,6 @@
 import Foundation
 
-/// Wire `Hook` shape (PROTOCOL §5.40, v3.1). `code` arrives on `hook.list`
-/// only — `hook:*` event payloads never carry it, so event folds must copy
-/// the existing hook to retain it. `lastLogs`/`lastState` are deliberately
-/// not modeled (display does not need them; clients read via `hook.list`).
 struct BackgroundHook: Identifiable, Equatable {
-    /// Hook lifecycle state (PROTOCOL §5.40).
-    /// `scheduled`/`running` are the active states; `dispatched`/`evicted`/
-    /// `cancelled`/`expired` are terminal.
     enum State: String {
         case scheduled
         case running
@@ -25,19 +18,15 @@ struct BackgroundHook: Identifiable, Equatable {
     let delayMs: Int
     var state: State
     let createdAt: String?
-    /// TTL deadline (v3.1); absent only on pre-TTL legacy rows.
     let expiresAt: String?
     var lastRunAt: String?
     var nextRunAt: String?
     let runCount: Int
-    /// Perpetual hooks re-arm after a dispatch instead of retiring (v6.0);
-    /// always present on the wire from v6.0, defaulted false when absent.
     let perpetual: Bool
     var lastError: String?
 
     var id: String { hookId }
 
-    /// Whether the hook is in an active state (`scheduled` or `running`).
     var isActive: Bool {
         state == .scheduled || state == .running
     }

@@ -1,20 +1,12 @@
 #if DEBUG
 import Foundation
 
-/// Demo seam for the `intent://invite` join sheet (`--demo-invite=<scenario>`
-/// with `--demo-data`): presents a fixture invite and answers the host and
-/// own-Mac calls locally, so UI tests and screenshots reach every sheet state
-/// without a shared host. Scenarios: `first-join` (confirm, prove through the
-/// Mac), `existing-access` (confirm with a login this device has), `no-mac`,
-/// `expired`.
 enum DemoInviteJoin {
     private static let prefix = "--demo-invite="
-    /// SHA-256 fingerprints are 32 bytes.
     private static let fingerprintBytes = 32
     private static let hostFingerprint = String(repeating: "ab", count: fingerprintBytes)
     private static let macFingerprint = String(repeating: "cd", count: fingerprintBytes)
     private static let port = 5181
-    /// Long enough for the progress state to render in screenshots.
     static let hostDelay: Duration = .milliseconds(hostDelayMilliseconds)
     static let macDelay: Duration = .milliseconds(macDelayMilliseconds)
     private static let hostDelayMilliseconds = 300
@@ -35,7 +27,6 @@ enum DemoInviteJoin {
         secret: "demo-secret"
     )
 
-    /// Opens the fixture invite once the first screen is routed.
     @MainActor
     static func present(_ coordinator: AppCoordinator) {
         guard scenario != nil, coordinator.pendingDeepLink == nil, let url = link.url else { return }

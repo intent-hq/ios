@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// Circular GitHub repo-owner avatar loaded from the public
-/// `https://github.com/{owner}.png` endpoint, with a folder icon fallback
-/// while loading and when the owner is unknown or the image fails to load. Mirrors the
-/// avatar treatment in the desktop `RepoSelector`.
 struct RepoOwnerAvatarView: View {
     let owner: String?
     var size: CGFloat = Constants.RepoOwnerAvatar.defaultSize
@@ -19,7 +15,6 @@ struct RepoOwnerAvatarView: View {
         let image: UIImage
     }
 
-    /// URL for a GitHub owner avatar, or nil when the owner is missing/empty.
     static func avatarURL(for owner: String?) -> URL? {
         guard let owner, !owner.isEmpty else { return nil }
         return URL(string: "https://github.com/\(owner).png?size=\(Constants.RepoOwnerAvatar.requestPixelSize)")

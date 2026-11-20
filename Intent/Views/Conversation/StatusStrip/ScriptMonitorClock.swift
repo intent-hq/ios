@@ -1,7 +1,6 @@
 import SwiftUI
 
 extension EnvironmentValues {
-    /// Nil uses a local presentation clock. Fixtures inject a date without changing cache state.
     @Entry var scriptMonitorPresentationDate: Date?
 }
 

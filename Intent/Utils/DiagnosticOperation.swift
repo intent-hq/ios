@@ -1,5 +1,3 @@
-/// Reviewed family/action pairs. Extend this table and its coverage entry when
-/// adding a producer; never substitute an RPC method name or source path.
 nonisolated enum DiagnosticOperation: String, Codable, CaseIterable, Sendable {
     case agentCreate = "agent.create"
     case agentDelete = "agent.delete"

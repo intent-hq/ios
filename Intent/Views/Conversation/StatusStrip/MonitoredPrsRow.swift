@@ -1,16 +1,5 @@
 import SwiftUI
 
-/// Faint chip row above the composer surfacing the active agent's monitored
-/// PRs (PROTOCOL §5.42) — the iOS counterpart of cloudlands-fe's
-/// `MonitoredPrsRow`, rendered ABOVE the background-hooks row when both
-/// exist. One chip per `active` monitor: the label is `#<number>`, prefixed
-/// `<owner/repo>: ` only when the monitor's repo differs from the workspace
-/// repo, with an amber dot while changes are pending the debounce emit.
-/// Tapping a chip opens a menu whose header shows the last-refresh detail
-/// (title, repo#number, checks/approvals/threads summary, mergeable/blocked
-/// status, last change time, pending status) with Check and flush / Open PR /
-/// Cancel monitor actions. The parent hides the row entirely when the agent
-/// has no active monitors.
 struct MonitoredPrsRow: View {
     let viewModel: ConversationViewModel
     private let monitoredPrStore: MonitoredPrStore
@@ -112,9 +101,6 @@ struct MonitoredPrsRow: View {
     @ViewBuilder
     private func monitorChip(_ monitor: MonitoredPr) -> some View {
         Menu {
-            // Detail header: last-refresh summary (mirrors the FE hover card).
-            // Positional IDs: lines are display strings with no inherent
-            // identity, and \.self would collide if two lines ever matched.
             ForEach(Array(Self.detailLines(monitor).enumerated()), id: \.offset) { _, line in
                 Text(line)
             }
@@ -212,8 +198,6 @@ struct MonitoredPrsRow: View {
 
     // MARK: - Display helpers (pure, unit-tested)
 
-    /// Chip label: `#42`, prefixed `owner/repo: ` only for cross-repo PRs.
-    /// Falls back to the bare number when the workspace repo is unknown.
     static func chipLabel(_ monitor: MonitoredPr, workspaceRepo: String?) -> String {
         let number = "#\(monitor.prNumber)"
         if let workspaceRepo, monitor.repo != workspaceRepo {
@@ -222,18 +206,10 @@ struct MonitoredPrsRow: View {
         return number
     }
 
-    /// PR web URL: the wire `url` when present, else the canonical GitHub form.
-    /// The Open PR action only opens it once it passes the `ExternalLink`
-    /// http/https allowlist.
     static func prUrl(_ monitor: MonitoredPr) -> String {
         monitor.url ?? "https://github.com/\(monitor.repo)/pull/\(monitor.prNumber)"
     }
 
-    /// Menu-header detail lines: title (+ state), repo#number with
-    /// checks/approvals/threads summary, mergeable/blocked status, "last
-    /// change … ago" (relative to `now` when the menu renders), and pending
-    /// status. The summary line is dropped when it would duplicate the title
-    /// line (the no-title/no-snapshot fallback), so every line is distinct.
     static func detailLines(_ monitor: MonitoredPr, now: Date = Date()) -> [String] {
         var lines: [String] = []
         var titleLine = monitor.title ?? "\(monitor.repo)#\(monitor.prNumber)"
@@ -260,8 +236,6 @@ struct MonitoredPrsRow: View {
         return lines
     }
 
-    /// Mergeable / blocked line; prefers the explicit blocked reason (nil
-    /// while the forge is still computing mergeability).
     static func mergeSummary(_ monitor: MonitoredPr) -> String? {
         guard let snapshot = monitor.lastSnapshot else { return nil }
         if let reason = snapshot.mergeBlockedReason, !reason.isEmpty {
@@ -277,7 +251,6 @@ struct MonitoredPrsRow: View {
         }
     }
 
-    /// Compact checks summary from the last snapshot, e.g. "3/4 passing".
     static func checksSummary(_ monitor: MonitoredPr) -> String? {
         guard let checks = monitor.lastSnapshot?.checks, checks.total > 0 else { return nil }
         if checks.failed > 0 { return "\(checks.failed)/\(checks.total) failing" }
@@ -285,7 +258,6 @@ struct MonitoredPrsRow: View {
         return "\(checks.passed)/\(checks.total) passing"
     }
 
-    /// Compact approvals summary, e.g. "approved (1/2 approvals)".
     static func approvalsSummary(_ monitor: MonitoredPr) -> String? {
         guard let approvals = monitor.lastSnapshot?.approvals else { return nil }
         if let needed = approvals.needed {
@@ -296,7 +268,6 @@ struct MonitoredPrsRow: View {
         return "\(approvals.decision) (\(approvals.have) \(noun))"
     }
 
-    /// Unresolved-threads summary; nil when there are none.
     static func threadsSummary(_ monitor: MonitoredPr) -> String? {
         guard let threads = monitor.lastSnapshot?.threads, threads.unresolved > 0 else { return nil }
         return threads.unresolved == 1
@@ -304,7 +275,6 @@ struct MonitoredPrsRow: View {
             : "\(threads.unresolved) unresolved threads"
     }
 
-    /// Pending-emit status line for the detail header.
     static func pendingSummary(_ monitor: MonitoredPr) -> String {
         guard monitor.hasPendingChanges else { return "No pending changes" }
         guard !monitor.pendingChanges.isEmpty else { return "Pending changes" }

@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Workspace resources remain reachable from either the overview or an agent's rail.
 struct WorkspaceResourceActions<Actions: View>: View {
     let workspaceId: String
     var isEnabled = true
@@ -20,7 +19,6 @@ struct WorkspaceResourceActions<Actions: View>: View {
 struct WorkspaceResourceShortcuts: View {
     let workspaceId: String
     @Environment(BackendSession.self) private var session
-    /// Created on first use, so the rail does not load agents for every screen it appears on.
     @State private var agentStore: AgentStore?
     @State private var showsSpecialistPicker = false
     @State private var selectedTerminal: MobileTerminal?

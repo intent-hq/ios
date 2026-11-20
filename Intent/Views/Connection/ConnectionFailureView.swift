@@ -60,8 +60,6 @@ struct ConnectionFailureView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
-        // The 48pt export hit target includes space below its text, leaving the
-        // visible label above the home indicator while matching the mock's inset.
         .ignoresSafeArea(.container, edges: .bottom)
     }
 
@@ -122,7 +120,6 @@ struct ConnectionFailureView: View {
             .foregroundStyle(Constants.Pairing.foreground(for: .light))
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-            // IntentButtonStyle adds 12pt above and below the label.
             .frame(maxWidth: .infinity, minHeight: Constants.ConnectionFailure.controlLabelHeight)
     }
 
@@ -184,12 +181,6 @@ struct ConnectionFailureView: View {
         message.localizedCaseInsensitiveContains("certificate")
     }
 
-    /// The saved record auto-retry dials: this window's own bound
-    /// connection resolved from the saved list — never the global pairing
-    /// record, so a retry success reconnects this window's backend instead
-    /// of retargeting it at the last-used one (window model v2). Nil —
-    /// unbound window, or the record was deleted mid-failure — means there
-    /// is nothing to dial.
     static func autoRetryConnection(
         connections: [StoredConnection],
         windowConnectionID: UUID?
@@ -198,8 +189,6 @@ struct ConnectionFailureView: View {
         return connections.first { $0.id == windowConnectionID }
     }
 
-    /// Saved connections other than this window's currently failing bound
-    /// one, most recently used first.
     static func alternativeConnections(
         connections: [StoredConnection],
         activeId: UUID?
@@ -209,11 +198,6 @@ struct ConnectionFailureView: View {
             .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
     }
 
-    /// Whether the failure screen may dial the saved record on its own. A
-    /// failed Log Off (`.manualLogOff`) never does: the user asked to
-    /// disconnect, so re-establishing the session must be an explicit
-    /// action — "Retry Disconnect" retries forgetting the record, it does not
-    /// reconnect (ios#235). Certificate failures route to re-pairing.
     static func shouldAutoRetry(
         retryPolicy: ConnectionFailureRetryPolicy,
         isCertMismatch: Bool
@@ -221,7 +205,6 @@ struct ConnectionFailureView: View {
         retryPolicy == .automaticConnection && !isCertMismatch
     }
 
-    /// Exponential backoff: 2s, 4s, 8s, 16s, max 30s.
     static func retryBackoff(attempt: Int) -> Duration {
         .seconds(min(
             Double(1 << min(attempt, Constants.ConnectionFailure.retryBackoffExponentCap)),
@@ -229,12 +212,6 @@ struct ConnectionFailureView: View {
         ))
     }
 
-    /// The auto-retry lifecycle behind the failure screen, independent of
-    /// the view so it can be driven against a coordinator and a fake
-    /// connection. Returns without dialing when `shouldAutoRetry` is false;
-    /// otherwise loops until a dial succeeds (routes via
-    /// `onConnectionSuccess`), the bound record disappears (routes to
-    /// pairing), or the task is cancelled.
     static func runAutoRetry(
         retryPolicy: ConnectionFailureRetryPolicy,
         isCertMismatch: Bool,
@@ -254,14 +231,8 @@ struct ConnectionFailureView: View {
 
             try? await Task.sleep(for: backoff(attempt))
             if Task.isCancelled { break }
-            // Home retires the coordinator synchronously, before SwiftUI
-            // delivers onDisappear and cancels this view-owned retry task.
             guard !coordinator.lifecycleState.hasReturnedToSavedMachines else { return }
 
-            // Dial this window's own bound record (re-read each
-            // attempt so rotated tokens synced mid-retry are used);
-            // a missing record routes to pairing instead of dialing
-            // another backend's.
             guard let record = autoRetryConnection(
                 connections: loadConnections(),
                 windowConnectionID: coordinator.backendID?.connectionID
@@ -280,15 +251,10 @@ struct ConnectionFailureView: View {
                         tcAddress: record.server.tcAddress
                     )
                 }
-                // A cancelled retry must never route: the user may have
-                // switched to another saved connection while this connect
-                // was in flight, and a stale success would restore the
-                // failing daemon over the selected one.
                 guard !Task.isCancelled else { return }
                 coordinator.onConnectionSuccess()
                 return
             } catch {
-                // Continue retrying
                 AppLog.connection.warning("[ConnectionFailureView] Retry \(attempt) failed: \(error)")
             }
         }
@@ -372,8 +338,6 @@ extension ConnectionFailureView {
     }
 }
 
-/// Center the main group when space permits, keeping help at the bottom without
-/// overlap. In the scroll view a taller intrinsic size makes every section reachable.
 private struct FailurePageLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
         let content = subviews[0].sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))

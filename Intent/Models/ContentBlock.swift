@@ -1,6 +1,5 @@
 import Foundation
 
-/// The type of a content block in a conversation message.
 nonisolated enum ContentBlockType: String, Codable {
     case code
     case file
@@ -18,9 +17,6 @@ nonisolated enum ContentBlockType: String, Codable {
     }
 }
 
-/// Nested contents of a standalone `resource` content block (PROTOCOL §7.1):
-/// `{ type: "resource", resource: { uri?, mimeType, text } }`. Decoded leniently —
-/// consumers validate the fields they need (e.g. question parsing is MIME-gated).
 nonisolated struct ResourceContents: Codable, Equatable {
     var uri: String?
     var mimeType: String?
@@ -61,76 +57,55 @@ nonisolated enum ImageDataRepresentation: Equatable {
     }
 }
 
-/// A content block within a conversation message.
-/// Supports multiple content types (text, code, tool_use, tool_result, thinking, image, file, resource)
-/// with backward-compatible field aliases.
 nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
-    /// Wire `id`, or the `FallbackIdentity`-derived id when absent
-    /// (see `ContentBlock+Identity.swift`).
     let id: String
     let type: ContentBlockType
 
-    // Text content fields
     var text: String?
-    private var content: String?  // legacy alias for text
+    private var content: String?
 
-    // Code block fields
     var language: String?
 
-    // Tool use fields
     var name: String?
-    private var toolName: String?  // legacy alias for name
+    private var toolName: String?
     var input: [String: AnyCodable] {
         didSet { inputWasProvided = true }
     }
     private var inputWasProvided: Bool
     var toolCallId: String?
 
-    // Tool result fields
     var toolUseId: String?
-    private var tool_use_id: String?  // snake_case alias
+    private var tool_use_id: String?
     var output: AnyCodable?
     var errorOutcome: ToolExecutionOutcome
     private var legacyErrorOutcome: ToolExecutionOutcome
 
-    // Media fields (image/file)
-    var data: String?       // base64 encoded
+    var data: String?
     var mimeType: String?
     var fileName: String?
-    /// Attachment-registry reference for placed attachment blocks (PROTOCOL
-    /// §5.5 v6.12) — persisted file/image references carry no inline `data`.
     var attachmentId: String?
-    /// Byte length for attachment-reference file blocks.
     var size: Int?
 
-    // Standalone resource block contents (type == .resource)
     var resource: ResourceContents?
 
-    // Metadata
     var metadata: [String: AnyCodable] {
         didSet { metadataWasProvided = true }
     }
     private var metadataWasProvided: Bool
     private var legacyMetadata: [String: AnyCodable]
     private var legacyMetadataWasProvided: Bool
-    /// Per-message send metadata persisted on the delivered block (PROTOCOL
-    /// §5.5, e.g. the `questions_dismissed` dismissal notice tag).
     var messageMetadata: [String: AnyCodable] {
         didSet { messageMetadataWasProvided = true }
     }
     private var messageMetadataWasProvided: Bool
 
-    // Slim projection truncation flags (PROTOCOL §5.5, opt-in via
-    // `projection: "slim"`). A served block whose oversized body was replaced
-    // by a bounded preview / thumbnail carries the additive flags below; the
-    // full body is fetched on demand via `agent.getMessageBlock`.
-    var inputTruncation: ProjectionTruncation      // tool_use.input replaced by a bounded preview
-    var inputBytes: Int?           // serialized byte size of the full input
-    var outputTruncation: ProjectionTruncation     // tool_result.output replaced by a bounded preview
-    var outputBytes: Int?          // serialized byte size of the full output
-    var dataTruncation: ProjectionTruncation       // image.data replaced by a thumbnail (or omitted)
-    var dataRepresentation: ImageDataRepresentation // whether present data is the thumbnail
-    var dataBytes: Int?            // byte size of the full image data
+    var inputTruncation: ProjectionTruncation
+    var inputBytes: Int?
+    var outputTruncation: ProjectionTruncation
+    var outputBytes: Int?
+    var dataTruncation: ProjectionTruncation
+    var dataRepresentation: ImageDataRepresentation
+    var dataBytes: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, type, text, content, language, name, toolName
@@ -156,22 +131,17 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         try self.init(from: decoder, fallbackIdentity: .fingerprint(messageId: nil))
     }
 
-    /// The one block decoder: every decode path (message rows, delta
-    /// entities, `agent.getMessageBlock` hydration, `JSONDecoder`) ends here,
-    /// differing only in the identity an id-less block falls back to.
     init(from decoder: Decoder, fallbackIdentity: FallbackIdentity) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         let wireId = try? container.decode(String.self, forKey: .id)
         type = (try? container.decode(ContentBlockType.self, forKey: .type)) ?? .text
 
-        // Text with fallback to content
         text = try? container.decode(String.self, forKey: .text)
         content = try? container.decode(String.self, forKey: .content)
 
         language = try? container.decode(String.self, forKey: .language)
 
-        // Name with fallback to toolName
         name = try? container.decode(String.self, forKey: .name)
         toolName = try? container.decode(String.self, forKey: .toolName)
 
@@ -180,13 +150,11 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         inputWasProvided = decodedInput.wasProvided
         toolCallId = try? container.decode(String.self, forKey: .toolCallId)
 
-        // toolUseId with fallback to tool_use_id
         toolUseId = try? container.decode(String.self, forKey: .toolUseId)
         tool_use_id = try? container.decode(String.self, forKey: .tool_use_id)
 
         output = try? container.decode(AnyCodable.self, forKey: .output)
 
-        // isError with fallback to is_error
         errorOutcome = (try? container.decode(Bool.self, forKey: .isError))
             .map(ToolExecutionOutcome.init(reportedIsError:)) ?? .unreported
         legacyErrorOutcome = (try? container.decode(Bool.self, forKey: .is_error))
@@ -227,28 +195,22 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         ])
     }
 
-    /// Resolved text content, falling back to legacy `content` field.
     var resolvedText: String? {
         text ?? content
     }
 
-    /// Resolved tool name, falling back to legacy `toolName` field.
     var resolvedName: String? {
         name ?? toolName
     }
 
-    /// Resolved tool use ID, falling back to snake_case `tool_use_id` field.
     var resolvedToolUseId: String? {
         toolUseId ?? tool_use_id
     }
 
-    /// Resolved error flag, falling back to snake_case `is_error` field.
     var resolvedErrorOutcome: ToolExecutionOutcome {
         errorOutcome == .unreported ? legacyErrorOutcome : errorOutcome
     }
 
-    /// Resolved metadata, falling back to the wire `meta` alias used by
-    /// daemon-persisted notice rows (e.g. `meta.kind = "discussion-request"`).
     var resolvedMetadata: [String: AnyCodable] {
         metadataWasProvided ? metadata : legacyMetadata
     }
@@ -262,10 +224,6 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         inputWasProvided = block.inputWasProvided
     }
 
-    /// True when the daemon served this block slim-truncated (PROTOCOL §5.5):
-    /// a `tool_use`/`tool_result` body reduced to a bounded preview, or an
-    /// `image` reduced to a thumbnail/placeholder. Such a block can be
-    /// hydrated to its full body on demand via `agent.getMessageBlock`.
     var isSlimTruncated: Bool {
         inputTruncation.isTruncated || outputTruncation.isTruncated || dataTruncation.isTruncated
     }

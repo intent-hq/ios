@@ -20,8 +20,6 @@ extension ConversationStore {
             } else if needsFeedReconciliation {
                 needsFeedReconciliation = false
                 guard let agentId else { return }
-                // The initial reads may precede the global ACK. Close that gap
-                // exactly once when the feed becomes ready, including retry.
                 commands.agentDetails.invalidate(agentId: agentId)
                 scheduleMetadataRefresh()
                 refreshQueue()
@@ -33,8 +31,6 @@ extension ConversationStore {
     func retainConversation(_ consumer: UUID, agentId: String, workspaceId: String) {
         consumers.insert(consumer)
         guard !streamingEventsActive || self.agentId != agentId else { return }
-        // Agent ids are backend-wide. A second window's route hint cannot
-        // replace a live channel; only shared agent detail supplies authority.
         bootstrapWorkspaceHint = workspaceId
         let knownWorkspace = commands.agentDetails.cached(agentId: agentId)?.values["workspaceId"] as? String
         bindStreaming(agentId: agentId, workspaceId: knownWorkspace)
@@ -56,8 +52,6 @@ extension ConversationStore {
         let events = pendingWorkspaceEvents
         pendingWorkspaceEvents.removeAll()
         isFoldingWorkspaceEvents = true
-        // A successful shared read supersedes only fields it supplied, and only
-        // events preceding its actual RPC start. Local confirmations also win.
         let confirmed = commands.confirmedMarkerRevisions
         for pending in events {
             let changed = Set(confirmed.keys.filter { confirmed[$0] != pending.confirmedMarkerRevisions[$0] })
@@ -86,7 +80,6 @@ extension ConversationStore {
         deactivateStreaming()
     }
 
-    /// Idempotent for this activation/connection, even after all reads settle.
     func startBootstrap(reconnecting: Bool = false) {
         guard bootstrapTask == nil, streamingEventsActive, let agentId,
               let workspace = workspaceId ?? bootstrapWorkspaceHint else { return }
@@ -122,8 +115,6 @@ extension ConversationStore {
         watchedAgentCoordinator.invalidateReads()
     }
 
-    /// Explicit recovery entry point used by connection tests and callers.
-    /// Publisher replay never invokes it; only actual transitions bootstrap.
     func onReconnected() async {
         guard streamingEventsActive else { return }
         cancelBootstrap()

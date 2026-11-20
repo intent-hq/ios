@@ -64,8 +64,6 @@ struct IntentFileVideoFailureAttachment: Attachment {
         .lineLimit(1)
         .minimumScaleFactor(0.5)
         .foregroundStyle(.secondary)
-        // Textual resolves an ideal-sized Canvas symbol, then scales it into
-        // the square run bounds. Give it a square so the labels do not stretch.
         .frame(width: SquareImageThumbnail.transcriptSide, height: SquareImageThumbnail.transcriptSide)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Video unavailable: \(name)")
@@ -77,8 +75,6 @@ struct IntentFileVideoFailureAttachment: Attachment {
         IntentFileImageAttachment.thumbnailSize(proposedWidth: proposal.width)
     }
 
-    /// Textual renders attachment bodies as symbols; its tap handler owns retry.
-    /// Clear the same session loader used to fetch, before re-resolving the markdown.
     @MainActor
     func prepareRetry(using loader: WorkspaceFileImageLoader) -> Bool {
         switch retrySource {

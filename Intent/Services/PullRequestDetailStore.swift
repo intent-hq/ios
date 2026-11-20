@@ -1,16 +1,12 @@
 import Foundation
 import Observation
 
-/// Loads one pull request's detail, checks, reviews and changed files (FE
-/// Home detail parity). Each read is independent: one failing leaves the
-/// others visible with their own retry.
 @MainActor
 @Observable final class PullRequestDetailStore {
     enum Section: Hashable {
         case checks, detail, files, reviews
     }
 
-    /// Links open with only a number; the loaded pull request fills in its title and state.
     private(set) var item: PullRequestListItem
     private(set) var detail: PullRequestDetail?
     private(set) var checks: [PullRequestCheck] = []
@@ -20,7 +16,6 @@ import Observation
     private(set) var loading: Set<Section> = []
     private(set) var errors: [Section: String] = [:]
 
-    /// A `github.pulls.get` reply without a readable pull request.
     enum ResponseError: LocalizedError, Equatable {
         case malformed
 

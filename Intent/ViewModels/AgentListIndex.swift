@@ -1,6 +1,5 @@
 import Foundation
 
-/// Rebuild once per agent snapshot, not once per rendered row.
 struct AgentListIndex {
     let active: [AgentSession]
     let foregroundOrder: [AgentSession]

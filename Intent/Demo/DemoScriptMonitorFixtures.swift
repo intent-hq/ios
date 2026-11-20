@@ -1,8 +1,6 @@
 #if DEBUG
 import Foundation
 
-/// Explicit demo-only wire fixture. Its single event pump feeds ConnectionManager's
-/// normal handlers; it never mutates a store or a view and never polls a server.
 @MainActor
 final class DemoScriptMonitorFixtures {
     enum Scenario: String {
@@ -150,8 +148,6 @@ final class DemoScriptMonitorFixtures {
         eventTask = nil
     }
 
-    /// Returns the full transient lifecycle envelope, like the daemon. Tests can
-    /// also drive this synchronously to verify the fixture's wire contract.
     func consume(_ action: Action) -> [String: Any]? { // swiftlint:disable:this discouraged_optional_collection
         guard active, consumed.insert(action).inserted else { return nil }
         if action == .rename { name = Self.updatedName }

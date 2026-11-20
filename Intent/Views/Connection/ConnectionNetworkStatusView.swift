@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Shared passive text for eligible loss and inline startup/failure surfaces.
 struct ConnectionNetworkStatusView: View {
     let status: NetworkAvailability.Status
     var statusIdentifier = "connection-network.status"

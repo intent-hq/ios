@@ -4,10 +4,6 @@ import Combine
 import Foundation
 import UIKit
 
-/// Links each connected machine to the push relay and keeps the relay's copy
-/// of this device current: APNs tokens, Live Activity tokens and the Live
-/// Activities switch. With any machine linked, the relay drives the Live
-/// Activity and `AgentLiveActivityController` stands down (D7).
 @MainActor
 final class PushRelayController {
     static let shared = PushRelayController()
@@ -21,16 +17,12 @@ final class PushRelayController {
     private var key: RelayDeviceKey?
     private var sessions: [UUID: BackendSession] = [:]
     private var connectionObservers: [UUID: AnyCancellable] = [:]
-    /// Machines that could not link; cleared each time the app becomes active.
     private var declined: Set<UUID> = []
     private var linking: Set<UUID> = []
-    /// Machines forgotten this run; a registration that finishes later is undone.
     private var removedConnections: Set<UUID> = []
-    /// Tail of the relay registration and unlink chain.
     private var relayOperations: Task<Void, Never>?
     private var pushToken: String?
     private var pushToStartToken: String?
-    /// The Live Activity whose push token the relay holds.
     private var liveActivity: (id: String, token: String)?
     private var observedActivities: Set<String> = []
     private let deviceSync = CoalescedRead()
@@ -42,13 +34,10 @@ final class PushRelayController {
 
     var isRelayDriven: Bool { state.isRelayDriven }
 
-    /// A linked machine's agent alerts come from the relay as remote
-    /// notifications, so the app does not post its own for that machine.
     func deliversAlerts(for connectionId: UUID) -> Bool {
         state.link(for: connectionId) != nil
     }
 
-    /// Starts token streams and launch work. Call once at app launch.
     func start() {
         AgentLiveActivityController.shared.setRelayDriven(state.isRelayDriven)
         Task { [weak self] in
@@ -86,7 +75,6 @@ final class PushRelayController {
         connectionObservers[backendID.connectionID] = nil
     }
 
-    /// The saved connections were removed: revoke their links.
     func connectionsRemoved(_ backendIDs: [BackendID]) {
         for backendID in backendIDs {
             removedConnections.insert(backendID.connectionID)
@@ -101,7 +89,6 @@ final class PushRelayController {
         scheduleDeviceSync()
     }
 
-    /// The Live Activities switch changed.
     func preferencesChanged() {
         scheduleDeviceSync()
         for connectionId in sessions.keys { linkIfNeeded(connectionId) }
@@ -171,7 +158,6 @@ final class PushRelayController {
 
     private func activityEnded(id: String) {
         observedActivities.remove(id)
-        // A newer activity may already hold the relay's token.
         guard liveActivity?.id == id else { return }
         liveActivity = nil
         sendActivityToken(nil)
@@ -227,12 +213,10 @@ final class PushRelayController {
         let client = try makeClient(baseURL: relayURL)
         let device = currentDevice()
         let forgotten = try await serialized { [self] in
-            // Forgotten while the link token was in flight: never register it.
             guard !removedConnections.contains(connectionId) else { return false }
             let registration = try await client.register(linkToken: linkToken, connectionId: connectionId, device: device)
             let link = RelayLink(connectionId: connectionId, daemonId: registration.daemonId, relayURL: relayURL)
             guard !removedConnections.contains(connectionId) else {
-                // A current link for the daemon is a newer generation; leave it.
                 guard state.links.allSatisfy({ $0.daemonId != link.daemonId }) else { return false }
                 state.queueUnlink(link)
                 state.save(to: defaults)
@@ -266,14 +250,11 @@ final class PushRelayController {
         Task { await applySnapshot() }
     }
 
-    /// The relay's content can be ahead of a stale card while the app was
-    /// closed; show it at once.
     private func applySnapshot() async {
         guard state.isRelayDriven, isEnabled, let client = makeClient() else { return }
         do {
             let snapshot = try await client.snapshot()
             guard snapshot.contentState.runningCount > 0 else {
-                // Nothing runs: clear a card the relay's end push did not remove.
                 await Self.endAll()
                 return
             }
@@ -302,8 +283,6 @@ final class PushRelayController {
 
     // MARK: - ActivityKit streams
 
-    // Activities are not Sendable: each helper iterates off the main actor
-    // and hands back only ids and token bytes.
     nonisolated private static func pushToStartTokens(_ handle: @MainActor @Sendable (Data) -> Void) async {
         for await token in Activity<AgentActivityAttributes>.pushToStartTokenUpdates {
             await handle(token)
@@ -347,8 +326,6 @@ final class PushRelayController {
 // MARK: - Unlinking
 
 extension PushRelayController {
-    /// Registrations and unlinks reach the relay one at a time, so an unlink
-    /// already on the wire cannot revoke the registration that replaced it.
     private func serialized<T: Sendable>(_ operation: @escaping @MainActor () async throws -> T) async throws -> T {
         let previous = relayOperations
         let task = Task { @MainActor in
@@ -372,7 +349,6 @@ extension PushRelayController {
         await retryPendingUnlinks()
     }
 
-    /// Each forgotten link stays queued until the relay confirms it is gone.
     private func retryPendingUnlinks() async {
         try? await serialized { [self] in
             for link in state.pendingUnlinks {
@@ -382,14 +358,12 @@ extension PushRelayController {
     }
 
     private func sendUnlink(_ link: RelayLink) async {
-        // Re-pairing removes the entry; never revoke the replacement.
         guard state.pendingUnlinks.contains(link),
               let client = try? makeClient(baseURL: link.relayURL)
         else { return }
         do {
             try await client.unlink(daemonId: link.daemonId)
         } catch RelayClientError.status(Self.relayNotFoundStatus, _) {
-            // Already gone at the relay.
         } catch {
             AppLog.notifications.warning("[PushRelay] Unlink will retry: \(error)")
             return
@@ -400,7 +374,6 @@ extension PushRelayController {
 }
 
 private extension Data {
-    /// APNs tokens go to the relay as lowercase hex.
     var hexString: String {
         map { String(format: "%02x", $0) }.joined()
     }
