@@ -114,11 +114,9 @@ extension CreationOptionsStoreTests {
         store.releaseCatalogs(consumer: consumer)
         try await expectNever("refresh after final interest release") { !connection.traffic(since: checkpoint).requests.isEmpty }
         #expect(store.specialists.first?.name == "Known specialist")
-        #expect(connection.eventHandlerCount == 1) // One cache-invalidating session listener, no view listener.
+        #expect(connection.eventHandlerCount == 1)
         store.reset()
         #expect(connection.eventHandlerCount == 0)
-        // Work scheduled by a departing view cannot resurrect a torn-down
-        // backend session, even if that caller itself was not cancelled yet.
         store.retainCreationOptions(consumer: consumer)
         store.selectModelProvider("auggie", consumer: consumer)
         await store.ensureSpecialists()

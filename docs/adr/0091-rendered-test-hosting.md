@@ -15,10 +15,18 @@ Some unit tests render UIKit or SwiftUI views in a real window to check appearan
 5. Focus-order tests use a responder spy, not a key window, so queue order is deterministic. Real keyboard entry is covered by UI tests.
 6. A closed window's SwiftUI graph is released on a later run-loop turn. A teardown test keeps the coordinator alive until a bounded deadline passes.
 
+7. **Painted geometry** (`CreationPickerRenderedGeometry`). Layout tests that must prove a control is visible measure painted pixels, not accessibility rectangles: a CGRect-only fixture cannot detect a broken capture or coordinate conversion.
+   1. Capture at scale 1, so image pixels and window-local points share coordinates. Convert frames only after the painted fixture has settled, and keep local, window-pixel and screen coordinates apart.
+   2. A region that touches the canvas edge fails closed (`ObservationError.missingOrAmbiguousRegion`): a clipped bitmap cannot show the missing part. Tiny anti-aliased islands are ignored by area, never by dimension, so a 120×1 clipping strip still reaches the assertions.
+   3. Compare each edge within one pixel, because the 1x capture can blend an interior edge; checking only the size would miss a flipped or offset image.
+   4. Wait for stability over a minimum number of samples, even past the deadline, because SwiftUI can finish Dynamic Type reflow after the host appears and capture can be slow.
+   5. The host canvas is tall enough to keep every measured row mounted at accessibility sizes. A readable-size floor detects clipping; it does not claim to measure the full hit target.
+
 ## Consequences
 
 - A test that calls `makeKeyAndVisible()` can break unrelated suites.
+- Unit-test runners do not start XCTest's UI automation session, and simulator preferences alone do not turn on SwiftUI's in-process accessibility tree. `SyntheticBadgeAccessibilityRuntime` turns it on with the same runtime entry points as AccessibilitySnapshot's `ASAccessibilityEnabler`. It lives only in the test bundle and is never linked into the app (from test comments).
 
 ## Code
 
-- `AgentAvatarPulseTests`, `AgentWaitingViewTests`, `ComposerSubmitPolicyTests`, `ComposerFocusBindingTests`, `ConnectionLossPresenterTests`
+- `AgentAvatarPulseTests`, `AgentWaitingViewTests`, `ComposerSubmitPolicyTests`, `ComposerFocusBindingTests`, `ConnectionLossPresenterTests`, `CreationPickerControlsTests`, `CreationPickerRenderedGeometry`

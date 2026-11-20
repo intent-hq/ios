@@ -17,10 +17,17 @@ A long press on a transcript row opens a Copy menu. SwiftUI's `.contextMenu { } 
    3. If the probe reaches an ancestor (plain SwiftUI content), the overlay claims the touch, except when a visible `UITextInput` descendant (Textual's selection and link view) or a passthrough marker claims the point. Those are found by a depth-first walk that ignores intermediate bounds, because a zero-framed SwiftUI wrapper would hide them from normal hit-testing.
    4. A scroll container can win the probe while a zero-framed wrapper hides a button marker under it; the marker wins.
 5. **Passthrough markers.** `CopyContextMenuPassthroughMarker` is a transparent UIKit view behind a tappable control. The probe resolves to the marker, the overlay passes the touch, and SwiftUI routes it to the control's own tap and context menu (ios#344). Apply `copyContextMenuPassthrough()` to the control's label and cover its whole tap area; `IntentButtonStyle(passesThroughCopyMenu: true)` does this for its pill. `CopyContextMenuPassthroughPolicyTests` requires it on every `Button` in a transcript row. The cost is no message-copy long-press directly over the control.
+6. **The policy scan** (added from test comments). The overlay cannot tell a SwiftUI Button from plain text, because a Button has no UIKit view; markers were missed three times (ios#344, ios#369, ios#212, ios#982), so `CopyContextMenuButtonScanner` is the guard.
+   1. The scan is lexical (`SwiftSourceLexer`): comments, strings and regex literals are blanked, then brackets are matched. A file whose literals or brackets do not pair up is reported as unreliable (`Scan.isReliable`), not trusted.
+   2. A Button passes when its label (the `label:` argument or closure, or the trailing closure of `Button(action:)`) reaches the marker, directly or through a same-file `func`, `var` or `struct`. A helper name counts only when every same-file declaration with that name is marked. A marker on the action, on a nested Button, or on the Button's modifier chain does not count, because the Button must be the marker's SwiftUI ancestor.
+   3. The one exception is `.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))` with a literal `true`, as the nearest `buttonStyle` on the Button's own chain; that style puts the marker inside the Button.
+   4. Buttons inside menus, dialogs, toolbars and presented or pushed screens are skipped (`detachedContainers`): they never render under a row's overlay.
+   5. Files whose Buttons never render in a `MessageCopyContextMenu` row are listed with their exact count of unmarked Buttons, so a new Button in them still fails.
 
 ## Consequences
 
 - A new tappable control in a transcript row needs a passthrough marker, or the overlay swallows its taps.
+- The overlay is always applied, so the row subtree never changes structural identity. `shouldEnableCopyInteraction(text:isStreaming:)` only decides whether it carries a live interaction: it attaches once the message has settled and has text. Image-only rows, the thinking phase and streaming rows stay inert (from test comments).
 
 ## Code
 

@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// The creation picker's specialist + provider load is one `LoadPhase`. A
-/// silent revalidation of a loaded catalog never shows loading or failure.
 @MainActor
 struct CreationOptionsLoadPhaseTests {
     private func makeFake() -> FakeConnectionManager {

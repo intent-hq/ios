@@ -4,7 +4,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Test-only observation of the painted workspace cards, not their accessibility rectangles.
 @MainActor
 struct CreationPickerRenderedGeometry {
     enum ObservationError: Error, Equatable {
@@ -29,7 +28,7 @@ struct CreationPickerRenderedGeometry {
         let hostView = try #require(window.rootViewController?.view)
         try #require(hostView.bounds == bounds && window.convert(hostView.bounds, from: hostView) == bounds)
         let format = UIGraphicsImageRendererFormat()
-        format.scale = 1 // Image pixels and window-local points have the same coordinates.
+        format.scale = 1
         format.preferredRange = .standard
         var drawn = false
         image = UIGraphicsImageRenderer(bounds: bounds, format: format).image { _ in
@@ -50,8 +49,6 @@ struct CreationPickerRenderedGeometry {
             }
             guard !selected.contains(index) else { throw ObservationError.sharedRegion }
             let region = regions[index]
-            // A clipped bitmap cannot reveal the missing portion. Fail closed instead of
-            // accepting its intersection with the canvas as a contained, complete control.
             guard region.minX > bounds.minX, region.minY > bounds.minY,
                   region.maxX < bounds.maxX, region.maxY < bounds.maxY else {
                 throw ObservationError.clippedAtCaptureEdge
@@ -94,8 +91,6 @@ struct CreationPickerRenderedGeometry {
         var regions: [CGRect] = []
         for seed in mask.indices where mask[seed] {
             let region = connectedRegion(seed: seed, mask: &mask, width: image.width)
-            // Tiny anti-aliased glyph islands cannot be a readable control. Do not filter
-            // dimensions: a 120x1 clipping strip must still reach the geometry assertions.
             if region.count >= minimumPaintedArea { regions.append(region.bounds) }
         }
         return regions

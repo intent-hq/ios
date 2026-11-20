@@ -4,8 +4,6 @@ import Testing
 
 @MainActor
 extension CreationOptionsStoreTests {
-    // MARK: - Models (per provider)
-
     @Test func coldModelLoadFetchesAndCachesPerProvider() async {
         let (store, fake) = await makeLoadedStore()
         #expect(store.models(for: "auggie") == nil)

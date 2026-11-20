@@ -11,7 +11,7 @@ extension CreationOptionsStoreTests {
         store.selectModelProvider("auggie", consumer: consumer)
         await store.ensureSpecialists()
         await store.ensureModels(providerId: "auggie")
-        await store.ensureModels(providerId: "codex") // Cached, no active consumer.
+        await store.ensureModels(providerId: "codex")
         let generation = store.loadGeneration
         let checkpoint = connection.checkpoint
         catalogEvent(connection, type: "settings:changed", paths: ["theme.color", "modelsUnrelated", "specialistsUnrelated"])
@@ -24,7 +24,7 @@ extension CreationOptionsStoreTests {
             store.modelCatalog(for: "auggie").isFresh && store.specialistCatalog.isFresh
         }
         #expect(connection.traffic(since: checkpoint).methodCounts == ["specialist.list": 2, "models.list": 1])
-        #expect(store.loadGeneration == generation) // No parent metadata invalidation.
+        #expect(store.loadGeneration == generation)
         #expect(!store.modelCatalog(for: "codex").isFresh)
         #expect(connection.traffic(since: checkpoint).calls("models.list").allSatisfy { $0.params["providerId"] as? String == "auggie" })
         printCatalogLedger("settings-specialist-invalidation", connection.traffic(since: checkpoint))
@@ -115,8 +115,6 @@ extension CreationOptionsStoreTests {
         await store.ensureSpecialists()
         await store.ensureModels(providerId: "auggie")
         let checkpoint = connection.checkpoint
-        // A local injected transport failure has no inbound frame; its full
-        // measured cost is the outgoing request, not an invented error body.
         connection.errorMap["specialist.list"] = URLError(.networkConnectionLost)
         connection.errorMap["models.list"] = URLError(.networkConnectionLost)
         catalogEvent(connection, type: "settings:changed", paths: ["model.default"])

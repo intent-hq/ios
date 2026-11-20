@@ -3,11 +3,6 @@ import SwiftUI
 import Testing
 
 extension CreateWorkspaceParamsTests {
-    // MARK: - Create gate sequencing (per selected provider + store generation)
-
-    /// The sheet's Create gate for `providerId`, exactly as
-    /// `CreateWorkspaceView.isLoadingSelectedModelCatalog` derives it from
-    /// the store's cache slot and the sheet's per-provider settled markers.
     @MainActor
     private func catalogGate(
         _ providerId: String,
@@ -20,8 +15,6 @@ extension CreateWorkspaceParamsTests {
         )
     }
 
-    /// Mirrors `CreateWorkspaceView.loadModels(for:)`: load, then settle
-    /// only in the generation the load started in.
     @MainActor
     private func loadModels(
         _ providerId: String,
@@ -50,16 +43,12 @@ extension CreateWorkspaceParamsTests {
         let store = CreationOptionsStore(connectionManager: fake)
         var settled = SpecialistPickerView.SettledLoads()
 
-        // Provider A settles: Create enabled for A.
         await loadModels("auggie", store: store, settled: &settled)
         #expect(!catalogGate("auggie", store: store, settled: settled))
 
-        // The user picks uncached B: A's settlement must not enable Create
-        // for B while B's catalog is unresolved.
         #expect(catalogGate("codex", store: store, settled: settled))
         await loadModels("codex", store: store, settled: &settled)
         #expect(!catalogGate("codex", store: store, settled: settled))
-        // Switching back to the warm A is instant.
         #expect(!catalogGate("auggie", store: store, settled: settled))
     }
 
@@ -70,7 +59,6 @@ extension CreateWorkspaceParamsTests {
         let store = CreationOptionsStore(connectionManager: fake)
         var settled = SpecialistPickerView.SettledLoads()
 
-        // A's load is in flight when the user picks B; A resolves first.
         let loadA = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
         try await waitForModelsListCalls(fake, count: 1)
         let generationA = store.loadGeneration
@@ -81,7 +69,6 @@ extension CreateWorkspaceParamsTests {
         fake.resolvePending("models.list", with: ["models": [["id": "a", "name": "a", "provider": "auggie"]]])
         await loadA.value
         settled.settleModels(for: "auggie", startedAt: generationA, current: store.loadGeneration)
-        // A settled, but B (the selection) is still unresolved: Create stays disabled.
         #expect(!catalogGate("auggie", store: store, settled: settled))
         #expect(catalogGate("codex", store: store, settled: settled))
         #expect(
@@ -108,15 +95,12 @@ extension CreateWorkspaceParamsTests {
         let oldLoad = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
         try await waitForModelsListCalls(fake, count: 1)
 
-        // Reconnect: the store hard-clears and the sheet drops its markers.
         store.invalidate()
         settled.reset()
         let freshGeneration = store.loadGeneration
         let freshLoad = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
         try await waitForModelsListCalls(fake, count: 2)
 
-        // The pre-reconnect request answers first: it settles nothing and
-        // Create stays disabled on the still-pending fresh load.
         fake.resolvePending("models.list", with: ["models": [["id": "stale", "name": "stale", "provider": "auggie"]]])
         await oldLoad.value
         let oldPublished = settled.settleModels(
@@ -128,7 +112,6 @@ extension CreateWorkspaceParamsTests {
         #expect(store.models(for: "auggie") == nil)
         #expect(catalogGate("auggie", store: store, settled: settled))
 
-        // A failed fresh load still settles (daemon default), a success too.
         fake.resolvePending("models.list", with: ["models": [["id": "fresh", "name": "fresh", "provider": "auggie"]]])
         await freshLoad.value
         let freshPublished = settled.settleModels(
@@ -149,18 +132,14 @@ extension CreateWorkspaceParamsTests {
         var settled = SpecialistPickerView.SettledLoads()
 
         await loadModels("auggie", store: store, settled: &settled)
-        // Failure settles A (daemon default, Create enabled) but not B.
         #expect(store.models(for: "auggie") == nil)
         #expect(!catalogGate("auggie", store: store, settled: settled))
         #expect(catalogGate("codex", store: store, settled: settled))
 
-        // A reconnect re-arms A's gate until a fresh load for it settles.
         store.invalidate()
         settled.reset()
         #expect(catalogGate("auggie", store: store, settled: settled))
     }
-
-    // MARK: - preselectedProvider
 
     @Test func preselectedProviderPrefersSelectableAuggieThenFirstSelectable() {
         let providers = [
@@ -173,7 +152,6 @@ extension CreateWorkspaceParamsTests {
             makeProvider(id: "grok", authenticated: .unknown),
             makeProvider(id: "codex", authenticated: .signedIn)
         ]
-        // nil (unknown) stays selectable since probes can fail transiently
         #expect(
             CreationSelectionPolicy.preselectedProvider(
                 current: nil,
@@ -193,7 +171,6 @@ extension CreateWorkspaceParamsTests {
                 providers: providers
             )?.id == "codex"
         )
-        // The selected provider signed out under a background refresh.
         let codexSignedOut = [
             makeProvider(id: "auggie", authenticated: .signedIn),
             makeProvider(id: "codex", authenticated: .signedOut)
@@ -207,9 +184,6 @@ extension CreateWorkspaceParamsTests {
     }
 
     @Test func preselectedProviderRebindsSurvivingSelectionAndEqualityTracksAuth() {
-        // Same provider ids, auth state changed: the arrays compare unequal
-        // (so the observer fires) and the kept selection carries the fresh
-        // tri-state rather than the stale DTO.
         let cached = [
             makeProvider(id: "auggie", authenticated: .signedIn),
             makeProvider(id: "codex", authenticated: .unknown)
@@ -245,8 +219,6 @@ extension CreateWorkspaceParamsTests {
         #expect(CreationSelectionPolicy.preselectedProvider(current: nil, providers: []) == nil)
     }
 
-    // MARK: - reconciledModel (explicit model vs. the displayed catalog)
-
     @Test func reconciledModelKeepsAndRebindsWhileStillListedForSameProvider() {
         let refreshed = [
             makeModel(id: "sonnet4.5", provider: "auggie"),
@@ -269,24 +241,17 @@ extension CreateWorkspaceParamsTests {
                 models: [makeModel(id: "sonnet4.5", provider: "auggie")]
             ) == nil
         )
-        // Reconnect clear / catalog not loaded yet: daemon default applies.
         #expect(CreationSelectionPolicy.reconciledModel(current: current, models: []) == nil)
     }
 
     @Test func reconciledModelDropsExplicitModelAcrossProviderSwitchWithSharedBareId() {
-        // Two cached provider catalogs share a bare model id. After an
-        // automatic provider switch the old explicit pick must not survive
-        // into the new provider's catalog: the daemon default applies.
         let codexCatalog = [makeModel(id: "sonnet4.5", provider: "codex"), makeModel(id: "gpt-5", provider: "codex")]
         let auggieCatalog = [makeModel(id: "sonnet4.5", provider: "auggie")]
         #expect(codexCatalog.map(\.id).contains("sonnet4.5") && auggieCatalog.map(\.id).contains("sonnet4.5"))
         let pickedOnCodex = codexCatalog[0]
         #expect(CreationSelectionPolicy.reconciledModel(current: pickedOnCodex, models: auggieCatalog) == nil)
-        // Staying on the same provider keeps it.
         #expect(CreationSelectionPolicy.reconciledModel(current: pickedOnCodex, models: codexCatalog) == pickedOnCodex)
     }
-
-    // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
     @Test(arguments: [WorkspaceProviderOptions.State.idle, .loading])
     func pendingWorkspacePolicyKeepsDraftSelection(state: WorkspaceProviderOptions.State) {
@@ -312,7 +277,6 @@ extension CreateWorkspaceParamsTests {
         CreationSelectionPolicy.reconcileWorkspaceProvider(provider: &provider, model: &model, state: .loaded([]))
         #expect(provider == nil)
         #expect(model == nil)
-        // Agent creation intentionally retains its prior empty-list policy.
         #expect(CreationSelectionPolicy.preselectedProvider(current: makeProvider(), providers: []) != nil)
     }
 
@@ -351,18 +315,15 @@ extension CreateWorkspaceParamsTests {
 
     @Test func createEnabledWhenAProviderIsSelectable() {
         #expect(!isCreateDisabled(providers: [makeProvider()]))
-        // nil (unknown) stays selectable since probes can fail transiently
         #expect(!isCreateDisabled(providers: [makeProvider(id: "grok", authenticated: .unknown)]))
     }
 
     @Test func createDisabledWhenProviderListEmptyAfterLoad() {
-        // An empty enabled set must never submit the daemon's fallback provider.
         #expect(isCreateDisabled(providers: []))
     }
 
     @Test func createDisabledWhileCreatingOrLoadingProviders() {
         #expect(isCreateDisabled(providers: [makeProvider()], isCreating: true))
-        // An empty in-flight list can't be told apart from a seat with no providers
         #expect(isCreateDisabled(providers: [], isLoadingProviders: true))
     }
 }
