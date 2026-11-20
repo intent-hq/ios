@@ -1,13 +1,7 @@
 import SwiftUI
 
-/// Finalizes a successful pairing over the just-established connection: names the
-/// connection after the daemon hostname (best-effort via `host.status`, preferring
-/// the user-facing `prettyHostname` over the raw `hostname`, falling back to
-/// host:port), saves it (upsert), and marks it active.
 enum ConnectionPairing {
     enum PersistenceError: LocalizedError {
-        /// The existing saved-connections data could not be read, so the new
-        /// pairing was not written over it (intent-hq/ios#265).
         case registryUndecodable
         case saveFailed
 
@@ -24,11 +18,6 @@ enum ConnectionPairing {
         }
     }
 
-    /// Picks the connection display name from a status result:
-    /// `prettyHostname` (user-facing, e.g. "Clement's Mac Studio") when present
-    /// and non-blank, else `hostname`, else nil (caller falls back to host:port).
-    /// Values are trimmed so whitespace-only names never win. Older daemons
-    /// don't report `prettyHostname`. Shared connections prefer `collaborationName`.
     static func displayName(fromHostStatus result: Any, shared: Bool = false) -> String? {
         guard let status = result as? [String: Any] else { return nil }
         let keys = shared ? ["collaborationName", "prettyHostname", "hostname"] : ["prettyHostname", "hostname"]
@@ -41,8 +30,6 @@ enum ConnectionPairing {
         return nil
     }
 
-    /// `connection` is the session connection the pairing was established
-    /// over, so a pinned session names and refreshes its own backend.
     @discardableResult
     static func finalize(
         server: PairedServer,
@@ -79,9 +66,6 @@ enum ConnectionPairing {
         guard outcome.persisted else { throw PersistenceError.saveFailed }
         let stored = outcome.connection
         guard persistence.setActiveConnection(id: stored.id) else { throw PersistenceError.saveFailed }
-        // Re-trigger the post-connect route refresh now that the record exists:
-        // the refresh fired by connect() may have run before the upsert above
-        // and found no stored record to persist the daemon-reported IPs into.
         Task {
             guard (try? connection.validatePairingAdmission(receipt)) != nil else { return }
             await connection.refreshHostRoutes()
@@ -91,13 +75,11 @@ enum ConnectionPairing {
     }
 }
 
-/// Saved daemon connections and direct actions to pair another daemon.
 struct ConnectionsView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
-    // False on iPhone, so the Open in New Window action never appears there.
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(\.openWindow) private var openWindow
     @State private var connections: [StoredConnection] = []
@@ -136,8 +118,6 @@ struct ConnectionsView: View {
             Text("The saved connection could not be removed. Please try again.")
         }
         .onAppear {
-            // Pull in registry changes synced from other devices while
-            // the sheet was closed, then show the merged list.
             coordinator.refreshSyncedBackends()
             reload()
         }
@@ -196,13 +176,11 @@ struct ConnectionsView: View {
     }
 
     private var connectionsList: some View {
-        // Prepare rows on MainActor before SwiftUI requests them during async layout.
         let rows = connections.map { (id: $0.id, content: connectionRow($0)) }
         return VStack(spacing: Constants.Connections.cardSpacing) {
             if connections.isEmpty {
                 Text("No saved connections. Add a connection below to get started.")
                     .interFont(Constants.Typography.bodyS)
-                    // No empty-state design reference: preserve its existing semantic light color.
                     .foregroundStyle(colorScheme == .dark
                         ? Constants.Pairing.mutedForeground(for: colorScheme) : Theme.mutedForeground(for: colorScheme))
                     .multilineTextAlignment(.center)
@@ -214,9 +192,6 @@ struct ConnectionsView: View {
         }
     }
 
-    /// The connection this window's backend is bound to (window model v2:
-    /// "connected" badges and delete warnings are scoped to this window, not
-    /// a global active pointer). Nil in an unbound pairing window.
     private var windowConnectionId: UUID? {
         coordinator.backendID?.connectionID
     }
@@ -272,8 +247,6 @@ struct ConnectionsView: View {
         }
     }
 
-    /// Opens a window pinned to `connection` (visionOS and iPad only —
-    /// supportsMultipleWindows is false on iPhone, so callers gate on it).
     private func openInNewWindowButton(_ connection: StoredConnection) -> some View {
         Button {
             openWindow(value: BackendID(connection: connection))

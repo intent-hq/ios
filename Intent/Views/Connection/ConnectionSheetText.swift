@@ -1,8 +1,6 @@
 import CoreText
 import SwiftUI
 
-/// Figma measures from cap top to last baseline. Keep the full native glyphs
-/// (including descenders) and wrapping, but measure spacing at those same edges.
 struct ConnectionSheetText: View {
     let text: LocalizedStringKey
     let style: Constants.Typography.Style

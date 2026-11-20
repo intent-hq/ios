@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Shared by initial connection and the scene-covering reconnection surface.
-/// Counts are exact; any daemon estimate applies only to indexing, not readiness.
 struct DaemonStartupProgressView: View {
     let state: DaemonStartupState
     var onRetry: (() -> Void)?

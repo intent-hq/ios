@@ -1,21 +1,14 @@
 import SwiftUI
 
 extension EnvironmentValues {
-    /// True while this window's Mac connection is lost (read-only or stopped).
-    /// Set per window by RootView; sheets and covers inherit it.
     @Entry var isRemoteReadOnly = false
 }
 
 extension View {
-    /// Disables a control that sends a change to the Mac while the connection is
-    /// lost, and explains itself on tap. Adds to, never replaces, permission
-    /// checks: pass those through `.disabled` as before.
     func requiresLiveConnection(_ hint: LocalizedStringResource = "Reconnect to make changes") -> some View {
         modifier(RequiresLiveConnection(hint: hint))
     }
 
-    /// For controls inside menus, toolbars and swipe actions, where a tap hint
-    /// cannot attach: disabled only.
     func disabledWhileReadOnly() -> some View {
         modifier(DisabledWhileReadOnly())
     }
@@ -40,8 +33,6 @@ private struct RequiresLiveConnection: ViewModifier {
             .disabled(isReadOnly)
             .overlay {
                 if isReadOnly {
-                    // A disabled control ignores taps; this catches them so the
-                    // control can say why instead of doing nothing.
                     Color.clear
                         .contentShape(.rect)
                         .onTapGesture { showsHint = true }
@@ -62,8 +53,6 @@ private struct RequiresLiveConnection: ViewModifier {
 }
 
 extension View {
-    /// Runs `action` when this window's Mac connection comes back, so screens
-    /// that failed during a drop reload by themselves.
     func onReconnect(_ action: @escaping () -> Void) -> some View {
         modifier(OnReconnect(action: action))
     }

@@ -1,13 +1,5 @@
 import SwiftUI
 
-/// Confirmation surface for `intent://pair` deep links. Unlike the in-app QR
-/// scan — where the user deliberately pointed the camera at their own desktop
-/// app — a deep link can be triggered by any web page, so the target
-/// host(s)/port are shown and the user must explicitly confirm before any
-/// connection is attempted. The connection itself reuses PairingFlow, so the
-/// security semantics match QR pairing exactly: payload fingerprint → pinned
-/// wss; no fingerprint → cert probe + user trust confirmation; never plain
-/// ws://.
 struct DeepLinkPairingView: View {
     @ScaledMetric(relativeTo: .body) private var connectionIconSize: CGFloat = 17
     @Environment(AppCoordinator.self) var coordinator
@@ -18,8 +10,6 @@ struct DeepLinkPairingView: View {
     @State private var probedFingerprint: String?
     @State private var showFingerprintConfirmation = false
     @ScaledMetric private var iconSize: CGFloat = 17
-    /// In-flight probe/connect task, cancelled when the sheet goes away so a
-    /// dismissed pairing can't complete (and persist + navigate) afterwards.
     @State private var pairingTask: Task<Void, Never>?
 
     var body: some View {
@@ -123,9 +113,6 @@ struct DeepLinkPairingView: View {
         isValidating = true
         errorMessage = nil
 
-        // Same pinning rules as QR pairing (PairingFlow): a payload
-        // fingerprint is pinned directly; without one the server cert is
-        // probed and the user must trust it — never plain ws://.
         pairingTask = Task {
             let resolution = await PairingFlow.resolveFingerprint(for: payload)
             guard !Task.isCancelled else { return }

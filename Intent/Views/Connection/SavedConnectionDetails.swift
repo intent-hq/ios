@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Secondary metadata reached through the card's existing context-menu affordance.
-/// Never renders the saved API token or certificate fingerprint.
 struct SavedConnectionDetails: View {
     @ScaledMetric(relativeTo: .subheadline) private var connectionIconSize: CGFloat = 15
     @Environment(\.colorScheme) private var colorScheme

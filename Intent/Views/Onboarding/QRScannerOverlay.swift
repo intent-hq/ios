@@ -86,7 +86,6 @@ struct QRScannerOverlay: View {
     }
 }
 
-/// All guide elements derive their coordinates during layout, including the first frame.
 nonisolated private struct QRScannerGeometry {
     let horizontalInset: CGFloat
     let verticalOffset: CGFloat
