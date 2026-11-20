@@ -31,11 +31,9 @@ struct MermaidMarkdownContent {
                     .map { fence.removingIndent(from: Self.normalized($0)) }
                     .joined(separator: "\n")
                 let carriageReturn = lines[index].hasSuffix("\r") ? "\r" : ""
-                // Keep one Markdown document so reference links and lists retain their context.
                 lines[index] = String(repeating: " ", count: fence.indent) + String(fence.marker) + key + carriageReturn
             } else if fence.isMermaid {
                 let key = "\(prefix)\(sources.count)"
-                // A nonempty code block keeps an opening-only fence visible in the Markdown parser.
                 let placeholder = [String(fence.marker) + key, "Generating diagram", String(fence.marker)]
                 pending = PendingDiagram(
                     markdown: (Array(lines[..<index]) + placeholder).joined(separator: "\n"),

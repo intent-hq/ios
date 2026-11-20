@@ -1,69 +1,32 @@
 import CoreGraphics
 import Foundation
 
-/// The one transition every handoff between the transcript's unrealized-end
-/// recovery (#338), its follows to the end and the user's takeover goes
-/// through. The view coordinated these by hand — a follow flag here, a
-/// deferral boolean there — and each of the #350 defects was a handoff one
-/// path forgot: a give-up whose follow was cancelled, a correction scrolling
-/// over the user, a re-arm that never came. Here the viewport has exactly
-/// one owner, every asynchronous continuation carries the token it was
-/// started with and is ignored once that token is stale, and a give-up over
-/// an unrealized end row is either shown as Go to End or transferred to the
-/// follow that owns the viewport, whose terminal discharges it exactly once.
-/// The reducer is pure: no clock, no task, no budget — the recovery and
-/// landing loops keep their deadlines and correction counts and report the
-/// resulting steps and terminals as events; the effects are executed by the
-/// view in order.
 enum ConversationTranscriptRecoveryLifecycle {
     typealias FollowTerminal = ConversationTranscriptScrollPolicy.FollowTerminal
     typealias RecoveryContinuation = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryContinuation
     typealias RecoveryTerminal = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryTerminal
 
-    /// Identity of one requested follow, minted by `followRequested`; its
-    /// debounce and landing loop report it back in their events.
     struct FollowToken: Hashable {
         let id: Int
     }
 
-    /// Identity of one armed recovery, minted when the end row derealizes
-    /// (or a follow drains over it); its polling loop reports it back.
     struct RecoveryToken: Hashable {
         let id: Int
     }
 
-    /// Who may issue the next programmatic scroll. `isFollowing` for the
-    /// geometry paths is `owner != .idle`.
     enum ViewportOwner: Equatable {
-        /// A follow from its request until its terminal is reported.
         case follow(FollowToken, forced: Bool)
         case idle
-        /// A recovery from its first correction until its terminal is
-        /// reported — today's `isRecoveringUnrealizedEnd` — except while a
-        /// follow requested meanwhile owns (`ArmedRecovery.demoted`).
         case recovery(RecoveryToken)
     }
 
-    /// What happens to Go to End after a give-up over an unrealized end row
-    /// while a follow owned the viewport. An exposed give-up is the
-    /// `.showGoToEnd` effect, not a state.
     enum GiveUpFallback: Equatable {
         case none
-        /// Discharged by exactly one terminal event for that follow (see
-        /// `followFinished`, `followCancelledByGesture`); a follow that
-        /// replaces it hands the transfer on.
         case transferred(follow: FollowToken)
     }
 
-    /// A recovery alive without owning the viewport. It may coexist with a
-    /// follow owner: it reads `isFollowing` and settles until the follow
-    /// drains.
     enum ArmedRecovery: Equatable {
-        /// Had claimed the viewport when a follow took it — today's
-        /// `isRecoveringUnrealizedEnd` stays raised through the follow —
-        /// and owns again once that follow drains.
         case demoted(RecoveryToken)
-        /// Polling without having claimed the viewport yet.
         case polling(RecoveryToken)
 
         var token: RecoveryToken {
@@ -83,15 +46,12 @@ enum ConversationTranscriptRecoveryLifecycle {
         var owner: ViewportOwner = .idle
         var armedRecovery: ArmedRecovery?
         var fallback: GiveUpFallback = .none
-        /// The end row (the `scroll-bottom` marker) is realized by the lazy
-        /// stack.
         var isEndRealized = false
         var nextTokenId = 1
 
         var isVisible: Bool { visibility == .visible }
         var isFollowing: Bool { owner != .idle }
 
-        /// The one recovery task alive right now, armed or owning.
         var currentRecovery: RecoveryToken? {
             if let armedRecovery { return armedRecovery.token }
             switch owner {
@@ -102,37 +62,22 @@ enum ConversationTranscriptRecoveryLifecycle {
     }
 
     enum Event: Equatable {
-        /// The end row disappeared from the lazy stack.
         case endDerealized
-        /// The end row appeared; `userIsScrolledAway` is the flag at that
-        /// moment.
         case endRealized(userIsScrolledAway: Bool)
-        /// Go to End, or the user's own message: cancels the recovery only;
-        /// the request's `followRequested` follows.
         case explicitClaim
-        /// A gesture took over: whichever owner and armed recovery there is.
         case followCancelledByGesture
-        /// The debounce elapsed; `execute` is `shouldExecuteFollow`.
         case followDue(FollowToken, execute: Bool)
         case followFinished(FollowToken, FollowTerminal)
-        /// `scrollToBottom(forced:)`, after the view's own refusals (the
-        /// takeover latch, the rate limit).
         case followRequested(forced: Bool)
         case recoveryFinished(RecoveryToken, RecoveryTerminal, corrections: Int)
-        /// The page up has had time to realize rows; `mayFollowBack` is
-        /// `unrealizedEndRecoveryMayFollowBack`.
         case recoveryPagedUp(RecoveryToken, mayFollowBack: Bool)
-        /// One intermediate poll of the recovery loop.
         case recoveryStep(RecoveryToken, RecoveryContinuation)
         case viewAppeared
         case viewDisappeared
     }
 
-    /// The gesture state a replayed edge reads.
     enum LiveEdgeSample: Equatable {
-        /// The live gesture state when the effect executes.
         case live
-        /// The gesture state sampled when the event was sent.
         case sampled(isInteracting: Bool)
 
         func isInteracting(live: Bool) -> Bool {
@@ -143,29 +88,19 @@ enum ConversationTranscriptRecoveryLifecycle {
         }
     }
 
-    /// Executed by the view in order.
     enum Effect: Equatable {
         case cancelFollowTask(FollowToken)
         case cancelRecoveryTask(RecoveryToken)
         case log(String)
         case pageUp(offsetY: CGFloat)
-        /// Record how the recovery ended with the corrections it spent; every
-        /// terminal is recorded, a correction spent or not.
         case recordRecoveryOutcome(RecoveryTerminal, corrections: Int)
-        /// Apply the live distance as a geometry edge with the sampled
-        /// gesture state.
         case replayLiveEdge(LiveEdgeSample)
         case scrollToEnd
-        /// Flag the viewport scrolled away with no scroll issued over it.
         case showGoToEnd
         case startFollowTask(FollowToken, forced: Bool)
         case startRecoveryTask(RecoveryToken)
     }
 
-    /// The one transition. An event carrying a token that is neither the
-    /// owner nor the armed recovery is stale — a continuation of a task
-    /// that was cancelled or replaced — and returns the state unchanged
-    /// with no effects.
     static func transition(_ state: State, _ event: Event) -> (state: State, effects: [Effect]) {
         var state = state
         var effects: [Effect] = []
@@ -210,9 +145,6 @@ extension ConversationTranscriptRecoveryLifecycle {
     }
 
     // MARK: - Per-event transitions
-    //
-    // A stale token returns before touching `state` or `effects`, so the
-    // dispatcher's unchanged state and empty effects are the result.
 
     private static func viewAppeared(_ state: inout State, _ effects: inout [Effect]) {
         guard !state.isVisible else { return }
@@ -233,9 +165,6 @@ extension ConversationTranscriptRecoveryLifecycle {
 
     private static func endDerealized(_ state: inout State, _ effects: inout [Effect]) {
         state.isEndRealized = false
-        // A recovery already polling keeps its budget: it reads the end
-        // row's state at every poll, so re-arming would only reset the
-        // bound.
         if state.isVisible, state.currentRecovery == nil {
             armRecovery(&state, &effects)
         }
@@ -251,13 +180,9 @@ extension ConversationTranscriptRecoveryLifecycle {
     private static func followRequested(forced: Bool, _ state: inout State, _ effects: inout [Effect]) {
         switch state.owner {
         case let .follow(current, currentForced):
-            // A forced follow is never preempted by an automatic one.
             if currentForced, !forced { return }
             effects.append(.cancelFollowTask(current))
         case .recovery(let recovery):
-            // The follow owns the viewport from here; the recovery keeps
-            // polling and settles until the follow drains, then owns
-            // again.
             state.armedRecovery = .demoted(recovery)
         case .idle:
             break
@@ -265,7 +190,6 @@ extension ConversationTranscriptRecoveryLifecycle {
         let token = FollowToken(id: mintTokenId(&state))
         switch state.fallback {
         case .transferred:
-            // The replacing follow inherits the give-up it must discharge.
             state.fallback = .transferred(follow: token)
         case .none:
             break
@@ -290,9 +214,6 @@ extension ConversationTranscriptRecoveryLifecycle {
         guard case .follow(token, let forced) = state.owner else { return }
         state.owner = .idle
         if case .demoted(let recovery) = state.armedRecovery {
-            // The correction the follow took the viewport from owns
-            // again: the replayed edge reads `isFollowing`, and its
-            // pending follow back is granted as it would have been.
             state.armedRecovery = nil
             state.owner = .recovery(recovery)
         }
@@ -302,10 +223,6 @@ extension ConversationTranscriptRecoveryLifecycle {
             if !forced {
                 effects.append(.replayLiveEdge(.live))
             }
-            // The follow drained onto a still-unrealized end row: the
-            // row was already unrealized when it claimed the viewport
-            // and no new edge will come, so the recovery is re-armed
-            // from the level.
             if !state.isEndRealized, state.currentRecovery == nil {
                 armRecovery(&state, &effects)
             }
@@ -361,9 +278,6 @@ extension ConversationTranscriptRecoveryLifecycle {
         }
     }
 
-    /// The follow back re-checks the claim once the rows have realized
-    /// rather than scroll over a follow that took the viewport meanwhile; a
-    /// current recovery demoted under that follow still reports its yield.
     private static func recoveryPagedUp(
         _ token: RecoveryToken, mayFollowBack: Bool, _ state: inout State, _ effects: inout [Effect]
     ) {
@@ -386,12 +300,6 @@ extension ConversationTranscriptRecoveryLifecycle {
         }
         switch terminal {
         case .giveUp:
-            // The budget is spent over a still-unrealized row: a re-pin
-            // from the live edge would scroll blind to a row that is not
-            // there, so Go to End is shown — or, with a follow owning
-            // the viewport, transferred to that follow's terminal, since
-            // flagging the viewport away now would cancel the follow as
-            // a takeover.
             switch state.owner {
             case .follow(let follow, _):
                 state.fallback = .transferred(follow: follow)
@@ -423,7 +331,6 @@ extension ConversationTranscriptRecoveryLifecycle {
         effects.append(.startRecoveryTask(token))
     }
 
-    /// Cancels whichever recovery is alive, armed or owning.
     private static func cancelRecovery(_ state: inout State, _ effects: inout [Effect]) {
         guard let token = state.currentRecovery else { return }
         effects.append(.cancelRecoveryTask(token))
@@ -433,8 +340,6 @@ extension ConversationTranscriptRecoveryLifecycle {
         }
     }
 
-    /// A correction claims the viewport unless a follow owns it: the step
-    /// function settles under a follow, and the reducer refuses too.
     private static func claimViewport(_ state: inout State, for token: RecoveryToken) -> Bool {
         switch state.owner {
         case .follow:
@@ -448,7 +353,6 @@ extension ConversationTranscriptRecoveryLifecycle {
         }
     }
 
-    /// Consumes a fallback transferred to `token`; returns whether one was.
     private static func dischargeFallback(_ state: inout State, for token: FollowToken) -> Bool {
         switch state.fallback {
         case .transferred(let follow) where follow == token:
