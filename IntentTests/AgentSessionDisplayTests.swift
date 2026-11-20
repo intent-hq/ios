@@ -3,8 +3,6 @@ import Foundation
 import Testing
 
 extension AgentSessionTests {
-    // MARK: - displayMessage
-
     @Test func displayMessagePrefersDigest() {
         let agent = makeAgent(digest: "digest text", lastAgentResponse: "response text")
         #expect(agent.displayMessage == "digest text")
@@ -51,16 +49,12 @@ extension AgentSessionTests {
     }
 
     @Test func displayMessageStripsInlineSuggestedPromptsComment() {
-        // A one-liner comment mentioning suggested-prompts is not a block
-        // opener (an opener ends its line), so it is stripped like any comment.
         let raw = "Hello <!-- suggested-prompts config note --> World"
         let agent = makeAgent(lastAgentResponse: raw)
         #expect(agent.displayMessage == "Hello  World")
     }
 
     @Test func displayMessageKeepsMalformedSuggestedPromptsBlock() {
-        // An embedded `-->` (Mermaid edge, prose arrow) does not close a block,
-        // so body text must survive intact.
         let raw = "Hello <!-- suggested-prompts\nA --> B"
         let agent = makeAgent(lastAgentResponse: raw)
         #expect(agent.displayMessage == raw)
@@ -77,8 +71,6 @@ extension AgentSessionTests {
         let agent = makeAgent(lastAgentResponse: raw)
         #expect(agent.displayMessage == "Real content")
     }
-
-    // MARK: - displayMessage lastMessageRole precedence (PROTOCOL §5.5)
 
     @Test func displayMessagePrefersUserFirstLineWhenUserIsNewest() {
         let agent = makeAgent(
@@ -117,7 +109,6 @@ extension AgentSessionTests {
     }
 
     @Test func displayMessageAbsentRoleKeepsExistingBehavior() {
-        // Older daemons omit lastMessageRole — back-compat fallback.
         let agent = makeAgent(
             digest: "digest text",
             lastAgentResponse: "response text",
@@ -144,11 +135,7 @@ extension AgentSessionTests {
         #expect(agent.displayMessage == "response text")
     }
 
-    // MARK: - applyingPreview role flip
-
     @Test func applyingPreviewFlipsRoleToAssistant() {
-        // Live agent text arriving mirrors the daemon's read-path overlay:
-        // the agent-side preview resumes over the user's newest message.
         let agent = makeAgent(
             lastUserMessage: "Do the thing",
             lastMessageRole: "user"
@@ -173,8 +160,6 @@ extension AgentSessionTests {
     }
 
     @Test func applyingPreviewDigestOnlyKeepsRole() {
-        // The daemon's read-path overlay flips the role only with the
-        // response overlay; a digest-only payload keeps the persisted role.
         let agent = makeAgent(
             lastUserMessage: "Do the thing",
             lastMessageRole: "user"
@@ -187,8 +172,6 @@ extension AgentSessionTests {
         #expect(updated.digest == "Working on it")
         #expect(updated.displayMessage == "Do the thing")
     }
-
-    // MARK: - isActive
 
     @Test func isActiveForRespondingStatus() {
         let agent = makeAgent(status: "responding")
@@ -224,8 +207,6 @@ extension AgentSessionTests {
         let agent = makeAgent(status: "completed")
         #expect(agent.isActive == false)
     }
-
-    // MARK: - pending-question markers (PROTOCOL §5.5)
 
     @Test func parsePendingQuestionMarkersFromMetadata() {
         let dict: [String: Any] = [
@@ -310,7 +291,6 @@ extension AgentSessionTests {
     }
 
     @Test func emptyPendingMarkerIsAuthoritativeClear() {
-        // The daemon writes "" at turn end when nothing is pending.
         let dict: [String: Any] = [
             "id": "agent-q",
             "name": "Asker",

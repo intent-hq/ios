@@ -2,11 +2,7 @@
 import SwiftUI
 import Testing
 
-/// Tests for the desktop-parity agent avatar design selection (mirrors
-/// cloudlands-fe avatar-design.ts) and the ported glyph geometry.
 struct AgentAvatarDesignTests {
-    // MARK: - Builtin specialist mapping
-
     @Test func mapsBuiltinSpecialistsToTheirDesigns() {
         let expected: [String: AgentAvatarDesign] = [
             "coordinator": .coordinator,
@@ -30,8 +26,6 @@ struct AgentAvatarDesignTests {
                 == AgentAvatarDesign.design(agentId: "agent-b", specialist: "implementor")
         )
     }
-
-    // MARK: - Icon resolution (PROTOCOL §5.11)
 
     @Test func iconResolvesAheadOfSpecialistMapAndFallback() {
         for icon in AgentAvatarDesign.builtinDesigns {
@@ -78,8 +72,6 @@ struct AgentAvatarDesignTests {
         }
     }
 
-    // MARK: - Fallback selection
-
     @Test func unknownSpecialistUsesFallbackDesign() {
         let design = AgentAvatarDesign.design(agentId: "agent-x", specialist: "quantum-entangler")
         #expect(AgentAvatarDesign.fallbackDesigns.contains(design))
@@ -105,10 +97,6 @@ struct AgentAvatarDesignTests {
     }
 
     @Test func fallbackMatchesDesktopFixtures() {
-        // Expected values computed with the desktop JS implementation:
-        // stringToSeededRandom(agentId).pick(fallbackAgentAvatarDesigns)
-        // (cloudlands-fe hash.ts + avatar-design.ts). Covers all six
-        // fallback designs.
         let fixtures: [(String, AgentAvatarDesign)] = [
             ("", .fallbackGlasses),
             ("a", .fallbackDots),
@@ -120,9 +108,6 @@ struct AgentAvatarDesignTests {
             ("agent-1", .fallbackCrownMouth),
             ("agent-5", .fallbackCrownInverted),
             ("agent-11", .fallbackCrown),
-            // Seeds where the JS float64 LCG step loses low bits and picks a
-            // different design than exact integer math would — regression
-            // coverage for the Double-based LCG step.
             ("agent-750158", .fallbackCrownMouth),
             ("x2191079", .fallbackGlasses)
         ]
@@ -133,8 +118,6 @@ struct AgentAvatarDesignTests {
             )
         }
     }
-
-    // MARK: - Glyph geometry
 
     @Test func everyDesignHasGlyphGeometryWithinArtBounds() {
         let limit = CGRect(x: -2, y: -2, width: 20, height: 20)

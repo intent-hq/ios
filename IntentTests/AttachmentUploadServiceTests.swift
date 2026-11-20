@@ -3,15 +3,10 @@ import Foundation
 import Synchronization
 import Testing
 
-/// Covers attachment placement (PROTOCOL §5.9): the single-shot
-/// `file.placeAttachment` path, the chunked `file.attachmentUpload.*`
-/// session (chunk math, progress, abort-on-failure), SHA-256 correctness,
-/// and the client-side 1 GiB cap.
 @MainActor
 struct AttachmentUploadServiceTests {
     private typealias UploadError = AttachmentUploadService.UploadError
 
-    /// Canonical daemon placement result (placeAttachment / commit).
     private static func placementResponse(
         fileName: String = "doc.pdf",
         mimeType: String? = "application/pdf",
@@ -36,7 +31,6 @@ struct AttachmentUploadServiceTests {
         ["uploadId": uploadId, "maxChunkBytes": maxChunkBytes]
     }
 
-    /// Temp file with the given contents; caller need not clean up (unique dir).
     private static func tempFile(_ data: Data, name: String = "payload.bin") throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("attachment-upload-tests-\(UUID().uuidString)")
@@ -125,8 +119,6 @@ struct AttachmentUploadServiceTests {
         #expect(stoppedURLs.withLock { $0 } == [file])
     }
 
-    // MARK: - Single-shot path
-
     @Test func smallDataPlacesSingleShot() async throws {
         let payload = Data("hello".utf8)
         let fake = FakeConnectionManager()
@@ -207,8 +199,6 @@ struct AttachmentUploadServiceTests {
 }
 
 extension AttachmentUploadServiceTests {
-    // MARK: - Chunked path
-
     @Test func dataAboveSingleShotCapUsesChunkedSession() async throws {
         let size = AttachmentUploadService.maxSingleShotBytes + 1
         var payload = Data(count: size)
@@ -235,7 +225,6 @@ extension AttachmentUploadServiceTests {
         #expect(begin[0]["sizeBytes"] as? Int == size)
         #expect(begin[0]["mimeType"] as? String == "application/octet-stream")
         #expect(begin[0]["sha256"] as? String == AttachmentUploadService.sha256Hex(of: payload))
-        // 25 MB + 1 at the 16 MiB chunk cap → exactly two chunks.
         let chunks = fake.paramsForMethod("file.attachmentUpload.chunk")
         #expect(chunks.count == 2)
         #expect(chunks[0]["seq"] as? Int == 0)
@@ -310,8 +299,6 @@ extension AttachmentUploadServiceTests {
         #expect(assembled == payload)
     }
 
-    // MARK: - Abort on failure
-
     @Test func chunkFailureAbortsSessionBestEffort() async {
         let payload = Data((0..<10).map { UInt8($0) })
         let fake = FakeConnectionManager()
@@ -348,7 +335,6 @@ extension AttachmentUploadServiceTests {
         fake.responseMap["file.attachmentUpload.begin"] = Self.beginResponse(uploadId: "up-9", maxChunkBytes: 4)
         fake.responseMap["file.attachmentUpload.chunk"] = ["uploadId": "up-9", "seq": 0, "receivedBytes": 4]
         fake.errorMap["file.attachmentUpload.commit"] = NSError(domain: "test", code: -8)
-        // Abort itself failing must not mask the original error.
         fake.errorMap["file.attachmentUpload.abort"] = NSError(domain: "test", code: -9)
 
         await #expect(throws: NSError(domain: "test", code: -8)) {
@@ -393,10 +379,7 @@ extension AttachmentUploadServiceTests {
         #expect(!fake.didCallMethod("file.attachmentUpload.abort"))
     }
 
-    // MARK: - SHA-256
-
     @Test func sha256MatchesKnownVector() throws {
-        // NIST FIPS 180-2 test vector for "abc".
         let expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         let abc = Data("abc".utf8)
         #expect(AttachmentUploadService.sha256Hex(of: abc) == expected)
@@ -405,7 +388,6 @@ extension AttachmentUploadServiceTests {
     }
 
     @Test func streamingFileHashMatchesInMemoryHashAcrossBlocks() throws {
-        // Larger than one hash block (1 MiB) so the streaming loop iterates.
         var payload = Data(count: AttachmentUploadService.hashBlockBytes * 2 + 5)
         payload[0] = 0x42
         payload[payload.count - 1] = 0x24
@@ -414,10 +396,7 @@ extension AttachmentUploadServiceTests {
             == AttachmentUploadService.sha256Hex(of: payload))
     }
 
-    // MARK: - 1 GiB cap
-
     @Test func overCapFileIsRejectedBeforeAnyRpc() async throws {
-        // Sparse file: 1 GiB + 1 logical bytes without touching disk blocks.
         let url = try Self.tempFile(Data(), name: "huge.bin")
         let handle = try FileHandle(forWritingTo: url)
         try handle.truncate(atOffset: UInt64(AttachmentUploadService.maxAttachmentBytes) + 1)

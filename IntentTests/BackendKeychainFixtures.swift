@@ -5,8 +5,6 @@ enum BackendKeychainFixtureError: Error {
     case invalid(String)
 }
 
-/// Offline, exact-byte mirror of the monorepo contract. CI also compares it
-/// with the canonical Git revision; these checks protect native bundle inputs.
 struct BackendKeychainFixtures {
     typealias Object = [String: Any]
 

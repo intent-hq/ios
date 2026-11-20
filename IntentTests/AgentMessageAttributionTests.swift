@@ -1,8 +1,6 @@
 @testable import Intent
 import Testing
 
-// MARK: - Agent-to-agent message attribution
-
 struct AgentMessageAttributionTests {
     @Test func extractsFromValidMetadata() {
         let attribution = AgentMessageAttribution.from([
@@ -50,8 +48,6 @@ struct AgentMessageAttributionTests {
             "type": AnyCodable("agent_message"),
             "fromAgentId": AnyCodable("   ")
         ]) == nil)
-        // Non-string ids are rejected like missing ones (FE parity:
-        // `typeof md.fromAgentId === 'string'`).
         #expect(AgentMessageAttribution.from([
             "type": AnyCodable("agent_message"),
             "fromAgentId": AnyCodable(42)
@@ -83,8 +79,6 @@ struct AgentMessageAttributionTests {
         #expect(attribution?.fromAgentId == "agent-1")
         #expect(attribution?.displayName == "A very long agent n…")
         #expect(attribution?.displayName.count == 20)
-        // The untruncated (trimmed) name survives for surfaces that need it,
-        // e.g. titling the pushed sender conversation.
         #expect(attribution?.rawName == "A very long agent name that keeps going")
     }
 
@@ -119,8 +113,6 @@ struct AgentMessageAttributionTests {
         #expect(plain.agentMessageAttribution == nil)
     }
 }
-
-// MARK: - Chief messages and the daemon sender header
 
 struct AgentMessageSenderHeaderTests {
     private func attribution(name: String?, id: String = "agent-1") -> AgentMessageAttribution? {

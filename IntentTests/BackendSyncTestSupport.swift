@@ -4,8 +4,6 @@ import Testing
 
 @testable import Intent
 
-/// Shared fake for the writer and a second client's ordinary registry reader.
-/// Stores exactly the JSON bytes handed to Security, never real credentials.
 nonisolated final class MemorySyncedKeychain: SyncedKeychainWriting {
     var items: [String: Data] = [:]
     var readFailure: OSStatus?
@@ -130,8 +128,6 @@ struct BackendSyncTestStore {
 }
 
 extension PersistenceManager {
-    /// These publication fixtures model an owner already confirmed by the
-    /// connection. The legacy savePairing shim intentionally has no authority.
     func saveVerifiedOwnerForTesting(server: PairedServer, token: String) -> Bool {
         var connection = StoredConnection(server: server, token: token)
         connection.principal = .demoOwner

@@ -4,8 +4,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Native rendered coverage: onAppear on a prefetched lazy row is insufficient.
-/// Exercise the actual onScrollVisibilityChange callbacks in a foreground window.
 @MainActor
 @Suite(.serialized)
 struct AgentWaitingViewTests {

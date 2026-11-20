@@ -43,8 +43,6 @@ struct BackgroundHookStoreTests {
         return dict
     }
 
-    // MARK: - Model parsing
-
     @Test func parsesFullHook() throws {
         let hook = try #require(BackgroundHook.parseHook(makeHookDict()))
         #expect(hook.hookId == "hook-1")
@@ -92,8 +90,6 @@ struct BackgroundHookStoreTests {
         #expect(BackgroundHook.parseHook(makeHookDict(state: "someFutureState")) == nil)
     }
 
-    // MARK: - Detail lines (BackgroundHooksRow pure helpers)
-
     @Test func detailLinesShowTimingRelativeToNow() throws {
         let hook = try #require(BackgroundHook.parseHook(makeHookDict()))
         let now = try #require(ISO8601DateFormatter.lenientDate(from: "2026-07-31T10:05:15Z"))
@@ -128,8 +124,6 @@ struct BackgroundHookStoreTests {
         #expect(DurationFormat.compact(86_400 + 30 * 60) == "1d")
     }
 
-    // MARK: - Fold
-
     @Test func foldRunStartedSetsRunning() throws {
         let hook = try #require(BackgroundHook.parseHook(makeHookDict()))
         let result = BackgroundHookStore.foldHookEvent(
@@ -150,7 +144,6 @@ struct BackgroundHookStoreTests {
         )
         #expect(result.hooks[0].state == .scheduled)
         #expect(result.hooks[0].nextRunAt == "2026-07-31T10:07:00Z")
-        // Absent nextRunAt clears it (a terminal event follows)
         let cleared = BackgroundHookStore.foldHookEvent(
             hooks: [hook],
             eventType: "hook:run-completed",
@@ -204,8 +197,6 @@ struct BackgroundHookStoreTests {
 }
 
 extension BackgroundHookStoreTests {
-    // MARK: - Store integration (subscribe / events / RPC / reconnect)
-
     private func makeSubscribedStore(
         _ fake: FakeConnectionManager,
         hooks: [[String: Any]] = []
@@ -373,7 +364,6 @@ extension BackgroundHookStoreTests {
         let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
         fake.clearRequestLog()
 
-        // Suspend hook.list requests so a fold can land while one is in flight.
         fake.pendingMethods.insert("hook.list")
         let refetchTask = Task { await store.refetch() }
         try await fake.waitForPendingRequests("hook.list")
@@ -388,8 +378,6 @@ extension BackgroundHookStoreTests {
         ] as [String: Any])
         try await waitUntil("hook:cancelled fold") { store.hooks.isEmpty }
 
-        // Replay the complete cancellation over the stale seed. No recovery
-        // read is needed, and the removed row must never reappear.
         fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
         await refetchTask.value
         #expect(store.hooks.isEmpty)
@@ -401,7 +389,6 @@ extension BackgroundHookStoreTests {
         let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
         fake.clearRequestLog()
 
-        // Suspend hook.list so unsubscribe lands while the request is in flight.
         fake.pendingMethods.insert("hook.list")
         let refetchTask = Task { await store.refetch() }
         try await fake.waitForPendingRequests("hook.list")
@@ -409,18 +396,12 @@ extension BackgroundHookStoreTests {
         await store.unsubscribe()
         #expect(store.hooks.isEmpty)
 
-        // Resolve the in-flight request with the STALE payload — it still
-        // lists the hook that unsubscribe cleared.
         fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
         await refetchTask.value
 
-        // The stale response must not repopulate the cleared list, and the
-        // queued follow-up bails out (no workspace bound anymore).
         #expect(store.hooks.isEmpty)
         #expect(fake.paramsForMethod("hook.list").count == 1)
     }
-
-    // MARK: - deinit removes event handler (monorepo#2211)
 
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()

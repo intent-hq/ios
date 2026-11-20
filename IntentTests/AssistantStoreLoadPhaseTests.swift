@@ -2,7 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Assistant history is one `LoadPhase`; create and delete failures are kept apart in `actionFailure`.
 @MainActor
 struct AssistantStoreLoadPhaseTests {
     private static let offline = NSError(
@@ -69,8 +68,6 @@ struct AssistantStoreLoadPhaseTests {
         #expect(store.threads.map(\.id) == ["replacement"] && store.errorMessage == nil)
     }
 
-    /// AssistantView refreshes on reconnect when `!hasLoaded || errorMessage != nil`;
-    /// a read running after a failure must keep that gate open.
     @Test func theReconnectGateStaysOpenWhileAReadRunsAfterAFailure() async throws {
         let connection = FakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [thread("existing")]]
@@ -90,7 +87,6 @@ struct AssistantStoreLoadPhaseTests {
         #expect(store.errorMessage == "Request timed out" && !store.isLoading)
     }
 
-    /// The coalesced loop stays loading from its first pass to its last, as on main.
     @Test func loadingSpansEveryPassOfACoalescedRefresh() async throws {
         let connection = FakeConnectionManager()
         connection.pendingMethods = ["agent.list"]

@@ -3,8 +3,6 @@ import Testing
 
 @Suite(.serialized)
 struct AgentListViewModelTests {
-    // MARK: - Helpers
-
     private func makeAgent(
         id: String = "agent-1",
         name: String = "Test Agent",
@@ -50,8 +48,6 @@ struct AgentListViewModelTests {
             dismissedQuestionsMessageId: dismissedQuestionsMessageId
         )
     }
-
-    // MARK: - Foreground agents
 
     @Test @MainActor func foregroundAgents_excludesBackground() {
         let viewModel = AgentListViewModel()
@@ -126,8 +122,6 @@ struct AgentListViewModelTests {
         #expect(ids == ["fractional", "whole"])
     }
 
-    // MARK: - Foreground agents: needs-user ordering
-
     @Test @MainActor func foregroundAgents_needsUserBeatsCoordinator() {
         let viewModel = AgentListViewModel()
         viewModel.agents = [
@@ -151,8 +145,6 @@ struct AgentListViewModelTests {
 
     @Test @MainActor func foregroundAgents_needsUserOrder_blockerThenQuestionThenDiscussion() {
         let viewModel = AgentListViewModel()
-        // Recency is inverted relative to the expected order so the kind
-        // ranking, not the timestamp, decides.
         viewModel.agents = [
             makeAgent(id: "discussion", name: "Discussion", updatedAt: "2026-03-15T12:00:00Z", attentionRequestKind: "discussion"),
             makeAgent(id: "question", name: "Question", updatedAt: "2026-03-15T11:00:00Z", pendingQuestionsMessageId: "msg-1"),
@@ -195,8 +187,6 @@ struct AgentListViewModelTests {
         #expect(ids == ["fresh-idle", "failed"])
     }
 
-    // MARK: - Delegated agents
-
     @Test @MainActor func delegatedAgents_nestedUnderParent() {
         let viewModel = AgentListViewModel()
         viewModel.agents = [
@@ -207,7 +197,6 @@ struct AgentListViewModelTests {
         ]
         let delegates = viewModel.delegatedAgents(for: "parent")
         #expect(delegates.count == 2)
-        // Newest first
         #expect(delegates.first?.id == "child2")
     }
 
@@ -235,8 +224,6 @@ struct AgentListViewModelTests {
         let ids = viewModel.delegatedAgents(for: "parent").map(\.id)
         #expect(ids == ["stale-blocker", "stale-discussion", "fresh-idle", "old-idle"])
     }
-
-    // MARK: - Standalone background agents
 
     @Test @MainActor func standaloneBackgroundAgents_excludesDelegated() {
         let viewModel = AgentListViewModel()
@@ -288,8 +275,6 @@ struct AgentListViewModelTests {
         let ids = viewModel.standaloneBackgroundAgents.map(\.id)
         #expect(ids == ["bg-orphaned-blocker", "bg-question", "bg-fresh", "bg-old"])
     }
-
-    // MARK: - AgentSession computed properties
 
     @Test func agentSession_isActive_forActiveStatus() {
         let agent = makeAgent(status: "active")
