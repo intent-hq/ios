@@ -1,5 +1,3 @@
-/// A coverage register, not an exhaustive control-flow proof.
-/// Partial families remain in exported pendingFamilies until all owners land.
 nonisolated enum DiagnosticCoverage {
     enum Status: String, Codable, Sendable {
         case instrumented, partial, pending
@@ -15,7 +13,6 @@ nonisolated enum DiagnosticCoverage {
         Entry(family: family, status: status(for: family))
     }
 
-    /// No identifiers, paths or test names are included in report metadata.
     static var pendingFamilies: [DiagnosticFamily] { entries.filter { $0.status != .instrumented }.map(\.family) }
 
     private static func status(for family: DiagnosticFamily) -> Status {

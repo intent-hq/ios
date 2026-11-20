@@ -2,11 +2,6 @@ import Foundation
 import SwiftUI
 
 extension NotificationManager {
-    // MARK: - Window visibility (connection-scoped)
-
-    /// A conversation became visible in some window: suppress its toasts
-    /// and clear any delivered system notification for the same agent on
-    /// the same backend — never another backend's same-id agent.
     func conversationOpened(agentId: String, connectionId: UUID) {
         openAgentIds[connectionId, default: [:]][agentId, default: 0] += 1
         localNotificationService.removeDeliveredNotifications(
@@ -15,19 +10,14 @@ extension NotificationManager {
         )
     }
 
-    /// Balances `conversationOpened`. Keyed by (agent, connection), so a
-    /// parent conversation's disappear never clobbers a pushed child's —
-    /// or another window's — visibility.
     func conversationClosed(agentId: String, connectionId: UUID) {
         decrement(&openAgentIds, id: agentId, connectionId: connectionId)
     }
 
-    /// A workspace detail became visible in some window.
     func workspaceOpened(workspaceId: String, connectionId: UUID) {
         openWorkspaceIds[connectionId, default: [:]][workspaceId, default: 0] += 1
     }
 
-    /// Balances `workspaceOpened`.
     func workspaceClosed(workspaceId: String, connectionId: UUID) {
         decrement(&openWorkspaceIds, id: workspaceId, connectionId: connectionId)
     }
@@ -49,8 +39,6 @@ extension NotificationManager {
         (openWorkspaceIds[connectionId]?[workspaceId] ?? 0) > 0
     }
 
-    // MARK: - Alert presentation
-
     func presentIdleAlert(agentId: String, workspaceId: String, agentName: String) {
         guard let connectionId = activeConnectionId() else { return }
         presentIdleAlert(
@@ -70,10 +58,7 @@ extension NotificationManager {
         sourceBackendID: BackendID?
     ) {
         guard sourceStillCurrent(sourceBackendID, connectionId: connectionId) else { return }
-        // The relay's remote alert stands in for this one; in the foreground
-        // it reaches `handleForegroundNotification` and toasts there.
         guard !relayDeliversAlerts(connectionId) else { return }
-        // Look up workspace name in the source session's store
         let workspaceName = workspaceStore(for: sourceBackendID).workspaces
             .first { $0.id == workspaceId }?.title ?? "Workspace"
 
@@ -89,7 +74,6 @@ extension NotificationManager {
             guard !windowEmitsFeedbackSound else { return }
         }
 
-        // iOS owns sound policy; the toast does not depend on notification permission.
         localNotificationService.postAgentIdleNotification(
             agentId: agentId,
             workspaceId: workspaceId,
@@ -100,15 +84,6 @@ extension NotificationManager {
         )
     }
 
-    // Suppression is connection-scoped (window model v2): only the SAME
-    // backend's open conversation/workspace downgrades its alert to
-    // feedback — an identically-named id open on another backend's window
-    // still toasts. The toast is tagged with the concrete source backend
-    // (`workspaceStore(for:)` falls back to the default store when the
-    // source isn't an observed session — the legacy handler path).
-    // Presentation is window-scoped: on multi-window platforms the alert
-    // (feedback and toast alike) presents only via the source backend's
-    // window (`alertPresents`); other windows see and hear nothing.
     @discardableResult
     func presentForegroundAlert(
         agentId: String,
@@ -122,14 +97,10 @@ extension NotificationManager {
         let workspaceName = workspaceName ?? workspaceStore(for: sourceBackendID).workspaces
             .first { $0.id == workspaceId }?.title ?? "Workspace"
         if isAgentOpen(agentId, connectionId: connectionId) {
-            // Currently viewing this exact agent's conversation — feedback, no toast
             playFeedback(source: sourceBackendID, workspaceId: workspaceId)
         } else if isWorkspaceOpen(workspaceId, connectionId: connectionId) {
-            // Viewing this workspace (agent list) — feedback, no toast
-            // The agent list will update via events, so the user will see the change
             playFeedback(source: sourceBackendID, workspaceId: workspaceId)
         } else {
-            // Different workspace — feedback + toast
             playFeedback(source: sourceBackendID, workspaceId: workspaceId)
             showToast(
                 agentId: agentId,
@@ -150,16 +121,6 @@ extension NotificationManager {
         )
     }
 
-    /// Plays alert feedback: on window-emitting platforms (visionOS) publish
-    /// the request for the source backend's window to emit the chime from
-    /// its own scene (`WindowFeedbackSoundEmitter`); elsewhere play the
-    /// haptic feedback. iOS sound goes through local notifications.
-    /// Deduplicated against the source session's workspace attention cue:
-    /// one agent event (idle/blocker) often also
-    /// flips its workspace's attention, and both sounds within a second is
-    /// the "double chime" — the cue center arbitrates so at most one
-    /// audible trigger plays per workspace per event (no-op off visionOS,
-    /// where the cue center never sounds).
     private func playFeedback(source: BackendID, workspaceId: String) {
         if let cueCenter = observedSessions[source]?.session.attentionCueCenter,
            !cueCenter.noteAlertChimeWillPlay(workspaceId: workspaceId) {

@@ -1,10 +1,5 @@
 import Foundation
 
-/// Compact duration rendering for the chip detail headers — the iOS
-/// counterpart of cloudlands-fe's `formatCompactDuration` (en): at most two
-/// adjacent units (d/h/m/s), a zero adjacent unit omitted (so a smaller
-/// remainder is truncated with it), rounded to the nearest second, negatives
-/// clamped to "0s".
 enum DurationFormat {
     private static let secondsPerMinute = 60
     private static let secondsPerHour = 3600

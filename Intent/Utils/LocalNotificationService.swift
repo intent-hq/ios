@@ -79,15 +79,11 @@ final class LocalNotificationService: NSObject {
 
     var onWillPresentNotification: ((Response) -> UNNotificationPresentationOptions)?
     var onNotificationResponse: ((Response) -> Void)?
-    /// Runs once alerts are allowed, so the app can register for remote alerts.
     var onAuthorized: (() -> Void)?
 
     private let center: any LocalNotificationCenter
     private let soundPolicy: NotificationSoundPolicy
     private let playForegroundSound: () async -> Void
-    /// The in-app chime for the latest foreground banner. It runs after the
-    /// presentation completion handler so the banner never waits for it;
-    /// exposed so tests can await the sound decision.
     private(set) var foregroundSoundTask: Task<Void, Never>?
 
     init(
@@ -191,8 +187,6 @@ final class LocalNotificationService: NSObject {
         Task { @MainActor [weak self] in
             var options = self?.onWillPresentNotification?(response) ?? []
             let requestsSound = options.contains(.sound)
-            // The app plays its own chime instead of the system sound, and the
-            // banner is presented without waiting for it.
             options.remove(.sound)
             completionHandler(options)
             guard let self else { return }
