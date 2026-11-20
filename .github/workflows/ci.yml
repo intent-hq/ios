@@ -876,12 +876,13 @@ jobs:
             TailcatKit/build/tcecho
           key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
 
+      # No Go cache, matching build-and-test.
       - name: Set up Go
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
         uses: actions/setup-go@v7
         with:
           go-version-file: TailcatKit/go.mod
-          cache-dependency-path: TailcatKit/go.sum
+          cache: false
 
       - name: Build TailcatKit.xcframework
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
