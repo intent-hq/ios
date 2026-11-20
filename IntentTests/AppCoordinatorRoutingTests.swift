@@ -42,20 +42,29 @@ extension AppCoordinatorTests {
         let current = BackendID(UUID())
         let other = BackendID(UUID())
         #expect(WindowRetargetRoute.route(
-            currentBackendID: current, target: other,
-            supportsMultipleWindows: true, opensSeparateBackendWindows: true
+            currentBackendID: current,
+            target: other,
+            supportsMultipleWindows: true,
+            opensSeparateBackendWindows: true
         ) == .openTargetWindow)
         #expect(WindowRetargetRoute.route(
-            currentBackendID: current, target: current,
-            supportsMultipleWindows: true, opensSeparateBackendWindows: true
+            currentBackendID: current,
+            target: current,
+            supportsMultipleWindows: true,
+            opensSeparateBackendWindows: true
         ) == .rebindInPlace, "Reselecting this window's own machine never opens a second window")
         #expect(WindowRetargetRoute.route(
-            currentBackendID: current, target: other,
-            supportsMultipleWindows: true, isShowingSavedMachines: true, opensSeparateBackendWindows: true
+            currentBackendID: current,
+            target: other,
+            supportsMultipleWindows: true,
+            isShowingSavedMachines: true,
+            opensSeparateBackendWindows: true
         ) == .rebindInPlace, "A window at Home picks what it shows in place")
         #expect(WindowRetargetRoute.route(
-            currentBackendID: current, target: other,
-            supportsMultipleWindows: true, opensSeparateBackendWindows: false
+            currentBackendID: current,
+            target: other,
+            supportsMultipleWindows: true,
+            opensSeparateBackendWindows: false
         ) == .rebindInPlace, "iPad keeps switching in place (ios#897)")
     }
 

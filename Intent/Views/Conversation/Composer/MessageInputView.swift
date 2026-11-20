@@ -442,11 +442,9 @@ private extension MessageInputView {
                         .frame(minHeight: Constants.Conversation.Composer.suggestedPromptChipMinimumHeight)
                         .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.Composer.suggestedPromptBackgroundOpacity))
                         .clipShape(Capsule())
-                        .contentShape(.hoverEffect, Capsule())
-                        .hoverEffect(.highlight)
+                        .visionHoverShape(Capsule())
                     }
                     .buttonStyle(IntentContentButtonStyle())
-                    .visionContainerDrawsHover()
                 }
             }
             .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptsHorizontalPadding)

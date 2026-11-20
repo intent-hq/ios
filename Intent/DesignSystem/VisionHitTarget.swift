@@ -4,6 +4,8 @@ extension Constants.Accessibility {
     /// visionOS list-row hit target: 60 pt tall rows keep adjacent row centers
     /// >= 60 pt apart while comfortably exceeding the 44 pt minimum target.
     static let visionListRowMinimumHeight: CGFloat = 60
+    /// Room around a disclosure chevron for its gaze highlight.
+    static let visionChevronHoverPadding: CGFloat = 8
 }
 
 extension Constants.WorkspaceSearch {

@@ -88,7 +88,7 @@ struct WorkspaceControlGazeTests {
         let header = try source("Intent/Views/Workspaces/CollapsibleSectionHeader.swift")
         let chevron = try #require(header.components(separatedBy: "Image(.chevronRight)").dropFirst().first)
             .components(separatedBy: ".padding(insets)")[0]
-        #expect(chevron.contains(".visionGroupedHoverHint(padding: Self.chevronHoverPadding)"))
+        #expect(chevron.contains(".visionGroupedHoverHint(padding: Constants.Accessibility.visionChevronHoverPadding)"))
         // The whole heading activates the hint but draws no row-wide highlight.
         #expect(header.contains(".visionHoverGroup()"))
         #expect(header.contains(".buttonStyle(IntentContentButtonStyle())\n        .visionContainerDrawsHover()"))
