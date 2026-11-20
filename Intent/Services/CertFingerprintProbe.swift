@@ -2,18 +2,7 @@ import Foundation
 import Network
 import os
 
-/// Probes a server's TLS certificate fingerprint ahead of pairing, shared by
-/// manual token entry and QR pairing payloads that carry no fingerprint.
-/// Pairing connections must always be pinned: a missing fingerprint aborts
-/// instead of falling back to plain WS.
-///
-/// Built on Network.framework (NWConnection) like WebSocketConnection:
-/// URLSession is deliberately not used because App Transport Security aborts
-/// the TLS handshake to non-local hosts (public IPs, Tailscale) before the
-/// server-trust delegate ever runs, so the fingerprint could never be
-/// captured for remote daemons.
 enum CertFingerprintProbe {
-    /// Decision for a completed TLS probe.
     enum Outcome: Equatable {
         case abort(message: String)
         case confirmFingerprint(String)
@@ -26,10 +15,6 @@ enum CertFingerprintProbe {
         case tls = "TLS"
     }
 
-    /// Safe-by-construction rendering of the NWError behind a probe failure:
-    /// a static domain name plus the numeric code (and a static label for
-    /// well-known codes). Never carries foreign error strings, hosts, or
-    /// user input, so it can be shown to the user in Release builds.
     nonisolated struct FailureCause: Equatable, Sendable, CustomStringConvertible {
         let domain: FailureDomain
         let code: Int32
@@ -49,7 +34,6 @@ enum CertFingerprintProbe {
             }
         }
 
-        /// Static label for well-known codes; nil for everything else.
         var label: String? {
             switch (domain, code) {
             case (.posix, POSIXErrorCode.ECONNREFUSED.rawValue): "connection refused"
@@ -71,31 +55,16 @@ enum CertFingerprintProbe {
         }
     }
 
-    /// Typed result of a probe. Every failure keeps the stage it failed at
-    /// (and the cause where the network stack reports one) so callers can
-    /// tell an unreachable endpoint from a TLS problem instead of collapsing
-    /// everything to "no certificate".
     nonisolated enum ProbeResult: Equatable, Sendable {
-        /// The probing task was cancelled before it settled.
         case cancelled
-        /// The handshake presented a leaf certificate; its fingerprint.
         case fingerprint(String)
-        /// The port is outside 1...65535; nothing was dialed.
         case invalidPort
-        /// The handshake completed without presenting a certificate.
         case noCertificate
-        /// No host was given to probe; nothing was dialed.
         case noHosts
-        /// Neither a handshake nor a failure arrived within the deadline.
         case timeout
-        /// TCP connected, but the TLS handshake failed (e.g. a plain-TCP or
-        /// HTTP listener on that port).
         case tlsFailed(cause: FailureCause)
-        /// The TCP connection never came up (refused, unroutable, DNS).
         case unreachable(cause: FailureCause)
 
-        /// User-facing abort message naming the stage that failed. An empty
-        /// `.fingerprint` is the degenerate no-certificate case.
         var abortMessage: String {
             switch self {
             case .invalidPort:
@@ -116,12 +85,8 @@ enum CertFingerprintProbe {
         }
     }
 
-    /// How the NWConnection behind a probe settled, if it did before the
-    /// deadline.
     nonisolated enum Settlement: Equatable, Sendable {
-        /// `.waiting` / `.failed` with the reported error.
         case failed(FailureCause)
-        /// `.ready`: the TLS handshake completed.
         case handshakeCompleted
     }
 
@@ -137,23 +102,14 @@ enum CertFingerprintProbe {
         return .abort(message: result.abortMessage)
     }
 
-    /// Per-host probe deadline. Fail fast on unroutable hosts: a multi-host
-    /// QR payload probes hosts sequentially, so a hung host would otherwise
-    /// stall the pairing spinner for minutes. 4s matches the websocket
-    /// timeout ConnectionManager.raceHosts uses per host.
     nonisolated private static let probeTimeoutSeconds = 4
     nonisolated static let probeTimeout: Duration = .seconds(probeTimeoutSeconds)
 
-    /// Validated NWEndpoint.Port for a user-supplied port number, or nil when
-    /// the value is outside 1...65535 (pure, unit-testable).
     nonisolated static func endpointPort(_ port: Int) -> NWEndpoint.Port? {
         guard let raw = UInt16(exactly: port), raw > 0 else { return nil }
         return NWEndpoint.Port(rawValue: raw)
     }
 
-    /// Normalized fingerprint of the leaf certificate in a server trust, or
-    /// nil when no certificate is presented (unit-testable — the verify block
-    /// below is only the NW wiring around this).
     nonisolated static func fingerprint(fromServerTrust serverTrust: SecTrust) -> String? {
         guard SecTrustGetCertificateCount(serverTrust) > 0,
               let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
@@ -241,16 +197,6 @@ enum CertFingerprintProbe {
         connection.cancel()
     }
 
-    /// Probe the server's TLS certificate fingerprint via a bare TLS
-    /// handshake — no HTTP request is needed, the handshake alone yields the
-    /// certificate. Every failure keeps its stage (`ProbeResult`): timeout,
-    /// unreachable host, TLS handshake failure, or a handshake that presented
-    /// no certificate.
-    ///
-    /// Keep probe setup off MainActor. The verify block and stateUpdateHandler
-    /// in makeProbeConnection are explicitly @Sendable because Network invokes
-    /// them on the probe's private queue; an inherited MainActor assertion
-    /// would trap there (EXC_BREAKPOINT in dispatch_assert_queue_fail).
     nonisolated static func probe(
         host: String,
         port: Int,
@@ -284,12 +230,6 @@ enum CertFingerprintProbe {
         return result
     }
 
-    /// Pure mapping from what the probe observed to a `ProbeResult`: a
-    /// captured fingerprint wins outright; otherwise the settlement names the
-    /// failing stage — a TLS-domain error means TCP connected and the
-    /// handshake failed, any other error means the endpoint was unreachable,
-    /// a completed handshake without a fingerprint means no certificate was
-    /// presented, and no settlement at all is a timeout.
     nonisolated static func classify(
         captured: String?, settled: Settlement?, cancelled: Bool
     ) -> ProbeResult {
@@ -309,10 +249,6 @@ enum CertFingerprintProbe {
         }
     }
 
-    /// Probe hosts in order and return the first fingerprint found; when no
-    /// host yields one, the result of the last host probed (so the stage and
-    /// cause of the failure survive). Nonisolated for the same reason as
-    /// `probe(host:port:)`. The probe function is injectable for tests.
     nonisolated static func probeFirst(
         hosts: [String],
         port: Int,
@@ -348,20 +284,6 @@ enum CertFingerprintProbe {
         return last
     }
 
-    /// Probe the daemon's certificate fingerprint through a tailcat tunnel
-    /// (manual tc-address entry): opens the tunnel, probes its loopback
-    /// forwarder, and closes the tunnel — pairing over the tunnel stays
-    /// pinned exactly like direct hosts. An out-of-range `remotePort` is
-    /// rejected as `.invalidPort` before any tunnel is dialed, matching the
-    /// direct path. Throws when the tunnel cannot be dialed (invalid or
-    /// unreachable tc address); a non-fingerprint result means the tunnel
-    /// came up but the probe through it failed at the stage the result
-    /// names. The probe function is injectable for tests;
-    /// production uses the real TLS probe above. It must stay non-throwing:
-    /// the close-on-all-paths guarantee relies on the linear open → probe →
-    /// close flow (`defer { await close() }` is not expressible), so a
-    /// throwing probe would leak the tunnel.
-    /// Nonisolated for the same reason as `probe(host:port:)`.
     nonisolated static func probeViaTunnel(
         dialer: any TunnelDialing,
         tcAddress: String,

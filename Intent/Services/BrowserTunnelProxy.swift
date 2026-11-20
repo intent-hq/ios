@@ -8,7 +8,6 @@ protocol BrowserProxySession: AnyObject {
     func close() async
 }
 
-/// Injectable wire seam; production uses the existing pinned WebSocket actor.
 nonisolated protocol BrowserTunnelWebSocket: Sendable {
     func receive() async throws -> URLSessionWebSocketTask.Message
     func send(_ data: Data) async throws
@@ -17,8 +16,6 @@ nonisolated protocol BrowserTunnelWebSocket: Sendable {
 
 extension WebSocketConnection: BrowserTunnelWebSocket {}
 
-/// One browser owns one authenticated tunnel and a bounded set of local ports.
-/// Receive never waits for a downstream TCP write: each stream drains separately.
 @MainActor
 final class BrowserTunnelProxy: BrowserProxySession {
     static let maximumListeners = 8
@@ -135,8 +132,6 @@ final class BrowserTunnelProxy: BrowserProxySession {
             connection.cancel()
             return
         }
-        // Never reuse an ID: stale callbacks and final CLOSE frames cannot
-        // affect a replacement stream. Reopening the browser resets the space.
         let stream = BrowserTunnelStream(id: nextStreamID, port: port, connection: connection)
         nextStreamID += 1
         streams[stream.id] = stream

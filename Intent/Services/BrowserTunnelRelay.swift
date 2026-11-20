@@ -31,7 +31,6 @@ extension BrowserTunnelProxy {
     }
 
     private func receiveClose(_ frame: BrowserTunnelFrame, stream: BrowserTunnelStream) {
-        // Drain DATA already received before closing the local socket.
         guard !stream.flow.remoteClosed else { return }
         stream.flow.receiveClose()
         stream.downstream.append(frame)
@@ -42,7 +41,6 @@ extension BrowserTunnelProxy {
         guard stream.flow.opened, !stream.flow.remoteEOF, !stream.flow.remoteClosed else {
             throw BrowserTunnelError.invalidFrame
         }
-        // Empty payloads carry no application data or credit.
         guard !frame.payload.isEmpty else { return }
         guard frame.payload.count <= Self.maximumBufferedBytes - bufferedBytes else {
             throw BrowserTunnelError.capacity
@@ -102,8 +100,6 @@ extension BrowserTunnelProxy {
         }
         let frame = stream.downstream.removeFirst()
         if frame.opcode == .close {
-            // EOF already flushed a write-side FIN. Closing now is safe because
-            // all preceding contentProcessed callbacks completed in order.
             removeStream(stream, notifyDaemon: false)
             return nil
         }

@@ -6,11 +6,9 @@ import Observation
 @Observable
 final class AssistantStore {
     private(set) var threads: [AgentSession] = []
-    /// The history read. A failed refresh keeps the threads and its message.
     private(set) var loadPhase = LoadPhase.idle
     private(set) var isCreating = false
     private(set) var deletingThreadIDs: Set<String> = []
-    /// The last create or delete failure, independent of the history read.
     private(set) var actionFailure: String?
     var isLoading: Bool { loadPhase.isLoading }
     var hasLoaded: Bool { loadPhase.hasLoaded }
@@ -28,10 +26,6 @@ final class AssistantStore {
         self.summaries = summaries
     }
 
-    /// Observation starts on first use, not at init: every BackendSession
-    /// (including transient pairing sessions) owns a store, and most never
-    /// open the Assistant tab, so an eager handler would sit on every
-    /// connection.
     private func startObservingIfNeeded() {
         guard eventHandlerId == nil else { return }
         eventHandlerId = connection.onEvent { [weak self] method, params in
@@ -60,7 +54,6 @@ final class AssistantStore {
             _ = refreshReads.invalidate()
             return
         }
-        // A shown failure stays (banner and spinner together) until the read ends.
         setLoadPhase(loadPhase.beginningKeepingFailure())
         defer { setLoadPhase(loadPhase.settled()) }
         while await refreshReads.run(isCurrent: { !Task.isCancelled }, pass: { [weak self] passRevision in
@@ -75,7 +68,6 @@ final class AssistantStore {
     private func runRefreshPass(_ passRevision: Int) async {
         do {
             let summaryBoundary = summaries?.beginRead()
-            // Every page: threads ascend by creation, so the newest are on the last page.
             let result = try await PagedReads.requestAgentList(
                 ["workspaceId": Workspace.chiefWorkspaceId], connection: connection
             )
@@ -89,7 +81,6 @@ final class AssistantStore {
             threads = rows.compactMap(AgentSession.parseAgent)
                 .filter { $0.createdByAgentId == nil && $0.status.lowercased() != "deleted" }
                 .sorted { timestamp($0) > timestamp($1) }
-            // Still loading until the coalesced loop ends; `settled()` then marks it loaded.
             setLoadPhase(.loading(lastLoadedAt: Date()))
             actionFailure = nil
         } catch is CancellationError {

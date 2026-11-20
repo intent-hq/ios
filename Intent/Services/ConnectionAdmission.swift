@@ -1,7 +1,5 @@
 import Foundation
 
-/// The identity actually admitted on one socket. Reconnect-cache updates do
-/// not change this receipt or attribute an old socket's revocation to a new token.
 nonisolated struct ConnectionAdmission: Equatable, Sendable {
     let id: UUID
     let token: String
@@ -9,9 +7,6 @@ nonisolated struct ConnectionAdmission: Equatable, Sendable {
     let principal: ConnectionPrincipal
 }
 
-/// A pairing owns its connection across automatic transport recovery, until
-/// an explicit replacement connect or disconnect takes over. Socket admission
-/// remains separate because every replacement socket must recheck authority.
 nonisolated enum PairingConnectionContext {
     @TaskLocal static var attemptID: UUID?
 }

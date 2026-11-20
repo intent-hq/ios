@@ -1,7 +1,5 @@
 import Foundation
 
-/// One membership refresh: the request task and the principal it must keep.
-/// The principal fences a later event while `currentPrincipal` is cleared.
 struct AuthorityRefresh {
     let previous: ConnectionPrincipal?
     let task: Task<Void, Never>
@@ -34,7 +32,6 @@ extension ConnectionManager {
         capabilities = capabilities.disablingScriptMonitors()
     }
 
-    /// A saved record can constrain identity, never supply current authority.
     func validateIdentity(_ principal: ConnectionPrincipal, token: String, fingerprint: String?) throws {
         guard persistence.invitedJournalAvailable else { throw PersistenceManager.InvitedPersistenceError.syncUnavailable }
         let records = persistence.loadConnections().filter { $0.token == token && InvitedSyncKey.sameFingerprint($0.server.certFingerprint, fingerprint) }
@@ -66,8 +63,6 @@ extension ConnectionManager {
         if changed { persistence.saveConnectionsLocked(records) }
     }
 
-    /// Membership events invalidate first. A newer notification cancels this
-    /// refresh; generation/socket fences prevent a late reply reviving rights.
     func invalidatePrincipalIfNeeded(method: String, params: Any) {
         guard method == "events.event" || method == "event", let envelope = params as? [String: Any] else { return }
         let event = envelope["event"] as? [String: Any] ?? envelope
@@ -165,8 +160,6 @@ extension ConnectionManager {
 }
 
 extension PersistenceManager {
-    /// Only the exact credential generation rejected by an authoritative RPC
-    /// can create a removal. Network/Keychain/TLS failures are not revocation.
     func recordAuthoritativeRevocation(_ error: Error, observed: [StoredConnection]) {
         guard ConnectionPrincipal.isRevocation(error) else { return }
         for old in observed {

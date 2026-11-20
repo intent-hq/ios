@@ -39,12 +39,8 @@ import os
             connectionStateSubject.send(connectionState)
         }
     }
-    /// Why reconnection stopped for good (e.g. revoked access); cleared on connect.
     var reconnectStopReason: String?
-    /// Set while connected without a daemon socket (pretend-paired launches);
-    /// readiness then follows the connection state directly.
     @ObservationIgnored private var isInProcessConnection = false
-    /// Answers requests in process instead of over the socket when set.
     @ObservationIgnored private(set) var requestTransport: (any ConnectionRequestTransport)?
 
     @ObservationIgnored var scriptMonitorsDisabledForConnection = false
@@ -69,10 +65,6 @@ import os
     var certMismatchDetected = false {
         didSet { certMismatchSubject.send(certMismatchDetected) }
     }
-    /// Every per-host certificate mismatch observed while racing hosts for the
-    /// current target, keeping the latest fingerprint per host. Accumulates
-    /// across reconnect attempts; cleared on a fresh `connect()` to a different
-    /// target and on explicit `disconnect()`.
     var certMismatches: [HostCertMismatch] = [] {
         didSet { certMismatchesSubject.send(certMismatches) }
     }
@@ -90,27 +82,18 @@ import os
     @ObservationIgnored private var nextRequestId = 1
     @ObservationIgnored private(set) var connectionGeneration: Int = 0
     @ObservationIgnored private(set) var reconnectCredentialsRevision = 0
-    /// Supersession order among overlapping `connect()` calls. The preserving
-    /// path (pairing over a live connection) does not tear down — and so does
-    /// not advance `connectionGeneration` — up front, so overlapping attempts
-    /// share a generation; this counter ensures the NEWEST attempt wins the
-    /// adoption race regardless of which one finishes first.
     @ObservationIgnored private var connectAttempt: Int = 0
     var connectAttemptCount: Int { connectAttempt }
     @ObservationIgnored var reconnectTask: Task<Void, Never>?
-    /// Read by tests as a completion barrier for a retired heartbeat.
     @ObservationIgnored var heartbeatTask: Task<Void, Never>?
     @ObservationIgnored var globalSubscriptionTask: Task<Void, Never>?
-    /// Time source for heartbeat cadence/probe deadlines and subscription retry backoff.
     @ObservationIgnored var heartbeatClock: any HeartbeatClock = ContinuousHeartbeatClock()
-    /// A fresh path monitor is created for every live socket because NWPathMonitor is one-shot.
     @ObservationIgnored var makePathMonitor: () -> any NetworkPathMonitoring = {
         NWPathMonitorAdapter()
     }
     @ObservationIgnored var pathMonitor: (any NetworkPathMonitoring)?
     @ObservationIgnored var pathMonitorID = 0
     @ObservationIgnored var lastPathSnapshot: NetworkPathSnapshot?
-    /// Injectable endpoint evidence; general path reports cannot disprove a direct route.
     @ObservationIgnored var readSocketPath: (WebSocketConnection) -> SocketPathObservation = { socket in
         socket.pathObservation
     }
@@ -128,15 +111,8 @@ import os
     @ObservationIgnored private(set) var port: Int?
     @ObservationIgnored private(set) var token: String?
     @ObservationIgnored private(set) var certFingerprint: String?
-    /// Tailcat tunnel address of the current target (nil when the daemon has
-    /// no tunnel); adds the tunnel candidate to host racing when present.
     @ObservationIgnored private(set) var tcAddress: String?
-    /// The tunnel session carrying the live socket (nil when a direct host
-    /// won the race); closed on teardown.
     @ObservationIgnored var activeTunnel: (any TunnelSession)?
-    /// Injectable for tests; defaults to the real TailcatKit-backed dialer
-    /// where the xcframework links (iOS), and to the always-failing stub on
-    /// visionOS (no xros TailcatKit slice yet).
     #if canImport(TailcatKit)
     @ObservationIgnored var tunnelDialer: any TunnelDialing = TailcatTunnelDialer()
     #else
@@ -152,14 +128,8 @@ import os
         globalSubscriptionSubject.eraseToAnyPublisher()
     }
 
-    /// The candidate label the tunnel route races under (also the host shown
-    /// in its transport errors). Not a dialable name: the tunnel connects via
-    /// a loopback forwarder.
     nonisolated static let tunnelCandidateLabel = "tailcat-tunnel"
 
-    /// Internal (not private) so `BackendSessionRegistry` can construct one
-    /// additional instance per pinned backend session; `.shared` remains the
-    /// process-wide default used by the default session and existing code.
     init(diagnostics: DiagnosticStore = .shared, persistence: PersistenceManager = .shared) {
         self.diagnostics = diagnostics
         self.persistence = persistence
@@ -176,7 +146,6 @@ import os
 }
 
 extension ConnectionManager {
-    /// Marks the connection live without a socket; requests go to `transport`.
     func connectInProcess(using transport: (any ConnectionRequestTransport)?) {
         if !isInProcessConnection { disconnect() }
         isInProcessConnection = true
@@ -184,33 +153,26 @@ extension ConnectionManager {
         connectionState = .connected
     }
 
-    /// Installs `transport` and adopts the capabilities it advertises.
     func replaceRequestTransport(with transport: (any ConnectionRequestTransport)?) {
         requestTransport?.stop()
         requestTransport = transport
         capabilities = transport?.capabilities ?? .unknown
     }
 
-    /// Combine compatibility for stores that depend on ConnectionManagerRouting.
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
         connectionStateSubject.eraseToAnyPublisher()
     }
 
-    /// Combine compatibility for AppCoordinator's certificate-mismatch routing.
     var certMismatchPublisher: AnyPublisher<Bool, Never> {
         certMismatchSubject.eraseToAnyPublisher()
     }
 
-    /// Combine mirror of `certMismatches`, matching `certMismatchPublisher`.
     var certMismatchesPublisher: AnyPublisher<[HostCertMismatch], Never> {
         certMismatchesSubject.eraseToAnyPublisher()
     }
 
     // MARK: - Connection lifecycle
 
-    /// A manual retry skips transport backoff without replacing an already
-    /// connected socket or an initial connection attempt. Pin failures still
-    /// require the pairing flow, never an untrusted reconnect.
     func retryConnection() {
         guard connectionState != .connected, connectionState != .connecting,
               !certMismatchDetected, !hosts.isEmpty || tcAddress != nil,
@@ -294,8 +256,6 @@ extension ConnectionManager {
     }
 
     private func validateTransportSecurity(hosts: [String], certFingerprint: String?) throws {
-        // Fail closed before touching state or opening a socket: otherwise a
-        // pinless saved record could send its bearer token over plaintext.
         guard WebSocketConnection.trustedPin(certFingerprint) != nil
             || WebSocketConnection.plaintextLoopbackOverrideActive else {
             throw WebSocketTransportError.missingCertificatePin(host: hosts.first ?? "unknown")
@@ -386,12 +346,6 @@ extension ConnectionManager {
         )
     }
 
-    /// Adopt registry-merged fields for the ACTIVE connection (called when a
-    /// synced-registry merge rewrote its stored record): refreshes the cached
-    /// hosts/port/token/fingerprint that reconnect racing and ping recovery
-    /// read, so they use the rotated token and current routes instead of the
-    /// stale cache. The live socket is kept — the daemon checks the token at
-    /// the WebSocket upgrade only, so an established connection stays valid.
     func updateCachedCredentials(
         hosts: [String],
         port: Int,
@@ -424,9 +378,6 @@ extension ConnectionManager {
         if !certMismatches.isEmpty { certMismatches = [] }
     }
 
-    /// Tears down the live connection without touching `certMismatches`:
-    /// `connect()` to the same target must keep the accumulated mismatches,
-    /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
         cancelStartupAdmission()
         requestTransport?.stop()
@@ -458,12 +409,7 @@ extension ConnectionManager {
         subscriptionRouter.reset()
     }
 
-    /// Drops accumulated mismatches when a fresh `connect()` targets a
-    /// different backend than the cached one. When a pin is present, port +
-    /// pin identify the daemon (host lists drift: `refreshHostRoutes()` merges
-    /// daemon-reported IPs into `self.hosts`, so a later connect from the
-    /// stored record would look different under exact host equality);
-    /// pinless targets fall back to host overlap. Internal for test
+    /// Internal for test
     /// visibility.
     func resetCertMismatchesIfTargetChanged(
         hosts: [String],

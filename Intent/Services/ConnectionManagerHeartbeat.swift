@@ -1,8 +1,6 @@
 import Foundation
 
 extension ConnectionManager {
-    /// Sleeps for one cadence interval, then probes the live socket. Probes are
-    /// sequential and generation/socket guarded so a retired result is ignored.
     func startHeartbeat() {
         stopHeartbeat()
         let generation = connectionGeneration

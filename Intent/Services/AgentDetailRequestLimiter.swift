@@ -1,8 +1,5 @@
 import Foundation
 
-/// Shared by every detail consumer on a backend, including route validation.
-/// The owner keeps sent operations alive through reply, timeout or disconnect;
-/// cancelling a display interest only cancels its queued acquisition.
 @MainActor
 final class AgentDetailRequestLimiter {
     private struct Waiter {
@@ -28,7 +25,6 @@ final class AgentDetailRequestLimiter {
         } onCancel: {
             Task { @MainActor [weak self] in self?.cancel(id) }
         }
-        // The caller releases even when cancellation raced the grant.
     }
 
     func release() {
