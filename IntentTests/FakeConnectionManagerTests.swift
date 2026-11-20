@@ -6,8 +6,6 @@ import Testing
 
 @MainActor
 struct FakeConnectionManagerTests {
-    // MARK: - Connection State
-
     @Test func connectionStatePublisher() {
         let fake = FakeConnectionManager()
         var states: [ConnectionState] = []
@@ -65,8 +63,6 @@ struct FakeConnectionManagerTests {
         #expect(fake.updateCachedCredentialsLog.first?.tcAddress == "cached-tailnet.example")
     }
 
-    // MARK: - Request/Response Mocking
-
     @Test func requestReturnsConfiguredResponse() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["test.method"] = ["result": "success"]
@@ -100,7 +96,6 @@ struct FakeConnectionManagerTests {
             _ = try await fake.request("unconfigured.method", params: [:])
             Issue.record("Expected error for unconfigured method")
         } catch {
-            // Expected
         }
     }
 
@@ -127,8 +122,6 @@ struct FakeConnectionManagerTests {
         #expect(!fake.didCallMethod("method3"))
     }
 
-    // MARK: - Legacy Event Handlers
-
     @Test func legacyEventHandlerRegistration() {
         let fake = FakeConnectionManager()
 
@@ -147,10 +140,8 @@ struct FakeConnectionManagerTests {
         #expect(fake.eventHandlerCount == 0)
 
         fake.deliverEvent(method: "note.deleted", params: ["noteId": "note-2"])
-        #expect(receivedEvents.count == 1) // No new event received after removal
+        #expect(receivedEvents.count == 1)
     }
-
-    // MARK: - Subscription Push Routing
 
     @Test func subscriptionHandlerRegistrationAndDelivery() {
         let fake = FakeConnectionManager()
@@ -200,8 +191,6 @@ struct FakeConnectionManagerTests {
         #expect(receivedB.count == 1)
     }
 
-    // MARK: - Bounded condition waits (ios#261)
-
     private static let shortTimeoutMilliseconds = 20
 
     @Test func waitUntilThrowsOnTimeoutInsteadOfContinuing() async {
@@ -236,12 +225,6 @@ struct FakeConnectionManagerTests {
         #expect(fake.pendingRequestCount("agent.get") == 0)
     }
 
-    /// The escape hatch the time-limited race tests rely on: a candidate
-    /// cancelled while awaiting the gate stays parked (the race's loser
-    /// cancellation must not release it), while cancelling the test-level
-    /// task wrapped in `opening(onCancellationOf:)` opens the gate so a
-    /// system under test that regressed into awaiting the loser fails the
-    /// time limit instead of hanging the runner.
     @Test func testGateOpensOnTestTaskCancellationButNotOnCandidateCancellation() async throws {
         let gate = TestGate()
         let candidateFinished = Mutex(false)

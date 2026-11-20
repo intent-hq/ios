@@ -131,7 +131,6 @@ extension DiagnosticExportTests {
         clock.advance(forward)
         #expect(intake.append(DiagnosticFixtures.event(operation: .workspaceCreate), scope: nil))
         clock.advance(-forward)
-        // No worker ran at the future time: removal itself must rotate the revision.
         let purged = await writer.snapshot()
         #expect(purged.jsonLines == reviewed.jsonLines)
         #expect(purged.metadata.loss.expiredRecords == 1)
@@ -224,7 +223,6 @@ extension DiagnosticExportTests {
             Issue.record("Clock rollback within one encoded second must also invalidate the review")
             return
         }
-        // One validation observation and one fresh snapshot/flush observation.
         #expect(clock.readCount == 5)
         #expect(fresh.metadata.generatedAt == reviewed.metadata.generatedAt)
         #expect(fresh.historyRevision != reviewed.historyRevision)

@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-// MARK: - Event-notification wake attribution (agent wakes)
-
 struct EventWakeAttributionTests {
     @Test func extractsFromValidMetadata() {
         let attribution = EventWakeAttribution.from([
@@ -54,7 +52,6 @@ struct EventWakeAttributionTests {
     }
 
     @Test func toleratesMalformedFields() {
-        // Wrong-typed count/types/events degrade to empty, never crash.
         let attribution = EventWakeAttribution.from([
             "type": AnyCodable("event_notification"),
             "eventCount": AnyCodable("two"),
@@ -83,7 +80,6 @@ struct EventWakeAttributionTests {
     }
 
     @Test func extractsFromDecodedWireMetadata() throws {
-        // Wire-shaped JSON round-trip: nested events decode via AnyCodable.
         let json = """
         {"id":"m1","role":"user","timestamp":"2025-01-01T00:00:00Z",
          "contentBlocks":[{"type":"text","text":"[WORKSPACE EVENTS] machine text"}],
@@ -126,7 +122,6 @@ struct EventWakeAttributionTests {
                 ["type": "file:created"]
             ] as [[String: Any]])
         ])
-        // Category labels dedupe (both file:* events collapse into one).
         #expect(attribution?.summaryLabel == "Verifier finished, File changes")
     }
 
@@ -174,7 +169,6 @@ struct EventWakeAttributionTests {
     }
 
     @Test func unknownTypesAreHumanized() {
-        // Machine identifiers never surface verbatim in the banner.
         let attribution = EventWakeAttribution.from([
             "type": AnyCodable("event_notification"),
             "eventTypes": AnyCodable(["custom:thing", "agent:status-changed"])
@@ -183,8 +177,6 @@ struct EventWakeAttributionTests {
     }
 
     @Test func legacyPrefixRowsFallBackToEmptyAttribution() {
-        // Metadata-less legacy rows still render the banner off the text
-        // prefix (FE parity: isEventWakeMessage) instead of raw machine text.
         let legacy = ConversationMessage(
             id: "m4",
             role: .user,

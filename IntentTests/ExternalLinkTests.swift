@@ -2,20 +2,12 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Backend-supplied strings opened via `openURL` (context-mention chips,
-/// PR-monitor chips) must go through the shared `ExternalLink` http/https
-/// allowlist rather than a bare `URL(string:)` (ios#262). The call-site scan
-/// reads the copies packaged into the test bundle (see TestBundleInputs),
-/// never the checkout via `#filePath` (ios#320, ios#373).
 struct ExternalLinkTests {
-    /// Every view that hands a daemon-supplied string to `openURL`.
     private static let externalLinkCallSites = [
         "Intent/Views/Conversation/Content/ContextMentionChipView.swift",
         "Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift",
         "Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift"
     ]
-
-    // MARK: - Accepted: absolute http/https with a host
 
     @Test(arguments: [
         "https://github.com/octo/repo/pull/12",
@@ -35,8 +27,6 @@ struct ExternalLinkTests {
         let url = ExternalLink.url(from: "https://example.com/a/b?x=1#y")
         #expect(url?.absoluteString == "https://example.com/a/b?x=1#y")
     }
-
-    // MARK: - Rejected: unsafe, non-web, or malformed
 
     @Test(arguments: [
         "javascript:alert(1)",
@@ -75,8 +65,6 @@ struct ExternalLinkTests {
     @Test func rejectsNil() {
         #expect(ExternalLink.url(from: nil) == nil)
     }
-
-    // MARK: - Call sites route through the shared helper
 
     @Test func externalLinkCallSitesUseTheSharedAllowlist() throws {
         let inputs = try TestBundleInputs.current()

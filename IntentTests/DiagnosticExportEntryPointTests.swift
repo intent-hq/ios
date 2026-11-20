@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// Source contracts complement the native UI tests; they do not claim that
-/// presentation, accessibility or system sharing has executed successfully.
 struct DiagnosticExportEntryPointTests {
     @Test func failureKeepsAnOfflinePreviewEntry() throws {
         let source = try read("Intent/Views/Connection/ConnectionFailureView.swift")

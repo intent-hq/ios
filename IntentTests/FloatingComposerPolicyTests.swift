@@ -3,13 +3,8 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// The visionOS floating composer (`FloatingComposerPolicy`): one ornament
-/// composer per active chat, sized from the chat column, with the inline iOS
-/// composer rules left untouched.
 @MainActor
 struct FloatingComposerPolicyTests {
-    // MARK: - Host selection
-
     @Test func visionOSFloatsTheComposer() {
         #expect(ComposerHost.forPlatform(isVisionOS: true) == .floatingOrnament)
     }
@@ -18,21 +13,15 @@ struct FloatingComposerPolicyTests {
         #expect(ComposerHost.forPlatform(isVisionOS: false) == .inline)
     }
 
-    // MARK: - Presentation
-
     @Test func presentsForTheActiveLoadedChat() {
         #expect(FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: true) == .shown)
     }
 
     @Test func withdrawsWhileTheChatIsCovered() {
-        // A pushed child agent owns the window's composer; the covered chat
-        // must not leave a second ornament behind.
         #expect(FloatingComposerPolicy.presentation(isActiveChat: false, isForemost: true, showsLoadingState: false, composerVisible: true) == .withdrawn)
     }
 
     @Test func withdrawsWhileAModalCoversTheChat() {
-        // Regression: the Assistant sheet over an open chat left the covered
-        // chat's composer on screen (two composers, covered draft sendable).
         let presentation = FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: false, showsLoadingState: false, composerVisible: true)
         #expect(presentation == .covered)
         #expect(!presentation.revealsComposer)
@@ -43,19 +32,14 @@ struct FloatingComposerPolicyTests {
     }
 
     @Test func hidesWhenTheQuestionSlotOwnsTheComposer() {
-        // Pending-question recovery keeps the composer closed (fail closed).
         #expect(FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: false) == .withdrawn)
     }
-
-    // MARK: - Modal coverage (ComposerCoverage)
 
     @Test func windowChatIsForemostWithNoModalOpen() {
         #expect(ComposerCoverage().isForemost(depth: 0))
     }
 
     @Test func sheetCoversTheWindowChatButNotItsOwnChat() {
-        // Assistant sheet (layer 1) over a window chat (depth 0): only the
-        // sheet's chat keeps a composer.
         let coverage = ComposerCoverage()
         coverage.cover(UUID(), depth: 1)
         #expect(!coverage.isForemost(depth: 0))
@@ -71,7 +55,6 @@ struct FloatingComposerPolicyTests {
     }
 
     @Test func nestedModalCoversEveryChatBeneathIt() {
-        // A lightbox (layer 2) opened from the Assistant chat (depth 1).
         let coverage = ComposerCoverage()
         let sheet = UUID()
         let lightbox = UUID()
@@ -90,8 +73,6 @@ struct FloatingComposerPolicyTests {
         coverage.uncover(UUID())
         #expect(!coverage.isForemost(depth: 0))
     }
-
-    // MARK: - Width follows the window
 
     @Test func unmeasuredColumnUsesIdealWidth() {
         #expect(FloatingComposerPolicy.width(forColumnWidth: 0) == nil)
@@ -123,10 +104,7 @@ struct FloatingComposerPolicyTests {
         #expect(FloatingComposerPolicy.width(forColumnWidth: column) == column)
     }
 
-    // MARK: - Launcher avoidance
-
     @Test func inlineHostReportsQuestionTopOnlyWhenItReplacesTheComposer() {
-        // Prior iOS rule, unchanged: the composer reports its own top.
         let replaced = FloatingComposerPolicy.questionRegionLauncherTop(
             host: .inline,
             questionInputTop: 500,
@@ -154,9 +132,6 @@ struct FloatingComposerPolicyTests {
     }
 
     @Test func floatingHostKeepsTheLauncherAboveTheQuestionBanner() {
-        // The composer is outside the window, so the in-window question
-        // banner is the input the launcher must avoid even while the
-        // composer is shown.
         let top = FloatingComposerPolicy.questionRegionLauncherTop(
             host: .floatingOrnament,
             questionInputTop: 640,
@@ -179,10 +154,6 @@ struct FloatingComposerPolicyTests {
     }
 
     @Test func floatingHostKeepsTheLauncherAboveStatusRows() {
-        // Regression: with the composer outside the window, waiting/monitor/
-        // hook/queue rows sit at the window bottom under the launcher. The
-        // launcher must rise above the topmost of them (and the question
-        // banner beneath them).
         let top = FloatingComposerPolicy.questionRegionLauncherTop(
             host: .floatingOrnament,
             questionInputTop: 640,
@@ -204,7 +175,6 @@ struct FloatingComposerPolicyTests {
     }
 
     @Test func inlineHostIgnoresStatusRowsForTheLauncher() {
-        // iPhone/iPad: the inline composer still reports its own top.
         let top = FloatingComposerPolicy.questionRegionLauncherTop(
             host: .inline,
             questionInputTop: 640,
@@ -217,8 +187,6 @@ struct FloatingComposerPolicyTests {
     }
 
     @Test func transcriptKeepsNoLauncherPaddingUnderTheLastRow() throws {
-        // Regression: every visionOS chat ended with a launcher-tall gap
-        // that pushed the transcript up; the launcher floats over it instead.
         let launcher = try Self.source("Intent/Views/Workspaces/WorkspaceActionLauncher.swift")
         let column = try Self.source("Intent/Views/Conversation/Transcript/ConversationColumnView.swift")
         let transcript = try Self.source("Intent/Views/Conversation/Transcript/ConversationTranscriptView+Presentation.swift")
@@ -226,18 +194,13 @@ struct FloatingComposerPolicyTests {
         #expect(!column.contains("launcherClearance"))
         #expect(!column.contains("bottomClearance"))
         #expect(column.contains("accessoryRowsTop: accessoryRowsLauncherTop"))
-        // On the end marker, so follow landings still reach the true end.
         #expect(transcript.components(separatedBy: ".padding(.bottom, Layout.bottomAnchorPadding)").count - 1 == 2)
         #expect(!transcript.contains("bottomClearance"))
     }
 
-    // MARK: - Source wiring (visionOS branches cannot run in the iOS test host)
-
     @Test func visionOSColumnHostsOneComposerInAGlassOrnament() throws {
         let column = try Self.source("Intent/Views/Conversation/Transcript/ConversationColumnView.swift")
         let ornament = try Self.source("Intent/Views/Conversation/Composer/FloatingComposerOrnament.swift")
-        // Exactly two construction sites: the inline host (gated off on
-        // visionOS) and the floating ornament host.
         #expect(column.components(separatedBy: "MessageInputView(").count - 1 == 2)
         #expect(column.contains("if composerHost == .inline, !viewModel.showsLoadingState"))
         #expect(column.contains(".modifier(FloatingComposerOrnament("))
@@ -250,10 +213,6 @@ struct FloatingComposerPolicyTests {
         #expect(ornament.contains("FloatingComposerPolicy.width(forColumnWidth: columnWidth)"))
     }
 
-    /// Regression (Assistant sheet over an open chat showed two floating
-    /// composers, and the covered draft could still be sent): every modal
-    /// that can open over a chat on visionOS must register as a covering
-    /// layer, so only the foremost chat keeps its composer.
     @Test(arguments: [
         "Intent/App/RootView.swift",
         "Intent/Views/Conversation/Transcript/ConversationView.swift",
