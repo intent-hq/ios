@@ -41,6 +41,7 @@ Several small stores show workspace side data: assistant threads, background hoo
    2. A reply without `pulls` is an error, never an empty result. A newer `load(_:)` supersedes an older one; rows of another query never pass for this query's results, while a failed refresh of the same query keeps its rows under an error. A failed "load more" keeps loaded rows.
    3. `PullRequestDetailStore` loads detail, checks, reviews and files independently; one failure leaves the others visible with their own retry.
 6. **Skills.** `SkillCatalogStore` reuses a successful catalog per agent and connection, because skills do not change during a session. Failures are not cached. Offline, the visible catalog is cleared so keyboard acceptance cannot insert a hidden suggestion; the cache repopulates it on reconnect.
+7. **Scripts and PR feed.** `WorkspaceScriptDiscovery` is the pure counterpart of the desktop manifest detector; discovery never registers or runs a script, and the desktop's remaining substring categories use command mode (Storybook is a service). `WorkspacePrMonitorsStore` is one session PR feed for row and conversation leases; a row never creates its own registration, and each interested workspace has one acknowledged seed.
 
 ## Code
 
@@ -49,5 +50,6 @@ Several small stores show workspace side data: assistant threads, background hoo
 - `MobileTerminalStore`: `errors`, `title(for:)`, `rename(_:to:)`; `MobileTerminalConnection`: `replay(snapshot:pending:)`
 - `PullRequestListStore`: `load(_:)`, `loadMore`, `fetch`; `PullRequestDetailStore`: `loadAll`
 - `SkillCatalogStore`: `refresh(workspaceId:agentId:connection:)`
+- `WorkspaceScriptDiscovery`, `WorkspacePrMonitorsStore`: `retain`, `release`, `seed`
 - `BackgroundHookStore`: `runNow(hookId:)`, `cancel(hookId:)`, `foldHookEvent(…)`, `FoldResult`
 - `MonitoredPrStore`: `foldMonitorEvent(…)`

@@ -1,6 +1,5 @@
 import Foundation
 
-/// Pure counterpart of the desktop manifest detector; discovery never registers or runs a script.
 nonisolated enum WorkspaceScriptDiscovery {
     static let manifestPaths = ["package.json", "Makefile", "Cargo.toml", "pyproject.toml"]
 
@@ -143,7 +142,6 @@ nonisolated enum WorkspaceScriptDiscovery {
             ("watch:", "service"), ("watch-", "service")
         ]
         if let match = prefixes.first(where: { lower.hasPrefix($0.0) }) { return match.1 }
-        // The desktop's remaining substring categories all have command mode.
         return lower.contains("storybook") ? "service" : "command"
     }
 }

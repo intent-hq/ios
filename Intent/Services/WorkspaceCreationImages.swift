@@ -6,7 +6,6 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Draft-owned Photos media. Videos stay on disk until the workspace exists.
 @MainActor
 @Observable final class WorkspaceCreationImages {
     nonisolated struct Image: Identifiable, Sendable {
@@ -45,9 +44,6 @@ import UniformTypeIdentifiers
     }
     typealias MediaLoader = @MainActor () async throws -> Media
 
-    // Bound compressed source reads and prepared draft memory independently of
-    // the daemon's frame limit. JSONSerialization may also escape base64 slashes.
-    // Keep MiB conversions visible in these named source, JPEG, and request limits.
     // swiftlint:disable no_magic_numbers
     nonisolated static let maximumSourceBytes = 30 * 1024 * 1024
     static let maximumJPEGBytes = 12 * 1024 * 1024
@@ -107,9 +103,6 @@ import UniformTypeIdentifiers
             errorMessage = ImportError.tooMany.localizedDescription
             return
         }
-        // Snapshot bytes during the user's paste action, before returning to the
-        // run loop. Lazy pasteboard providers can fail after that action ends or
-        // the clipboard changes. Decode/downsample stays off the main actor.
         let data = imageTypes.map { index, type in
             pasteboard.data(type, index)
         }
@@ -118,8 +111,6 @@ import UniformTypeIdentifiers
         })
     }
 
-    /// Set the gate synchronously, before any picker/paste task can yield to Create.
-    /// Each batch is atomic: a bad selection never silently drops one of its images.
     @discardableResult
     func add(_ loaders: [Loader]) -> Task<Void, Never>? {
         addMedia(loaders.map { load in { .image(try await load()) } })
@@ -144,7 +135,6 @@ import UniformTypeIdentifiers
             } catch {
                 if !Task.isCancelled { errorMessage = error.localizedDescription }
             }
-            // A cancelled task may finish after a newer import has started.
             guard !Task.isCancelled else { return }
             isImporting = false
             importTask = nil
@@ -179,8 +169,6 @@ import UniformTypeIdentifiers
         isImporting = false
     }
 
-    /// Same serializer and envelope as ConnectionManager; Int.min conservatively
-    /// covers every possible numeric RPC id. Leave 1 MiB below the host's 40 MiB.
     static func validateRequest(_ params: [String: Any]) throws {
         let envelope: [String: Any] = ["jsonrpc": "2.0", "id": Int.min, "method": "workspace.create", "params": params]
         let data = try JSONSerialization.data(withJSONObject: envelope)

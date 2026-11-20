@@ -51,7 +51,8 @@ A saved daemon has several host routes and can have a Tailcat tunnel address. `C
    2. `close()` runs exactly once; later callers return at once. Gomobile `close()` takes the Go startup mutex and can block for seconds, so it runs off the caller's executor. The continuation is not cancellation-aware, so a cancelled caller still releases the handles. Closures capture the lock-guarded `self`, not the non-Sendable handles. `markClosed()` is synchronous because `NSLock.lock()` is unavailable in async contexts.
    3. `establishTimeoutMs` (20 s) covers first-use DERP discovery and a relay round-trip. It is much longer than the WebSocket connect timeout: the tunnel is the slow-path candidate, and reachable direct hosts win first.
    4. `DialHandle` bridges task cancellation to the blocking dial: `cancel()` records the time and closes the in-flight client off the cancelling thread, because close takes the same mutex that startup holds. It is idempotent. Before registration, the dial thread closes the client itself when `register(_:)` fails. Close cannot shorten `ping`: before first use it is a no-op, during startup it waits for startup, and during the wait it does not wake it (10 s internal cap). It only guarantees teardown, off the connect critical path.
-15. **Network copy diagnostics.** `NetworkCopyDiagnostics` is temporary, opt-in phone evidence. It never accepts free-form text or writes data. Recording does not subscribe the presenter to later events.
+15. **Transport errors.** `certificateMismatches` carries every per-host mismatch when no host won, not just the last. `missingCertificatePin` refuses a record without a trusted pin before any bearer can be sent. `relabeled(host:)` changes a single-route error's label only; aggregate mismatches keep each candidate's host.
+16. **Network copy diagnostics.** `NetworkCopyDiagnostics` is temporary, opt-in phone evidence. It never accepts free-form text or writes data. Recording does not subscribe the presenter to later events.
 
 ## Consequences
 
@@ -65,4 +66,5 @@ A saved daemon has several host routes and can have a Tailcat tunnel address. `C
 - `ConnectionManager` (startup, routes, requests): `readyRace(…)`, `observeStartupLifecycle()`, `scheduleHostRoutesRefresh()`, `refreshHostRoutes()`, `mergeHosts(existing:reported:)`, `refreshStoredDisplayName(token:port:context:)`, `hostRefreshIsCurrent(_:)`, `defaultRequestTimeout`, `awaitResponse(…)`, `startHeartbeat()`
 - `ConnectionRequestTransport`: `makeInProcessTransport(…)`
 - `TailcatTunnelSession`: `close()`, `markClosed()`; `TailcatTunnelDialer`: `establishTimeoutMs`; `DialHandle`: `register(_:)`, `cancel()`, `cancelledAt`
+- `WebSocketTransportError`: `certificateMismatches`, `missingCertificatePin`, `relabeled(host:)`; `HostCertMismatch`
 - `NetworkAvailability`: `acquire()`, `Lease`; `NetworkPathSnapshot`, `NetworkCopyDiagnostics`, `SocketPathObservation`: `ready(path:)`, `observe(_:)`

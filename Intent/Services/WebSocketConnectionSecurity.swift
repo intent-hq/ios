@@ -6,7 +6,6 @@ extension WebSocketConnection {
     nonisolated enum Endpoint: Sendable {
         case rpc
         case tunnel
-        /// The host's unauthenticated invite-join endpoint (no bearer token).
         case invite
 
         var path: String {
@@ -23,7 +22,6 @@ extension WebSocketConnection {
     }
 
     #if DEBUG
-    /// Plaintext escape hatch for loopback-only test servers; app code never enables it.
     nonisolated static let allowsPlaintextLoopbackForTesting =
         OSAllocatedUnfairLock(initialState: false)
     #endif
@@ -80,20 +78,16 @@ extension WebSocketConnection {
         return url
     }
 
-    /// `/invite` callers hold no credential: an empty token sends no header.
     nonisolated static func additionalHeaders(token: String) -> [(name: String, value: String)] {
         token.isEmpty ? [] : [(name: "Authorization", value: "Bearer \(token)")]
     }
 
-    /// SHA-256 fingerprint of a DER-encoded certificate, formatted as
-    /// lowercase colon-separated hex — the normalization the pairing flow uses.
     nonisolated static func fingerprint(ofCertificate der: Data) -> String {
         SHA256.hash(data: der)
             .map { String(format: "%02x", $0) }
             .joined(separator: ":")
     }
 
-    /// Compare validated SHA-256 bytes, accepting both supported spellings.
     nonisolated static func fingerprintMatches(_ received: String, pinned: String) -> Bool {
         guard let received = try? InvitedSyncKey.fingerprint(received),
               let pinned = try? InvitedSyncKey.fingerprint(pinned) else { return false }
