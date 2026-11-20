@@ -134,7 +134,10 @@ final class AgentLiveActivityController {
 
     private static func demoState(_ state: AgentActivityAttributes.ContentState) -> AgentActivityAttributes.ContentState {
         #if DEBUG
-        if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-live-activity-finished-running"), let row = state.rows.first {
+        let options = LaunchOptions.current
+        let kind: AgentActivityNoticeKind? = options.contains("--demo-live-activity-needs-input") ? .needsAttention
+            : options.contains("--demo-live-activity-review") ? .reviewRequired : nil
+        if DemoMode.isEnabled, options.contains("--demo-live-activity-finished-running"), let row = state.rows.first {
             var mixed = state
             mixed.finished = AgentActivityRow(
                 connectionId: row.connectionId,
@@ -142,11 +145,12 @@ final class AgentLiveActivityController {
                 title: "Docs pass",
                 detail: "README and setup guide updated for the new relay.",
                 agentId: nil,
-                agentName: "Writer"
+                agentName: "Writer",
+                kind: kind
             )
             return mixed
         }
-        if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-live-activity-finished"), let row = state.rows.first {
+        if DemoMode.isEnabled, options.contains("--demo-live-activity-finished"), let row = state.rows.first {
             var finished = state
             finished.rows = []
             finished.runningCount = 0
@@ -156,7 +160,8 @@ final class AgentLiveActivityController {
                 title: row.title,
                 detail: row.detail ?? "Reconnect storm fixed: retries now back off with jitter and the flaky test passes.",
                 agentId: row.agentId,
-                agentName: row.agentName
+                agentName: row.agentName,
+                kind: kind
             )
             return finished
         }
