@@ -51,7 +51,36 @@ struct WorkspaceControlGazeTests {
         let creation = try source("Intent/Views/Workspaces/CreateWorkspaceSelectionPage.swift")
         #expect(creation.contains("WorkspaceSearchButton("))
         #expect(!creation.contains("visionWorkspaceHover:"))
+    }
+
+    @Test func contentButtonsShowGazeFeedbackUnlessTheirContainerDrawsIt() throws {
         let style = try source("Intent/DesignSystem/IntentButtonStyle.swift")
-        #expect(!style.contains("hoverEffect"), "Do not enable gaze feedback globally for unrelated controls")
+        let content = try #require(style.components(separatedBy: "struct IntentContentButtonStyle: ButtonStyle {").dropFirst().first)
+            .components(separatedBy: "struct IntentIconButton:")[0]
+        #expect(content.contains(".visionButtonHover(isEnabled: isEnabled && !containerDrawsHover)"))
+        // Rows and shaped labels that draw their own highlight opt out, so
+        // a control never stacks two highlights.
+        let helpers = try source("Intent/DesignSystem/VisionHitTarget.swift")
+        for helper in ["func visionListRowHitTarget()", "func visionCardRowButton("] {
+            let body = try #require(helpers.components(separatedBy: helper).dropFirst().first)
+                .components(separatedBy: "#endif")[0]
+            #expect(body.contains(".visionContainerDrawsHover()"), "\(helper) must suppress the button style's highlight")
+        }
+        let search = try source("Intent/Views/Workspaces/WorkspaceSearchBar.swift")
+        #expect(search.contains(".visionContainerDrawsHover(visionWorkspaceHover)"))
+    }
+
+    @Test func gazeHelpersAreNoOpsOffVisionOS() throws {
+        let helpers = try source("Intent/DesignSystem/VisionHitTarget.swift")
+        let visionGuard = "#if os(" + "visionOS)"
+        for helper in ["func visionButtonHover(", "func visionHoverShape("] {
+            let body = try #require(helpers.components(separatedBy: helper).dropFirst().first)
+            let vision = try #require(body.components(separatedBy: visionGuard).dropFirst().first)
+                .components(separatedBy: "#else")[0]
+            #expect(vision.contains("hoverEffect"))
+            let fallback = try #require(body.components(separatedBy: "#else").dropFirst().first)
+                .components(separatedBy: "#endif")[0]
+            #expect(fallback.trimmingCharacters(in: .whitespacesAndNewlines) == "self")
+        }
     }
 }

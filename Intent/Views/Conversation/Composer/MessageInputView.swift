@@ -200,6 +200,7 @@ private extension MessageInputView {
                 .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .frame(minWidth: Constants.Conversation.Composer.controlTarget, minHeight: Constants.Conversation.Composer.controlTarget)
+                .visionHoverShape(Circle())
         }
         .buttonStyle(IntentContentButtonStyle())
         .requiresLiveConnection()
@@ -225,6 +226,7 @@ private extension MessageInputView {
                     minWidth: Constants.Conversation.Composer.controlTarget,
                     minHeight: Constants.Conversation.Composer.controlTarget
                 )
+                .visionHoverShape(Circle())
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Add attachment")
@@ -307,6 +309,7 @@ private extension MessageInputView {
                             minWidth: Constants.Conversation.Composer.controlTarget,
                             minHeight: Constants.Conversation.Composer.controlTarget
                         )
+                        .visionHoverShape(Circle())
                 }
                 .buttonStyle(IntentContentButtonStyle())
                 .disabled(!hasSendableContent)
@@ -350,6 +353,7 @@ private extension MessageInputView {
                     minWidth: Constants.Conversation.Composer.controlTarget,
                     minHeight: Constants.Conversation.Composer.controlTarget
                 )
+                .visionHoverShape(Circle())
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(dictation.isActive ? "Stop dictation" : "Dictate")
@@ -442,6 +446,7 @@ private extension MessageInputView {
                         .hoverEffect(.highlight)
                     }
                     .buttonStyle(IntentContentButtonStyle())
+                    .visionContainerDrawsHover()
                 }
             }
             .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptsHorizontalPadding)

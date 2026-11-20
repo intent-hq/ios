@@ -23,6 +23,8 @@ struct WorkspaceQuestionButtonStyle: ButtonStyle {
             .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: Design.Question.buttonHeight)
             .background(primary ? Design.Palette.accent : Design.Palette.raisedSurface(for: colorScheme))
             .clipShape(.rect(cornerRadius: Design.innerCornerRadius))
+            .visionHoverShape(.rect(cornerRadius: Design.innerCornerRadius))
+            .visionButtonHover(isEnabled: isEnabled)
             .frame(minWidth: Design.minimumTapTarget, minHeight: Design.minimumTapTarget)
             .contentShape(.rect)
             .opacity(isEnabled ? (configuration.isPressed ? Layout.pressedOpacity : 1) : Layout.disabledOpacity)

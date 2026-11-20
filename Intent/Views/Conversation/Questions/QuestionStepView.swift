@@ -92,6 +92,9 @@ struct QuestionStepView: View {
             ))
             .overlay(optionBorder(selected: selected))
             .contentShape(Rectangle())
+            .visionHoverShape(RoundedRectangle(
+                cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
+            ))
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(option.label)

@@ -127,6 +127,7 @@ struct QuestionWizardDismissButton: View {
                     minHeight: Constants.Accessibility.minimumTapTarget
                 )
                 .contentShape(Rectangle())
+                .visionHoverShape(Capsule())
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(dismissed)

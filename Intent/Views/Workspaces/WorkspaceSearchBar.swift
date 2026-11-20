@@ -55,6 +55,7 @@ struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: Vie
                         .visionWorkspaceControlHover(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius)
                 }
                 .buttonStyle(IntentContentButtonStyle())
+                .visionContainerDrawsHover()
                 .matchedGeometryEffect(id: mode, in: selectionAnimation)
                 .accessibilityAddTraits(viewMode == mode ? .isSelected : [])
                 .accessibilityIdentifier("\(identifierPrefix).\(mode.rawValue)")
@@ -108,8 +109,10 @@ struct WorkspaceSearchButton: View {
                 }
                 .visionWorkspaceControlHover(cornerRadius: Constants.WorkspaceSearch.cornerRadius, isEnabled: visionWorkspaceHover)
                 .accessibilityHidden(true)
+                .visionHoverShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
         }
         .buttonStyle(IntentContentButtonStyle())
+        .visionContainerDrawsHover(visionWorkspaceHover)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
@@ -148,6 +151,7 @@ struct WorkspaceSearchInput: View {
                     .background { WorkspaceSearchSurface(color: surfaceColor) }
                     .contentShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
                     .accessibilityHidden(true)
+                    .visionHoverShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Close search")
@@ -184,6 +188,7 @@ struct WorkspaceSearchInput: View {
                             : Constants.Pairing.mutedForeground(for: colorScheme))
                         .accessibilityHidden(true)
                         .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
+                        .visionHoverShape(Circle())
                 }
                 .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Clear search")

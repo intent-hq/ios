@@ -1,10 +1,16 @@
 import SwiftUI
 
 /// For controls whose labels own their layout and enabled/disabled colors.
+/// On visionOS it adds the gaze highlight the system styles would draw;
+/// labels shape it with `visionHoverShape(_:)`.
 struct IntentContentButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.visionContainerDrawsHover) private var containerDrawsHover
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? Constants.ConnectionSheet.pressedOpacity : 1)
+            .visionButtonHover(isEnabled: isEnabled && !containerDrawsHover)
     }
 }
 
@@ -31,6 +37,7 @@ struct IntentIconButton: View {
                 }
                 .contentShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
                 .accessibilityHidden(true)
+                .visionHoverShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(label)
@@ -86,6 +93,8 @@ struct IntentButtonStyle: ButtonStyle {
                     }
             }
             .contentShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+            .visionHoverShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+            .visionButtonHover(isEnabled: isEnabled)
     }
 
     private func foreground(for role: ButtonRole?) -> Color {

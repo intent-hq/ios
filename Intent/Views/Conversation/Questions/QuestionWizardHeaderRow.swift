@@ -86,6 +86,7 @@ struct QuestionWizardHeaderRow: View {
                     minWidth: Constants.Accessibility.minimumTapTarget,
                     minHeight: Constants.Accessibility.minimumTapTarget
                 )
+                .visionHoverShape(Capsule())
         }
         .buttonStyle(IntentContentButtonStyle())
     }

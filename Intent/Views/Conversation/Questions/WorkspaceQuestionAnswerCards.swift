@@ -74,6 +74,7 @@ private struct WorkspaceQuestionAnswerCard: View {
                     )
             }
             .contentShape(.rect)
+            .visionHoverShape(.rect(cornerRadius: Design.innerCornerRadius))
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(option.label)

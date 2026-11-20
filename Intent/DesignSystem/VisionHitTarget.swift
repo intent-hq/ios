@@ -17,7 +17,41 @@ extension Constants.WorkspaceSearch {
     }
 }
 
+extension EnvironmentValues {
+    /// True below a row or label that draws the gaze highlight itself, so
+    /// `IntentContentButtonStyle` does not stack a second one (visionOS).
+    @Entry var visionContainerDrawsHover = false
+}
+
 extension View {
+    /// visionOS gaze highlight for a custom-styled button (HIG: every
+    /// interactive element shows hover feedback). No-op elsewhere.
+    @ViewBuilder
+    func visionButtonHover(isEnabled: Bool = true) -> some View {
+        #if os(visionOS)
+        self.hoverEffect(.highlight, isEnabled: isEnabled)
+        #else
+        self
+        #endif
+    }
+
+    /// The visible shape the gaze highlight follows. Apply as the label's
+    /// last modifier so the button style's highlight picks it up. No-op
+    /// elsewhere.
+    @ViewBuilder
+    func visionHoverShape(_ shape: some Shape) -> some View {
+        #if os(visionOS)
+        self.contentShape(.hoverEffect, shape)
+        #else
+        self
+        #endif
+    }
+
+    /// Marks the buttons below as highlighted by this container on visionOS.
+    func visionContainerDrawsHover(_ drawsHover: Bool = true) -> some View {
+        environment(\.visionContainerDrawsHover, drawsHover)
+    }
+
     /// Apply inside each workspace control's label, after its frame, so the
     /// custom button style keeps a single, shaped gaze target per action.
     @ViewBuilder
@@ -42,6 +76,7 @@ extension View {
     func visionListRowHitTarget() -> some View {
         #if os(visionOS)
         return self
+            .visionContainerDrawsHover()
             .frame(minHeight: Constants.Accessibility.visionListRowMinimumHeight)
             .contentShape(Rectangle())
             .hoverEffect()
@@ -59,6 +94,7 @@ extension View {
         #if os(visionOS)
         return self
             .buttonStyle(IntentContentButtonStyle())
+            .visionContainerDrawsHover()
             .frame(minHeight: Constants.Accessibility.visionListRowMinimumHeight)
             .contentShape(.hoverEffect, .rect(cornerRadius: cornerRadius))
             .hoverEffect()
