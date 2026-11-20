@@ -2,8 +2,6 @@ import Combine
 import SwiftUI
 import UIKit
 
-/// Publishes the backend label through this view's own scene. Kept outside
-/// navigation and session identities so Home/rebinds update the same anchor.
 struct WindowSceneTitle: UIViewRepresentable {
     let title: String?
 
@@ -34,8 +32,6 @@ struct WindowSceneTitle: UIViewRepresentable {
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            // Transient removal need not erase the last published title;
-            // reattachment publishes the latest value to the new scene.
             titleObservation = nil
             scene = window?.windowScene
             observeTitle()
@@ -45,9 +41,6 @@ struct WindowSceneTitle: UIViewRepresentable {
         private func observeTitle() {
             titleObservation = nil
             guard title != nil, let scene else { return }
-            // SwiftUI reflects primary navigation titles into UIScene.title.
-            // Reassert the server label after those writes, leaving in-app
-            // navigation titles untouched. Equality prevents feedback loops.
             titleObservation = scene.publisher(for: \.title, options: [.new])
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.applyTitle() }

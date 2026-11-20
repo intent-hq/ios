@@ -2,39 +2,21 @@ import Combine
 import Foundation
 import Observation
 
-/// The connection surface a `BackendSession` owns: the routing seam the
-/// stores already depend on, plus the lifecycle, credential and certificate
-/// surfaces the coordinator and the connection views drive on their own
-/// session instead of a process-wide singleton.
-/// `ConnectionManager` conforms as-is; tests inject fakes.
 @MainActor
 protocol SessionConnectionManaging: ConnectionManagerRouting {
-    /// Settable so demo mode can mark the session connected without a socket.
     var connectionState: ConnectionState { get set }
-    /// Per-host certificate mismatches observed by the current race.
     var certMismatches: [HostCertMismatch] { get }
     var startupState: DaemonStartupState? { get }
-    /// Raised when a pinned certificate changed; the coordinator clears it
-    /// once it has routed to the failure screen.
     var certMismatchDetected: Bool { get set }
     var certMismatchPublisher: AnyPublisher<Bool, Never> { get }
-    /// Dialer used to probe a server certificate over a Tailcat tunnel.
     var tunnelDialer: any TunnelDialing { get }
-    /// Where the live socket's global event subscription stands; `.failed`
-    /// once its bounded retries are exhausted, which the window surfaces
-    /// with a retry action routed to `retryGlobalSubscription()` (ios#254).
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
-    /// Why automatic reconnection stopped for good; nil while it may recover.
     var reconnectStopReason: String? { get }
 
     var currentPrincipal: ConnectionPrincipal? { get }
-    /// The person last confirmed on a live connection, kept through a drop that
-    /// keeps reconnecting. For read-only navigation only, never for authority.
     var lastConnectedPrincipal: ConnectionPrincipal? { get }
     var admission: ConnectionAdmission? { get }
     var pairingAttemptID: UUID? { get }
-    /// Counts connect attempts started on this session, so a caller whose
-    /// connect was cancelled can tell whether a newer attempt replaced it.
     var connectAttemptCount: Int { get }
 
     func confirmedPrincipal() async throws -> ConnectionPrincipal
@@ -58,7 +40,6 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     )
     func refreshHostRoutes() async
     #if DEBUG
-    /// Debug-only: Release callers fail to compile.
     func connectDemo(serveFixtures: Bool)
     #endif
     func disconnect()
@@ -77,37 +58,20 @@ extension SessionConnectionManaging {
 
 extension ConnectionManager: SessionConnectionManaging {}
 
-/// One backend's runtime state: the connection plus the per-window stores
-/// and loaders from the spec's state split. Sessions are vended by
-/// `BackendSessionRegistry`; this type never reads process-wide singletons —
-/// the registry's live factory composes fresh per-backend instances (window
-/// model v2: every window is bound to exactly one backend; there is no
-/// default session).
 @MainActor
 @Observable
 final class BackendSession {
-    /// Builds a per-window coordinator bound to this session's connection and
-    /// stores. `claimScreenRestoration` is the coordinator's lazy hook into
-    /// `claimScreenRestoration()` below.
     typealias CoordinatorFactory =
         @MainActor (_ claimScreenRestoration: @escaping @MainActor () -> Bool) -> AppCoordinator
 
-    /// The backend this session is bound to; nil only for the transient
-    /// pairing session backing a window that has no backend yet (first run,
-    /// or a window unbound after its backend was removed).
     let backendID: BackendID?
     let connection: any SessionConnectionManaging
     let workspaceStore: WorkspaceStore
     let assistantStore: AssistantStore
-    /// Authoritative detail state shared by routes, conversations and proposal cards.
     let agentDetails: AgentDetailStore
     var agentSummaries: AgentSummaryStore { agentDetails.summaries }
     let conversations: ConversationStorePool
-    /// Session-lifetime GitHub repo cache for the New Workspace repo step;
-    /// outlives the sheet so a reopen renders the cached list instantly.
     let githubRepoStore: GitHubRepoStore
-    /// Session-lifetime specialist / provider / model cache for the New
-    /// Workspace final step; same reopen-instantly contract as the repo cache.
     let creationOptionsStore: CreationOptionsStore
     let hooksStore: WorkspaceStatusStore<BackgroundHook>
     let scriptMonitorsStore: WorkspaceScriptMonitorsStore
@@ -163,12 +127,6 @@ final class BackendSession {
         self.attentionCueCenter = attentionCueCenter
     }
 
-    /// A fresh coordinator for one window over this session. Windows sharing
-    /// the session share connection + stores but navigate independently
-    /// (spec "State split"); the coordinator claims last-screen restoration
-    /// lazily via `claimScreenRestoration()`.
-    /// `startingAtSavedMachines` skips the launch splash after an explicit
-    /// return Home, including in demo mode. No connection attempt is started.
     func makeCoordinator(startingAtSavedMachines: Bool = false) -> AppCoordinator {
         let coordinator = coordinatorFactory { [weak self] in
             self?.claimScreenRestoration() ?? false
@@ -186,10 +144,6 @@ final class BackendSession {
         return coordinator
     }
 
-    /// A pairing from `leaving`'s window dialed another daemon over this
-    /// session's shared connection, and that window is switching away. One
-    /// window that stays on this backend re-dials it; with none left, the
-    /// registry tears the session down when `leaving` detaches.
     func repairConnection(leaving: AppCoordinator?) {
         coordinators.removeAll { $0.value == nil }
         coordinators
@@ -198,18 +152,12 @@ final class BackendSession {
             .redialWindowBackend()
     }
 
-    /// Grants last-screen restoration to this session's first claimant only:
-    /// the first window on a backend restores that backend's saved screen;
-    /// duplicated windows start at the workspace list. Pairing sessions
-    /// (nil backendID) have no backend to restore.
     func claimScreenRestoration() -> Bool {
         guard backendID != nil, !screenRestorationClaimed else { return false }
         screenRestorationClaimed = true
         return true
     }
 
-    /// The window keeps these leases across conversation switches in its
-    /// selected workspace. Conversation/row leases share the exact same caches.
     func retainWorkspaceStatus(workspaceId: String, consumer: UUID) {
         hooksStore.retain(workspaceId: workspaceId, consumer: consumer)
         prMonitorsStore.retain(workspaceId: workspaceId, consumer: consumer)
@@ -226,8 +174,6 @@ final class BackendSession {
         prMonitorsStore.release(workspaceId: workspaceId, consumer: consumer)
     }
 
-    /// Disconnects the backend connection. Called by the registry when the
-    /// last window detaches from the session.
     func teardown() {
         creationOptionsStore.reset()
         hooksStore.reset()

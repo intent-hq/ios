@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// The workspace route keeps its identity as tools move its chat into the sidebar.
 struct IPadShellView: View {
-    /// Pages shift this far while fading, so a slow first frame cannot turn into a visible jump.
     static let pageParallax: CGFloat = 48
     private static let sidebarChatLayer = 1.5
     private static let workspaceLayer = 0.5
@@ -13,7 +11,6 @@ struct IPadShellView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @Environment(\.workspaceVerticalBarEdge) private var verticalBarEdge
-    /// Nil until measured, so a zero first width never drives the navigation layout.
     @State private var width: CGFloat?
     @State private var windowShortSide: CGFloat = .infinity
     @State private var topSafeArea: CGFloat = 0
@@ -128,12 +125,8 @@ struct IPadShellView: View {
                 .zIndex(1)
             sidebarPane
                 .padding(paneInsets)
-                // Retained, hidden sidebar containers must not cover detail controls
-                // in the accessibility hit-test order.
                 .zIndex(sidebarLayer)
             if isFocused {
-                // Keep the shade outside pane padding so it reaches the full
-                // window, including the status bar and the shell's outer gutter.
                 Color.black.opacity(IPadShellLayout.focusShadeOpacity)
                     .ignoresSafeArea()
                     .accessibilityHidden(true)
@@ -178,7 +171,6 @@ struct IPadShellView: View {
             }
         }
         .onChange(of: sidebarPresentation) { old, new in
-            // Layout changes (first measurement, rotation) must not move VoiceOver focus.
             if old.usesOverlay == new.usesOverlay, old.isVisible, !new.isVisible {
                 focusedPane = workspaceRouteVisible && !workspaceRouteInSidebar ? .workspace : .detail
             }
@@ -205,7 +197,6 @@ extension IPadShellView {
         .allowsHitTesting(!isFocused)
         .accessibilityHidden(isFocused)
         .padding(paneInsets)
-        // Keep normal navigation above native pane containers' hit regions.
         .zIndex(isFocused ? 0 : 2)
     }
 
@@ -282,7 +273,6 @@ extension IPadShellView {
             .frame(maxWidth: .infinity, alignment: isEditing ? .center : .leading)
     }
 
-    /// A drawer sits flush against the undimmed shell, so only its trailing edge is rounded.
     private var sidebarShape: UnevenRoundedRectangle {
         let radius = IPadShellLayout.cornerRadius
         let leading = navigation.usesSidebarOverlay && !workspaceSearchVisible ? 0 : radius
@@ -397,9 +387,7 @@ private extension IPadShellView {
     }
 }
 
-/// The workspaces sidebar swaps between the list and the open agent's or note's workspace page.
 extension IPadShellView {
-    /// A persistent sidebar beside the detail pane; drawers and compact windows keep the list.
     private var workspaceSidebarContent: WorkspaceSidebarContent {
         if let tool = navigation.mainTool { return .workspace(id: tool.workspaceId) }
         return WorkspaceSidebarContent.resolve(
@@ -408,8 +396,6 @@ extension IPadShellView {
         )
     }
 
-    /// The list stays mounted under a sidebar workspace, keeping its scroll position and search.
-    /// The two swap with a crossfade; nothing moves, so a slow first frame cannot read as a jump.
     private var workspacesSidebar: some View {
         ZStack {
             RetainedIPadPane(isVisible: workspaceSidebarContent == .workspaceList) {

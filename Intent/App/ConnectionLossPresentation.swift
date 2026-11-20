@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// Presentation only: transport state and the coordinator's recovery/data gate
-/// remain authoritative. A background scene cannot pre-present a new failure.
 @MainActor
 @Observable
 final class ConnectionLossPresentation {
@@ -47,16 +45,12 @@ final class ConnectionLossPresentation {
                 return
             }
             guard let self, !Task.isCancelled, phase == .grace(generation) else { return }
-            // Reconcile a recovery whose publisher delivery is still queued
-            // before making any pending loss visible.
             onDeadline()
             reset()
         }
     }
 
     func recovered() {
-        // Recovery while backgrounded still needs protection for a loss queued
-        // at reactivation. A real recovery during grace retires the deadline.
         if case .grace = phase { reset() }
     }
 

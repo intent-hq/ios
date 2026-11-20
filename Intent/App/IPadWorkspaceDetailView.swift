@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// The iPad routes directly within a stable pane; no split-view or size-class
-/// dependent push/re-push is needed to replace the selected conversation.
 struct IPadWorkspaceDetailView: View {
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
@@ -110,8 +108,6 @@ struct IPadWorkspaceDetailView: View {
         }
     }
 
-    /// A swipe shifts the overview toward the leading edge and its pages toward the trailing edge
-    /// while they fade; other navigation keeps the plain crossfade.
     private func pageTransition(isOverview: Bool) -> AnyTransition {
         guard isSwiping else { return .opacity }
         return .opacity.combined(with: .offset(x: isOverview ? -IPadShellView.pageParallax : IPadShellView.pageParallax))
@@ -156,7 +152,6 @@ struct IPadWorkspaceDetailView: View {
     }
 }
 
-/// The overview's top agent, which a forward swipe opens.
 nonisolated struct WorkspaceFirstAgent: Equatable, Sendable {
     let id: String
     let workspaceId: String
