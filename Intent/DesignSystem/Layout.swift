@@ -72,6 +72,7 @@ extension Constants.Conversation.Composer {
     static let pendingImageSide: CGFloat = 56
     static let pendingFileMaximumWidth: CGFloat = 200
     static let textContainerInset: CGFloat = 4
+
     #if os(visionOS)
     static let controlTarget: CGFloat = 60
     static let minimumTextViewHeight: CGFloat = controlTarget
@@ -246,6 +247,7 @@ extension Constants.WorkspaceRow {
     static let statusIconSize: CGFloat = 16
     static let statusGlyphScale: CGFloat = 0.5
     static let statusRingWidth: CGFloat = 2
+
     #if os(visionOS)
     static let attentionCueZOffset: CGFloat = 12
     static let attentionCueScale: CGFloat = 1.02
@@ -296,6 +298,7 @@ extension Constants.WorkspaceDetail {
     static let titleBottomPadding: CGFloat = 4
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
+
     #if os(visionOS)
     static let confirmationSheetSpacing: CGFloat = 16
     static let confirmationSheetPadding: CGFloat = 32

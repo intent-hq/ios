@@ -113,6 +113,7 @@ import os
     @ObservationIgnored private(set) var certFingerprint: String?
     @ObservationIgnored private(set) var tcAddress: String?
     @ObservationIgnored var activeTunnel: (any TunnelSession)?
+
     #if canImport(TailcatKit)
     @ObservationIgnored var tunnelDialer: any TunnelDialing = TailcatTunnelDialer()
     #else

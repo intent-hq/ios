@@ -31,6 +31,7 @@ struct QuestionStepView: View {
     )
 
     private typealias Layout = Constants.Conversation.QuestionWizard.Step
+
     private static let textContainerVerticalInsetMultiplier: CGFloat = 2
 
     var body: some View {
