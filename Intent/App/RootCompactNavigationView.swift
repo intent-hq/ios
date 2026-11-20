@@ -198,10 +198,6 @@ extension RootView {
         !repushInFlight
     }
 
-    /// Guard for the deferred iPad conversation re-push scheduled by the
-    /// tear-down/re-push branch in `syncNavigationState()`. Only re-push when
-    /// the coordinator is still showing the same conversation; if the user has
-    /// navigated back in the meantime, the re-push must be dropped.
     static func shouldRepushConversation(
         currentScreen: AppScreen,
         pendingAgentId: String,

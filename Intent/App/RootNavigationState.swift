@@ -1,21 +1,15 @@
 import SwiftUI
 
-/// Explicit presentation state for `RootView`'s compact and regular-split
-/// navigation stacks, replacing 12 parallel Boolean and empty-string `@State`
-/// properties with mutually exclusive phase enums and typed targets.
 struct RootNavigationState {
     enum ConversationPhase: Equatable {
         case hidden
-        /// Workspace detail is mounting first; push once `showingWorkspaceDetail` settles.
         case pendingAfterWorkspaceDetail
         case presented
-        /// Regular-width `NavigationStack` is tearing down to re-push on the next runloop tick.
         case repushing
     }
 
     enum CompactNotePhase: Equatable {
         case hidden
-        /// Workspace detail is mounting first; push once `showingWorkspaceDetail` settles.
         case pendingAfterWorkspaceDetail
         case presented
     }
