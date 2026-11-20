@@ -10,6 +10,7 @@ nonisolated struct AgentActivityRow: Codable, Hashable, Identifiable, Sendable {
     let detail: String?
     let agentId: String?
     let agentName: String?
+    var kind: AgentActivityNoticeKind?
 
     var id: String { "\(connectionId.uuidString)/\(workspaceId)" }
 
@@ -21,6 +22,18 @@ nonisolated struct AgentActivityRow: Codable, Hashable, Identifiable, Sendable {
             agentId: agentId,
             agentName: agentName ?? "Agent"
         )
+    }
+}
+
+/// The relay's notice kind on a finished row. Kinds this build does not know
+/// decode as `.finished`, so a newer relay never breaks the card.
+nonisolated enum AgentActivityNoticeKind: String, Codable, Hashable, Sendable {
+    case finished
+    case needsAttention = "needs_attention"
+    case reviewRequired = "review_required"
+
+    init(from decoder: any Decoder) throws {
+        self = Self(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .finished
     }
 }
 

@@ -32,6 +32,28 @@ enum AgentActivityStyle {
     }
 }
 
+extension AgentActivityNoticeKind {
+    var symbol: String {
+        switch self {
+        case .finished: "checkmark"
+        case .needsAttention: "exclamationmark"
+        case .reviewRequired: "eye"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .finished: "Finished"
+        case .needsAttention: "Needs your input"
+        case .reviewRequired: "Ready for review"
+        }
+    }
+}
+
+extension AgentActivityRow {
+    var noticeKind: AgentActivityNoticeKind { kind ?? .finished }
+}
+
 enum AgentActivityRowStyle {
     case finished
     case running
@@ -120,7 +142,9 @@ struct AgentActivityRowView: View {
         HStack(alignment: .firstTextBaseline, spacing: AgentActivityStyle.rowSpacing) {
             Group {
                 if style != .running {
-                    AgentActivityCheck()
+                    // The text says what the agent waits for; only the check needs its own label.
+                    AgentActivityNoticeMark(kind: row.noticeKind)
+                        .accessibilityHidden(row.noticeKind != .finished)
                 } else {
                     Circle()
                         .fill(AgentActivityStyle.running)
@@ -131,7 +155,7 @@ struct AgentActivityRowView: View {
             .frame(width: AgentActivityStyle.markerWidth)
             VStack(alignment: .leading, spacing: AgentActivityStyle.rowTextSpacing) {
                 if style == .summary {
-                    Text(row.detail ?? "Finished")
+                    Text(summary)
                         .font(.subheadline)
                         .lineLimit(showsDetail ? AgentActivityStyle.summaryLines : AgentActivityStyle.compactSummaryLines)
                 } else {
@@ -139,8 +163,8 @@ struct AgentActivityRowView: View {
                         .font(.subheadline.weight(.medium))
                         .lineLimit(1)
                 }
-                if showsDetail, style != .summary, let detail = row.detail {
-                    Text(detail)
+                if let caption {
+                    Text(caption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -150,14 +174,32 @@ struct AgentActivityRowView: View {
         }
         .accessibilityElement(children: .combine)
     }
+
+    private var summary: String {
+        guard row.noticeKind == .finished else { return row.noticeKind.label }
+        return row.detail ?? row.noticeKind.label
+    }
+
+    private var caption: String? {
+        switch style {
+        case .summary:
+            return row.noticeKind == .finished || !showsDetail ? nil : row.detail
+        case .finished where row.noticeKind != .finished:
+            return row.noticeKind.label
+        case .finished, .running:
+            return showsDetail ? row.detail : nil
+        }
+    }
 }
 
-struct AgentActivityCheck: View {
+struct AgentActivityNoticeMark: View {
+    var kind: AgentActivityNoticeKind = .finished
+
     var body: some View {
-        Image(systemName: "checkmark")
+        Image(systemName: kind.symbol)
             .font(.caption.weight(.bold))
             .foregroundStyle(AgentActivityStyle.running)
-            .accessibilityLabel("Finished")
+            .accessibilityLabel(kind.label)
     }
 }
 
@@ -179,7 +221,7 @@ struct AgentActivityCompactCount: View {
 
     var body: some View {
         if state.isAllFinished {
-            AgentActivityCheck()
+            AgentActivityNoticeMark(kind: state.finished?.noticeKind ?? .finished)
         } else {
             Text("\(state.runningCount)")
                 .font(.subheadline.weight(.semibold).monospacedDigit())
