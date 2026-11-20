@@ -87,42 +87,46 @@ def _string_end(src: str, start: int, spans: list[tuple[int, int]] | None = None
     raise LexError("unclosed string literal")
 
 
+def _blank(code: list[str], start: int, end: int) -> None:
+    for index in range(start, end):
+        if code[index] != "\n":
+            code[index] = " "
+
+
 def _interpolation_end(src: str, opener: int, spans: list[tuple[int, int]] | None = None, code: list[str] | None = None) -> int:
-    """Scan an interpolation as Swift code: nested literals (strings and
-    regexes) and comments are skipped lexically, and comments are recorded in
-    `spans`."""
+    """Scan an interpolation as Swift code, like `comment_spans`: nested
+    literals (strings and regexes) and comments are skipped lexically and
+    blanked in `code`, so a later bare regex sees the real preceding token,
+    and comments are recorded in `spans`."""
     if code is None:
         code = list(src)
     depth, index = 0, opener
     while index < len(src):
-        literal = _regex_end(src, index, code)
-        if literal is not None:
-            index = literal
-            continue
+        start = index
         if src.startswith("//", index):
             newline = src.find("\n", index)
-            end = len(src) if newline < 0 else newline
+            index = len(src) if newline < 0 else newline
             if spans is not None:
-                spans.append((index, end))
-            index = end
-            continue
-        if src.startswith("/*", index):
-            end = _block_end(src, index)
+                spans.append((start, index))
+        elif src.startswith("/*", index):
+            index = _block_end(src, index)
             if spans is not None:
-                spans.append((index, end))
-            index = end
-            continue
-        literal = _string_end(src, index, spans, code)
-        if literal is not None:
+                spans.append((start, index))
+        else:
+            literal = _regex_end(src, index, code)
+            if literal is None:
+                literal = _string_end(src, index, spans, code)
+            if literal is None:
+                if src[index] == "(":
+                    depth += 1
+                elif src[index] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        return index + 1
+                index += 1
+                continue
             index = literal
-            continue
-        if src[index] == "(":
-            depth += 1
-        elif src[index] == ")":
-            depth -= 1
-            if depth == 0:
-                return index + 1
-        index += 1
+        _blank(code, start, index)
     raise LexError("unclosed interpolation")
 
 
