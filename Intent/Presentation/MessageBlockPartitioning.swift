@@ -148,10 +148,47 @@ enum MessageBlockPartitioning {
 
     static func groupContentBlocks(
         _ blocks: [ContentBlock],
-        isStreaming: Bool = false
+        isStreaming: Bool = false,
+        collapseToolActivity: Bool = false
     ) -> [RenderBlock] {
         var partitioner = GroupContentBlockPartitioner(isStreaming: isStreaming)
-        return partitioner.partition(blocks)
+        let rows = partitioner.partition(blocks)
+        return collapseToolActivity ? collapsingToolActivity(in: rows) : rows
+    }
+
+    private static func collapsingToolActivity(in rows: [RenderBlock]) -> [RenderBlock] {
+        var result: [RenderBlock] = []
+        var run: [ContentBlock] = []
+
+        func finishRun() {
+            guard let first = run.first else { return }
+            let tools = run.count { $0.type == .toolUse }
+            let thinking = run.count { block in
+                block.type == .thinking && block.resolvedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            }
+            if tools + thinking >= 2 {
+                result.append(.group(ResponseGroup(
+                    id: "\(first.id)#tool-activity",
+                    name: "",
+                    children: run,
+                    activity: .init(tools: tools, thinking: thinking)
+                )))
+            } else {
+                result.append(contentsOf: run.map(RenderBlock.contentBlock))
+            }
+            run.removeAll(keepingCapacity: true)
+        }
+
+        for row in rows {
+            if case .contentBlock(let block) = row, block.isToolActivity {
+                run.append(block)
+            } else {
+                finishRun()
+                result.append(row)
+            }
+        }
+        finishRun()
+        return result
     }
 
     private struct ActiveResponseGroup {

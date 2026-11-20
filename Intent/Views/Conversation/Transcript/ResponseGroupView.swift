@@ -1,9 +1,25 @@
 import SwiftUI
 
 struct ResponseGroup: Identifiable, Equatable {
+    struct Activity: Equatable {
+        let tools: Int
+        let thinking: Int
+
+        var label: String {
+            let toolsLabel = tools == 1 ? String(localized: "1 tool call") : String(localized: "\(tools) tool calls")
+            let thinkingLabel = thinking == 1
+                ? String(localized: "1 thinking step")
+                : String(localized: "\(thinking) thinking steps")
+            if tools == 0 { return thinkingLabel }
+            if thinking == 0 { return toolsLabel }
+            return String(localized: "\(toolsLabel) · \(thinkingLabel)")
+        }
+    }
+
     let id: String
     let name: String
     let children: [ContentBlock]
+    var activity: Activity?
 
     var toolCallCount: Int {
         children.filter { $0.type == .toolUse }.count
@@ -22,8 +38,10 @@ enum RenderBlock: Identifiable {
     }
 
     var isToolActivity: Bool {
-        if case .contentBlock(let block) = self { return block.isToolActivity }
-        return false
+        switch self {
+        case .contentBlock(let block): block.isToolActivity
+        case .group(let group): group.activity != nil
+        }
     }
 }
 
@@ -68,9 +86,10 @@ struct ResponseGroupBody: View, Equatable {
     @ScaledMetric(relativeTo: .caption) private var groupIconSide: CGFloat = 12
     @ScaledMetric(relativeTo: .caption2) private var disclosureIconSide: CGFloat = 11
     var disclosure = TranscriptDisclosure()
+    private var expandsByDefault: Bool { isLast && group.activity == nil }
     private var isExpanded: Bool {
-        get { disclosure.binding(for: .group(group.id), default: isLast).wrappedValue }
-        nonmutating set { disclosure.binding(for: .group(group.id), default: isLast).wrappedValue = newValue }
+        get { disclosure.binding(for: .group(group.id), default: expandsByDefault).wrappedValue }
+        nonmutating set { disclosure.binding(for: .group(group.id), default: expandsByDefault).wrappedValue = newValue }
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -109,8 +128,8 @@ struct ResponseGroupBody: View, Equatable {
             headerButton
             groupContent
         }
-        .padding(.bottom, Layout.bottomPadding)
-        .onAppear { disclosure.initialize(.group(group.id), default: isLast) }
+        .padding(.bottom, group.activity == nil ? Layout.bottomPadding : 0)
+        .onAppear { disclosure.initialize(.group(group.id), default: expandsByDefault) }
     }
 
     private var headerButton: some View {
@@ -129,7 +148,7 @@ struct ResponseGroupBody: View, Equatable {
 
     @ViewBuilder
     private var headerLabel: some View {
-        if workspaceDesign {
+        if workspaceDesign || group.activity != nil {
             HStack(spacing: Design.Transcript.toolLabelSpacing) {
                 Image(.fileList)
                     .renderingMode(.template)
@@ -137,11 +156,11 @@ struct ResponseGroupBody: View, Equatable {
                     .scaledToFit()
                     .frame(width: Design.toolIconSize, height: Design.toolIconSize)
                     .accessibilityHidden(true)
-                Text(group.name)
+                Text(group.activity?.label ?? group.name)
                     .interFont(Constants.Typography.bodyS)
                     .tracking(Design.Typography.bodyTracking)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if group.toolCallCount > 0 {
+                if group.activity == nil, group.toolCallCount > 0 {
                     Text("\(group.toolCallCount)")
                         .interFont(Constants.Typography.bodyXS)
                 }
@@ -149,6 +168,7 @@ struct ResponseGroupBody: View, Equatable {
             }
             .foregroundStyle(isExpanded ? Design.Palette.foreground(for: colorScheme)
                 : Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
+            .opacity(collapsedHeaderOpacity)
             .frame(minHeight: Design.minimumTapTarget)
             .contentShape(Rectangle())
         } else {
@@ -183,6 +203,11 @@ struct ResponseGroupBody: View, Equatable {
         }
     }
 
+    private var collapsedHeaderOpacity: Double {
+        guard group.activity != nil, !isExpanded, contrast == .standard else { return 1 }
+        return colorScheme == .dark ? Layout.collapsedSummaryDarkOpacity : Layout.collapsedSummaryLightOpacity
+    }
+
     @ViewBuilder
     private var groupContent: some View {
         if isExpanded {
@@ -190,7 +215,7 @@ struct ResponseGroupBody: View, Equatable {
                 .padding(.leading, workspaceDesign ? Design.Transcript.expandedContentIndent : Layout.contentIndent)
                 .overlay(alignment: .leading) { if !workspaceDesign { contentRail } }
                 .transition(.opacity.combined(with: .move(edge: .top)))
-        } else {
+        } else if group.activity == nil {
             collapsedGroupContent
         }
     }

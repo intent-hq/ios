@@ -140,6 +140,8 @@ extension Constants.Conversation.ResponseGroup {
     static let countHorizontalPadding: CGFloat = 5
     static let countVerticalPadding: CGFloat = 1
     static let disclosureOpacity: Double = 0.4
+    static let collapsedSummaryLightOpacity: Double = 0.85
+    static let collapsedSummaryDarkOpacity: Double = 0.9
     static let headerVerticalPadding: CGFloat = 4
     static let railOpacity: Double = 0.15
     static let bottomPadding: CGFloat = 8

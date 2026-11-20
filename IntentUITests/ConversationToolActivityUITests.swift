@@ -50,6 +50,7 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
         for appearance in ["light", "dark"] {
             openTools(in: app, appearance: appearance, scenario: "claude-tools")
             let transcript = app.scrollViews["transcript.scrollView"].firstMatch
+            openToolSummary("2 tool calls", in: transcript)
             let loading = transcript.buttons["Loading tools"]
             let find = transcript.buttons["Find src/**/*.swift"]
             assertCollapsedRows([loading, find], in: transcript)
@@ -94,6 +95,11 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
         let rows = Self.toolLabels.map { transcript.buttons[$0] }
+        let summary = transcript.buttons["3 tool calls"]
+        XCTAssertTrue(summary.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertFalse(rows[0].exists)
+        capture(app, name: "iPad tools summary \(appearance)")
+        openToolSummary("3 tool calls", in: transcript)
         for row in rows {
             XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         }
@@ -121,6 +127,30 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: Self.timeout) { read.value as? String == "Collapsed" })
         XCTAssertTrue(output.waitForNonExistence(timeout: Self.timeout), "Collapsing must hide the paired output again")
         assertCollapsedRows(rows, in: transcript)
+
+        toggleToolActivity(in: app)
+        XCTAssertTrue(summary.waitForNonExistence(timeout: Self.timeout))
+        assertCollapsedRows(rows, in: transcript)
+        toggleToolActivity(in: app)
+        XCTAssertTrue(summary.waitForExistence(timeout: Self.timeout))
+        summary.tap()
+        XCTAssertTrue(rows[0].waitForNonExistence(timeout: Self.timeout))
+    }
+
+    @MainActor
+    private func openToolSummary(_ label: String, in transcript: XCUIElement) {
+        let summary = transcript.buttons[label]
+        XCTAssertTrue(summary.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertEqual(summary.value as? String, "Collapsed")
+        summary.tap()
+    }
+
+    @MainActor
+    private func toggleToolActivity(in app: XCUIApplication) {
+        app.buttons["conversation.actions.open"].tap()
+        let toggle = app.descendants(matching: .any)["conversation.actions.collapseToolActivity"].firstMatch
+        XCTAssertTrue(toggle.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        toggle.tap()
     }
 
     @MainActor

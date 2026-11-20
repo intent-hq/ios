@@ -4,7 +4,7 @@
 
 ## Context
 
-Demo mode (`--demo-data`) runs the app on fixture data with ephemeral storage and no pairing. UI tests, App Store screenshots and hands-on checks use it. Demo code must never reach a Release build, must test the real production paths, and must not change the screens that screenshots and older tests depend on. [ADR 0101](0101-demo-fixtures-contract.md) records the fixture wire contract; this record holds the boundaries around it.
+Demo mode (`--demo-data`) runs the app on fixture data with ephemeral storage and no pairing. UI tests, App Store screenshots and hands-on checks use it. Demo code must never reach a Release build, must test the real production paths, and must not change the screens that screenshots and older tests depend on. [ADR 0059](0059-demo-fixtures-contract.md) records the fixture wire contract; this record holds the boundaries around it.
 
 ## Decision
 

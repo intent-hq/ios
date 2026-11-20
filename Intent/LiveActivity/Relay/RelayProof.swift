@@ -3,6 +3,7 @@ import Foundation
 
 nonisolated protocol RelaySigner: Sendable {
     var publicKeyX963: Data { get }
+
     func sign(_ message: Data) throws -> Data
 }
 

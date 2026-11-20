@@ -4,7 +4,7 @@
 
 ## Context
 
-ADR 0071 and ADR 0113 decide when the blocking "Can't reconnect" screen and the read-only banner show. This record covers how they are presented and how controls behave while the Mac connection is lost.
+ADR 0071 and ADR 0095 decide when the blocking "Can't reconnect" screen and the read-only banner show. This record covers how they are presented and how controls behave while the Mac connection is lost.
 
 ## Decision
 

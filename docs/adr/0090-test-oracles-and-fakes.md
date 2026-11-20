@@ -25,7 +25,7 @@ Many unit tests check that the app matches another implementation: the desktop a
    1. To prove that a second call joins an in-flight one, the second task sets a main-actor mark as its first statement. Same-actor calls do not suspend before the join's `await`, so the mark proves the join happened before the first read resolves.
    2. Before the final count, a test resolves every suspended request and answers later ones at once. A regression then fails the count; it does not hang the suite.
    3. The coordinator's connection sink delivers on the main queue, and main-actor tasks enqueue on the same serial queue. One round trip through the main queue (`awaitMainQueueTurn()`) therefore drains a delivery.
-   4. Timeout tests poll the production timeout with a bounded wait ([ADR 0104](0104-test-synchronization-and-fakes.md)). A negative check watches past the timeout, so a stale timeout fails the moment it clears the overlay.
+   4. Timeout tests poll the production timeout with a bounded wait ([ADR 0077](0077-test-synchronization-and-fakes.md)). A negative check watches past the timeout, so a stale timeout fails the moment it clears the overlay.
    5. To assert a transient "reconnecting" state, the recovery fixture server parks admission replies (`client.hello`, `principal.me`) with `holdHandshakes()`. No replacement can be adopted until `releaseHandshakes()`, however fast it dials, so the assertion cannot race a fast recovery (ios#261, `awaitParkedReplacement(on:timeout:sourceLocation:after:)`).
    6. The loopback pairing server retains every accepted `NWConnection` for its lifetime. An unreferenced `NWConnection` deallocates and drops the socket.
 

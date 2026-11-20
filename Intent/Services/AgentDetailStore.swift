@@ -33,6 +33,7 @@ enum AgentDetailError: LocalizedError {
 final class AgentDetailStore {
     let summaries = AgentSummaryStore()
     @ObservationIgnored private let requestLimiter = AgentDetailRequestLimiter()
+
     nonisolated private final class LoadInterest: Sendable {
         let activation: Int?
         private let cancelled = Mutex(false)

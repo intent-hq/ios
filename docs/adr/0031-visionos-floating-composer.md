@@ -21,7 +21,7 @@ On visionOS the chat composer floats in a glass ornament below the window. A win
    4. `FloatingComposerLifecycle` is the one state machine for these transitions. The modifier and the unit tests use the same code. `.onDisappear` followed by `.onChange` cancels a photo import once, never twice.
 4. **Geometry.** The ornament width tracks the chat column, between `minimumWidth` and `maximumWidth`, and is never wider than the column. The glass corner radius is the field capsule radius plus the row padding and `contentInset`, so the curves stay concentric. The ornament hangs below the window's bottom edge (`.scene(.bottom)`).
 5. **Launcher clearance.** `questionRegionLauncherTop(…)` reports the top edge that the workspace action launcher must stay above. Inline hosts report it only when the question slot replaces the composer. With a floating composer, the question region and the status rows above it are the lowest in-window controls, so the launcher stays above them. An empty region reports nothing rather than a stale top.
-6. **Dictation.** visionOS dictation is an app-owned Speech session that inserts at the caret (`caretOffset`). [ADR 0102](0102-dictation-merge-rules.md) has the merge rules.
+6. **Dictation.** visionOS dictation is an app-owned Speech session that inserts at the caret (`caretOffset`). [ADR 0075](0075-dictation-merge-rules.md) has the merge rules.
    1. `isActive` includes the start window. A second tap while permission prompts are open cancels the start before any audio.
    2. The view tracks the committed insertion point, because programmatic text changes do not always fire a selection change.
    3. When the text changes outside dictation (typing, or a send that clears it), that edit wins and dictation stops.
