@@ -1,8 +1,6 @@
 @testable import Intent
 import Testing
 
-// MARK: - Identity keys + access group
-
 struct SyncedBackendIdentityTests {
     private func record(fingerprint: String, host: String = "H", port: Int = 1)
         -> SyncedBackendRecord {

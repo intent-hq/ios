@@ -34,6 +34,9 @@ Some repository rules cannot be left to SwiftLint alone, because a lint rule can
 4. **Platform guards.** `#if os(visionOS)` and `#if canImport(TailcatKit)` may appear only in the files that `PlatformGuardAllowlistTests` lists. Adding or removing a guard anywhere else is a deliberate change to that list. The patterns allow whitespace inside the parentheses, so a spaced spelling cannot bypass the scan, and the test writes its own spellings so that its packaged copy does not match itself.
 5. **Negative cases.** Each scanning test also runs on a small fixture tree and must report exactly the fixture's matches. A pass then proves the tree's contents, not an empty or unreadable scan.
 6. **Code only.** The privacy-manifest scan blanks comments and string literals before it matches, so prose cannot stand in for a call. A literal that interpolates an expression is kept, because the expression is code.
+7. **Shared lexer.** `SwiftSourceLexer.blankingLiterals(_:)` replaces comment, string (interpolations included) and regex literal bytes with spaces and keeps newlines, so offsets and line numbers survive. It reports `isReliable == false` when a literal or comment never closes. Bracket-pairing scans such as `CopyContextMenuButtonScanner` run on the blanked code.
+8. **State flag budget.** `StateFlagBudgetPolicyTests` counts stored Bool flags and optional `Task` handles per app type, including nested types and types declared in extensions. Several flags that move together usually form an implicit state machine that belongs in an enum. The baseline only goes down.
+9. **Shape isolation (ios#291).** `Shape` conformers are `nonisolated`: SDK 27 declares `Shape` and `path(in:)` nonisolated, so an implicitly main-actor conformer no longer compiles. `ShapeIsolationTests` is itself nonisolated and pins each shape's geometry, so the isolation change cannot alter rendering. Xcode 26 accepts both forms, so the suite is a geometry pin, not a toolchain guard.
 
 ## Consequences
 
@@ -43,5 +46,6 @@ Some repository rules cannot be left to SwiftLint alone, because a lint rule can
 
 - `LayoutPolicyTests`: `reader`, `suppression`
 - `ObjCCallbackIsolationTests`: `threadHoppingCallbackAPIs`, `callSiteIsSafe`
-- `PlatformGuardAllowlistTests`, `PrivacyManifestDriftTests`
+- `PlatformGuardAllowlistTests`, `PrivacyManifestDriftTests`, `StateFlagBudgetPolicyTests`, `ShapeIsolationTests`
+- `SwiftSourceLexer`: `blankingLiterals(_:)`
 - `TestSourceInputs`

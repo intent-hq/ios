@@ -3,8 +3,6 @@ import Testing
 
 @testable import Intent
 
-/// Merge matrix for `SyncedBackendConnectionMerge`: new/newer/older/tombstone/
-/// absent records, fingerprint vs host:port matching, token rotation.
 struct SyncedBackendConnectionMergeTests {
     enum RecordHosts: ExpressibleByArrayLiteral {
         case primaryHost
@@ -70,8 +68,6 @@ struct SyncedBackendConnectionMergeTests {
         )
     }
 
-    // MARK: - New records
-
     @Test func newRecordIsAddedWithTokenFingerprintAndClock() {
         let result = SyncedBackendConnectionMerge.merge(records: [record()], into: [])
         #expect(result.connections.count == 1)
@@ -102,8 +98,6 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func fingerprintlessNewRecordIsNeverAdded() {
-        // Without a pinned cert the connection would fall back to plain
-        // ws:// and leak the synced token — such records must not be adopted.
         for fingerprint in ["", "   "] {
             let result = SyncedBackendConnectionMerge.merge(
                 records: [record(fingerprint: fingerprint)],
@@ -115,13 +109,10 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func malformedHostsAreDroppedAndHostlessRecordsAreNeverAdded() {
-        // Registry host strings are untrusted; raceHosts force-unwraps
-        // URL(string:), so a malformed host must never survive the merge.
         let mixed = record(host: "10.0.0.1", hosts: ["10.0.0.1", "bad host", "mac.local"])
         let result = SyncedBackendConnectionMerge.merge(records: [mixed], into: [])
         #expect(result.connections.map(\.server.hosts) == [["10.0.0.1", "mac.local"]])
 
-        // A record with NO usable host cannot be connected to: skip it.
         let hostless = record(host: "spaces in host", hosts: ["also/bad", "with spaces"])
         #expect(!SyncedBackendConnectionMerge.merge(records: [hostless], into: []).changed)
     }
@@ -142,9 +133,6 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func usableHostRejectsMalformedDnsLabelsAndIPv4Octets() {
-        // ios#341: the character allowlist alone admitted `a..b`, `-bad` and
-        // `999.999.999.999`. Names need DNS label structure; all-numeric
-        // dotted names must be real IPv4 literals.
         let label63 = String(repeating: "a", count: 63)
         let label64 = label63 + "a"
         let name253 = ([String](repeating: label63, count: 3) + [String(repeating: "b", count: 61)])
@@ -168,9 +156,6 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func caseVariantDuplicateHostsCollapseToTheFirstSpelling() {
-        // ios#341: DNS names and IPv6 hex are case-insensitive; `HOST.local`
-        // and `host.local` must not persist as separate routes. The first
-        // spelling seen is kept, so user-facing spelling/order is unchanged.
         let synced = record(
             host: "HOST.local",
             hosts: ["HOST.local", "host.local", "Host.Local", "[2001:DB8::1]", "2001:db8::1", "10.0.0.1"]
@@ -180,8 +165,6 @@ struct SyncedBackendConnectionMergeTests {
         let result = SyncedBackendConnectionMerge.merge(records: [synced], into: [])
         #expect(result.connections.map(\.server.hosts) == [["HOST.local", "[2001:DB8::1]", "10.0.0.1"]])
 
-        // A newer record whose spelling differs only by case adds no route
-        // next to the local one.
         let existing = local(hosts: ["Host.Local", "192.168.1.2"], syncUpdatedAt: 50)
         let updated = SyncedBackendConnectionMerge.merge(
             records: [record(host: "host.local", hosts: ["host.local", "192.168.1.2"], updatedAt: 100)],
@@ -192,17 +175,11 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func unusableEntriesNeverMaskUsableSpellingsOfTheSameHost() {
-        // Review finding on ios#341: a padded primary is unusable (spaces)
-        // but trims to the same dedup key as the clean fallback. Validation
-        // must run before dedup so the fallback survives; malformed input
-        // is never trimmed into acceptance.
         let padded = record(host: " MAC.local ", hosts: [" mac.local", "mac.local", " 2001:db8::1 ", "2001:db8::1"])
         #expect(SyncedBackendConnectionMerge.candidateHosts(of: padded) == ["mac.local", "[2001:db8::1]"])
         let added = SyncedBackendConnectionMerge.merge(records: [padded], into: [])
         #expect(added.connections.map(\.server.hosts) == [["mac.local", "[2001:db8::1]"]])
 
-        // Same on the update path: the newer record's clean route reaches
-        // the existing connection.
         let existing = local(hosts: ["10.0.0.1"], syncUpdatedAt: 50)
         let updated = SyncedBackendConnectionMerge.merge(
             records: [record(host: " MAC.local ", hosts: ["mac.local", "10.0.0.1"], updatedAt: 100)],
@@ -212,9 +189,6 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func rawIPv6LiteralsAreBracketNormalizedNotDropped() {
-        // intentd advertises RAW unbracketed IPv6 strings in pairing/registry
-        // hosts (collect_local_ipv6s emits e.g. "2001:db8::1"); they must be
-        // bracket-normalized for URL embedding, not silently dropped.
         #expect(SyncedBackendConnectionMerge.usableHost("2001:db8::1") == "[2001:db8::1]")
         #expect(SyncedBackendConnectionMerge.usableHost("::1") == "[::1]")
 
@@ -224,8 +198,6 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func fingerprintlessRecordStillUpdatesExistingFingerprintlessLocal() {
-        // The host:port fallback still applies: a record the user paired on
-        // this device (fingerprint-less local) keeps receiving updates.
         let existing = local(fingerprint: nil)
         let result = SyncedBackendConnectionMerge.merge(
             records: [record(fingerprint: "", token: "tok-new", updatedAt: 200)],
@@ -235,9 +207,6 @@ struct SyncedBackendConnectionMergeTests {
         #expect(result.connections[0].token == "tok-new")
     }
 
-    /// ios#251: merging a pin-less record into a pin-less legacy local keeps
-    /// the record (name, hosts, port intact) but never fabricates a pin, so
-    /// the connection stays refused by transport admission until re-paired.
     @Test func fingerprintlessMergeNeverMakesLegacyLocalConnectable() throws {
         let existing = local(fingerprint: nil)
         let result = SyncedBackendConnectionMerge.merge(
@@ -259,8 +228,6 @@ struct SyncedBackendConnectionMergeTests {
         }
     }
 
-    /// A pinned local is never downgraded: a pin-less record at the same
-    /// address does not match it, so its pin (and connectability) survive.
     @Test func fingerprintlessRecordNeverStripsPinFromPinnedLocal() {
         let existing = local(fingerprint: "aa:bb")
         let result = SyncedBackendConnectionMerge.merge(
@@ -283,8 +250,6 @@ struct SyncedBackendConnectionMergeTests {
         #expect(SyncedBackendConnectionMerge.displayName(for: withHostname) == "mac-studio.local")
     }
 
-    // MARK: - LWW updates
-
     @Test func newerRecordOverwritesRotatedTokenAndFields() {
         let existing = local(syncUpdatedAt: 100)
         let newer = record(label: "Renamed", host: "10.9.9.9", token: "tok-rotated", updatedAt: 200)
@@ -298,8 +263,6 @@ struct SyncedBackendConnectionMergeTests {
         #expect(updated.syncUpdatedAt == 200)
     }
 
-    /// Legacy registry records carry no tunnel address; a registry-driven
-    /// rewrite must keep the locally learned one.
     @Test func newerRecordPreservesLocalTcAddress() {
         let existing = local(syncUpdatedAt: 100, tcAddress: "tc-local-tunnel")
         let newer = record(token: "tok-rotated", updatedAt: 200)
@@ -321,9 +284,6 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func neverSyncedLocalAdoptsTheRegistryCopy() {
-        // nil clock: a locally paired record matched by fingerprint adopts a
-        // registry copy newer than its pairing time (gains its token). The
-        // helper's default pairedAt is the epoch, so even updatedAt: 1 wins.
         let existing = local(syncUpdatedAt: nil)
         let result = SyncedBackendConnectionMerge.merge(
             records: [record(updatedAt: 1)],
@@ -335,10 +295,6 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func staleLiveRecordDoesNotClobberFreshLocalRePairing() {
-        // Same race as the stale-tombstone guard, live variant: the user
-        // re-pairs directly (fresh token, nil sync clock) while the Mac's
-        // registry copy lags behind a rotation — the stale copy must not
-        // overwrite the fresh working token.
         let repaired = Date(timeIntervalSince1970: 1000)
         let existing = local(syncUpdatedAt: nil, pairedAt: repaired)
         let result = SyncedBackendConnectionMerge.merge(

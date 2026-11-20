@@ -3,8 +3,6 @@ import Foundation
 import Testing
 
 extension SyncedBackendConnectionMergeTests {
-    // MARK: - Tombstones
-
     @Test func tombstoneRemovesFingerprintMatch() {
         let existing = local()
         let result = SyncedBackendConnectionMerge.merge(
@@ -43,8 +41,6 @@ extension SyncedBackendConnectionMergeTests {
     }
 
     @Test func equalClockTombstoneRemovesSyncedLocal() {
-        // Equal clocks delete — mirrors the fe reconcile's tie rule (an
-        // address change must not dodge a delete).
         let existing = local(syncUpdatedAt: 200)
         let result = SyncedBackendConnectionMerge.merge(
             records: [record(updatedAt: 200, deleted: true)],
@@ -54,8 +50,6 @@ extension SyncedBackendConnectionMergeTests {
     }
 
     @Test func staleTombstoneLosesToNewerLocalPairing() {
-        // Re-pair race: a tombstone written BEFORE the user re-paired this
-        // machine locally must not delete the fresh never-synced pairing.
         let repaired = Date(timeIntervalSince1970: 1000)
         let existing = local(syncUpdatedAt: nil, pairedAt: repaired)
         let result = SyncedBackendConnectionMerge.merge(
@@ -76,8 +70,6 @@ extension SyncedBackendConnectionMergeTests {
     }
 
     @Test func tombstoneWithDifferentFingerprintAtSameAddressDoesNotRemove() {
-        // Another machine reusing the IP was forgotten: the tombstone must
-        // not delete the local record with a different pinned cert.
         let existing = local(fingerprint: "aa:bb")
         let result = SyncedBackendConnectionMerge.merge(
             records: [record(fingerprint: "cc:dd", updatedAt: 500_000, deleted: true)],
@@ -87,8 +79,6 @@ extension SyncedBackendConnectionMergeTests {
         #expect(result.connections == [existing])
     }
 
-    // MARK: - Absence and matching rules
-
     @Test func absenceFromRegistryNeverRemovesLocals() {
         let existing = local()
         let result = SyncedBackendConnectionMerge.merge(records: [], into: [existing])
@@ -97,7 +87,6 @@ extension SyncedBackendConnectionMergeTests {
     }
 
     @Test func differentFingerprintAtSameAddressIsNotMatched() {
-        // Another machine reusing the IP: must be added, never overwrite.
         let existing = local(fingerprint: "aa:bb")
         let other = record(fingerprint: "cc:dd", updatedAt: 200)
         let result = SyncedBackendConnectionMerge.merge(records: [other], into: [existing])
@@ -133,7 +122,6 @@ extension SyncedBackendConnectionMergeTests {
             into: [existing]
         )
         #expect(result.updatedIds == [existing.id])
-        // The fingerprint-less local gains the registry's fingerprint.
         #expect(result.connections[0].server.certFingerprint == "aa:bb")
     }
 

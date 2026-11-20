@@ -1,10 +1,6 @@
 import Darwin
 import Foundation
 
-/// Unit-test runners do not start XCTest's UI automation session. Simulator
-/// preferences alone do not activate SwiftUI's in-process accessibility tree.
-/// This test-bundle-only switch uses the same runtime entry points as
-/// CashApp AccessibilitySnapshot's ASAccessibilityEnabler; never link into Intent.
 @MainActor final class SyntheticBadgeAccessibilityRuntime {
     struct Interface {
         let read: @MainActor () -> Int32

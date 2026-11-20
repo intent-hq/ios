@@ -22,7 +22,6 @@ struct ScriptMonitorCapabilitiesTests {
     }
 
     @Test func capabilitiesAloneGateMonitorsOnEveryProtocolVersion() {
-        // intent-hq/intent#7206: a protocol-major gate hid monitors from protocol 15 daemons.
         for version in ["14.0", "14.12", "15.0", "15.3", "16.0", "99.1"] {
             #expect(ConnectionCapabilities(hello: Self.hello(version: version)).supportsScriptMonitors)
             #expect(!ConnectionCapabilities(hello: Self.hello(version: version, monitors: 1)).supportsScriptMonitors)

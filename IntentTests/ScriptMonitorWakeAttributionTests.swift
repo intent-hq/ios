@@ -1,8 +1,6 @@
 @testable import Intent
 import Testing
 
-// MARK: - Script-monitor wake attribution (FE parity: script-monitor-wake-attribution.ts)
-
 struct ScriptMonitorWakeAttributionTests {
     private func metadata(
         reason: String = "finished",

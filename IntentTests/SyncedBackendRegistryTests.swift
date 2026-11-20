@@ -4,8 +4,6 @@ import Testing
 
 @testable import Intent
 
-/// In-memory `SyncedKeychainListing` capturing queries and returning a
-/// canned outcome (SecItem calls fail in headless CI simulators).
 final class FakeSyncedKeychain: SyncedKeychainListing, @unchecked Sendable {
     var outcome: SyncedKeychainListOutcome
     private(set) var capturedQueries: [[String: Any]] = []
@@ -20,7 +18,6 @@ final class FakeSyncedKeychain: SyncedKeychainListing, @unchecked Sendable {
     }
 }
 
-/// A keychain list row as SecItemCopyMatching would return it.
 private func row(account: String, payload: String) -> [String: Any] {
     [
         kSecAttrAccount as String: account,
@@ -28,7 +25,6 @@ private func row(account: String, payload: String) -> [String: Any] {
     ]
 }
 
-/// A valid v1 live payload with every field populated plus an unknown field.
 private let kLivePayload = """
     {"v": 1, "label": "Mac Studio", "host": "192.168.1.20", \
     "hosts": ["192.168.1.20", "10.0.0.5"], "port": 8843, \
@@ -36,8 +32,6 @@ private let kLivePayload = """
     "detectHosts": false, "token": "secret-token", "updatedAt": 1700000000000, \
     "someFutureField": {"nested": true}}
     """
-
-// MARK: - Payload parsing
 
 struct SyncedBackendPayloadTests {
     @Test func parsesLivePayloadAndToleratesUnknownFields() {
@@ -170,16 +164,12 @@ struct SyncedBackendPayloadTests {
     }
 }
 
-// MARK: - Registry list
-
 struct SyncedBackendRegistryTests {
     private func registry(_ keychain: FakeSyncedKeychain, group: String? = "T.dev.intentapp.backends")
         -> SyncedBackendRegistry {
         SyncedBackendRegistry(keychain: keychain, accessGroup: group)
     }
 
-    /// A "now" close to the tests' tiny epoch-era clocks so their tombstones
-    /// are within the 30-day TTL (the TTL tests below pin their own clocks).
     private let now = Date(timeIntervalSince1970: 1)
 
     @Test func listQueryIsGroupScopedAndSynchronizableAny() {
@@ -396,11 +386,7 @@ struct SyncedBackendRegistryTests {
         #expect(records.map(\.label) == ["Dead"])
     }
 
-    // MARK: - Tombstone TTL
-
     @Test func expiredTombstoneIsSkippedAndStopsHidingOlderLiveRecords() {
-        // The desktop purges tombstones after ~30 days; a straggler item the
-        // purge has not reached must not still act as a delete here.
         let ttl = SyncedBackendRecord.tombstoneTTLMs
         let live = #"{"v": 1, "label": "Live", "host": "10.0.0.1", "port": 1, "#
             + #""fingerprint": "aa", "updatedAt": 100}"#
@@ -434,7 +420,6 @@ struct SyncedBackendRegistryTests {
         let keychain = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.2:2", payload: tombstone)
         ]))
-        // Past updatedAt+TTL but within deletedAt+TTL: still honored.
         let now = Date(timeIntervalSince1970: (500_000 + ttl) / 1000)
         guard case .available(let records) = registry(keychain).listBackends(now: now) else {
             Issue.record("expected .available")
