@@ -87,10 +87,17 @@ def _string_end(src: str, start: int, spans: list[tuple[int, int]] | None = None
     raise LexError("unclosed string literal")
 
 
-def _blank(code: list[str], start: int, end: int) -> None:
+OPERAND = "x"
+
+
+def _blank(code: list[str], start: int, end: int, literal: bool = False) -> None:
+    """Hide a skipped token from regex look-back. A comment becomes
+    whitespace; a literal stays an operand, so `"a"/2` reads as division."""
     for index in range(start, end):
         if code[index] != "\n":
             code[index] = " "
+    if literal and end > start:
+        code[end - 1] = OPERAND
 
 
 def _interpolation_end(src: str, opener: int, spans: list[tuple[int, int]] | None = None, code: list[str] | None = None) -> int:
@@ -126,6 +133,8 @@ def _interpolation_end(src: str, opener: int, spans: list[tuple[int, int]] | Non
                 index += 1
                 continue
             index = literal
+            _blank(code, start, index, literal=True)
+            continue
         _blank(code, start, index)
     raise LexError("unclosed interpolation")
 
@@ -186,9 +195,7 @@ def comment_spans(src: str) -> list[tuple[int, int]]:
                 index += 1
                 continue
             index = end
-        for blank in range(start, index):
-            if code[blank] != "\n":
-                code[blank] = " "
+        _blank(code, start, index, literal=not src.startswith(("//", "/*"), start))
     return sorted(spans)
 
 
