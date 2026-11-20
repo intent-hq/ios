@@ -2,12 +2,10 @@ import SwiftUI
 import UIKit
 
 extension EnvironmentValues {
-    /// Lets the Connections switcher stand down while agent history is open.
     @Entry var isAgentHistoryOpen = false
     @Entry var openAgentHistory = OpenAgentHistoryAction()
 }
 
-/// Stores the drawer's state rather than an incomparable environment closure.
 struct OpenAgentHistoryAction {
     var isPresented: Binding<Bool>?
     var isEnabled = false
@@ -17,8 +15,6 @@ struct OpenAgentHistoryAction {
     }
 }
 
-/// Global right-edge drawer listing visited agents on every saved device;
-/// the counterpart of the workspace list's left-edge Connections switcher.
 struct AgentHistoryDrawer<Content: View>: View {
     let isEnabled: Bool
     @ViewBuilder let content: Content

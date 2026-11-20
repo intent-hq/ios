@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// A panel revealed by sliding the page away from one physical screen edge.
-/// Shared by the Connections switcher (left) and the agent history (right).
 struct EdgeDrawer<Panel: View, Content: View>: View {
     let side: EdgeDrawerSide
     @Binding var isPresented: Bool
@@ -26,7 +24,6 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
     }
     private var isRevealed: Bool { isPresented || offset > 0 }
     private var revealProgress: CGFloat { offset / max(revealWidth, 1) }
-    /// Offsets are physical, so the panel pins to its physical side in both layout directions.
     private var panelAlignment: Alignment {
         (side == .left) == (layoutDirection == .leftToRight) ? .leading : .trailing
     }
@@ -40,8 +37,6 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
     var body: some View {
         ZStack(alignment: panelAlignment) {
             ConnectionSwitcherStyle.background(for: colorScheme).ignoresSafeArea()
-            // Ancestor visibility modifiers can expose hidden descendants. A closed
-            // panel must not leave connection or agent rows in the accessibility tree.
             if isRevealed {
                 panel
                     .frame(width: revealWidth)
@@ -97,7 +92,6 @@ struct EdgeDrawer<Panel: View, Content: View>: View {
             .accessibilityElement(children: isRevealed ? .ignore : .contain)
             .scrollDisabled(isRevealed)
             .allowsHitTesting(!isRevealed)
-            // A closed drawer must preserve hidden states inside the page.
             .accessibilityHidden(true, isEnabled: isRevealed)
             .overlay {
                 if isRevealed {

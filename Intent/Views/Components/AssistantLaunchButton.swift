@@ -72,7 +72,6 @@ struct AssistantLaunchButton: View {
     }
 }
 
-/// Keep the visible control, hit shape, menu anchor and scroll clearance together.
 struct AssistantLauncherLayout {
     let diameter: CGFloat
     let closeSize: CGFloat
@@ -81,7 +80,6 @@ struct AssistantLauncherLayout {
     let menuBottomInset: CGFloat
     let tileExtraInset: CGFloat
 
-    // Named layout presets keep platform geometry in one place.
     private enum Handheld {
         static let diameter: CGFloat = 80
         static let closeSize: CGFloat = 48
@@ -126,7 +124,6 @@ struct AssistantLauncherLayout {
     }
 
     var scrollClearance: CGFloat {
-        // Leave breathing room above the tallest control in either state.
         let contentGap: CGFloat = 12
         return max(diameter + launcherBottomInset, closeSize + menuBottomInset) + contentGap
     }

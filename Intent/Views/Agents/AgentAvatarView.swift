@@ -1,12 +1,10 @@
 import SwiftUI
 
-/// Rounded-tile agent avatar with brand artwork and state-aware surfaces.
-/// Workspace rows use the iOS assets; other surfaces retain the desktop geometry.
 struct AgentAvatarView: View {
     let agentId: String
     var size: CGFloat = Constants.AgentAvatar.defaultSize
     var specialist: String?
-    var icon: String?  // Specialist icon metadata (PROTOCOL §5.11)
+    var icon: String?
     var isActive: Bool = false
     var state: AgentAvatarState = .idle
     var workspaceStyle = false
@@ -16,8 +14,6 @@ struct AgentAvatarView: View {
         AgentAvatarDesign.design(agentId: agentId, specialist: specialist, icon: icon)
     }
 
-    // Desktop geometry ratios (avatar-size.ts "standard": surface 20,
-    // art 16, clear space 2, corner radius 6).
     private var artSize: CGFloat {
         size * (workspaceStyle ? WorkspaceDetailStyle.avatarArtRatio : Constants.AgentAvatar.artSizeRatio)
     }
@@ -32,9 +28,6 @@ struct AgentAvatarView: View {
 
             artwork
 
-            // Animate only the layer's stroke color in the render server, not
-            // SwiftUI geometry: an implicit repeatForever previously made rings
-            // drift between rows when a list reordered.
             if isActive {
                 AgentAvatarPulse(cornerRadius: cornerRadius)
                     .allowsHitTesting(false)
@@ -69,8 +62,6 @@ struct AgentAvatarView: View {
         }
     }
 
-    /// Desktop tile surface per state (`--agent-avatar-surface-*` tokens);
-    /// idle is the neutral hsl(145 14% 92%) light / hsl(145 12% 78%) dark.
     private var surfaceColor: Color {
         if workspaceStyle, state == .idle || state == .running {
             return design == .coordinator
@@ -87,9 +78,6 @@ struct AgentAvatarView: View {
         }
     }
 
-    /// Desktop glyph color: near-black (#080808) in both schemes — the tile
-    /// stays light, so the glyph stays dark. The completed tile darkens in
-    /// dark mode, so it carries its own foreground token.
     private var glyphColor: Color {
         if workspaceStyle, state == .idle || state == .running {
             return design == .coordinator
@@ -172,7 +160,6 @@ nonisolated private struct AgentAvatarFillShape: Shape {
     }
 }
 
-/// Maps the 16×16 glyph art space onto the shape's rect.
 nonisolated private func artTransform(for rect: CGRect) -> CGAffineTransform {
     CGAffineTransform(translationX: rect.minX, y: rect.minY)
         .scaledBy(

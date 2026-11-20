@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// A render-server pulse with no per-frame SwiftUI updates.
 struct AgentAvatarPulse: UIViewRepresentable {
     let cornerRadius: CGFloat
 
@@ -16,7 +15,6 @@ struct AgentAvatarPulse: UIViewRepresentable {
 
     final class PulseView: UIView {
         private static let animationKey = "agentAvatarPulse"
-        // PhaseAnimator held each endpoint for 50 ms on the 60 Hz reference recording.
         private static let endpointHoldDuration: CFTimeInterval = 0.05
         private let ring = CAShapeLayer()
         var cornerRadius: CGFloat {
@@ -46,7 +44,6 @@ struct AgentAvatarPulse: UIViewRepresentable {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             ring.frame = bounds
-            // Reuse SwiftUI's continuous path, including its centered stroke.
             ring.path = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .path(in: CGRect(origin: .zero, size: bounds.size)).cgPath
             CATransaction.commit()
@@ -65,8 +62,6 @@ struct AgentAvatarPulse: UIViewRepresentable {
             updatePulse()
         }
 
-        /// UIKit delivers activation on the main thread. Reinstall if backgrounding
-        /// removed the animation, but don't restart a running pulse on view updates.
         @objc func updatePulse() {
             let weakColor = UIColor(Constants.Colors.AgentAvatar.activeStrokeWeak)
                 .resolvedColor(with: traitCollection).cgColor

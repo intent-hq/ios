@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// No backend/session environment dependency: every entry point works offline.
 struct DiagnosticExportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -18,7 +17,6 @@ struct DiagnosticExportView: View {
             }
             .scrollContentBackground(colorScheme == .dark ? .hidden : .automatic)
             .background(exportBackground)
-            // Preserve native diagnostic list actions; only navigation uses Intent button chrome.
             // swiftlint:disable:next generic_button_style
             .buttonStyle(.automatic)
             .navigationTitle("Export logs")

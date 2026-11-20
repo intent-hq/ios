@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Reports pans in the drawer's opening frame (see `EdgeDrawerDrag`).
 struct EdgeDrawerGesture: ViewModifier {
     let side: EdgeDrawerSide
     let isEnabled: Bool
@@ -27,7 +26,6 @@ struct EdgeDrawerGesture: ViewModifier {
 }
 
 #if os(iOS)
-/// Distinguishes drawer pans so nested drawers never wait on each other.
 private final class EdgeDrawerPanRecognizer: UIPanGestureRecognizer {}
 
 private struct EdgeDrawerPan: UIGestureRecognizerRepresentable {
@@ -71,7 +69,6 @@ private struct EdgeDrawerPan: UIGestureRecognizerRepresentable {
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         let side: EdgeDrawerSide
-        // UIKit can ask before SwiftUI refreshes the representable; read the live state.
         var isOpen: Binding<Bool>
 
         init(side: EdgeDrawerSide, isOpen: Binding<Bool>) {
@@ -95,7 +92,6 @@ private struct EdgeDrawerPan: UIGestureRecognizerRepresentable {
             _: UIGestureRecognizer,
             shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
         ) -> Bool {
-            // Row actions and scrolling wait for the direction/edge gate to reject this pan.
             otherGestureRecognizer is UIPanGestureRecognizer && !(otherGestureRecognizer is EdgeDrawerPanRecognizer)
         }
     }

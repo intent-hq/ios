@@ -1,7 +1,6 @@
 import SwiftUI
 
 extension AgentAttentionKind {
-    /// Indicator tint: discussion needs input (orange), blocker is stop-flavored (red).
     var color: Color {
         switch self {
         case .discussion: return .orange
@@ -11,7 +10,6 @@ extension AgentAttentionKind {
 }
 
 extension AgentAvatarState {
-    /// Discussion and blocker cues; questions use the row's status text.
     var cornerIcon: String? {
         switch self {
         case .attentionDiscussion: return AgentAttentionKind.discussion.iconName
@@ -20,7 +18,6 @@ extension AgentAvatarState {
         }
     }
 
-    /// Tint for the corner cue and the matching subtitle line.
     var cornerColor: Color {
         switch self {
         case .attentionBlocker: return AgentAttentionKind.blocker.color
@@ -31,20 +28,15 @@ extension AgentAvatarState {
 }
 
 extension AgentSession {
-    /// Context-menu title of the per-agent notification mute toggle.
     var notificationsMuteToggleTitle: String {
         notificationsMuted ? "Unmute notifications" : "Mute notifications"
     }
 
-    /// Context-menu symbol of the per-agent notification mute toggle.
     var notificationsMuteToggleSymbol: String {
         notificationsMuted ? "bell" : "bell.slash"
     }
 }
 
-/// Context-menu toggle of the daemon-owned per-agent notification mute
-/// (`agent.update { changes: { notificationsMuted } }`). Rendered by the
-/// row's containing list so it composes with the row's selection button.
 struct AgentNotificationsMuteButton: View {
     let agent: AgentSession
     let action: () -> Void
@@ -76,7 +68,6 @@ struct AgentRowView: View {
 
     private var avatarState: AgentAvatarState { AgentAvatarState.state(for: agent) }
 
-    /// Muting hides attention cues but preserves the running dot.
     private var cornerIcon: String? {
         agent.notificationsMuted ? nil : avatarState.cornerIcon
     }
@@ -260,8 +251,6 @@ struct AgentRowView: View {
         return date.relativeFormatted
     }
 }
-
-// MARK: - Collapsible Headers
 
 struct DelegatedAgentsRow: View {
     let agents: [AgentSession]
