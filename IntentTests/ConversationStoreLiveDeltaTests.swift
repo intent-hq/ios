@@ -10,7 +10,6 @@ extension ConversationStoreLiveStateTests {
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
 
-        // First block delta carries no timestamp — a local one is synthesized.
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
             blockEntity(
                 messageId: "msg-1",
@@ -20,7 +19,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.count == 1)
         #expect(!store.messages[0].timestamp.isEmpty)
 
-        // Terminal frame carries the server timestamp — it must be adopted.
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
             blockEntity(
                 messageId: "msg-1",
@@ -32,12 +30,9 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages[0].timestamp == "2026-06-27T01:00:05.000Z")
     }
 
-    // MARK: - Firehose gating while chat channel is live
-
     @Test func firehoseActivityIgnoredWhenChatLive() {
         let (store, _) = makeStore()
 
-        // Snapshot applied → chatLive; deltas own the transcript from here on.
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
                 "id": "msg-1",
@@ -48,8 +43,6 @@ extension ConversationStoreLiveStateTests {
         ]))
         #expect(store.messages.count == 1)
 
-        // Firehose stream events for the same turn must NOT mutate live state —
-        // chat.subscribe owns the transcript and streaming flags while chatLive.
         store.handleStreamEvent("event", params: [
             "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
         ])
@@ -60,7 +53,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.count == 1)
         #expect(store.isStreaming == false)
 
-        // The delta channel still applies normally afterwards.
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
             blockEntity(
                 messageId: "msg-2",
@@ -73,13 +65,9 @@ extension ConversationStoreLiveStateTests {
     }
 
     @Test func firehoseActivityRaisesStreamingWhenChatNotLive() {
-        // No chat.subscribe snapshot applied → chatLive is false: the firehose
-        // is the only liveness signal until the channel seeds.
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        // agent:stream:activity is content-free ({ agentId, messageId }) —
-        // it must raise the streaming flag but never mutate the transcript.
         store.handleStreamEvent("event", params: [
             "event": ["type": "agent:stream:activity", "data": ["messageId": "m-1"]]
         ])
@@ -87,7 +75,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.isEmpty)
         #expect(store.isStreaming == true)
 
-        // agent:stream:end lowers the flag it raised, still without content.
         store.handleStreamEvent("event", params: [
             "event": ["type": "agent:stream:end", "data": ["streamId": "s-1"]]
         ])
@@ -108,8 +95,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages[0].isStreaming == true)
         #expect(store.isStreaming == true)
 
-        // The channel owns the in-flight row and the streaming flag; only its
-        // terminal delta settles them.
         store.handleStreamEvent("event", params: [
             "event": ["type": "agent:stream:end", "data": ["streamId": "s-1"]]
         ])
@@ -122,7 +107,6 @@ extension ConversationStoreLiveStateTests {
     @Test func failedResubscribeClearsChatLiveSoFirehoseApplies() async {
         let (store, _) = makeStore()
 
-        // Chat channel goes live via a snapshot.
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
                 "id": "msg-1",
@@ -133,9 +117,6 @@ extension ConversationStoreLiveStateTests {
         ]))
         #expect(store.messages.count == 1)
 
-        // A re-subscribe fails (no response configured → request throws).
-        // The failed registration must clear chatLive so firehose events apply
-        // until the backoff retry lands a channel again.
         await store.subscribeLiveChat(agentId: "agent-1")
 
         store.handleStreamEvent("event", params: [
@@ -149,8 +130,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.isStreaming == true)
     }
 
-    // MARK: - Stale-seq tolerance
-
     @Test func staleSeqDeltaIgnoredWithoutResubscribe() async throws {
         let (store, fake) = makeStore()
 
@@ -163,8 +142,6 @@ extension ConversationStoreLiveStateTests {
         ]))
         #expect(store.messages.count == 1)
 
-        // Stale re-delivery: seq 1 already applied (expected is now 2) — must be
-        // silently ignored, not treated as a gap
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
             blockEntity(
                 messageId: "msg-stale",
@@ -175,9 +152,8 @@ extension ConversationStoreLiveStateTests {
         try await expectNever("resnapshot for a stale entity") {
             fake.didCallMethod("chat.unsubscribe") || fake.didCallMethod("chat.subscribe")
         }
-        #expect(store.messages.count == 1) // stale entity not applied
+        #expect(store.messages.count == 1)
 
-        // The live sequence continues normally after the stale frame
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
             blockEntity(
                 messageId: "msg-2",
@@ -193,15 +169,12 @@ extension ConversationStoreLiveStateTests {
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
 
-        // Gap: expected seq 1, got 5 — genuine loss, must resnapshot
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 5, added: [
             blockEntity(
                 messageId: "msg-2",
                 block: ["type": "text", "id": "msg-2:0", "text": "lost"]
             )
         ]))
-        // A second gapped frame while the resnapshot is in flight must not
-        // trigger another one (storm guard)
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 6, added: [
             blockEntity(
                 messageId: "msg-2",
@@ -213,7 +186,7 @@ extension ConversationStoreLiveStateTests {
         try await expectNever("second resnapshot while one is in flight") {
             fake.paramsForMethod("chat.unsubscribe").count > 1
         }
-        #expect(store.messages.isEmpty) // gapped deltas not applied
+        #expect(store.messages.isEmpty)
     }
 }
 
@@ -230,13 +203,10 @@ extension ConversationStoreLiveStateTests {
         ]))
         #expect(store.messages.count == 1)
 
-        // A duplicate/late seq-0 snapshot after deltas were applied would rewind
-        // chatExpectedSeq and roll the transcript back — it must be ignored
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         #expect(store.messages.count == 1)
         #expect(store.messages[0].id == "msg-2")
 
-        // The live sequence continues without a gap
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
             blockEntity(
                 messageId: "msg-2",
@@ -249,12 +219,6 @@ extension ConversationStoreLiveStateTests {
         }
     }
 
-    // MARK: - Mid-turn tool title classification (STAB: generic spanner fallback)
-
-    /// Daemon-shaped live `tool_use` delta: auggie sends `raw_input: null`, so the
-    /// daemon coerces input to `{}` carrying only `_acpTitle` (tool_block.rs). The
-    /// classifier must derive a meaningful title from `_acpTitle` instead of
-    /// falling through to the generic .tool fallback.
     @Test func midTurnFileReadToolWithAcpTitleOnlyClassifiesAsRead() throws {
         let (store, _) = makeStore()
 
@@ -375,8 +339,6 @@ extension ConversationStoreLiveStateTests {
         #expect(display.subject == nil)
     }
 
-    /// A raw tool-name-shaped title (single token) must NOT be rendered verbatim;
-    /// the cleaned-name generic fallback wins (desktop isProseToolName parity).
     @Test func nonProseAcpTitleKeepsCleanedNameFallback() {
         let display = ToolClassifier.classify(name: "zz_unrecognized_tool", input: [
             "_acpTitle": AnyCodable("zz_unrecognized_tool")
@@ -404,9 +366,6 @@ extension ConversationStoreLiveStateTests {
         #expect(display.path == "src/foo")
     }
 
-    /// The completed `agent:tool:call` update arrives as an `updated` entity with
-    /// fuller input; the store must replace the block so re-classification picks
-    /// up the raw args mid-turn.
     @Test func completedUpdatedToolBlockReplacesInputAndReclassifies() throws {
         let (store, _) = makeStore()
 
@@ -421,8 +380,6 @@ extension ConversationStoreLiveStateTests {
                 "metadata": ["toolKind": "read", "status": "started"]
             ])
         ]))
-        // Title deliberately disagrees with path: raw input must win over the
-        // _acpTitle fallback (pins raw-input-wins precedence).
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
             blockEntity(messageId: "msg-2", block: [
                 "type": "tool_use",
@@ -442,14 +399,4 @@ extension ConversationStoreLiveStateTests {
         #expect(display.verb == "Read")
         #expect(display.subject == "main.rs")
     }
-
-    /// Regression (bare spanner): sparse `tool_call_update` ticks reach the
-    /// chat.subscribe delta path as FULL blocks with every unset field mapped
-    /// to its default (`name:""`, `input:{}`, `toolKind:"other"` — see the
-    /// daemon's `tool_delta`/`map_tool_call_update`). Upserting such a block
-    /// verbatim clobbers the titled block from first sight, and every later
-    /// sparse tick keeps it clobbered — the in-flight row renders as a bare
-    /// 🔧 with no title for the rest of the turn. A progress-only tick (empty
-    /// name, same toolCallId) must preserve the prior block's name/input/
-    /// toolKind and only adopt the new status (desktop bridge merge parity).
 }

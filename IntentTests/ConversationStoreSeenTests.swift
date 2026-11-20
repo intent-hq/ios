@@ -3,8 +3,6 @@ import Foundation
 import Testing
 
 extension ConversationStoreTests {
-    // MARK: - Seen marker (agent.markSeen, PROTOCOL §5.5)
-
     @Test func fetchAgentStreamingStateRestoresSeenMarkerFromMetadata() async {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [

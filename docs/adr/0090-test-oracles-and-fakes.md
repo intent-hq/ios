@@ -38,7 +38,7 @@ Many unit tests check that the app matches another implementation: the desktop a
    6. `ConversationStartupFixture` uses the real backend session composition across real view models; a second panel shares the conversation, detail and workspace status owners, and the recorder counts every request they make, including window and row leases. The view's separate model-catalog task belongs to the opening total.
    7. A frame the daemon already sent can arrive after close. It costs bytes even though its orphaned registration has no local consumer.
    8. Media budget tests use the real session media caches and a fixed, valid PNG, so the count does not depend on an OS encoder. A portable harness that stubs these caches must not report the test as run.
-   9. Traces matched with the desktop use the daemon's canonical `tool_result` field, so the desktop's strict decoder reads the same content. Older iOS-only fixtures may still use aliases.
+   9. Traces matched with the desktop use the daemon's canonical `tool_result` field, so the desktop's strict decoder reads the same content. Older iOS-only fixtures may still use aliases. `ConversationStreamingFixture` holds matched traces only, with no reducer: tests feed its frames through `SubscriptionPush` and the store. Its text uses UTF-8 beyond ASCII to catch character and byte confusion.
 6. **Design expectations** in rendered design tests are independent values from the design (for example the question card shell and 10% outline, #756), checked on the composited result including opacity, not values read back from the code under test.
 
 ## Consequences

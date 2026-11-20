@@ -29,9 +29,6 @@ extension ConversationStoreTests {
     }
 
     @Test func dismissQuestionsRaisesMarkerOptimisticallyBeforeRpcReturns() async throws {
-        // PR #86 review: the marker must be raised BEFORE the RPC resolves so
-        // the wizard unmounts immediately — no in-flight window where a Send
-        // or second Dismiss can race the same question message.
         let fake = FakeConnectionManager()
         fake.pendingMethods.insert("agent.dismissQuestions")
         let store = ConversationStore(connectionManager: fake)
@@ -54,8 +51,6 @@ extension ConversationStoreTests {
     }
 
     @Test func failedDismissRollbackPreservesConcurrentMarkerUpdate() async throws {
-        // If another client's dismissal lands (agent:updated push) while our
-        // failing RPC is in flight, the rollback must not clobber it.
         let fake = FakeConnectionManager()
         fake.pendingMethods.insert("agent.dismissQuestions")
         let store = ConversationStore(connectionManager: fake)
@@ -167,8 +162,6 @@ extension ConversationStoreTests {
         #expect(store.dismissedQuestionsMessageId == nil)
     }
 
-    // MARK: - Pending-questions marker (PROTOCOL §5.5 pendingQuestionsMessageId)
-
     @Test func pendingMarkerStartsNil() {
         let store = ConversationStore()
         #expect(store.pendingQuestionsMessageId == nil)
@@ -191,8 +184,6 @@ extension ConversationStoreTests {
     }
 
     @Test func fetchAgentStreamingStateRaiseOnlyStillAppliesPendingMarker() async {
-        // The agent:idle refresh runs raiseOnly — the marker must still land,
-        // since that refresh is what populates it when the asking turn ends.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
@@ -210,8 +201,6 @@ extension ConversationStoreTests {
     }
 
     @Test func fetchAgentStreamingStatePreservesWrittenEmptyPendingMarker() async {
-        // Three-state rule: "" (nothing pending) must not be coerced to nil
-        // (legacy fallback), or a question-bearing tail would re-pend.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
@@ -283,11 +272,6 @@ extension ConversationStoreTests {
     }
 
     @Test func agentUpdatedEventDuringInitialLoadIsAppliedNotDropped() async {
-        // Regression (PR #210 review): the isLoading buffer only replays
-        // user-message/stream events, so a marker clear pushed while the
-        // initial chat.subscribe snapshot was pending used to be dropped —
-        // the wizard then re-pended on the stale agent.get marker. Session
-        // metadata pushes bypass the buffer and land immediately.
         let fake = FakeConnectionManager()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
         let store = ConversationStore(connectionManager: fake)
@@ -323,10 +307,6 @@ extension ConversationStoreTests {
     }
 
     @Test func staleAgentGetReplyDoesNotOverwriteMarkersPushedWhileInFlight() async throws {
-        // Regression: an agent.get reply applied unconditionally used to
-        // revert a marker that an agent:updated push moved after the request
-        // started (e.g. a newer question-bearing turn's marker replaced by the
-        // previous marker the daemon captured before it).
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")

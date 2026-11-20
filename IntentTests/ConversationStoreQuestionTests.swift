@@ -4,9 +4,6 @@ import Testing
 
 extension ConversationStoreTests {
     @Test func staleAgentGetReplyFromPreviousAgentDoesNotLeakMarkersIntoSwitchedAgent() async throws {
-        // Regression: the generation was bumped only on agent:updated, so an
-        // agent.get for A that completed after the store started loading B
-        // (no push in between) wrote A's pending/dismissed/seen markers into B.
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
@@ -81,9 +78,6 @@ extension ConversationStoreTests {
     }
 
     @Test func agentGetReplyStillAppliesMarkersWhenConversationBindsSameAgentWhileInFlight() async throws {
-        // View load issues subscribeLiveChat and the raise-only agent.get
-        // concurrently: binding the same agent from nil must not make the
-        // reply look stale.
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
@@ -111,8 +105,6 @@ extension ConversationStoreTests {
     }
 
     @Test func agentGetReplyStillAppliesMarkersAfterUnrelatedAgentUpdated() async throws {
-        // An agent:updated for another agent is filtered out before the
-        // metadata handler, so it must not make our in-flight reply look stale.
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
@@ -145,9 +137,6 @@ extension ConversationStoreTests {
     }
 
     @Test func staleAgentGetReplyFromPreviousAgentDoesNotTouchStreaming() async throws {
-        // Regression (PR #213 review): the agent-mismatch guard covered only
-        // the markers, so an agent.get for A that completed after the store
-        // switched to B still wrote A's isStreaming into B.
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
@@ -201,8 +190,6 @@ extension ConversationStoreTests {
     }
 
     @Test func staleNotFoundForPreviousAgentDoesNotMarkSwitchedAgentDeleted() async throws {
-        // A definitive not-found for A arriving after the store switched to B
-        // says nothing about B.
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
@@ -233,9 +220,6 @@ extension ConversationStoreTests {
 
 extension ConversationStoreTests {
     @Test func staleAgentGetReplyAfterResetDoesNotRestoreStreaming() async throws {
-        // Regression (PR #215 review): reset() unbinds the store, and an
-        // unbound store used to accept any reply — so an agent.get issued
-        // while bound to A restored A's isStreaming into the reset store.
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")
@@ -289,8 +273,6 @@ extension ConversationStoreTests {
 
     @Test(arguments: [false, true])
     func agentGetReplyAfterMarkerPushPreservesChatStreamingAuthority(seenChanged: Bool) async throws {
-        // Markers follow the newer push, while streaming follows the already
-        // subscribed idle chat snapshot instead of a later detail reply.
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
         fake.pendingMethods.insert("agent.get")

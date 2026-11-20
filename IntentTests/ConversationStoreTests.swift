@@ -3,11 +3,8 @@ import Foundation
 import Synchronization
 import Testing
 
-/// Tests for ConversationStore – reset behavior and retained send ownership.
 @MainActor
 struct ConversationStoreTests {
-    // MARK: - Helpers
-
     func makeAgent(
         id: String = "agent-1",
         name: String = "Test",
@@ -41,8 +38,6 @@ struct ConversationStoreTests {
         )
     }
 
-    // MARK: - reset clears all relevant state
-
     @Test func resetClearsAllState() {
         let store = ConversationStore()
         store.watchedAgents.append(makeAgent(id: "watched"))
@@ -54,8 +49,6 @@ struct ConversationStoreTests {
         #expect(store.isWaitingForAgents == false)
         #expect(store.messages.isEmpty)
     }
-
-    // MARK: - Retained attempts (ordinary sends are not idempotent)
 
     @Test func lastFailedSendStartsNil() {
         let store = ConversationStore()
@@ -178,8 +171,6 @@ struct ConversationStoreTests {
         #expect(originalPayload == retriedPayload)
     }
 
-    // MARK: - rollbackFailedSend (failed send must not supersede pending questions)
-
     @Test func rollbackFailedSendRemovesOptimisticMessageAndThinking() async {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
@@ -214,8 +205,6 @@ struct ConversationStoreTests {
         #expect(store.messages.count == 1)
         #expect(store.isStreaming)
     }
-
-    // MARK: - sendMessage messageMetadata threading (intent-hq/monorepo#1789)
 }
 
 extension ConversationStoreTests {
@@ -251,12 +240,8 @@ extension ConversationStoreTests {
         #expect(sent.params["messageMetadata"] == nil, "plain sends stay untagged")
     }
 
-    // MARK: - agentNotFound (missing-agent fallback)
-
     @Test func subscribeLiveChatNotFoundRaisesAgentNotFound() async {
         let fake = FakeConnectionManager()
-        // chat.subscribe answers -32602 with data.code == "not-found" for a
-        // nonexistent agent (docs/PROTOCOL.md §3.3/§9)
         fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -32_602,
@@ -274,8 +259,6 @@ extension ConversationStoreTests {
 
     @Test func subscribeLiveChatBare32602DoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
-        // -32602 without data.code == "not-found" (invalid-params or a legacy
-        // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
         fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -32_602,
@@ -307,7 +290,6 @@ extension ConversationStoreTests {
 
     @Test func subscribeLiveChatTransientErrorDoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
-        // Transport-level timeout must not read as deletion
         fake.errorMap["chat.subscribe"] = NSError(
             domain: "WebSocket",
             code: -2,
@@ -425,7 +407,6 @@ extension ConversationStoreTests {
         #expect(store.messages.map(\.id) == ["server-row"])
         #expect(store.messages.last?.appMessageId == id)
         #expect(store.sendAttempts.first?.confirmedMessageId == "server-row")
-        // Duplicate sequence, then a fresh update omitting optional correlation.
         deliverRecoveryDelta("server-row", store: store, correlation: id, seq: seq)
         deliverRecoveryDelta("server-row", store: store, seq: seq + 1, updated: true)
         await deliverRecoveryRow("late-queue", source: "queue", store: store, fake: fake, correlation: id)

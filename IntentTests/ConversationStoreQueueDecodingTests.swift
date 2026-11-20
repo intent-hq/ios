@@ -9,11 +9,6 @@ private enum NestedImageQueueFixture {
 }
 
 extension ConversationStoreIntegrationTests {
-    // MARK: - Queue snapshot decoding (ios#252)
-
-    /// One malformed element (missing the required `content`) must drop only
-    /// itself: the valid siblings keep their order, ids, and positions instead
-    /// of the whole queue collapsing to `[]`.
     @Test func fetchQueueKeepsValidSiblingsWhenOneElementIsMalformed() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -32,8 +27,6 @@ extension ConversationStoreIntegrationTests {
         #expect(store.queuedMessages.map(\.content) == ["first", "third"])
     }
 
-    /// A non-object element (e.g. `null` or a string) is malformed too and
-    /// must not invalidate the array cast for its siblings.
     @Test func fetchQueueDropsNonObjectElementsButKeepsSiblings() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -62,8 +55,6 @@ extension ConversationStoreIntegrationTests {
         #expect(fake.paramsForMethod("agent.getQueue").count == 1)
     }
 
-    /// A well-formed empty `queue` is an authoritative snapshot and clears
-    /// the local queue — it must not be confused with malformed input.
     @Test func fetchQueueEmptyArrayClearsQueue() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -77,8 +68,6 @@ extension ConversationStoreIntegrationTests {
         #expect(store.queuedMessages.isEmpty)
     }
 
-    /// Malformed envelope policy: when the response carries no `queue` array
-    /// at all, the previous local queue is preserved rather than blanked.
     @Test func fetchQueueMalformedEnvelopePreservesPreviousQueue() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -103,9 +92,6 @@ extension ConversationStoreIntegrationTests {
         #expect(store.queuedMessages.map(\.id) == ["q-1", "q-2"])
     }
 
-    /// The `agent:queue:updated` push shares the element-tolerant decoder: a
-    /// malformed element drops only itself and the snapshot is applied
-    /// directly, without falling back to a re-fetch.
     @Test func queueUpdatedEventKeepsValidSiblingsWhenOneElementIsMalformed() async {
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
@@ -151,8 +137,6 @@ extension ConversationStoreIntegrationTests {
         #expect(!fake.didCallMethod("agent.getQueue"))
     }
 
-    /// An `agent:queue:updated` push with an empty `queue` clears the local
-    /// queue directly.
     @Test func queueUpdatedEventEmptyArrayClearsQueue() async {
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()

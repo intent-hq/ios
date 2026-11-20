@@ -2,15 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
-// MARK: - Turn boundaries landing during the initial load
-
 extension ConversationStoreTests {
     @Test func turnBoundaryDuringInitialLoadRefreshesTheMarkerWithoutReplay() async throws {
-        // Regression (PR #210 review): a turn ending mid-load must still raise
-        // the pending-questions marker. There is no stream-event buffer any
-        // more: agent:idle / agent:status-changed refresh the marker as they
-        // land, one shared raiseOnly agent.get, and the seq-0 snapshot neither
-        // replays them nor issues a refresh of its own.
         let fake = FakeConnectionManager()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat"]
         fake.responseMap["agent.get"] = [
@@ -49,8 +42,6 @@ extension ConversationStoreTests {
             metadata: ["agentId": "a"]
         ))
         #expect(!store.isLoading)
-        // The snapshot is the transcript; it neither replays the boundaries
-        // nor adds a refresh of its own.
         try await expectNever("an agent.get issued by the snapshot") {
             fake.requestLog.filter { $0.method == "agent.get" }.count > 1
         }
@@ -60,8 +51,6 @@ extension ConversationStoreTests {
         )
     }
 
-    /// Binds agent "a" with the seq-0 snapshot still pending, fires the turn
-    /// boundary `eventType` for it, and holds the `agent.get` it schedules.
     private func bindWithHeldBoundaryRefresh(
         _ eventType: String
     ) async throws -> (ConversationStore, FakeConnectionManager) {
@@ -90,7 +79,6 @@ extension ConversationStoreTests {
         ))
     }
 
-    /// An `agent.get` reply for a turn that was still in flight when it was read.
     private func liveTurnReply(pendingQuestionsMessageId: String) -> [String: Any] {
         [
             "agent": [
@@ -105,11 +93,6 @@ extension ConversationStoreTests {
 
     @Test(arguments: ["agent:idle", "agent:status-changed"])
     func staleBoundaryReplyYieldsStreamingToTheSnapshotItRaced(eventType: String) async throws {
-        // A boundary landing mid-load reads agent.get at once. If the seq-0
-        // snapshot applies while that read is in flight, the snapshot is the
-        // authoritative streaming state: a reply that still says the turn is
-        // live must not re-raise the flag (no terminal delta is owed for a
-        // turn the snapshot already saw finished). The markers still apply.
         let (store, fake) = try await bindWithHeldBoundaryRefresh(eventType)
 
         deliverIdleSnapshot(fake)
@@ -127,8 +110,6 @@ extension ConversationStoreTests {
     }
 
     @Test func boundaryReplyBeforeTheSnapshotStillRaisesAndIsSettledByIt() async throws {
-        // The complement: a reply landing before the snapshot is the freshest
-        // signal and raises the flag; the snapshot then settles it.
         let (store, fake) = try await bindWithHeldBoundaryRefresh("agent:idle")
         #expect(!store.isStreaming)
 

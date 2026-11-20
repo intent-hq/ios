@@ -4,9 +4,6 @@ import Observation
 import Synchronization
 import Testing
 
-/// Live-state tests for the chat.subscribe channel using real PROTOCOL §7.1 wire
-/// shapes: object-shaped seq-0 snapshots (messages page + activity flags) and
-/// block-granularity deltas ({ agentId, messageId, role, block } entities).
 @MainActor
 struct ConversationStoreLiveStateTests {
     func makeStore() -> (ConversationStore, FakeConnectionManager) {
@@ -16,7 +13,6 @@ struct ConversationStoreLiveStateTests {
         return (store, fake)
     }
 
-    /// Object-shaped seq-0 snapshot params (PROTOCOL §7.1).
     func snapshotParams(
         messages: [[String: Any]],
         meta: [String: Any] = [:]
@@ -31,7 +27,6 @@ struct ConversationStoreLiveStateTests {
         ]
     }
 
-    /// Block-level delta params (PROTOCOL §7.1).
     func deltaParams(
         seq: Int,
         added: [[String: Any]] = [],
@@ -46,7 +41,6 @@ struct ConversationStoreLiveStateTests {
         ]
     }
 
-    /// A delta entity carrying the full current block.
     func blockEntity(
         messageId: String,
         block: [String: Any],
@@ -66,8 +60,6 @@ struct ConversationStoreLiveStateTests {
         if let timestamp { entity["timestamp"] = timestamp }
         return entity
     }
-
-    // MARK: - Snapshot application
 
     @Test func loadingStageTracksConnectionAndIgnoresAckAfterReset() async throws {
         let fake = FakeConnectionManager()
@@ -147,7 +139,6 @@ struct ConversationStoreLiveStateTests {
     @Test func snapshotWithoutMetaResetsTruncationDefaults() {
         let (store, _) = makeStore()
 
-        // First snapshot marks the transcript truncated.
         store.handleStreamEvent("subscription.push", params: snapshotParams(
             messages: [
                 [
@@ -162,8 +153,6 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isTruncated == true)
         #expect(store.totalMessageCount == 50)
 
-        // A later snapshot omitting the meta keys is still authoritative:
-        // stale truncation state must reset to defaults.
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
                 "id": "msg-1",
@@ -176,13 +165,9 @@ struct ConversationStoreLiveStateTests {
         #expect(store.totalMessageCount == 1)
     }
 
-    // MARK: - Mid-turn hydration
-
     @Test func midTurnSnapshotShowsPartialAndStreaming() {
         let (store, _) = makeStore()
 
-        // Snapshot taken mid-turn: synthetic in-flight assistant message with
-        // isStreaming true plus the activity-flags overlay.
         let params = snapshotParams(
             messages: [
                 [
@@ -211,7 +196,6 @@ struct ConversationStoreLiveStateTests {
     @Test func activityFlagsAloneRaiseStreaming() {
         let (store, _) = makeStore()
 
-        // Turn in flight but no partial content yet (no synthetic message).
         let params = snapshotParams(
             messages: [
                 [
@@ -228,8 +212,6 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isStreaming == true)
     }
 
-    // MARK: - Growing-text delta sequence
-
     @Test func growingTextDeltasAccumulateFullText() {
         let (store, _) = makeStore()
 
@@ -242,14 +224,12 @@ struct ConversationStoreLiveStateTests {
             ]
         ]))
 
-        // First chunk: block's first appearance → added, full text so far
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
             blockEntity(
                 messageId: "msg-2",
                 block: ["type": "text", "id": "msg-2:0", "text": "Let me"]
             )
         ]))
-        // Growth: updated carries the FULL accumulated text
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
             blockEntity(
                 messageId: "msg-2",
@@ -266,8 +246,6 @@ struct ConversationStoreLiveStateTests {
         #expect(assistant.contentBlocks.first?.resolvedText == "Let me check the logs.")
         #expect(store.isStreaming == true)
     }
-
-    // MARK: - Tool blocks
 }
 
 extension ConversationStoreLiveStateTests {
@@ -309,14 +287,11 @@ extension ConversationStoreLiveStateTests {
         #expect(blocks[2].resolvedToolUseId == "call-1")
     }
 
-    // MARK: - Terminal frame
-
     @Test func terminalFrameClearsStreamingAndHonorsRemovedIds() {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
 
-        // Live chunks: one real block, one orphan the persisted message drops
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
             blockEntity(
                 messageId: "msg-2",
@@ -329,8 +304,6 @@ extension ConversationStoreLiveStateTests {
         ]))
         #expect(store.isStreaming == true)
 
-        // Terminal reconcile: persisted block as updated with streamingComplete,
-        // orphan removed
         store.handleStreamEvent("subscription.push", params: deltaParams(
             seq: 2,
             updated: [
@@ -353,8 +326,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.isStreaming == false)
     }
 
-    // MARK: - Gap detection
-
     @Test func gapLeavesTranscriptUntouched() {
         let (store, _) = makeStore()
 
@@ -367,7 +338,6 @@ extension ConversationStoreLiveStateTests {
             ]
         ]))
 
-        // Gap: expected seq 1, got 5 — delta must not apply
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 5, added: [
             blockEntity(
                 messageId: "msg-2",
@@ -381,7 +351,6 @@ extension ConversationStoreLiveStateTests {
     @Test func idleSnapshotClearsStaleStreaming() {
         let (store, _) = makeStore()
 
-        // Turn in flight at first snapshot.
         store.handleStreamEvent("subscription.push", params: snapshotParams(
             messages: [
                 [
@@ -395,8 +364,6 @@ extension ConversationStoreLiveStateTests {
         ))
         #expect(store.isStreaming == true)
 
-        // Resnapshot after the turn ended: no in-flight message, no activity flags.
-        // The snapshot is authoritative — stale streaming state must clear.
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
                 "id": "msg-1",
