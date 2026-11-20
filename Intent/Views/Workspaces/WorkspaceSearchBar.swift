@@ -55,6 +55,7 @@ struct WorkspaceSearchBar<Mode: RawRepresentable & CaseIterable & Hashable>: Vie
                         .visionWorkspaceControlHover(cornerRadius: Constants.WorkspaceSearch.segmentCornerRadius)
                 }
                 .buttonStyle(IntentContentButtonStyle())
+                .visionContainerDrawsHover()
                 .matchedGeometryEffect(id: mode, in: selectionAnimation)
                 .accessibilityAddTraits(viewMode == mode ? .isSelected : [])
                 .accessibilityIdentifier("\(identifierPrefix).\(mode.rawValue)")
@@ -108,8 +109,10 @@ struct WorkspaceSearchButton: View {
                 }
                 .visionWorkspaceControlHover(cornerRadius: Constants.WorkspaceSearch.cornerRadius, isEnabled: visionWorkspaceHover)
                 .accessibilityHidden(true)
+                .visionHoverShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
         }
         .buttonStyle(IntentContentButtonStyle())
+        .visionContainerDrawsHover(visionWorkspaceHover)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }
@@ -125,7 +128,8 @@ struct WorkspaceSearchInput: View {
     var placeholder: LocalizedStringKey = "Search workspaces"
     var identifierPrefix = "workspaces.search"
     var surfaceColor: Color?
-    var horizontalPadding: CGFloat = Constants.WorkspaceSearch.contentSpacing
+    var horizontalPadding: CGFloat = Constants.WorkspaceSearch.windowCornerInset
+    var bottomPadding: CGFloat = Constants.WorkspaceSearch.windowCornerBottomPadding
     var focusesOnAppear = true
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
@@ -148,6 +152,7 @@ struct WorkspaceSearchInput: View {
                     .background { WorkspaceSearchSurface(color: surfaceColor) }
                     .contentShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
                     .accessibilityHidden(true)
+                    .visionHoverShape(.rect(cornerRadius: Constants.WorkspaceSearch.cornerRadius))
             }
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel("Close search")
@@ -155,7 +160,8 @@ struct WorkspaceSearchInput: View {
             .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, horizontalPadding)
-        .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
+        .padding(.top, Constants.WorkspaceSearch.bottomPadding)
+        .padding(.bottom, bottomPadding)
     }
 
     private var searchField: some View {
@@ -184,6 +190,7 @@ struct WorkspaceSearchInput: View {
                             : Constants.Pairing.mutedForeground(for: colorScheme))
                         .accessibilityHidden(true)
                         .frame(minWidth: Constants.Accessibility.minimumTapTarget, minHeight: Constants.Accessibility.minimumTapTarget)
+                        .visionHoverShape(Circle())
                 }
                 .buttonStyle(IntentContentButtonStyle())
                 .accessibilityLabel("Clear search")

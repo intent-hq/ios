@@ -82,6 +82,32 @@ extension AppCoordinatorTests {
         #expect(delivered == "agent-1")
     }
 
+    /// Regression: on Vision Pro a recent agent on another machine replaced
+    /// this window instead of opening that machine's own window.
+    @Test @MainActor func historyEntryOnAnotherDeviceOpensItsWindowWhereBackendsGetSeparateWindows() {
+        let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
+        var retargeted: BackendID?
+        coordinator.retargetWindow = { retargeted = $0 }
+        let manager = makeHistoryNotificationManager()
+        manager.supportsMultipleWindows = true
+        var opened: BackendID?
+        manager.openBackendWindow = { opened = $0 }
+        manager.registerAgentSelectionHandler(for: Self.windowBackend) { _, _, _, _ in }
+        let laptop = BackendID(UUID())
+
+        coordinator.onSelectHistoryEntry(
+            historyEntry(on: laptop.connectionID),
+            notifications: manager,
+            opensSeparateBackendWindows: true
+        )
+
+        #expect(opened == laptop)
+        #expect(retargeted == nil)
+        var delivered: String?
+        manager.registerAgentSelectionHandler(for: laptop) { agentId, _, _, _ in delivered = agentId }
+        #expect(delivered == "agent-1")
+    }
+
     @Test @MainActor func historyEntryOnAnotherDeviceRaisesItsOpenWindow() {
         let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
         var retargeted: BackendID?

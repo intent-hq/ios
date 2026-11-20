@@ -10,8 +10,6 @@ struct ConversationColumnView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
-    /// Room a floating Intent launcher needs over this chat (0 when none).
-    @Environment(\.workspaceActionLauncherClearance) private var launcherClearance
     @State private var questionWizardCollapsed = false
     @State private var submittingQuestions: PendingQuestionSet?
     @State private var conversationHeight: CGFloat = 0
@@ -125,12 +123,15 @@ struct ConversationColumnView: View {
                     viewModel: viewModel,
                     scrollState: transcriptScrollState,
                     onNavigateToNote: onNavigateToNote,
-                    onNavigateToAgent: onNavigateToAgent,
-                    bottomClearance: FloatingComposerPolicy.transcriptBottomClearance(host: composerHost, launcherClearance: launcherClearance)
+                    onNavigateToAgent: onNavigateToAgent
                 )
                 .environment(\.workspaceTranscriptDesign, usesWorkspaceDesign)
                 .overlay(alignment: .top) {
+                    #if os(visionOS)
+                    ConversationHeaderBackdrop()
+                    #else
                     if usesWorkspaceDesign { WorkspaceHeaderFade() }
+                    #endif
                 }
             }
         }
@@ -475,6 +476,39 @@ struct ConversationBackground: View {
             .ignoresSafeArea()
     }
 }
+
+#if os(visionOS)
+/// The transcript scrolls under the window's navigation bar, which draws no
+/// background on visionOS. A material band behind the bar, fading out just
+/// below it, blurs the rows passing underneath instead of overlapping them.
+private struct ConversationHeaderBackdrop: View {
+    private static let fadeHeight: CGFloat = 24
+    @State private var barHeight: CGFloat = 0
+
+    var body: some View {
+        let height = barHeight + Self.fadeHeight
+        Rectangle()
+            .fill(.regularMaterial)
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: barHeight / height),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .frame(height: height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { barHeight = $0 }
+            .ignoresSafeArea(.container, edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+#endif
 
 private struct PendingQuestionRecoveryPlaceholder: View {
     @Environment(\.colorScheme) private var colorScheme

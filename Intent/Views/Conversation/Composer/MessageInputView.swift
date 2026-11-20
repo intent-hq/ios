@@ -200,6 +200,7 @@ private extension MessageInputView {
                 .frame(width: controlIconSide, height: controlIconSide)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .frame(minWidth: Constants.Conversation.Composer.controlTarget, minHeight: Constants.Conversation.Composer.controlTarget)
+                .visionHoverShape(Circle())
         }
         .buttonStyle(IntentContentButtonStyle())
         .requiresLiveConnection()
@@ -225,6 +226,7 @@ private extension MessageInputView {
                     minWidth: Constants.Conversation.Composer.controlTarget,
                     minHeight: Constants.Conversation.Composer.controlTarget
                 )
+                .visionHoverShape(Circle())
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Add attachment")
@@ -307,6 +309,7 @@ private extension MessageInputView {
                             minWidth: Constants.Conversation.Composer.controlTarget,
                             minHeight: Constants.Conversation.Composer.controlTarget
                         )
+                        .visionHoverShape(Circle())
                 }
                 .buttonStyle(IntentContentButtonStyle())
                 .disabled(!hasSendableContent)
@@ -350,6 +353,7 @@ private extension MessageInputView {
                     minWidth: Constants.Conversation.Composer.controlTarget,
                     minHeight: Constants.Conversation.Composer.controlTarget
                 )
+                .visionHoverShape(Circle())
         }
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel(dictation.isActive ? "Stop dictation" : "Dictate")
@@ -438,8 +442,7 @@ private extension MessageInputView {
                         .frame(minHeight: Constants.Conversation.Composer.suggestedPromptChipMinimumHeight)
                         .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.Composer.suggestedPromptBackgroundOpacity))
                         .clipShape(Capsule())
-                        .contentShape(.hoverEffect, Capsule())
-                        .hoverEffect(.highlight)
+                        .visionHoverShape(Capsule())
                     }
                     .buttonStyle(IntentContentButtonStyle())
                 }
