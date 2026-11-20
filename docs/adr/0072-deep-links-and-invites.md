@@ -9,7 +9,7 @@
 ## Decision
 
 1. **Kinds.** Two kinds are actionable: `intent://pair` (`DeepLinkPairingView`) and `intent://invite`, a shared workspace (`InviteJoinView`). Live Activity `intent://agent` links are routed by `IntentApp` before `handleIncomingURL(_:)`. Every other or malformed URL is ignored without changing app state.
-2. **Confirmation.** An actionable link (`DeepLinkRequest`) waits for explicit user confirmation before anything is sent. The sheet shows over whichever screen is current.
+2. **Confirmation.** An actionable link (`DeepLinkRequest`) shows its sheet over whichever screen is current. A pair link connects only after the user confirms. An invite link starts `InviteJoinModel` at once: it reads the invite (`invite.inspect`), and on the proof path it also requests `invite.challenge` and reads the account on the person's Mac. Only accepting the invite (`invite.accept`) and publishing and sending the identity proof (`invite.prove`) wait for the person to confirm.
 3. **Logging.** The URL is never logged.
 4. **Cold start.** A URL that arrives before the load has routed is stashed (`stashedDeepLink`) and shown after the load.
 5. **Joined invite** (`onInviteJoined(_:workspaceId:)`).

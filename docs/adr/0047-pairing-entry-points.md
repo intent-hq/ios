@@ -10,7 +10,7 @@ A device can pair from an `intent://pair` deep link, a QR scan, manual entry (ho
 
 1. **Same pinning everywhere.** Every entry point uses `PairingFlow` rules. A payload fingerprint is pinned directly. Without one, the server certificate is probed and the user must trust it before a pinned WSS connect. There is never a plain `ws://` path. Without a probed certificate the app never connects; the error names the stage where the probe failed (ios#233).
 2. **Deep links need consent.** Any web page can trigger `intent://pair`, unlike a QR scan the user aimed at their own desktop. `DeepLinkPairingView` shows the target hosts and port, and connects only after the user confirms.
-3. **Invites.** `InviteJoinView` sends nothing to the host beyond reading the invite preview until the person taps Join (`InviteJoinModel`).
+3. **Invites.** Before the person taps Join, `InviteJoinModel` only reads: `invite.inspect`, `invite.challenge` on the proof path, and the account on the person's Mac. It accepts the invite or publishes and sends an identity proof only after confirmation.
 4. **Cancellation.** An in-flight probe or connect task is cancelled when its sheet goes away or the user taps Cancel. A dismissed pairing never completes, saves or navigates. A cancelled probe result is dropped, so it never shows a false certificate error or overwrites a newer attempt.
 5. **Manual entry input.**
    1. `ManualConnectionInput.classify(_:)` treats input as a Tailcat address only when it is lowercase `tc` followed by unpadded base64url CBOR (tailcat v0.4.0). The decoded value must start with a 1–4 entry CBOR map whose first field is `p`, a 32-byte server public key. This keeps short DNS labels such as `tcoA` (an empty CBOR map) as hosts.

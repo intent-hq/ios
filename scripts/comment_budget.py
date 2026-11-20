@@ -59,7 +59,7 @@ def _block_end(src: str, start: int) -> int:
     raise LexError("unclosed block comment")
 
 
-def _string_end(src: str, start: int) -> int | None:
+def _string_end(src: str, start: int, spans: list[tuple[int, int]] | None = None) -> int | None:
     index = start
     while index < len(src) and src[index] == "#":
         index += 1
@@ -79,7 +79,7 @@ def _string_end(src: str, start: int) -> int | None:
         if src.startswith(escape, index):
             index += len(escape)
             if index < len(src) and src[index] == "(":
-                index = _interpolation_end(src, index)
+                index = _interpolation_end(src, index, spans)
             else:
                 index += 1
         else:
@@ -87,10 +87,25 @@ def _string_end(src: str, start: int) -> int | None:
     raise LexError("unclosed string literal")
 
 
-def _interpolation_end(src: str, opener: int) -> int:
+def _interpolation_end(src: str, opener: int, spans: list[tuple[int, int]] | None = None) -> int:
+    """Scan an interpolation as Swift code: nested literals and comments are
+    skipped lexically, and comments are recorded in `spans`."""
     depth, index = 0, opener
     while index < len(src):
-        literal = _string_end(src, index)
+        if src.startswith("//", index):
+            newline = src.find("\n", index)
+            end = len(src) if newline < 0 else newline
+            if spans is not None:
+                spans.append((index, end))
+            index = end
+            continue
+        if src.startswith("/*", index):
+            end = _block_end(src, index)
+            if spans is not None:
+                spans.append((index, end))
+            index = end
+            continue
+        literal = _string_end(src, index, spans)
         if literal is not None:
             index = literal
             continue
@@ -153,7 +168,7 @@ def comment_spans(src: str) -> list[tuple[int, int]]:
             index = _block_end(src, index)
             spans.append((start, index))
         else:
-            end = _string_end(src, index)
+            end = _string_end(src, index, spans)
             if end is None:
                 end = _regex_end(src, index, code)
             if end is None:
@@ -163,7 +178,7 @@ def comment_spans(src: str) -> list[tuple[int, int]]:
         for blank in range(start, index):
             if code[blank] != "\n":
                 code[blank] = " "
-    return spans
+    return sorted(spans)
 
 
 @dataclass
@@ -330,18 +345,32 @@ def strip_source(src: str, selected: set[int] | None = None) -> str:
     spans = [(s, e) for s, e in comment_spans(src) if not DIRECTIVE.match(src[s:e])]
     chosen = {line.number for line in lines if line.counted and (selected is None or line.number in selected)}
     removed = {number for number in chosen if lines[number - 1].comment_only}
-    starts, offset = [], 0
-    for line in lines:
-        starts.append(offset)
-        offset += len(line.text) + 1
-    text = list(src)
+    pieces, cursor = [], 0
     for start, end in spans:
-        line_number = src.count("\n", 0, start) + 1
-        if line_number in chosen and line_number not in removed:
-            for index in range(start, end):
-                if text[index] != "\n":
-                    text[index] = ""
-    edited = "".join(text).split("\n")
+        first = src.count("\n", 0, start) + 1
+        last = first + src.count("\n", start, end)
+        if not any(number in chosen for number in range(first, last + 1)):
+            continue
+        pieces.append(src[cursor:start])
+        before = src[start - 1] if start > 0 else "\n"
+        after = src[end] if end < len(src) else "\n"
+        newlines = src.count("\n", start, end)
+        pieces.append("\n" * newlines)
+        if newlines and after != "\n":
+            line_start = src.rfind("\n", 0, start) + 1
+            indent = src[line_start:start]
+            pieces.append(indent[:len(indent) - len(indent.lstrip(" \t"))])
+            while end < len(src) and src[end] in " \t":
+                end += 1
+        elif before not in WHITESPACE and after not in WHITESPACE:
+            pieces.append(" ")
+        elif before in " \t" and after in " \t":
+            end += 1
+        elif before in " \t" and after in ")]},;:.":
+            pieces[-2] = pieces[-2].rstrip(" \t")
+        cursor = end
+    pieces.append(src[cursor:])
+    edited = "".join(pieces).split("\n")
     drop = removed | _orphaned_blanks(lines, removed)
     output = []
     for line, new_text in zip(lines, edited):

@@ -50,6 +50,14 @@ class LexerTests(unittest.TestCase):
         """
         self.assertEqual(counted(source), [5])
 
+    def test_comments_inside_interpolations_are_counted(self):
+        self.assertEqual(counted('let s = "\\(1 /* note */)"\nlet t = 2\n'), [1])
+        source = 'let s = """\n    \\(value // why\n    )\n    """\n'
+        self.assertEqual(counted(source), [2])
+
+    def test_quotes_and_parens_in_interpolated_comments_are_skipped(self):
+        self.assertEqual(counted('let s = "\\(f(x) /* ") ( */)"\n'), [1])
+
     def test_unclosed_literal_is_an_error(self):
         with self.assertRaises(LexError):
             classify('let a = "open\n')
@@ -95,6 +103,17 @@ class StripTests(unittest.TestCase):
         let a = try! f("// text")
         """
         self.assertEqual(self.strip(source, {3}), textwrap.dedent(expected))
+
+    def test_strip_removes_a_block_comment_that_ends_beside_code(self):
+        self.assertEqual(self.strip("/* note\n*/ let x = 1\n"), "let x = 1\n")
+        self.assertEqual(self.strip("func f() {\n    /* a\n    b */ let x = 1\n}\n"), "func f() {\n    let x = 1\n}\n")
+
+    def test_strip_keeps_tokens_apart(self):
+        self.assertEqual(self.strip("let/*note*/value = 1\n"), "let value = 1\n")
+        self.assertEqual(self.strip("let x = 1 /* a */ + 2\n"), "let x = 1 + 2\n")
+
+    def test_strip_removes_comments_inside_interpolations(self):
+        self.assertEqual(self.strip('let s = "\\(1 /* note */)"\n'), 'let s = "\\(1)"\n')
 
     def test_strip_collapses_blanks_around_a_removed_block(self):
         self.assertEqual(self.strip("a\n\n// x\n\nb\n"), "a\n\nb\n")
