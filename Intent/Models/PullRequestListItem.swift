@@ -1,7 +1,5 @@
 import Foundation
 
-/// One row of the pull requests list: a lenient parse of a
-/// `github.pulls.search` result (FE Home `PullWire` parity).
 struct PullRequestListItem: Identifiable, Hashable {
     let owner: String
     let repo: String
@@ -13,7 +11,6 @@ struct PullRequestListItem: Identifiable, Hashable {
     let updatedAt: String?
     let headRef: String?
 
-    /// Lowercased `owner/repo#number`, shared with workspace links.
     var id: String { Self.key(owner: owner, repo: repo, number: number) }
 
     static func key(owner: String, repo: String, number: Int) -> String {
@@ -42,8 +39,6 @@ struct PullRequestListItem: Identifiable, Hashable {
         self.headRef = headRef
     }
 
-    /// `owner`/`repo` fall back to the batch's first repository, as the
-    /// daemon omits them on single-repository searches.
     init?(wire: [String: Any], owner fallbackOwner: String, repo fallbackRepo: String) {
         guard let number = wire["number"] as? Int, let title = wire["title"] as? String else { return nil }
         let status: WorkspacePrPill.Status
@@ -69,9 +64,6 @@ struct PullRequestListItem: Identifiable, Hashable {
         )
     }
 
-    /// Workspaces keyed by every PR they track (detected pool, active PR),
-    /// so a row can open the workspace that owns it. URLs win over the
-    /// workspace's own repository because a workspace may track PRs elsewhere.
     static func linkedWorkspaces(_ workspaces: [Workspace]) -> [String: Workspace] {
         var links: [String: Workspace] = [:]
         for workspace in workspaces {
@@ -84,7 +76,6 @@ struct PullRequestListItem: Identifiable, Hashable {
         return links
     }
 
-    /// `/{owner}/{repo}/pull/{number}` path component indices.
     private enum PullPath {
         static let owner = 0
         static let repo = 1
@@ -92,7 +83,6 @@ struct PullRequestListItem: Identifiable, Hashable {
         static let number = 3
     }
 
-    /// A github.com pull request link, titled by its number until details load.
     init?(githubURL url: URL) {
         guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
               ["github.com", "www.github.com"].contains(url.host()?.lowercased() ?? "") else { return nil }
@@ -110,7 +100,6 @@ struct PullRequestListItem: Identifiable, Hashable {
         )
     }
 
-    /// `self` with fields the loaded pull request lacks kept from `other`.
     func filling(from other: Self) -> Self {
         Self(
             owner: owner,
@@ -125,8 +114,6 @@ struct PullRequestListItem: Identifiable, Hashable {
         )
     }
 
-    /// The pull request a link points at when one of `workspaces` tracks it,
-    /// carrying the workspace's title and state for that pull request.
     static func tracked(url: URL, in workspaces: [Workspace]) -> (item: Self, workspace: Workspace)? {
         guard let link = Self(githubURL: url) else { return nil }
         for workspace in workspaces {
@@ -146,10 +133,6 @@ struct PullRequestListItem: Identifiable, Hashable {
         return nil
     }
 
-    /// Every pull request associated with the workspace: its detected pool
-    /// and active PR (including PRs in its git roots) plus agent-monitored
-    /// PRs in any repository, deduplicated by repository and number,
-    /// newest-updated first.
     static func associated(with workspace: Workspace, monitors: [MonitoredPr] = []) -> [Self] {
         var seen: Set<String> = []
         var items: [Self] = []
@@ -204,7 +187,6 @@ struct PullRequestListItem: Identifiable, Hashable {
     }
 }
 
-/// Pull requests of one repository, for the grouped list.
 struct PullRequestProjectGroup: Identifiable {
     let id: String
     let title: String
@@ -212,9 +194,6 @@ struct PullRequestProjectGroup: Identifiable {
 }
 
 extension PullRequestListItem {
-    /// Groups by repository, keeping the incoming (newest-first) order, so
-    /// the most recently updated project leads. Titles name the owner only
-    /// when two groups share a repository name.
     static func groupedByProject(_ items: [PullRequestListItem]) -> [PullRequestProjectGroup] {
         var order: [String] = []
         var buckets: [String: [PullRequestListItem]] = [:]
@@ -232,12 +211,10 @@ extension PullRequestListItem {
     }
 }
 
-/// A GitHub repository the list searches, from the known workspaces.
 struct PullRequestListRepository: Hashable {
     let owner: String
     let name: String
 
-    /// Distinct repositories, case-insensitive, sorted for a stable scope key.
     static func scope(_ workspaces: [Workspace]) -> [Self] {
         var seen: Set<String> = []
         return workspaces.compactMap { workspace -> Self? in

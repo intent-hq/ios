@@ -1,19 +1,11 @@
 import Foundation
 
-/// The broad cause of a `turn-failure` attention notice, inferred
-/// client-side from the notice's reason text. Mirrors the markers intentd
-/// uses in `crates/intent-acp/src/error.rs`.
 nonisolated enum TurnFailureCategory: Equatable, Sendable {
-    /// The provider needs the user to sign in again.
     case authentication
-    /// Anything else.
     case generic
-    /// A transient connection problem (reset, refused, timed out).
     case network
-    /// The provider's usage, rate, or billing limit was hit.
     case usageLimit
 
-    /// The short card title for this category.
     var title: String {
         switch self {
         case .usageLimit: "Usage limit reached"
@@ -23,8 +15,6 @@ nonisolated enum TurnFailureCategory: Equatable, Sendable {
         }
     }
 
-    /// Used when a valid JSON reason carries a category signal but no
-    /// human string field.
     var fallbackMessage: String? {
         switch self {
         case .usageLimit: "The provider's usage limit was reached."
@@ -35,26 +25,11 @@ nonisolated enum TurnFailureCategory: Equatable, Sendable {
     }
 }
 
-/// A friendly presentation of a raw `turn-failure` reason.
-///
-/// Build one with `TurnFailureSummary(reason:)` (or
-/// `AttentionNotice.turnFailureSummary`). Pure and total: any input,
-/// including empty or malformed text, yields a summary, and the original
-/// text is always kept verbatim in `rawDetails`.
-///
-/// - `title`: short headline for the category ("Usage limit reached").
-/// - `message`: a human sentence with wrapper prefixes, RPC codes, and JSON
-///   stripped. Nil only when the peeled reason is empty; otherwise falls
-///   back to a JSON string field, the category sentence, or the peeled text.
-/// - `retryHint`: the provider's own reset wording ("try again at Nov 14th,
-///   2026 8:07 AM", "resets 3pm"), when present.
-/// - `linkURL`: the first http(s) link in the human text, when present.
 nonisolated struct TurnFailureSummary: Equatable, Sendable {
     let category: TurnFailureCategory
     let message: String?
     let retryHint: String?
     let linkURL: URL?
-    /// The untouched original reason, for a "Details" disclosure and Copy.
     let rawDetails: String
 
     var title: String { category.title }
@@ -72,17 +47,12 @@ nonisolated struct TurnFailureSummary: Equatable, Sendable {
 }
 
 extension AttentionNotice {
-    /// The friendly summary for a `turn-failure` notice; nil for other kinds.
     nonisolated var turnFailureSummary: TurnFailureSummary? {
         kind == .turnFailure ? TurnFailureSummary(reason: reason) : nil
     }
 }
 
-// MARK: - Parsing
-
 nonisolated private extension TurnFailureSummary {
-    /// Repeatedly strips `internal error:`, `session/prompt failed:`, and
-    /// `JSON-RPC error -NNNNN:` style prefixes (case-insensitive).
     static func peelWrappers(_ reason: String) -> String {
         var text = Substring(reason.trimmingCharacters(in: .whitespacesAndNewlines))
         let prefix = #/^\s*(?:internal error|session/prompt failed|json-rpc error\s*-?\d+)\s*:\s*/#.ignoresCase()
@@ -92,9 +62,6 @@ nonisolated private extension TurnFailureSummary {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Structured hints win; otherwise only the phrasings intentd matches
-    /// (`crates/intent-acp/src/error.rs`) count, so generic "limit reached",
-    /// "quota", or tool "timeout" text stays `.generic`.
     static func classify(reason: String, hints: [String]) -> TurnFailureCategory {
         let hints = hints.map { $0.lowercased() }
         if hints.contains(where: { ["usagelimitexceeded", "ratelimitexceeded", "rate_limit", "billing_error"].contains($0) }) {
@@ -119,10 +86,6 @@ nonisolated private extension TurnFailureSummary {
         return .generic
     }
 
-    /// The provider's reset phrase, e.g. "try again at Nov 14th, 2026 8:07 AM"
-    /// or "resets 3pm". Ends at a sentence-ending period, `·`, newline, or
-    /// the end; `a.m.`/`p.m.` do not end it. A "try again …" phrase counts
-    /// only when it names a time or date ("in a moment" does not).
     static func retryHint(in text: String) -> String? {
         let pattern = #/\b(?<lead>try again (?:at|in|after|on|by)|resets(?: at| in| on)?|reset (?:at|in|on))\s+(?:[ap]\.m\.|[^\n·])+?(?=\.\s+[A-Z(]|\.\s*$|·|\n|$)/#
             .ignoresCase()
@@ -148,15 +111,9 @@ nonisolated private extension TurnFailureSummary {
     }
 }
 
-/// What a peeled reason carries besides plain text.
 nonisolated private enum EmbeddedError {
-    /// A valid JSON object starts at the first `{`. `text` is its best human
-    /// string field; `leading` is the text before the object.
     case object(leading: String, text: String?, hints: [String])
-    /// No `{` in the text.
     case plain
-    /// A `{` that is not valid JSON (truncated JSON or prose like
-    /// "Invalid value {foo}"). `message` is a best-effort `"message":"…"` scan.
     case unparsed(message: String?, hints: [String])
 
     init(peeledText text: String) {
@@ -183,7 +140,6 @@ nonisolated private enum EmbeddedError {
         }
     }
 
-    /// The best human sentence; nil only when every candidate is empty.
     func humanText(peeledText: String, fallback: String?) -> String? {
         let candidates: [String?] = switch self {
         case .plain: [peeledText]
@@ -195,9 +151,6 @@ nonisolated private enum EmbeddedError {
             .first { !$0.isEmpty }
     }
 
-    /// `message`, `details`, `detail`, `reason`, or a string `error` (each
-    /// searched breadth-first, so top-level wins), then `error.type`, then a
-    /// top-level `type` other than the envelope value "error".
     private static func humanField(in object: [String: Any]) -> String? {
         for key in ["message", "details", "detail", "reason", "error"] {
             if let value = firstString(forKey: key, in: object) { return value }
@@ -234,8 +187,6 @@ nonisolated private enum EmbeddedError {
         return result
     }
 
-    /// Extracts `"key":"value"` from text that is not valid JSON, decoding
-    /// JSON string escapes when possible.
     private static func scanString(forKey key: String, in text: String) -> String? {
         let pattern = #/"(?<key>[A-Za-z]+)"\s*:\s*"(?<value>(?:\\.|[^"\\])*)"/#
         guard let match = text.matches(of: pattern).first(where: { $0.output.key == key }) else { return nil }

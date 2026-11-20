@@ -1,6 +1,5 @@
 import Foundation
 
-/// A changed file placed in a `ChangeTree` by its slash-separated path.
 protocol ChangeTreeFile: Equatable {
     var id: String { get }
     var path: String { get }

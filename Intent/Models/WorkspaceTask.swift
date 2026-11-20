@@ -1,14 +1,11 @@
 import Foundation
 
-/// Canonical task facts for a workspace (matches WorkspaceTask from intentd).
-/// Returned by task.list and task.subscribe.
 struct WorkspaceTask: Identifiable, Codable, Equatable {
     let id: String
     let title: String
     let status: String
     let updatedAt: String
 
-    /// Display treatment for the wire `status` string.
     var displayStatus: TaskDisplayStatus {
         TaskDisplayStatus(wire: status)
     }
@@ -30,13 +27,6 @@ struct WorkspaceTask: Identifiable, Codable, Equatable {
     }
 }
 
-/// Display treatment for the task-note status vocabulary (PROTOCOL §5.4):
-/// not_started | waiting | discussion_needed | blocked | in_progress |
-/// review_required | complete | cancelled. Task statuses stay open strings on
-/// the wire; unrecognized values fall back to `.unknown` so newer daemons
-/// degrade gracefully. `blocked` and `discussion_needed` are pending
-/// attention-request states (`ws.agent.reportBlocker` / `requestDiscussion`)
-/// and get a distinct treatment rather than being lumped with unknown.
 enum TaskDisplayStatus: Equatable {
     case blocked
     case cancelled
@@ -90,8 +80,6 @@ enum TaskDisplayStatus: Equatable {
         }
     }
 
-    /// True for statuses raised by agent attention requests — the task is
-    /// waiting on the user rather than progressing.
     var needsAttention: Bool {
         self == .blocked || self == .discussionNeeded
     }

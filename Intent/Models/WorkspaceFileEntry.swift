@@ -1,6 +1,5 @@
 import Foundation
 
-/// A direct child returned by file.list, with a workspace-relative path for previews.
 struct WorkspaceFileEntry: Identifiable, Equatable, Sendable {
     let path: String
     let name: String
