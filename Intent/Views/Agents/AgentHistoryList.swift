@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// The right-edge drawer's panel: visited agents across every saved device.
-/// Reads the live stores here so their updates re-render only this panel.
 struct AgentHistoryList: View {
     let onSelect: (AgentHistoryEntry) -> Void
     @Environment(AppCoordinator.self) private var coordinator
@@ -52,7 +50,6 @@ struct AgentHistoryList: View {
     }
 
     private func rowList(_ rows: [AgentHistoryRowSnapshot]) -> some View {
-        // Resolve environment values and actions before SwiftUI's async row callback.
         let content = rows.map { row in
             let content = AgentHistoryRow(
                 snapshot: row,
@@ -90,7 +87,6 @@ struct AgentHistoryList: View {
         }
     }
 
-    /// The open device's workspace title is read live; others use the title from the visit.
     private func workspaceTitle(for entry: AgentHistoryEntry) -> String? {
         var liveTitle: String?
         if entry.connectionId == coordinator.windowConnectionID {
@@ -100,7 +96,6 @@ struct AgentHistoryList: View {
         return title
     }
 
-    /// Device, then agent; the agent name moves to the title when the workspace is unknown.
     private func subtitle(for entry: AgentHistoryEntry, showsAgentName: Bool) -> String {
         let device = coordinator.savedConnections.first { $0.id == entry.connectionId }?.displayName
         return [device, showsAgentName ? entry.agentName : nil]

@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Shared form action reflects whether validation is running and remains cancellable.
 struct ManualConnectionSubmitButton: View {
     let isValidating: Bool
     let canConnect: Bool

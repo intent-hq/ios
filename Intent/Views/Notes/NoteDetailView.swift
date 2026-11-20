@@ -9,11 +9,8 @@ struct NoteDetailView: View {
     let workspaceId: String
     let noteTitle: String
     let showsBackButton: Bool
-    /// Set by the iPad shell, which shows an inline header in place of the navigation bar.
     var onInlineBack: (() -> Void)?
     var inlineBackLabel: LocalizedStringKey = "Back"
-    /// Optional closure to push a note onto the navigation stack (for note-to-note navigation).
-    /// Parameters: (noteId, workspaceId, noteTitle)
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     @State private var noteStore: NoteStore
     @State private var agentStore: AgentStore
@@ -72,47 +69,26 @@ struct NoteDetailView: View {
         .intentNavigationBackButton(showsBackButton, usesWorkspaceVerticalBar: true, showsBackground: false)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
         .onChange(of: isRemoteReadOnly) { _, readOnly in
-            // A note that could not load during a drop loads by itself on reconnect.
             guard !readOnly, displayNote?.content.isEmpty ?? true else { return }
             Task { await loadNote() }
         }
         .task {
             await loadNote()
-            // Also fetch all notes so we can resolve titles for intent:// links
             await noteStore.fetchNotes(workspaceId: workspaceId)
-            // The list landed after loadNote(), so its slim row (§5.2) missed
-            // fetchNote's upsert — graft the fetched body onto it so
-            // optimistic checkbox edits work off the cached content.
             if let fetched = note {
                 noteStore.upsertFullNote(fetched, workspaceId: workspaceId)
             }
-            // Agents back the metadata header's assignee names; observe events
-            // so names stay current while the note is open.
             agentStore.startObservingEvents()
             await agentStore.fetchAgents(workspaceId: workspaceId)
             noteStore.startObservingEvents(workspaceId: workspaceId)
-            // Refresh on note events for as long as this task lives: SwiftUI
-            // cancels it when the view disappears, which ends the stream, so
-            // the store never holds a reference back to the view and no stale
-            // refresh runs after dismissal (ios#250).
             for await _ in noteStore.noteChanges() {
                 await refreshNote()
             }
         }
         .onChange(of: noteStore.notes) { _, newNotes in
-            // Live-delta removal: if the open note vanished from the workspace's note
-            // list while we have content loaded, confirm via refetch (which falls back
-            // to the workspace detail on a definitive not-found). An empty list also
-            // triggers the refetch — the last note in the workspace may have been the
-            // open one — and a spurious empty publish is harmless since refreshNote
-            // only navigates on a definitive not-found.
             if note != nil, !newNotes.contains(where: { $0.id == noteId }) {
                 Task { await refreshNote() }
             }
-            // A slim row (§5.2) at a different revision than the fetched body
-            // means the note changed between loadNote() and the list request:
-            // refetch so the rendered content catches up (fetchNote's upsert
-            // then clears the stale marker, ending the cycle).
             if let cached = newNotes.first(where: { $0.id == noteId }),
                cached.needsFullContent, let full = note,
                cached.updatedAt != full.updatedAt {
@@ -263,14 +239,6 @@ struct NoteDetailView: View {
         }
     }
 
-    /// The note to render: the store's cached copy when available (so
-    /// optimistic task-status updates show immediately), else the fetched one.
-    /// A cached slim list row (§5.2) carries no content, and a cut list row
-    /// only a prefix, so graft the fetched body onto it when it holds at
-    /// least as much — the cached copy's metadata still wins. When the
-    /// cached row is newer than the fetched body, this is last-known content:
-    /// the onChange handler has already kicked off a refetch (same policy as
-    /// refreshNote's transient-error path — never blank a rendered note).
     private var displayNote: Note? {
         guard let cached = noteStore.note(byId: noteId) else { return note }
         if cached.needsFullContent, let full = note, !full.content.isEmpty,
@@ -280,16 +248,10 @@ struct NoteDetailView: View {
         return cached
     }
 
-    /// Whether the task-note metadata header renders: any task note except
-    /// the spec. Also keeps metadata-only (empty-content) task notes on the
-    /// detail view instead of the "content unavailable" placeholder.
     private func showsTaskHeader(_ note: Note) -> Bool {
         note.taskStatus != nil && !note.isDefault
     }
 
-    /// Push a note onto the navigation stack (note-to-note navigation).
-    /// A non-nil `targetWorkspaceId` (from a workspace-qualified link) routes
-    /// the navigation to that workspace; nil falls back to the current one.
     private func navigateToNote(_ targetId: String, in targetWorkspaceId: String? = nil) {
         let destinationWorkspaceId = targetWorkspaceId ?? workspaceId
         let title = noteStore.note(byId: targetId)?.title ?? "Note"
@@ -321,22 +283,12 @@ struct NoteDetailView: View {
         case .notFound:
             coordinator.handleMissingNote(noteId: noteId, workspaceId: workspaceId)
         case .transientError:
-            break  // keep showing the last known content
+            break
         }
     }
 
-    /// Parse an intent:// URL to extract a note/task ID.
-    /// Supports the short forms
-    ///   intent://local/task/{id}
-    ///   intent://local/note/{id}
-    /// and the canonical workspace-qualified long forms
-    ///   intent://local/{workspaceId}/task/{id}
-    ///   intent://local/{workspaceId}/note/{id}
-    /// Long forms carry the embedded workspace ID; short forms return nil for it
-    /// (callers fall back to the current workspace).
     static func parseIntentNoteLink(_ url: URL) -> (workspaceId: String?, id: String)? {
         guard url.scheme == "intent", url.host == "local" else { return nil }
-        // URL path segments: e.g. intent://local/task/abc-123 → host="local", path="/task/abc-123"
         let segments = url.pathComponents.filter { $0 != "/" }
         if segments.count >= 2, segments[0] == "task" || segments[0] == "note" {
             return (workspaceId: nil, id: segments[1])

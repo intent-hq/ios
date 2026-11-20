@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Sheet for an `intent://invite` link: someone shared a workspace with this
-/// person. Nothing is sent to the host beyond reading the invite's preview
-/// until the person taps Join (see InviteJoinModel for the flow).
 struct InviteJoinView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session

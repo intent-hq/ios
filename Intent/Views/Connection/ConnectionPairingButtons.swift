@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Shared pairing actions; each presenting screen owns pairing and dismissal.
 struct ConnectionPairingButtons: View {
     @Environment(\.colorScheme) private var colorScheme
     let qrTitle: LocalizedStringKey

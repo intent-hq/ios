@@ -1,18 +1,5 @@
 import SwiftUI
 
-/// Compact circular task status indicator, visually matching the desktop
-/// frontend's `TaskStatusIcon.svelte`:
-/// - notStarted: empty gray outline circle; unknown adds a question mark
-/// - waiting: gray outline circle with a clock glyph (deliberate addition;
-///   the fe currently renders waiting identically to not_started)
-/// - discussionNeeded: amber filled circle with a question mark
-/// - blocked: red filled circle with an exclamation mark
-/// - inProgress: blue outline, right half filled
-/// - reviewRequired: blue filled circle with an eye
-/// - complete: green filled circle with a white checkmark
-/// - cancelled: gray outline circle with a diagonal line
-///
-/// All geometry is defined in the fe's 24×24 viewBox space and scaled to `size`.
 struct TaskStatusIconView: View {
     let status: TaskDisplayStatus
     var size: CGFloat = Metrics.defaultSize
@@ -20,7 +7,6 @@ struct TaskStatusIconView: View {
 
     private typealias Metrics = Constants.TaskStatusIcon
 
-    /// Scale factor from the 24×24 reference space to the rendered size.
     private var scale: CGFloat { size / Metrics.referenceSize }
 
     private var statusStrokeWidth: CGFloat {
@@ -36,26 +22,16 @@ struct TaskStatusIconView: View {
             : Palette.gray
     }
 
-    /// Shared task-status palette; `amber` doubles as the warning color for
-    /// conflict relation chips (fe `text-warning`).
     enum Palette {
-        // #99999966
         static let gray = Constants.Colors.TaskStatus.neutral
-        // #f59e0b
         static let amber = Constants.Colors.TaskStatus.warning
-        // #ef4444
         static let red = Constants.Colors.TaskStatus.blocked
-        // #00BCFF
         static let skyBlue = Constants.Colors.TaskStatus.inProgress
-        // #3b82f6
         static let blue = Constants.Colors.TaskStatus.reviewRequired
-        // #22c55e
         static let greenStroke = Constants.Colors.TaskStatus.completeStroke
-        // #00BD7D
         static let greenFill = Constants.Colors.TaskStatus.completeFill
     }
 
-    /// Outline stroke color per status.
     private var strokeColor: Color {
         switch status {
         case .notStarted, .waiting, .cancelled, .unknown: return neutralColor
@@ -67,9 +43,6 @@ struct TaskStatusIconView: View {
         }
     }
 
-    /// Inner fill circle: color and radius in reference units (nil = no fill).
-    /// Cancelled has no fill in the fe (innerCircleRPercentage 0) — it renders
-    /// as a gray outline with a diagonal line.
     private var fill: (color: Color, radius: CGFloat)? {
         switch status {
         case .notStarted, .waiting, .cancelled, .unknown: return nil
@@ -93,8 +66,6 @@ struct TaskStatusIconView: View {
                     height: Metrics.outerCircleDiameter * scale
                 )
             if status == .inProgress {
-                // fe draws an extra inner ring (r=10, width 2) that thickens
-                // the in-progress outline inward.
                 Circle()
                     .stroke(strokeColor, lineWidth: Metrics.inProgressInnerStrokeWidth * scale)
                     .frame(
@@ -117,10 +88,6 @@ struct TaskStatusIconView: View {
                 height: radius * Metrics.diameterMultiplier * scale
             )
         if status == .inProgress {
-            // Half fill: only the part right of x = 11.52 (48% of 24) is visible.
-            // The fill circle spans x ∈ [12 − radius, 12 + radius]. The mask is
-            // pinned to LTR so the visible half never flips under RTL (the fe
-            // clip is an absolute x=48% rect).
             circle.mask(
                 Rectangle()
                     .padding(

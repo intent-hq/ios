@@ -5,10 +5,6 @@ import Vision
 import VisionKit
 #endif
 
-/// Pure state machine for `QRScannerView` (idle -> validating -> fingerprint
-/// confirmation or error), eliminating mutually invalid Boolean/Optional
-/// combinations and keeping scan/probe/trust transitions unit-testable without
-/// VisionKit camera hardware.
 struct QRScannerSessionState: Equatable {
     enum Phase: Equatable {
         case confirmingFingerprint(payload: PairingPayload, fingerprint: String)
@@ -100,7 +96,6 @@ struct QRScannerSessionState: Equatable {
     }
 }
 
-/// Suppresses consecutive scans of the same barcode until its cooldown expires.
 struct QRScannerDeduplicator: Equatable {
     private(set) var lastScannedCode: String?
 
@@ -118,13 +113,8 @@ struct QRScannerDeduplicator: Equatable {
 }
 
 #if os(visionOS)
-/// DataScannerViewController (VisionKit live camera scanning) is unavailable
-/// on visionOS; keep the same API so call sites compile, and direct the user
-/// to manual token entry.
 struct QRScannerView: View {
     @Environment(\.dismiss) var dismiss
-    /// Unused on visionOS: kept so call sites pass the same arguments as the
-    /// iOS QRScannerView below.
     var onPaired: ((StoredConnection) -> Void)?
     var isEmbedded = false
     var onCancel: (() -> Void)?
@@ -156,8 +146,6 @@ struct QRScannerView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.dismiss) var dismiss
-    /// When set, pairing success is reported to the presenting context instead
-    /// of the first-run coordinator flow.
     var onPaired: ((StoredConnection) -> Void)?
     var isEmbedded = false
     var onCancel: (() -> Void)?
@@ -283,9 +271,6 @@ struct QRScannerView: View {
             PairingDiagnostics.invalidInput()
             return
         case .validate(let payload):
-            // A payload fingerprint is pinned directly; without one, PairingFlow
-            // probes the server cert like manual entry does and the user must
-            // trust it before connecting pinned over wss — never plain ws://.
             connectTask = Task {
                 let resolution = await PairingFlow.resolveFingerprint(for: payload)
                 guard !Task.isCancelled else { return }
@@ -301,9 +286,6 @@ struct QRScannerView: View {
         }
     }
 
-    /// Connect over wss with the fingerprint pinned. Every QR pairing path
-    /// goes through here with a non-nil fingerprint (from the payload or the
-    /// trust-confirmed probe), so scanning can never fall back to plain ws://.
     private func connect(payload: PairingPayload, certFingerprint: String) {
         connectTask = Task {
             do {
@@ -344,8 +326,6 @@ struct QRCameraPreview: UIViewControllerRepresentable {
             recognizedDataTypes: [.barcode(symbologies: [.qr])],
             qualityLevel: .fast,
             recognizesMultipleItems: false,
-            // VisionKit cannot relocate its native guidance. Keep scan instructions
-            // in the SwiftUI overlay, below the description and outside the scan window.
             isGuidanceEnabled: false,
             isHighlightingEnabled: true
         )
@@ -417,7 +397,6 @@ struct QRCameraPreview: UIViewControllerRepresentable {
             guard let code = deduplicator.accept(candidates) else { return }
             onCodeScanned(code)
 
-            // Reset after 3 seconds to allow re-scanning
             resetTask?.cancel()
             resetTask = Task { [weak self] in
                 try? await Task.sleep(for: Constants.QRScanner.duplicateScanResetDelay)

@@ -1,15 +1,11 @@
 import CoreText
 import SwiftUI
 
-/// The pairing paths PairingView offers, platform-filtered: visionOS exposes
-/// no camera to third-party apps, so live QR scanning is not a viable path
-/// there and is excluded from the options list.
 enum PairingOption: Equatable {
     case manualEntry
     case qrScan
     case savedConnections
 
-    /// Whether live camera QR scanning exists on this platform.
     static var platformSupportsCameraScanning: Bool {
         #if os(visionOS)
         false
@@ -63,8 +59,6 @@ struct PairingView: View {
     private var pairingContent: some View {
         ZStack {
             Constants.Pairing.background(for: colorScheme).ignoresSafeArea()
-            // Equal outer safe margins center on the full container, not the
-            // asymmetric safe area. The same protected region gates scrolling.
             ViewThatFits(in: .vertical) {
                 pairingLayout
                 ScrollView { pairingLayout }
@@ -154,8 +148,6 @@ struct PairingView: View {
     }
 }
 
-/// Figma spaces the header from cap top to last baseline, not native line-box
-/// edges. Measure real multiline baselines without clipping or fixing text height.
 private struct PairingHeaderLayout: Layout {
     let capHeights: [CGFloat]
     let spacing: CGFloat
@@ -188,13 +180,11 @@ private struct PairingHeaderLayout: Layout {
 private enum PairingTextMetrics {
     private static let heading = font(Constants.Typography.heading2)
     private static let body = font(Constants.Typography.bodyS)
-    private static let bodyLineHeightRatio: CGFloat = 1.32 // Figma Connect description.
+    private static let bodyLineHeightRatio: CGFloat = 1.32
     private static let bodyLineHeight = CTFontGetAscent(body) + CTFontGetDescent(body) + CTFontGetLeading(body)
     static let headingCapHeight = CTFontGetCapHeight(heading)
     static let bodyCapHeight = CTFontGetCapHeight(body)
     static let bodyLineSpacing = max(0, Constants.Typography.bodyS.size * bodyLineHeightRatio - bodyLineHeight)
-    // Inter Regular and Medium share vertical metrics. Native line boxes already
-    // contribute this whitespace to the title/subtitle gap between visible caps.
     static let bodyNativeLeading = bodyLineHeight - bodyCapHeight
 
     private static func font(_ style: Constants.Typography.Style) -> CTFont {

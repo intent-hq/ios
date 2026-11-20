@@ -52,7 +52,6 @@ private struct SettingsStatusBarCapture: UIViewControllerRepresentable {
             var presentation: UIViewController = self
             while let parent = presentation.parent { presentation = parent }
             guard presentation.presentingViewController != nil else { return }
-            // Non-fullscreen presentations otherwise keep the presenting screen's status-bar style.
             presentation.modalPresentationCapturesStatusBarAppearance = true
             presentation.setNeedsStatusBarAppearanceUpdate()
         }
@@ -146,8 +145,6 @@ private struct SettingsContent: View {
             .fill(SettingsStyle.surface(for: colorScheme))
             .ignoresSafeArea(edges: .bottom)
         }
-        // Keep the real system status bar and its light/dark contrast. Do not
-        // draw the status bar or force the rest of Settings into dark mode.
         .background(outerBackground.ignoresSafeArea())
     }
 

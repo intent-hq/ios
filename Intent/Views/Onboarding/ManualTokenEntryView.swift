@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// Classification of the manual-entry "Host / Tailcat Address" input: a
-/// direct host/IP dialed as today, or a Tailcat connection blob dialed via
-/// TailcatKit. Pinned tailcat v0.4.0 encodes blobs as lowercase `tc` followed
-/// by unpadded base64url-encoded CBOR; the tunnel dial remains the authoritative
-/// validation of the decoded contents.
 enum ManualConnectionInput: Equatable {
     private static let base64BlockSize = 4
     private static let minimumConnectionBlobByteCount = 37
@@ -39,16 +34,10 @@ enum ManualConnectionInput: Equatable {
         base64 += String(repeating: "=", count: paddingCount)
         guard let decoded = Data(base64Encoded: base64),
               decoded.count >= minimumConnectionBlobByteCount else { return false }
-        // v0.4.0's wireConnInfo emits a 1–4 entry map whose first, required
-        // field is `p`: a 32-byte server public key. Requiring that structure
-        // prevents short legal DNS labels such as `tcoA` (an empty CBOR map)
-        // from being mistaken for connection blobs.
         return cborMapPrefixRange.contains(decoded[0])
             && decoded[publicKeyHeaderRange].elementsEqual(publicKeyHeader)
     }
 
-    /// Direct hosts to race and persist: empty for a tunnel-only target
-    /// (the post-connect route refresh fills in daemon-reported IPs).
     var hosts: [String] {
         switch self {
         case .direct(let host): [host]
@@ -56,8 +45,6 @@ enum ManualConnectionInput: Equatable {
         }
     }
 
-    /// tc address to race the tunnel with; persisted on the paired server so
-    /// reconnects race the tunnel route too.
     var tcAddress: String? {
         switch self {
         case .direct: nil
@@ -71,8 +58,6 @@ struct ManualTokenEntryView: View {
     @Environment(BackendSession.self) var session
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
-    /// When set, pairing success is reported to the presenting context instead
-    /// of the first-run coordinator flow.
     var onPaired: ((StoredConnection) -> Void)?
     var isEmbedded = false
     var onCancel: (() -> Void)?
@@ -83,10 +68,6 @@ struct ManualTokenEntryView: View {
     @State private var isValidating = false
     @State private var errorMessage: String?
     @State private var probedFingerprint: String?
-    /// The classified target whose fingerprint was probed, captured alongside
-    /// `probedFingerprint` so the confirmation alert connects to exactly the
-    /// target the user confirmed — never a re-classification of a possibly
-    /// edited field.
     @State private var probedInput: ManualConnectionInput?
     @State private var showFingerprintConfirmation = false
     @State private var connectTask: Task<Void, Never>?
@@ -179,7 +160,6 @@ struct ManualTokenEntryView: View {
         #endif
     }
 
-    /// VoiceOver name matching the visible field label, not the example placeholder.
     private var hostAccessibilityLabel: LocalizedStringKey {
         #if os(visionOS)
         "Host"
@@ -221,7 +201,6 @@ struct ManualTokenEntryView: View {
     private var pasteTokenButton: some View {
         Button(action: pasteToken) {
             Image(.connectionClipboard)
-                // The exact export already has 30% white strokes.
                 .renderingMode(colorScheme == .dark && !isValidating ? .original : .template)
                 .resizable()
                 .scaledToFit()
@@ -233,7 +212,6 @@ struct ManualTokenEntryView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(IntentContentButtonStyle())
-        // Preserve the visible light paste affordance rather than Figma's white-on-white export.
         .foregroundStyle(isValidating
             ? Constants.ConnectionSheet.disabledForeground(for: colorScheme)
             : Theme.foreground(for: colorScheme))
@@ -260,7 +238,6 @@ struct ManualTokenEntryView: View {
             ? Constants.ConnectionSheet.disabledForeground(for: colorScheme)
             : Theme.foreground(for: colorScheme).opacity(colorScheme == .dark ? Constants.ConnectionSheet.placeholderOpacity : 1))
         .accessibilityLabel(isTokenVisible ? "Hide API token" : "Show API token")
-        // Expand the trailing hit region inward, retaining the reference's 24pt glyph inset.
         .padding(.trailing, -Constants.ManualTokenEntry.pasteHitExpansion)
     }
 
@@ -335,10 +312,6 @@ struct ManualTokenEntryView: View {
                         remotePort: portNum
                     )
                 } catch {
-                    // Classification only recognizes the expected prefix,
-                    // base64, and CBOR-header shape. TailcatKit authoritatively
-                    // validates decoded fields, and the dial reports invalid
-                    // or unreachable addresses.
                     guard !Task.isCancelled else { return }
                     PairingDiagnostics.phase(.probe, .failed, failure: TransportDiagnosticFailure.classify(error))
                     showError("Could not reach the Tailcat address: \(error.localizedDescription)")
@@ -347,11 +320,6 @@ struct ManualTokenEntryView: View {
                 }
             }
 
-            // The user may have hit Cancel while the probe was in flight: a
-            // cancelled direct probe surfaces here as `.cancelled` (the
-            // tunnel branch handles its thrown cancellation above), and
-            // processing it would show a spurious certificate error (or
-            // clobber the state of a newer attempt). Drop the result instead.
             guard !Task.isCancelled else { return }
 
             PairingDiagnostics.probeResult(probed)
@@ -361,17 +329,12 @@ struct ManualTokenEntryView: View {
                 probedInput = input
                 showFingerprintConfirmation = true
             case .abort(let message):
-                // Never connect unpinned: without a probed certificate there is
-                // no way to verify the server's identity. The message names
-                // the stage the probe failed at (ios#233).
                 showError(message)
                 isValidating = false
             }
         }
     }
 
-    /// Shows a validation or connection failure and speaks it, because VoiceOver
-    /// focus stays on the Connect button and would not otherwise reach the new text.
     private func showError(_ message: String) {
         errorMessage = message
         var announcement = AttributedString(message)
@@ -411,7 +374,6 @@ struct ManualTokenEntryView: View {
 }
 
 extension ManualTokenEntryView {
-    /// Each phase owns only its own errors; the view handles presentation for either failure.
     @MainActor static func connectAndSave(
         input: ManualConnectionInput,
         port: Int,

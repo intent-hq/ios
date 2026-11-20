@@ -24,7 +24,6 @@ struct NavigationPopObserver: UIViewControllerRepresentable {
 
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
-            // UIKit also calls this when an interactive pop is cancelled.
             if isPopping.wrappedValue { isPopping.wrappedValue = false }
         }
 

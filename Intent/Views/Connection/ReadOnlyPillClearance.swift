@@ -1,9 +1,6 @@
 import Observation
 import SwiftUI
 
-/// Bottom chrome in one window (composers, search, floating buttons) that the
-/// read-only pill floats above instead of covering. Frames are in window
-/// coordinates, which the pill's same-size window shares.
 @MainActor
 @Observable
 final class ReadOnlyPillClearance {
@@ -27,14 +24,11 @@ final class ReadOnlyPillClearance {
         anchorEntry = frame.map { Entry(frame: $0, depth: depth) }
     }
 
-    /// The content panel to centre on, unless a sheet or cover sits above it.
     func anchor(coverage: ComposerCoverage?) -> CGRect? {
         guard let anchorEntry, coverage?.isForemost(depth: anchorEntry.depth) ?? true else { return nil }
         return anchorEntry.frame
     }
 
-    /// The top of the highest chrome under `span` within the window's lower
-    /// half, skipping chrome hidden beneath a sheet or cover.
     func top(under span: ClosedRange<CGFloat>, windowBottom: CGFloat, coverage: ComposerCoverage?) -> CGFloat? {
         entries.values
             .filter { entry in
@@ -55,7 +49,6 @@ private struct ReadOnlyPillClearanceReporter: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            // Measuring nil while inactive makes activation itself report the frame.
             .onGeometryChange(for: CGRect?.self) { isActive ? $0.frame(in: .global) : nil } action: { frame in
                 if let frame {
                     clearance?.report(id, frame: frame, depth: depth)
@@ -81,12 +74,10 @@ private struct ReadOnlyPillAnchorReporter: ViewModifier {
 }
 
 extension View {
-    /// Centres the read-only pill on this content panel instead of the whole window.
     func centersReadOnlyPill() -> some View {
         modifier(ReadOnlyPillAnchorReporter())
     }
 
-    /// Keeps the read-only pill above this bottom chrome while `isActive`.
     func keepsReadOnlyPillAbove(isActive: Bool = true) -> some View {
         modifier(ReadOnlyPillClearanceReporter(isActive: isActive))
     }

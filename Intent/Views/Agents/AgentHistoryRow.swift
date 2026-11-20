@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Values read from the live stores before handing rows to SwiftUI's renderer.
 nonisolated struct AgentHistoryRowSnapshot: Identifiable, Sendable {
     let entry: AgentHistoryEntry
     let title: String
@@ -10,7 +9,6 @@ nonisolated struct AgentHistoryRowSnapshot: Identifiable, Sendable {
     var id: AgentHistoryEntry.ID { entry.id }
 }
 
-/// Constructing this value does not build its label or resolve live store state.
 struct AgentHistoryRow: View {
     let snapshot: AgentHistoryRowSnapshot
     let colorScheme: ColorScheme

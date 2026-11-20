@@ -1,13 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Hosts `ReadOnlyBanner` in a separate window of the SAME scene, like
-/// `ConnectionLossPresenter`, so it stays above sheets and full-screen covers.
-/// Unlike the blocking overlay it never snapshots, disables, or hides the app:
-/// only touches on the banner itself are taken; all others pass through. The
-/// window never becomes key, so a focused composer keeps its keyboard. The
-/// collapsed pill floats over the app without reserving space, so nothing
-/// below it moves when the connection drops or comes back.
 struct ReadOnlyBannerPresenter: UIViewRepresentable {
     let isPresented: Bool
     let message: ReadOnlyBannerMessage
@@ -47,12 +40,9 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
         coordinator.detach()
     }
 
-    /// Takes touches only inside the banner's reported frame.
     final class PassthroughWindow: UIWindow {
         var interactiveFrame: () -> CGRect = { .null }
 
-        /// Stays non-key even when touched, so the app's first responder (a
-        /// focused composer) and its keyboard are never taken away.
         override var canBecomeKey: Bool { false }
 
         override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
@@ -115,7 +105,6 @@ struct ReadOnlyBannerPresenter: UIViewRepresentable {
             window.interactiveFrame = { [weak self] in self?.interactiveFrame ?? .null }
             window.frame = sourceWindow.frame
             window.backgroundColor = .clear
-            // Below the blocking overlay (alert + 1), above every presentation.
             window.windowLevel = .alert - 1
             window.rootViewController = host
             self.host = host
