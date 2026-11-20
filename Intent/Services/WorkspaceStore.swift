@@ -9,12 +9,8 @@ import Observation
     var workspaces: [Workspace] = [] {
         didSet { workspacesRevision &+= 1 }
     }
-    /// Invalidates derived lists for replacements and in-place array mutations.
     private(set) var workspacesRevision: UInt64 = 0
-    /// The `workspace.list` read. A failure before any success shows an
-    /// error with Retry instead of "No Workspaces".
     var loadPhase = LoadPhase.idle
-    /// When the shown list was last published; nil before the first one.
     var lastUpdated: Date? { loadPhase.lastLoadedAt }
     var isLoading: Bool { loadPhase.isLoading }
     var showArchived = false
@@ -25,48 +21,33 @@ import Observation
         }
     }
 
-    /// Ids this backend reported deleted or archived (events or own actions);
-    /// unique across daemons, so consumers need not know which daemon replied.
     var removedWorkspaceIds: AnyPublisher<String, Never> { removedWorkspaceSubject.eraseToAnyPublisher() }
     @ObservationIgnored private let removedWorkspaceSubject = PassthroughSubject<String, Never>()
-    /// `workspace.list` reads. Callers join the running read; an event while
-    /// it runs earns a trailing read, and one during that read a successor.
     @ObservationIgnored let fetchReads = CoalescedRead()
-    /// The read revision the published list is current at. Nil while a read
-    /// runs or after it failed, so `fetchIfNeeded` reads again.
     @ObservationIgnored private var fetchedRevision: Int? = 0
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var eventHandlerId: UUID?
     @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
-    // Live-state subscription tracking
     @ObservationIgnored private var liveSubscription = LiveSubscription.idle
     @ObservationIgnored private var liveSubscriptionGeneration = 0
-    /// Read-only outside this file so local patches can reseed it.
     @ObservationIgnored private(set) var workspaceReconciler: DeltaReconciler<Workspace>?
-    /// Reads the rest of a paged `workspace.subscribe` snapshot (protocol §6.9).
     @ObservationIgnored let snapshotFiller = PagedSnapshotFiller()
 
-    /// Each pinned backend session owns a store over its own connection.
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
         observeConnection()
     }
 
-    /// Test-only initializer that skips connection observation
     init(forTesting _: Bool) {
         self.connectionManager = ConnectionManager.shared
-        // No connection observation for unit tests
     }
 
-    /// Test-only helper to set reconciler for race condition testing
     func setTestReconciler(_ reconciler: DeltaReconciler<Workspace>) async {
         await MainActor.run {
             workspaceReconciler = reconciler
         }
     }
-
-    // MARK: - Connection observation
 
     private func observeConnection() {
         connectionObserver = connectionManager.connectionStatePublisher
@@ -79,8 +60,6 @@ import Observation
     }
 
     private func onConnected() async {
-        // Reset live-state tracking on new connection. Unregister the old
-        // handler if reconnecting (defensive: subscription is invalid after disconnect)
         liveSubscriptionGeneration &+= 1
         if let oldId = liveSubscription.reset() {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
@@ -93,8 +72,6 @@ import Observation
         await subscribeLiveState(generation: liveSubscriptionGeneration)
     }
 
-    // MARK: - Fetch
-
     func fetchIfNeeded() async {
         guard lastUpdated == nil || fetchNeedsRefresh else { return }
         await fetchAll()
@@ -102,8 +79,6 @@ import Observation
 
     private var fetchNeedsRefresh: Bool { fetchedRevision != fetchReads.revision }
 
-    /// Joins the running read or starts one. Callers wait for that read only;
-    /// a successor it hands off to keeps `isLoading` set without them.
     func fetchAll() async {
         let lastPass = FetchPassOutcome()
         let needsSuccessor = await fetchReads.run { true } pass: { [weak self] revision in
@@ -112,14 +87,11 @@ import Observation
         if needsSuccessor {
             invalidateFetchForEvent()
         } else if fetchReads.phase == .idle {
-            // A failure ends loading only with the read, so a caller woken by
-            // `isLoading` starts a new read instead of joining this one.
             let next = lastPass.error.map { loadPhase.failing($0) } ?? loadPhase.settled()
             if next != loadPhase { loadPhase = next }
         }
     }
 
-    /// The owner's view of its read's last pass.
     @MainActor private final class FetchPassOutcome {
         var error: Error?
     }
@@ -149,15 +121,11 @@ import Observation
         await fetchAll()
     }
 
-    /// Marks the list stale and starts a read unless one is scheduled or running.
     private func invalidateFetchForEvent() {
         guard fetchReads.invalidate() else { return }
         Task { await fetchAll() }
     }
 
-    /// One `workspace.list` read. A result invalidated mid-read is dropped for
-    /// the trailing read; a failure alone stays dirty without automatic retries.
-    /// Returns the failure of a current pass.
     private func fetchPass(_ revision: Int) async -> Error? {
         fetchedRevision = nil
         if !isLoading { loadPhase = loadPhase.beginning() }
@@ -170,23 +138,15 @@ import Observation
             return nil
         } catch {
             AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
-            // An invalidated read is followed by another pass; stay loading.
             return revision == fetchReads.revision ? error : nil
         }
     }
 
-    /// Drops the published list so the next screen waits for a fresh read;
-    /// a read still running keeps `isLoading` set.
     func forgetPublishedWorkspaces() {
         workspaces = []
         loadPhase = isLoading ? .loading(lastLoadedAt: nil) : .idle
     }
 
-    /// Every `workspace.list` page (protocol "Paged workspace lists": `limit`
-    /// + `nextToken`, rows in `(createdAt, id)` order). A daemon without paging
-    /// answers the whole list in one reply, possibly as a bare array. A failed
-    /// page fails the whole read, so a partial list is never published as
-    /// whole (a missing row would read as a deleted workspace).
     private func requestAllWorkspaceRows() async throws -> [[String: Any]] {
         try await PagedReads.requestAllPages(
             params: ["includeArchived": true, "limit": PagedReads.workspacePageLimit],
@@ -198,11 +158,6 @@ import Observation
         }
     }
 
-    /// Publishes a fetched workspace list, keeping a running read's loading
-    /// state until it settles. `lastUpdated` is set **before** `workspaces`
-    /// so observers that gate on "fetched at least once" (e.g. AppCoordinator's
-    /// missing-workspace validation) see a non-nil `lastUpdated` on the very first
-    /// post-fetch change.
     func publishFetchedWorkspaces(_ parsed: [Workspace], summaryBoundary: AgentSummaryStore.ReadBoundary? = nil) {
         if let agentSummaries {
             let changed = parsed.filter { incoming in
@@ -216,9 +171,6 @@ import Observation
         workspaces = parsed
     }
 
-    // MARK: - Upsert
-
-    /// Upserts a row and seeds the live reconciler, excluding the virtual workspace.
     func addOrUpdate(_ workspace: Workspace) {
         guard workspace.id != Workspace.chiefWorkspaceId else { return }
         if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
@@ -233,7 +185,6 @@ import Observation
         guard var workspace = workspaces.first(where: { $0.id == workspaceId }) else { return }
         workspace.title = title
         if snapshotFiller.isFilling, let index = workspaces.firstIndex(where: { $0.id == workspaceId }) {
-            // The published row is from the previous list; patch the fresher reconciler row.
             workspaces[index] = workspace
             workspaceReconciler?.patch(id: workspaceId) { row in
                 var renamed = row
@@ -248,16 +199,11 @@ import Observation
 }
 
 extension WorkspaceStore {
-    // MARK: - Event subscription
-
     private func subscribeToEvents() {
-        // Remove old handler to prevent accumulation on reconnect
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)
         }
 
-        // Register event handler on the session's connection
-        // (server subscription is handled centrally by ConnectionManager.subscribeToAllEvents)
         eventHandlerId = connectionManager.onEvent { [weak self] method, params in
             Task { @MainActor in
                 self?.handleEvent(method, params: params)
@@ -266,13 +212,11 @@ extension WorkspaceStore {
     }
 
     private func subscribeLiveState(generation: Int) async {
-        // Initialize workspace reconciler
         workspaceReconciler = DeltaReconciler<Workspace>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in Self.parseWorkspace(dict) }
         )
 
-        // Try to subscribe - if server doesn't support it, error response falls back to legacy
         do {
             let result = try await connectionManager.request("workspace.subscribe", params: [
                 "replaceGroup": "ios-workspaces"
@@ -286,11 +230,9 @@ extension WorkspaceStore {
             }
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
-                // Unregister old handler if we had one
                 if let oldId = liveSubscription.acknowledge(subId) {
                     connectionManager.unregisterSubscriptionHandler(id: oldId)
                 }
-                // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
                 connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
                 }
@@ -303,7 +245,6 @@ extension WorkspaceStore {
     }
 
     func handleEvent(_ method: String, params: Any) {
-        // Handle subscription.push for live-state updates (test injection compatibility)
         if let push = SubscriptionPush.parse(method: method, params: params) {
             handleSubscriptionPush(push)
             return
@@ -321,8 +262,6 @@ extension WorkspaceStore {
             removedWorkspaceSubject.send(removedId)
         }
 
-        // In-place patches apply in every mode (live or not) and before the
-        // refetch decision, since they are the complete application of the event.
         if eventType == "workspace:updated",
            let changes = data?["changes"] as? [String: Any],
            let lastActivity = changes["lastActivity"] as? String,
@@ -348,23 +287,14 @@ extension WorkspaceStore {
         }
     }
 
-    /// Unwraps the websocket-event-bridge envelope while preserving direct
-    /// event dictionaries used by tests and legacy callers.
     private static func eventDictionary(from dictionary: [String: Any]) -> [String: Any] {
         (dictionary["event"] as? [String: Any]) ?? dictionary
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {
-        // Only process pushes if we have a reconciler ready
-        // (reconciler is initialized synchronously before subscribe request, so any
-        // push arriving between subscribe-sent and response-received is safe to process)
         guard let reconciler = workspaceReconciler else {
             return
         }
-
-        // ConnectionManager now routes pushes by subscriptionId at the transport layer,
-        // so this handler only receives pushes for our exact subscriptionId.
-        // No per-store gate needed (single source of truth is the router)
 
         switch push.kind {
         case .snapshot:
@@ -382,11 +312,9 @@ extension WorkspaceStore {
         case .delta:
             guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
-                // A paged snapshot still filling publishes once complete.
                 if !snapshotFiller.isFilling { publishFetchedWorkspaces(reconciler.values()) }
                 AppLog.workspace.debug("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
-                // Gap detected — resnapshot (guard against storm)
                 if liveSubscription.requestResnapshot() {
                     AppLog.workspace.warning("[WorkspaceStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshot() }
@@ -395,10 +323,6 @@ extension WorkspaceStore {
         }
     }
 
-    /// Reads the rest of a paged snapshot (§6.9) with `workspace.list`, then
-    /// publishes the whole list. A partial list is never published: views
-    /// treat a workspace missing from a loaded list as deleted. A walk that
-    /// gives up keeps the previous list and resubscribes.
     private func fillSnapshot(reconciler: DeltaReconciler<Workspace>, firstToken: String) {
         let source = PagedReads.PageSource(field: "workspaces") { [connectionManager] token in
             try await connectionManager.request("workspace.list", params: ["includeArchived": true, "nextToken": token])
@@ -428,7 +352,6 @@ extension WorkspaceStore {
         snapshotFiller.cancel()
 
         if let subId = liveSubscription.id {
-            // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
                 _ = try await connectionManager.request("workspace.unsubscribe", params: [
@@ -442,7 +365,6 @@ extension WorkspaceStore {
         guard generation == liveSubscriptionGeneration else { return }
         liveSubscription.clearId()
 
-        // Re-subscribe and refetch to bridge
         await subscribeLiveState(generation: generation)
         guard generation == liveSubscriptionGeneration else { return }
         await fetchAll()

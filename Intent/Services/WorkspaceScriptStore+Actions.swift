@@ -22,7 +22,6 @@ extension WorkspaceScriptStore {
         revisions[workspaceId, default: 0] += 1
         defer { finishUpdate(key, token: token) }
         do {
-            // A previously sent start must settle before stop/remove can win.
             if let start = startTasks[key] { _ = try? await start.task.value }
             guard isCurrent(currentGeneration) else { return }
             try await ensureSubscribed(generation: currentGeneration)

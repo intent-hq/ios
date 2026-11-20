@@ -24,8 +24,13 @@ A guest joins a host's workspace or the host itself through an invite link (prot
    5. The proof is deleted after use, best-effort; it is spent once the host has read it.
    6. GitHub targets omit the host parameter; other providers name their instance. Account ids are canonical strings (GitHub sends a number) and must be exact JSON integers.
    7. Only documented proof refusals (`error.data.code`) map to specific `InviteProofFailure` cases; everything else is unavailable.
+5. **Creating invite links (`WorkspaceSharingModel`).** The Share sheet creates a link with `workspace.invite.create` (§5.48) that anyone can use, or that one GitHub account can use once, and hands it to the system share sheet. People join only by opening a link; members and open links are managed on the Mac. Links are capabilities: shown and shared on request, never logged.
+   1. Protocol 10.8+ hosts take `pinProvider`/`pinHost`. The form names a GitHub account, so the app sends `pinProvider: "github"` and never lets the host pick its own forge. Older hosts resolve pins on GitHub only, which is the same.
+   2. A login is trimmed and a leading `@` dropped. Only an `intent://` link is shared.
+   3. Expiry text rounds partial days up, so a fresh week-long link reads "7 days"; under a day reads as today.
 
 ## Code
 
 - `InviteClient`: `inspect`, `challenge`, `prove`, `accept`; `InviteSocket`, `InviteSocket.response(to:in:)`, `InviteIdentity`, `InvitePin`, `InvitePreview`, `InviteCredential`, `InviteFailure`
+- `WorkspaceSharingModel`: `createLink`, `namesPinProvider(protocolVersion:)`, `normalized(_:)`, `inviteLink(from:)`, `expiryText(_:now:)`
 - `InviteIdentityProof`: `account(for:on:)`, `publish`, `delete(_:collaboration:on:)`, `anyAccount(on:)`, `failure(_:provider:)`, `stableId(_:)`, `InviteProofFailure`

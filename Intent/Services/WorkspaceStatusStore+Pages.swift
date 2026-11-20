@@ -1,7 +1,5 @@
 import Foundation
 
-/// Opt-in adapter for bounded active summaries. Events are reduced to summary
-/// fields before entering the journal; full output/configuration is never retained.
 @MainActor
 struct WorkspaceStatusPageAdapter<Row> {
     struct Page {
@@ -45,7 +43,6 @@ extension WorkspaceStatusStore {
                 bucket.error = recover ? "Script watches changed during refresh. Retry to update them." : nil
                 bucket.events = []
                 if !recover || attempt == 1 { return }
-                // Recovery replaces page one once. Never drain/retry a cursor automatically.
                 cursor = nil
             } catch {
                 guard owns(bucket, workspaceId: workspaceId, generation: generation) else { return }
@@ -95,8 +92,6 @@ extension WorkspaceStatusStore {
     }
 
     private func recordRemoval(_ type: String, data: [String: Any], identity: String, bucket: Bucket) {
-        // Keep only bounded identities. With no list in flight, old tombstones
-        // can retire locally; selected detail reads have their own generations.
         if bucket.tombstones.count >= Self.journalLimit, bucket.tombstones[identity] == nil {
             if bucket.isLoading {
                 bucket.journalOverflow = true

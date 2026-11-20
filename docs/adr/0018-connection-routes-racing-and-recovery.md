@@ -57,6 +57,8 @@ A saved daemon has several host routes and can have a Tailcat tunnel address. `C
 ## Consequences
 
 - A stored record can grow hosts over time but never loses hosts through a refresh.
+- A Tailcat session closes the forwarder before the client, because the forwarder rides the client's tunnel (from test comments).
+- TailcatKit has no visionOS (`xros`) slice, so its tests compile only under `#if canImport(TailcatKit)`. The byte-exchange smoke test dials a `TailcatKit/cmd/tcecho` server that CI starts and names in `TAILCAT_SMOKE_TOKEN`; without it only that test skips. A gomobile read reports end of stream as an error whose description is "EOF", because an empty Go slice would bridge to nil `NSData` and break the `throws -> Data` projection (from test comments).
 
 ## Code
 
