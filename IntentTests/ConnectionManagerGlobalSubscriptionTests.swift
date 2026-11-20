@@ -12,8 +12,6 @@ extension ConnectionManagerTests {
             method: "events.subscribe",
             params: ["eventTypes": ConnectionManager.globalEventTypes, "replaceGroup": "global"]
         )
-        // Keep the catalog-only byte accounting; the required membership event
-        // adds exactly 23 bytes to the shared subscription request.
         let catalogRequest = try RPCFixtureJSON.request(
             method: "events.subscribe",
             params: [

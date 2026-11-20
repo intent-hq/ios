@@ -26,6 +26,8 @@ Many unit tests check that the app matches another implementation: the desktop a
    2. Before the final count, a test resolves every suspended request and answers later ones at once. A regression then fails the count; it does not hang the suite.
    3. The coordinator's connection sink delivers on the main queue, and main-actor tasks enqueue on the same serial queue. One round trip through the main queue (`awaitMainQueueTurn()`) therefore drains a delivery.
    4. Timeout tests poll the production timeout with a bounded wait ([ADR 0104](0104-test-synchronization-and-fakes.md)). A negative check watches past the timeout, so a stale timeout fails the moment it clears the overlay.
+   5. To assert a transient "reconnecting" state, the recovery fixture server parks admission replies (`client.hello`, `principal.me`) with `holdHandshakes()`. No replacement can be adopted until `releaseHandshakes()`, however fast it dials, so the assertion cannot race a fast recovery (ios#261, `awaitParkedReplacement(on:timeout:sourceLocation:after:)`).
+   6. The loopback pairing server retains every accepted `NWConnection` for its lifetime. An unreferenced `NWConnection` deallocates and drops the socket.
 
 ## Consequences
 
@@ -41,5 +43,5 @@ Many unit tests check that the app matches another implementation: the desktop a
 - `AttachmentUploadService`; `AttachmentUploadServiceTests`
 - `BackendKeychainFixtures`, `BackendKeychainConformanceSupport`, `MemorySyncedKeychain`
 - `FakeConnectionManager`: `pendingMethods`, `resolvePending(_:with:)`
-- `TestKeychainStorage`, `BackgroundPresentationClock`; `AppCoordinatorTests`, `AppCoordinatorAutoOpenTests`, `AppCoordinatorBackgroundRecoveryTests`
+- `TestKeychainStorage`, `BackgroundPresentationClock`, `ConnectionManagerTests.awaitParkedReplacement(on:timeout:sourceLocation:after:)`; `AppCoordinatorTests`, `AppCoordinatorAutoOpenTests`, `AppCoordinatorBackgroundRecoveryTests`
 - `AttachmentImageLoaderTests`, `AgentStoreTests`, `AgentStoreScopedLifecycleTests`, `BackendSessionRegistryTests`

@@ -6,10 +6,6 @@ import os
 import Testing
 
 extension ConnectionManagerTests {
-    // MARK: - Pairing over a live connection (monorepo#4185)
-
-    /// A loopback port with nothing listening on it, so connections are
-    /// refused fast and deterministically.
     private static func unusedLoopbackPort() async throws -> Int {
         let server = try await LoopbackWebSocketServer.start()
         let port = server.port
@@ -52,10 +48,6 @@ extension ConnectionManagerTests {
         }
     }
 
-    /// Regression for monorepo#4185: a pairing attempt (QR / manual token /
-    /// intent:// link all funnel into `connect()`) that fails while a live
-    /// connection is active must NOT strand the app in `.connecting` on a
-    /// dead socket — the existing connection keeps serving.
     @Test @MainActor func failedPairingOverLiveConnectionKeepsItServing() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
@@ -82,8 +74,6 @@ extension ConnectionManagerTests {
             )
         }
 
-        // The live connection was never torn down: state and target are
-        // untouched, and the socket still serves a round-trip.
         #expect(manager.connectionState == .connected)
         #expect(manager.port == server.port)
         #expect(manager.token == "live-token")
@@ -91,10 +81,6 @@ extension ConnectionManagerTests {
         #expect(result is [String: Any])
     }
 
-    /// A failed pairing attempt over a live connection must leave the live
-    /// connection's `certMismatches` bookkeeping untouched: the entry-point
-    /// reset (different target) must not wipe it, and mismatches observed by
-    /// the failed race must not stick to the preserved connection.
     @Test @MainActor func failedPairingOverLiveConnectionKeepsCertMismatches() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
@@ -125,10 +111,6 @@ extension ConnectionManagerTests {
 
         #expect(manager.certMismatches == liveMismatches)
     }
-
-    /// The success side of the same flow: pairing over a live connection
-    /// adopts the new target only once the replacement socket is
-    /// established, and the new connection serves round-trips.
 }
 
 extension ConnectionManagerTests {
@@ -164,10 +146,6 @@ extension ConnectionManagerTests {
         #expect(result is [String: Any])
     }
 
-    /// A tunnel dialer that reports a certificate mismatch only once the test
-    /// releases it — `TestGate.wait()` ignores the race's loser cancellation —
-    /// so a direct candidate wins first and the mismatch is reported by the
-    /// background drain.
     nonisolated private struct GatedMismatchTunnelDialer: TunnelDialing {
         let fingerprint: String
         let release: TestGate
@@ -181,12 +159,6 @@ extension ConnectionManagerTests {
         }
     }
 
-    /// A preserving connect() retires the old connection — advancing the
-    /// connection generation — only AFTER its race is won. A slower losing
-    /// candidate's certificate mismatch, reported by the background drain,
-    /// must still reach `certMismatches`: the race was not superseded. The
-    /// time limit turns a connect() that waits on the gated loser into a
-    /// failure instead of a hang: its cancellation of the test opens the gate.
     @Test(.timeLimit(.minutes(1)))
     @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
         let previous = Self.enablePlaintextLoopback()
@@ -223,8 +195,6 @@ extension ConnectionManagerTests {
         #expect(manager.port == serverB.port)
         #expect(manager.token == "token-b")
 
-        // The direct candidate has won and connect() returned; only now does
-        // the losing tunnel candidate report its mismatch.
         loserRelease.open()
         let expected = [
             HostCertMismatch(
@@ -238,12 +208,6 @@ extension ConnectionManagerTests {
         }
     }
 
-    /// Two overlapping pairing attempts over a live connection: the OLDER
-    /// attempt completing first must not install its target and supersede
-    /// the newer one. Preserving connects don't tear down (and so don't
-    /// advance the generation) up front, so ordering is carried by the
-    /// connect-attempt counter: the older attempt is superseded, the newer
-    /// one adopts its target.
     @Test @MainActor func olderOverlappingPairingAttemptDoesNotWin() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
@@ -265,8 +229,6 @@ extension ConnectionManagerTests {
         )
         #expect(manager.connectionState == .connected)
 
-        // Both attempts hang in their WS handshake until their server opens;
-        // a gated server counts the socket as accepted while holding it back.
         let older = Task {
             try await manager.connect(
                 hosts: ["127.0.0.1"],
@@ -288,8 +250,6 @@ extension ConnectionManagerTests {
             newerTarget.acceptedCount == 1
         }
 
-        // The older attempt completes its handshake FIRST — it must be
-        // superseded rather than install token-old and kill the newer one.
         olderTarget.open()
         await #expect(throws: (any Error).self) { try await older.value }
         #expect(manager.token != "token-old")
@@ -304,9 +264,6 @@ extension ConnectionManagerTests {
         #expect(result is [String: Any])
     }
 
-    /// A failed pairing attempt while the manager is reconnecting must keep
-    /// the reconnect loop (and its target) alive instead of cancelling it
-    /// and stranding the app in `.connecting`.
     @Test @MainActor func failedPairingWhileReconnectingKeepsReconnectLoop() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
@@ -325,7 +282,6 @@ extension ConnectionManagerTests {
         #expect(manager.connectionState == .connected)
         let livePort = server.port
 
-        // Kill the live socket so the manager enters its reconnect loop.
         server.stop()
         let reconnectingTimeoutSeconds = 5
         try await waitUntil(
@@ -342,8 +298,6 @@ extension ConnectionManagerTests {
             )
         }
 
-        // Still recovering toward the ORIGINAL target — not stuck in
-        // .connecting on the failed pairing target.
         guard case .reconnecting = manager.connectionState else {
             Issue.record("expected .reconnecting, got \(manager.connectionState)")
             return

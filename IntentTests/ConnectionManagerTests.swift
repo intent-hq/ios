@@ -56,14 +56,11 @@ struct ConnectionManagerTests {
         ) == 5)
     }
 
-    // MARK: - Event handlers
-
     @Test @MainActor func onEventRegistersHandler() {
         let manager = ConnectionManager.shared
         let initialCount = manager.eventHandlers.count
         let handlerId = manager.onEvent { _, _ in }
         #expect(manager.eventHandlers.count == initialCount + 1)
-        // Clean up: remove the handler we added
         manager.removeEventHandler(id: handlerId)
     }
 
@@ -83,11 +80,8 @@ struct ConnectionManagerTests {
 
         #expect(receivedMethod == "events.event")
         #expect(receivedParams != nil)
-        // Clean up
         manager.removeEventHandler(id: handlerId)
     }
-
-    // MARK: - Message dispatch (response routing)
 
     @Test @MainActor func dispatchResponseResolvesCorrectContinuation() async throws {
         let manager = ConnectionManager.shared
@@ -123,16 +117,10 @@ struct ConnectionManagerTests {
         }
     }
 
-    // MARK: - Request timeout (per-call override)
-
     @Test @MainActor func defaultRequestTimeoutIsTenSeconds() {
         #expect(ConnectionManager.defaultRequestTimeout == 10)
     }
 
-    /// Regression (PR #94 review): a daemon that NEVER responds must still
-    /// produce the timeout error. Previously the timeout child's throw left
-    /// the task group awaiting the suspended continuation child (which does
-    /// not observe cancellation), hanging the request forever.
     @Test @MainActor func timeoutFiresWhenDaemonNeverResponds() async {
         let manager = ConnectionManager.shared
         let start = ContinuousClock.now
@@ -143,14 +131,9 @@ struct ConnectionManagerTests {
             #expect(error.localizedDescription.contains("timed out"))
         }
         #expect(ContinuousClock.now - start < .seconds(5))
-        // Pending continuation is cleaned up by the timeout path itself
         #expect(manager.pendingRequests[7003] == nil)
     }
 
-    /// Regression (#1954): the request timeout was hardcoded to 10s with no
-    /// per-call override. A short per-call timeout must fire at the configured
-    /// bound — well before the 10s default would. A response landing after the
-    /// timeout has already fired is ignored; the timeout error wins.
     @Test @MainActor func perCallTimeoutFiresAtConfiguredBound() async throws {
         let manager = ConnectionManager.shared
         let start = ContinuousClock.now
@@ -164,9 +147,6 @@ struct ConnectionManagerTests {
         }
         try await waitForPendingRequest(manager, id: 7001)
 
-        // The 0.05s timeout clears the continuation; a response after that is late.
-        // The wait keeps the original 200 ms observation budget (the fixed sleep it
-        // replaced), so a timeout that fires later than that still fails here.
         let perCallTimeoutClearBoundMilliseconds = 200
         try await waitUntil(
             "the per-call timeout to clear the request",
@@ -183,13 +163,9 @@ struct ConnectionManagerTests {
             Issue.record("Expected timeout error but got success")
         }
         #expect(ContinuousClock.now - start < .seconds(5))
-        // Pending continuation is cleaned up
         #expect(manager.pendingRequests[7001] == nil)
     }
 
-    /// A response arriving after a delay but within the per-call override must
-    /// resolve the request instead of timing out (the daemon's structured
-    /// result wins over the client-side transport timeout).
     @Test @MainActor func perCallTimeoutOverrideHonored() async throws {
         let manager = ConnectionManager.shared
         let capture = ResponseCapture()
@@ -202,8 +178,6 @@ struct ConnectionManagerTests {
         }
         try await waitForPendingRequest(manager, id: 7002)
 
-        // Outlast a hypothetical short bound: the override must keep the
-        // request pending across the window instead of timing it out.
         try await expectNever("request 7002 settling before the per-call override") {
             manager.pendingRequests[7002] == nil || capture.error != nil
         }
@@ -258,10 +232,6 @@ extension ConnectionManagerTests {
         #expect(writeCancelled.withLock { $0 })
     }
 
-    /// Deterministically wait (bounded) until the continuation-registration Task
-    /// has stored its continuation, instead of a fixed sleep (flake-prone under
-    /// CI load). The registration Task inherits the main actor, so yielding here
-    /// lets it run to the registration point.
     @MainActor
     private func installPendingResponse(
         _ manager: ConnectionManager,
@@ -280,8 +250,6 @@ extension ConnectionManagerTests {
         return (task, capture)
     }
 
-    /// Throws on timeout so a test fails at the wait instead of dispatching into a
-    /// never-registered continuation and then hanging on the awaiting task.
     @MainActor
     private func waitForPendingRequest(_ manager: ConnectionManager, id: Int) async throws {
         let pendingRequestTimeoutSeconds = 5
@@ -290,8 +258,6 @@ extension ConnectionManagerTests {
             timeout: .seconds(pendingRequestTimeoutSeconds)
         ) { manager.pendingRequests[id] != nil }
     }
-
-    // MARK: - failAllPending
 
     @Test @MainActor func failAllPendingClearsRequests() async throws {
         let manager = ConnectionManager.shared
@@ -350,7 +316,6 @@ extension ConnectionManagerTests {
 
         try await waitForPendingRequest(manager, id: 890)
 
-        // Legacy daemons emit -32602 with no data (monorepo#1365)
         let errorResponse = """
         {"jsonrpc":"2.0","id":890,"error":{"code":-32602,"message":"unknown agent id: gone"}}
         """
@@ -366,8 +331,6 @@ extension ConnectionManagerTests {
             Issue.record("Expected error but got success")
         }
     }
-
-    // MARK: - NSError.isEntityNotFound helper
 
     @Test func isEntityNotFoundRequiresDomainCodeAndDataCode() {
         let notFound = NSError(

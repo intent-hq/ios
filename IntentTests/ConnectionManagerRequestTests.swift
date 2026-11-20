@@ -14,8 +14,6 @@ extension ConnectionManagerTests {
             return previous
         }
         #else
-        // Keep Release tests buildable without enabling a production escape
-        // hatch. These fixtures are not evidence of Release transport coverage.
         Issue.record("Plaintext loopback fixtures require DEBUG; run this test with the default configuration")
         return false
         #endif
@@ -126,7 +124,6 @@ extension ConnectionManagerTests {
         #expect(!WebSocketConnection.fingerprintMatches(pin, pinned: InvitedSessionFixtures.pin))
     }
 
-    // URLSessionWebSocketTask.Message is not Equatable; extract payloads for asserting.
     private func text(of message: URLSessionWebSocketTask.Message?) -> String? {
         if case let .string(value)? = message { return value }
         return nil
@@ -151,8 +148,6 @@ extension ConnectionManagerTests {
 
     @Test func assemblerReassemblesFragmentedTextAcrossContinuations() throws {
         var assembler = WebSocketConnection.MessageAssembler()
-        // "héllo" with the two-byte UTF-8 encoding of "é" split across
-        // fragments — decoding must wait for the complete message.
         let bytes = Array("héllo".utf8)
 
         #expect(try assembler.consume(
@@ -199,7 +194,6 @@ extension ConnectionManagerTests {
             data: Data([0xff]),
             isComplete: true
         ) == nil)
-        // A well-formed message afterwards is unaffected.
         let message = try assembler.consume(
             kind: .text,
             data: Data("ok".utf8),
@@ -255,8 +249,6 @@ extension ConnectionManagerTests {
         #expect(error.localizedDescription.contains("de:ad:be:ef"))
     }
 
-    // MARK: - Host race certificate mismatch collection
-
     private actor FakeRaceConnection: HostRacingConnection {
         nonisolated let host: String
 
@@ -265,8 +257,6 @@ extension ConnectionManagerTests {
     }
 
     @Test func mixedRaceCollectsLoserMismatchAndStillWins() async {
-        // The winner is held until the loser is about to report its mismatch,
-        // so the mismatch is not swallowed by an already-settled race.
         let mismatchReported = TestGate()
         let outcome = await ConnectionManager.raceCandidates(
             ["bad.host", "good.host"]
@@ -284,9 +274,6 @@ extension ConnectionManagerTests {
 
         #expect(outcome.winner?.host == "good.host")
         #expect(outcome.failure == nil)
-        // The race settles on the first success, so whether the loser's
-        // mismatch is on the outcome or reported by the background drain
-        // depends on scheduling; either way it must not be swallowed.
         let lateMismatches = await outcome.drain?.value ?? []
         #expect(outcome.mismatches + lateMismatches == [
             HostCertMismatch(host: "bad.host", fingerprint: "aa:bb")
@@ -298,7 +285,6 @@ extension ConnectionManagerTests {
             ["good.host", "bad.host"]
         ) { host -> FakeRaceConnection in
             if host == "bad.host" {
-                // Released by the loser cancellation that follows the win.
                 await suspendUntilCancelled()
                 throw WebSocketTransportError.certificateMismatch(
                     host: host,
@@ -309,8 +295,6 @@ extension ConnectionManagerTests {
         }
 
         #expect(outcome.winner?.host == "good.host")
-        // The loser's mismatch lands after the winner settled the race, so it
-        // is reported by the background drain rather than the outcome itself.
         let lateMismatches = await outcome.drain?.value ?? []
         #expect(outcome.mismatches + lateMismatches == [
             HostCertMismatch(host: "bad.host", fingerprint: "cc:dd")
@@ -344,7 +328,6 @@ extension ConnectionManagerTests {
     }
 
     @Test func certFailurePreferredOverGenericFailuresWhenNoWinner() async {
-        // Fixed ordering: the generic failure lands before the mismatch.
         let genericFailureReported = TestGate()
         let outcome = await ConnectionManager.raceCandidates(
             ["down.host", "bad.host"]
@@ -418,10 +401,6 @@ extension ConnectionManagerTests {
         )
         #expect(manager.certMismatches == seeded)
 
-        // Pinned targets are identified by port + pin: a drifted host list
-        // (refreshHostRoutes merges daemon-reported IPs post-connect) is the
-        // same daemon, so the list survives an app-driven reconnect from the
-        // stored record.
         manager.resetCertMismatchesIfTargetChanged(
             hosts: ["h2"],
             port: 1234,
@@ -472,8 +451,6 @@ extension ConnectionManagerTests {
         #expect(manager.certMismatches.isEmpty)
     }
 
-    // MARK: - Synced-registry credential adoption
-
     @Test @MainActor func updateCachedCredentialsReplacesReconnectFields() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
@@ -488,8 +465,6 @@ extension ConnectionManagerTests {
         #expect(manager.token == "tok-rotated")
         #expect(manager.certFingerprint == "ff:ee")
     }
-
-    // MARK: - Invalid message handling
 
     @Test @MainActor func dispatchInvalidJsonDoesNotCrash() {
         let manager = ConnectionManager.shared

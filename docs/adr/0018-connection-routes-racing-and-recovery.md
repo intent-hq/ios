@@ -37,6 +37,12 @@ A saved daemon has several host routes and can have a Tailcat tunnel address. `C
    2. `awaitResponse(…)` resumes the continuation exactly once. Whoever removes the entry from `pendingRequests` on the main actor owns the resume: a reply, `failAllPending`, or the timeout task. A silent daemon still gets a timeout, because a suspended continuation does not see task cancellation.
 9. **Heartbeat.** `startHeartbeat()` sleeps one interval, then probes. Probes are sequential and guarded by generation and socket, so a retired result is ignored.
 10. **In-process transport.** `ConnectionRequestTransport` stands in for the socket: it answers every request and supplies identity and capabilities. `makeInProcessTransport(…)` is the single Debug seam; Release has no demo types and always uses the socket. Readiness then follows the connection state directly.
+11. **Added from test comments.**
+    1. A socket that lived at least `stableConnectionThreshold` (10 s) restarts recovery at the first attempt, with no backoff. A shorter-lived socket continues the backoff from its previous attempt (`reconnectStartingAttempt(connectionLifetime:previousAttempt:)`).
+    2. A pairing that fails while the manager is reconnecting keeps the reconnect loop and its original target. It never leaves the app on `.connecting` for the failed target (monorepo#4185).
+    3. Platforms without a TailcatKit build (visionOS) use `UnavailableTunnelDialer`. A tunnel candidate then fails with a clear unavailable error under the tunnel label; it does not crash.
+    4. `WebSocketMessageAssembler.MessageAssembler` decodes text only from a complete message. A multi-byte UTF-8 character split across fragments must not be decoded early. A malformed message does not affect the next one.
+    5. Path classification uses interface metadata, never name prefixes.
 
 ## Consequences
 
