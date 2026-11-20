@@ -34,8 +34,6 @@ extension AppCoordinator {
         }
     }
 
-    /// Embedded pairing dials a temporary session, so the window's connection
-    /// was never borrowed and must not be torn down to repair it on success.
     func onIPadPairedConnection(_ connection: StoredConnection) {
         guard !lifecycleState.hasReturnedToSavedMachines else { return }
         let target = BackendID(connection.id)
@@ -54,7 +52,6 @@ extension AppCoordinator {
         }
     }
 
-    /// Selecting a rail destination never switches this window's backend.
     func onSelectIPadSection(_ section: IPadSidebarSection) {
         if section == .assistant {
             guard canUseAssistant else { return }
@@ -67,7 +64,6 @@ extension AppCoordinator {
         iPadNavigation.selectSection(section)
     }
 
-    /// Reselecting Workspaces while the sidebar shows the open workspace leaves it, like the main view's Back.
     private var showsIPadSidebarWorkspace: Bool {
         let navigation = iPadNavigation
         guard usesIPadShell, navigation.section == .workspaces, navigation.isSidebarVisible else { return false }
@@ -75,7 +71,6 @@ extension AppCoordinator {
         return WorkspaceSidebarContent.resolve(screen: currentScreen, isPersistent: isPersistent) != .workspaceList
     }
 
-    /// The workspace a wide window opens now: the top visible row of the user's list.
     var iPadAutoSelectedWorkspaceId: String? {
         let store = dependencies.workspaceStore
         return IPadWorkspaceAutoSelection(
@@ -87,7 +82,6 @@ extension AppCoordinator {
         ).workspaceId(in: store.workspaces)
     }
 
-    /// The only auto-selection trigger: reruns whenever an input of the decision changes.
     func startObservingIPadAutoSelection() {
         withObservationTracking {
             _ = iPadAutoSelectedWorkspaceId
@@ -100,14 +94,11 @@ extension AppCoordinator {
         }
     }
 
-    /// Opens the decided workspace. Production calls arrive only from the observer above.
     func applyIPadAutoSelection() {
         guard !lifecycleState.hasReturnedToSavedMachines, let workspaceId = iPadAutoSelectedWorkspaceId else { return }
         onSelectWorkspace(workspaceId)
     }
 
-    /// Only explicit workspace selections move the shell. Background redirects
-    /// (a missing workspace, reconnect restore) update the retained pane in place.
     func revealIPadWorkspaceRoute() {
         guard usesIPadShell else { return }
         iPadNavigation.showWorkspaceDetail()
@@ -122,8 +113,6 @@ extension AppCoordinator {
     }
 
     func onIPadAssistantAccessChanged() {
-        // Reconnecting keeps the current conversation. Only a known loss of
-        // owner access evicts the Assistant's privileged presentation.
         guard dependencies.connection.currentPrincipal?.isOwner == false else { return }
         iPadNavigation.revokeAssistantAccess()
         if selectedSection == .assistant { selectedSection = .workspaces }
