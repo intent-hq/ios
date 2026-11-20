@@ -18,6 +18,12 @@
 - The `state_phase_flag` lint rule rejects Bools named after a step (`…Scheduled`, `…Queued`, `…Pending`, `…Awaiting…`, `…Performed`, `…InProgress`, `…InFlight`); suppress it on the line only for an independent one-off guard.
 - `DERIVED_DATA_DIR=<dir> scripts/periphery-assign-only.sh` (macOS, Periphery) lists new assign-only properties against [scripts/periphery-baseline.json](scripts/periphery-baseline.json); run it after state refactors.
 
+## Comments
+
+- Swift code has no comments ([ADR 0001](docs/adr/0001-no-code-comments.md)). Put non-obvious decisions in [docs/adr/](docs/adr/README.md) and workarounds in issues; only tool directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) stay.
+- `python3 scripts/comment_budget.py check` ratchets per-file comment lines against [scripts/comment-budget.json](scripts/comment-budget.json); new files start at zero. Run `update` after deleting comments; it only lowers the baseline.
+- Burn down a slice with the [/delete-comment skill](.claude/skills/delete-comment/SKILL.md).
+
 ## Platform guards
 
 - Keep visionOS as a destination of the single `Intent` target; every visionOS branch must preserve existing iOS behavior.
@@ -34,7 +40,7 @@
 | iOS / visionOS build | `scripts/xcodebuild.sh build-ios` / `scripts/xcodebuild.sh build-visionos` |
 | Physical iOS build | `DEVICE_UDID=<device-id> scripts/xcodebuild.sh build-ios-device` (project signing; build only) |
 | Full pre-PR test gate | `scripts/xcodebuild.sh test-ios` |
-| Pre-PR lint gate | `scripts/swiftlint.sh` |
+| Pre-PR lint gate | `scripts/swiftlint.sh`; `python3 scripts/comment_budget.py check` |
 | Focused unit iteration | `ONLY_TESTING='IntentTests/DemoFixturesTests' scripts/xcodebuild.sh test-ios-unit` |
 | Split mixed/unit run | `scripts/xcodebuild.sh build-for-testing`, then `scripts/xcodebuild.sh test-without-building` or `scripts/xcodebuild.sh test-without-building-unit` |
 | Split UI-only run | `scripts/xcodebuild.sh build-for-testing-ui`, then `scripts/xcodebuild.sh test-without-building-ui` |
@@ -74,6 +80,7 @@ Run the matching checks after changing tooling:
 | Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`); `scripts/test_run_commit_tests.sh` (the runner calls its command line) |
 | SwiftLint wrapper / input checker | `scripts/test-swiftlint.sh`; `scripts/test-check-swiftlint-inputs.sh`; Linux setup/runtime checks are in the [lint guide](README.md#strict-lint-on-linux) |
 | Xcode Cloud preparation | `scripts/test-ci-post-clone.sh` |
+| Comment ratchet | `python3 scripts/test_comment_budget.py`; `python3 scripts/comment_budget.py check` |
 | UI attachment lifecycle check | `python3 scripts/check_ui_attachment_lifecycle.py`; `python3 scripts/test_check_ui_attachment_lifecycle.py` |
 | Capture-lifecycle verifier | `python3 scripts/test_fixture_capture_lifecycle.py` |
 | Protocol fixture versions | `python3 scripts/test_protocol_fixture_version.py`; `python3 scripts/protocol_fixture_version.py lint` |
