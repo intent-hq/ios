@@ -2,17 +2,7 @@ import CoreGraphics
 @testable import Intent
 import Testing
 
-/// The #350 handoff defects (scenarios 5, 6) and the migrated
-/// correction / give-up sequences replayed through `LifecycleHarness`.
 extension TranscriptRecoveryLifecycleTests {
-    /// Scenario 5 (7e0ecbc, e3cd988): the recovery spends its budget over
-    /// the blank and shows Go to End. A viewport over an unrealized end row
-    /// reads "at bottom" while showing nothing (#338), so the blank's
-    /// at-bottom edges — a layout settle, a gesture ending there, a bounce
-    /// — clear nothing and re-pin nothing over the button, and its away
-    /// edges are as before. The row realizing replays the live edge, and
-    /// only then does the ordinary rule apply: cleared at the bottom, growth
-    /// re-pinned, a drag away scrolled away.
     @Test func anAtBottomEdgeOverTheBlankKeepsGoToEndUntilTheMarkerRealizes() {
         var harness = makeHarness()
         #expect(harness.send(.endDerealized) == [.startRecoveryTask(recovery1)])
@@ -63,9 +53,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(!harness.userIsScrolledAway)
     }
 
-    /// Scenario 5, continued: a pinned viewport over the blank is kept
-    /// pinned the same way — its at-bottom and away edges clear nothing
-    /// until a gesture's own away edge does.
     @Test func aPinnedViewportOverTheBlankStaysPinnedUntilAGestureScrollsAway() {
         var pinned = makeHarness()
         #expect(pinned.send(.endDerealized) == [.startRecoveryTask(recovery1)])
@@ -77,10 +64,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(pinned.userIsScrolledAway)
     }
 
-    /// Scenario 6: a completed follow's terminal replayed after a new
-    /// follow was requested, and a cancelled recovery's continuations, are
-    /// stale — no state change, no effect, no outcome — while the current
-    /// tokens keep going.
     @Test func staleContinuationsAfterAReplacementAndAClaimChangeNothing() {
         var harness = makeHarness()
         #expect(harness.send(.followRequested(forced: false)) == [.startFollowTask(follow1, forced: false)])
@@ -116,14 +99,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(harness.liveFollows.isEmpty)
     }
 
-    /// Migrated from `recoveryDrainReplaysTheEdgeTheCorrectionSuppressed`: a
-    /// correction in flight counts as a follow, so an away edge under it
-    /// neither scrolls away nor re-pins; the drain replays that edge with
-    /// the flag released. Recovered (the end row realized) short of the
-    /// end, the viewport is re-pinned by the growth path; yielded to a
-    /// follow that claimed the viewport, the landing is the follow's and the
-    /// replay re-pins nothing over it; recovered at the bottom, the edge
-    /// does nothing.
     @Test func aCorrectionSuppressesTheGrowthRePinUntilItsDrainReplaysTheEdge() {
         var harness = makeHarness()
         #expect(harness.send(.endDerealized) == [.startRecoveryTask(recovery1)])
@@ -175,10 +150,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(toFollow.scrolls == 1)
     }
 
-    /// Migrated from `recoveryDrainReplaysTheEdgeTheCorrectionSuppressed`
-    /// (the yielded half): a correction yielded under the finger drains with
-    /// the edge as the gesture it is — scrolled away, nothing scrolls the
-    /// user back, and the outcome reports as `endRecovery=yieldedToUser`.
     @Test func aCorrectionYieldedUnderTheFingerDrainsAsTheGestureEdge() {
         var yielded = makeHarness()
         #expect(yielded.send(.endDerealized) == [.startRecoveryTask(recovery1)])
@@ -198,13 +169,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(yielded.scrolls == 0)
     }
 
-    /// A correction pages up and an automatic follow is requested during
-    /// the settle: the follow owns and the recovery is demoted, so the
-    /// page-up check reads a follow pending and the recovery yields. The
-    /// yield is still logged once — the follow, not the user, has the
-    /// paged-up viewport, so nothing scrolls over it — and the recovery
-    /// finishes with its outcome and the replayed edge, leaving the follow
-    /// the owner and its task live.
     @Test func aPageUpDemotedByAnAutomaticFollowDuringTheSettleLogsItsYieldWithoutScrolling() {
         var harness = makeHarness()
         #expect(harness.send(.endDerealized) == [.startRecoveryTask(recovery1)])
@@ -236,20 +200,11 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(harness.rePins == 0)
         #expect(harness.goToEndShown == 0)
         #expect(harness.scrolls == 0)
-        // The finished token's page-up is stale either way.
         #expect(harness.send(.recoveryPagedUp(recovery1, mayFollowBack: false)).isEmpty)
         #expect(harness.send(.recoveryPagedUp(recovery1, mayFollowBack: true)).isEmpty)
         #expect(harness.scrolls == 0)
     }
 
-    /// Migrated from `recoveryGiveUpShowsGoToEndInsteadOfRePinningBlind`:
-    /// the budget spent short of the end inside the band (or the deadline
-    /// passed at the bottom over the blank) gives up, and the give-up shows
-    /// Go to End where the edge alone would have re-pinned blind to a row
-    /// that is not there. Scrolled away, growth re-pins nothing over the
-    /// button; the tap follows through the verified path and its executed
-    /// drain re-arms the recovery from the level. The outcome reports as
-    /// `endRecovery=gaveUp` with the corrections spent.
     @Test func aGiveUpShowsGoToEndInsteadOfRePinningBlind() {
         var harness = makeHarness()
         #expect(harness.send(.endDerealized) == [.startRecoveryTask(recovery1)])

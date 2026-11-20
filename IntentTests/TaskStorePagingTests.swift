@@ -2,15 +2,10 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// TaskStore against a bounded daemon (§6.9 "Paged snapshots"): the
-/// `task.subscribe` seq-0 snapshot is the first page of task notes, and its
-/// `nextToken` continues through the paged `task.list` (`WorkspaceTask` rows
-/// plus `workspaceId`).
 @MainActor
 struct TaskStorePagingTests {
     private struct PageError: Error {}
 
-    /// A snapshot row: a task note stamped with `specLinked`.
     private static func taskNote(_ id: String, title: String? = nil, status: String = "not_started") -> [String: Any] {
         [
             "id": id,
@@ -23,7 +18,6 @@ struct TaskStorePagingTests {
         ]
     }
 
-    /// A continuation row: the `task.list` projection plus `workspaceId`.
     private static func taskRow(_ id: String, title: String? = nil, status: String = "not_started") -> [String: Any] {
         [
             "id": id,
@@ -43,8 +37,6 @@ struct TaskStorePagingTests {
         range.map { taskRow("task-\($0)") }
     }
 
-    /// Connected store with a `task.subscribe` handler registered as `sub-1`
-    /// and the connect-time whole-list `task.list` read already settled.
     private func liveStore() async throws -> (TaskStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
@@ -57,8 +49,6 @@ struct TaskStorePagingTests {
         try await waitUntil("connect-time task.list") { fake.paramsForMethod("task.list").count == 1 }
         return (store, fake)
     }
-
-    // MARK: - One-shot task.list
 
     @Test func fetchAllAsksForTheWholeList() async {
         let fake = FakeConnectionManager()
@@ -108,8 +98,6 @@ struct TaskStorePagingTests {
         #expect(store.tasks.count == 2, "a partial list must not replace the whole one")
     }
 
-    // MARK: - Paged task.subscribe snapshot
-
     @Test func pagedSnapshotPublishesOnceWholeWithDeltasOnTop() async throws {
         let (store, fake) = try await liveStore()
         fake.clearRequestLog()
@@ -122,7 +110,6 @@ struct TaskStorePagingTests {
         #expect(store.snapshotFiller.isFilling)
         #expect(store.tasks.isEmpty, "a partial snapshot must not replace the list")
 
-        // A delta during the walk is newer than any later page row.
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             seq: 1,
@@ -156,7 +143,6 @@ struct TaskStorePagingTests {
             params["workspaceId"] as? String == "ws-1" && params["limit"] as? Int == PagedReads.taskPageLimit
         })
 
-        // Deltas publish directly once the walk is over.
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1", seq: 2, delta: .init(added: [Self.taskNote("task-999")], updated: [], removedIds: [])
         ))
@@ -191,7 +177,6 @@ struct TaskStorePagingTests {
             subscriptionId: "sub-1", seq: 0, snapshot: Self.taskNotes(1...200), nextToken: "t1"
         ))
 
-        // Three page attempts, then the resubscribe and its baseline `task.list`.
         try await waitUntil("resubscribed for a fresh snapshot") {
             fake.paramsForMethod("task.subscribe").count == 1 && fake.paramsForMethod("task.list").count == 4
         }

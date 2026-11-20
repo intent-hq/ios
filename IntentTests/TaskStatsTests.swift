@@ -22,8 +22,6 @@ struct TaskStatsTests {
         "- [ ] [\(title)](intent://local/task/\(id))"
     }
 
-    // MARK: - parseTaskStats
-
     @Test func emptyAndNilContentReturnZeros() {
         #expect(TaskContentParser.parseTaskStats(content: nil, notes: []) == TaskStats(total: 0, completed: 0, inProgress: 0))
         #expect(TaskContentParser.parseTaskStats(content: "", notes: []) == TaskStats(total: 0, completed: 0, inProgress: 0))
@@ -90,8 +88,6 @@ struct TaskStatsTests {
         let stats = TaskContentParser.parseTaskStats(content: content, notes: notes)
         #expect(stats == TaskStats(total: 2, completed: 2, inProgress: 0))
     }
-
-    // MARK: - linkedTaskLines
 
     @Test func returnsLinkedTaskLinesInOrderWithMarkers() {
         let content = """

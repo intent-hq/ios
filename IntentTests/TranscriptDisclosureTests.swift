@@ -49,11 +49,8 @@ struct TranscriptDisclosureTests {
         let expanded = try #require(state.height)
         #expect(expanded > collapsed)
 
-        // Appending the thirteenth message moves row zero between ForEach parents.
         for count in [13, 12, 14] {
             let appearances = state.appearances
-            // Forget the old row's height so the checks below read the
-            // recreated row's own geometry report.
             state.height = nil
             state.count = count
             try await settle(controller, until: "row recreated for count \(count)") {
@@ -68,7 +65,6 @@ struct TranscriptDisclosureTests {
         #expect(abs((state.height ?? 0) - collapsed) < 1)
     }
 
-    /// Lays out and polls (bounded) until the probe reports `condition`.
     private func settle<Content: View>(
         _ controller: UIHostingController<Content>,
         until description: String,

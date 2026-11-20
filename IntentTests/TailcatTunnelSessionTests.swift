@@ -1,4 +1,3 @@
-// TailcatTunnelSession only compiles where TailcatKit links (no xros slice).
 #if canImport(TailcatKit)
 
     import Foundation
@@ -6,20 +5,12 @@
     import os
     import Testing
 
-    /// Teardown contract of `TailcatTunnelSession` over injected fakes standing
-    /// in for the gomobile client/forwarder: exactly-once close, partial
-    /// construction, and blocking closes staying off the caller's executor.
     struct TailcatTunnelSessionTests {
         private struct FakeHandleState {
             var closeCount = 0
             var closeEntered = false
         }
 
-        /// Fake gomobile handle: counts `close()` calls, appends its name to a
-        /// shared order log, and optionally blocks inside `close()` until the
-        /// gate is signalled (a stand-in for a Go-side close waiting on the
-        /// startup mutex). The block is bounded so a regression that parks the
-        /// main thread fails the test instead of hanging the run.
         nonisolated private final class FakeHandle: TunnelClientHandle, TunnelForwarderHandle,
             @unchecked Sendable {
             private let name: String
@@ -64,8 +55,6 @@
             static let maxBlock: DispatchTimeInterval = .seconds(10)
         }
 
-        /// Polls `condition` off the main actor until it holds or `timeout`
-        /// elapses.
         nonisolated private static func eventually(
             within timeout: Duration,
             _ condition: @Sendable () -> Bool
@@ -81,8 +70,6 @@
             return true
         }
 
-        /// Concurrent callers race `close()`: the handles must be closed exactly
-        /// once, forwarder before client (the forwarder rides the client's tunnel).
         @Test func concurrentClosesCloseEachHandleOnce() async {
             let log = OSAllocatedUnfairLock<[String]>(initialState: [])
             let client = FakeHandle("client", log: log)
@@ -102,8 +89,6 @@
             #expect(log.withLock { $0 } == ["forwarder", "client"])
         }
 
-        /// A partially constructed session (client dialed, no forwarder) tears
-        /// down only what exists.
         @Test func partialConstructionClosesOnlyTheClient() async {
             let log = OSAllocatedUnfairLock<[String]>(initialState: [])
             let client = FakeHandle("client", log: log)
@@ -117,8 +102,6 @@
             #expect(log.withLock { $0 } == ["client"])
         }
 
-        /// Teardown must not be skipped because the closing task was cancelled:
-        /// an already-cancelled caller still releases both handles.
         @Test func closeReleasesHandlesWhenCallerIsCancelled() async {
             let log = OSAllocatedUnfairLock<[String]>(initialState: [])
             let client = FakeHandle("client", log: log)
@@ -135,14 +118,6 @@
             #expect(forwarder.closeCount == 1)
         }
 
-        /// The gomobile closes can block for seconds (Go-side startup mutex); a
-        /// `close()` awaited from the main actor must park the blocking call on
-        /// a global queue, leaving the main actor free to run other work.
-        /// The probe is driven from a detached task: the test body itself may run
-        /// on the main actor (a `nonisolated` async test inherits the runner's
-        /// isolation), and a regression that parks the main thread inside the
-        /// fake would otherwise stall the judge along with it. Expectations are
-        /// recorded only after the gate is released for the same reason.
         @Test func blockingCloseDoesNotStallCallersExecutor() async {
             let log = OSAllocatedUnfairLock<[String]>(initialState: [])
             let gate = DispatchSemaphore(value: 0)

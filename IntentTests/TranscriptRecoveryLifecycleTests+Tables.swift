@@ -2,11 +2,7 @@ import CoreGraphics
 @testable import Intent
 import Testing
 
-/// Token identity, and the two terminal events over every well-formed
-/// owner / armed / fallback combination.
 extension TranscriptRecoveryLifecycleTests {
-    // MARK: - Identity
-
     @Test func staleTokensChangeNothing() {
         let states = [
             State(visibility: .visible),
@@ -63,13 +59,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(state.nextTokenId == 5)
     }
 
-    // MARK: - Tables
-
-    /// Every well-formed owner / armed / fallback combination the two
-    /// terminal events can meet. `follow1` is the follow, `recovery2` the recovery. A
-    /// demoted recovery exists only under a follow, and never with a
-    /// transfer: a transfer names the follow that owns, while a demotion is
-    /// made over an owning recovery.
     private var terminalStates: [State] {
         var states: [State] = []
         for realized in [false, true] {
@@ -135,8 +124,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(cases == 26 * 3 * 2 * 2)
     }
 
-    /// Every terminal state, including the recovery-owner ones where any
-    /// follow token is stale.
     @Test func followFinishedTable() {
         let terminals: [Lifecycle.FollowTerminal] = [
             .executed(nil), .executed(.landed), .dropped, .yielded, .cancelled, .replaced
@@ -162,8 +149,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(cases == 26 * 6 * 2)
     }
 
-    /// The contract's state and effects for the owning follow `token`
-    /// draining from `original` with `terminal`.
     private func expectedDrain(
         of original: State, token: FollowToken, forced: Bool, terminal: Lifecycle.FollowTerminal
     ) -> (State, [Effect]) {
