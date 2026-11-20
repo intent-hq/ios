@@ -5,11 +5,7 @@ import UIKit
 
 @testable import Intent
 
-/// Covers the chat-image action menu helpers: info-row formatting and the
-/// image block's base64 payload decoding.
 struct ChatImageActionsTests {
-    // MARK: - Dimensions formatting
-
     @Test func dimensionsTextFormatsPixels() {
         #expect(ImageInfoFormat.dimensionsText(pixelWidth: 800, pixelHeight: 600) == "800 × 600")
     }
@@ -35,8 +31,6 @@ struct ChatImageActionsTests {
         #expect(ImageInfoFormat.dimensionsText(for: decoded) == "3 × 5")
     }
 
-    // MARK: - File-size formatting
-
     @Test func byteCountTextIsNonEmptyAndSizeDependent() {
         let small = ImageInfoFormat.byteCountText(1024)
         let large = ImageInfoFormat.byteCountText(1_500_000)
@@ -44,8 +38,6 @@ struct ChatImageActionsTests {
         #expect(!large.isEmpty)
         #expect(small != large)
     }
-
-    // MARK: - Base64 payload decoding
 
     @Test func decodeImageDataRoundtripsBase64() throws {
         let payload = Data("hello".utf8)
@@ -68,8 +60,6 @@ struct ChatImageActionsTests {
 
         #expect(ContentBlockView.decodeImageData(block) == nil)
     }
-
-    // MARK: - Save outcomes (#463)
 
     private struct WriteFailure: Error {}
 

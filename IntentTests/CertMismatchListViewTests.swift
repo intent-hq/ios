@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Display formatting for the passive per-host cert-mismatch list shown
-/// while connecting/reconnecting and on the re-pair screen.
 struct CertMismatchListViewTests {
     @Test func fullSha256FingerprintIsTruncatedToLeadingBytes() {
         let fingerprint = (0..<32).map { String(format: "%02x", $0) }

@@ -21,8 +21,6 @@ extension ConnectionPersistenceTests {
         PairedServer(hosts: hosts, port: port, name: name, pairedAt: Date())
     }
 
-    // MARK: - updateConnectionDisplayName
-
     @Test func updateConnectionDisplayNameReplacesNamePreservingRecord() {
         resetMigrationState()
         defer { resetMigrationState() }
@@ -36,7 +34,6 @@ extension ConnectionPersistenceTests {
         #expect(loaded.count == 1)
         #expect(loaded.first?.id == stored.id)
         #expect(loaded.first?.displayName == "Pretty Studio")
-        // Everything else on the record is preserved.
         #expect(loaded.first?.token == "tok")
         #expect(loaded.first?.server == stored.server)
     }
@@ -87,8 +84,6 @@ extension ConnectionPersistenceTests {
         #expect(loaded.first { $0.id == secondConnection.id }?.server.hosts == ["b.local"])
     }
 
-    // MARK: - Delete
-
     @Test func deleteRemovesConnectionAndClearsActivePointer() {
         resetMigrationState()
         defer { resetMigrationState() }
@@ -101,13 +96,10 @@ extension ConnectionPersistenceTests {
         #expect(migrationPersistenceManager.loadConnections().map(\.id) == [secondConnection.id])
         #expect(migrationPersistenceManager.activeConnection() == nil)
 
-        // Deleting a non-active connection leaves the active pointer alone.
         migrationPersistenceManager.setActiveConnection(id: secondConnection.id)
         migrationPersistenceManager.deleteConnection(id: firstConnection.id)
         #expect(migrationPersistenceManager.activeConnection()?.id == secondConnection.id)
     }
-
-    // MARK: - Active pointer
 
     @Test func activeConnectionRoundTrip() {
         resetMigrationState()
@@ -140,8 +132,6 @@ extension ConnectionPersistenceTests {
             #expect(touched >= before)
         }
     }
-
-    // MARK: - Launch-seed fallback (window model v2)
 
     @Test func lastUsedConnectionPrefersLastUsedPointer() {
         resetMigrationState()
@@ -181,8 +171,6 @@ extension ConnectionPersistenceTests {
         #expect(migrationPersistenceManager.lastUsedConnection() == nil)
     }
 
-    // MARK: - Migration
-
     @Test func migratesLegacyKeychainPairing() throws {
         resetMigrationState()
         defer { resetMigrationState() }
@@ -198,7 +186,6 @@ extension ConnectionPersistenceTests {
         #expect(loaded.first?.token == "legacy-token")
         #expect(migrationPersistenceManager.activeConnection()?.id == loaded.first?.id)
 
-        // Legacy entries removed after successful migration.
         #expect(migrationPersistenceManager.loadDataFromKeychain(account: migrationPersistenceManager.keychainAccountServer) == nil)
         #expect(migrationPersistenceManager.loadDataFromKeychain(account: migrationPersistenceManager.keychainAccountToken) == nil)
     }
@@ -227,7 +214,6 @@ extension ConnectionPersistenceTests {
         let data = try JSONEncoder().encode(server)
         migrationPersistenceManager.saveDataToKeychain(data: data, account: migrationPersistenceManager.keychainAccountServer)
 
-        // No token: nothing to migrate, legacy server entry must remain untouched.
         #expect(migrationPersistenceManager.loadConnections().isEmpty)
         #expect(migrationPersistenceManager.loadDataFromKeychain(account: migrationPersistenceManager.keychainAccountServer) == data)
     }
@@ -243,12 +229,9 @@ extension ConnectionPersistenceTests {
         let first = migrationPersistenceManager.loadConnections()
         try #require(first.count == 1)
 
-        // Deleting everything from the migrated list must not resurrect the legacy pairing.
         migrationPersistenceManager.deleteConnection(id: first[0].id)
         #expect(migrationPersistenceManager.loadConnections().isEmpty)
     }
-
-    // MARK: - Synced-registry merge
 
     private func syncedRecord(
         host: String = "10.0.0.1",
@@ -352,13 +335,10 @@ extension ConnectionPersistenceTests {
         migrationPersistenceManager.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
         let before = migrationPersistenceManager.loadConnections()
 
-        // Same clock again: no-op.
         let outcome = migrationPersistenceManager.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
         #expect(!outcome.changed)
         #expect(migrationPersistenceManager.loadConnections() == before)
     }
-
-    // MARK: - Compatibility shims
 
     @Test func pairingShimsRoundTripOverConnectionsAPI() {
         resetMigrationState()
@@ -372,12 +352,10 @@ extension ConnectionPersistenceTests {
         #expect(pairing?.token == "shim-token")
         #expect(migrationPersistenceManager.loadConnections().count == 1)
 
-        // Re-pairing the same host:port does not create a duplicate.
         migrationPersistenceManager.savePairing(server: server, token: "shim-token-2")
         #expect(migrationPersistenceManager.loadConnections().count == 1)
         #expect(migrationPersistenceManager.loadPairing()?.token == "shim-token-2")
 
-        // clearPairing forgets only the active connection.
         let other = migrationPersistenceManager.upsertConnection(
             StoredConnection(server: makeMigrationServer(hosts: ["other.local"], port: 7778), token: "o")
         )
@@ -387,10 +365,6 @@ extension ConnectionPersistenceTests {
     }
 }
 
-/// Keyed last-screen persistence (window model v2: one slot per backend
-/// connection) plus migration of the legacy single-slot screen. Each test
-/// gets its own UserDefaults suite and in-memory keychain, removed again in
-/// deinit.
 @Suite(.serialized)
 final class LastScreenPersistenceTests {
     private let persistenceManager: PersistenceManager
@@ -479,11 +453,8 @@ final class LastScreenPersistenceTests {
         persistenceManager.defaults.set("workspaceDetail", forKey: "lastScreen")
         persistenceManager.defaults.set("ws-legacy", forKey: "lastWorkspaceId")
 
-        // A different connection must not adopt the legacy slot.
         #expect(persistenceManager.loadLastScreen(for: UUID()) == nil)
 
-        // The connection that was active adopts the legacy slot once, and
-        // the legacy keys are cleared so it cannot migrate twice.
         let migrated = persistenceManager.loadLastScreen(for: active.id)
         #expect(migrated?.screen == "workspaceDetail")
         #expect(migrated?.workspaceId == "ws-legacy")

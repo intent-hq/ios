@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// CommentStore against a bounded daemon: the `comment.subscribe` snapshot is
-/// the first `comment.list` page and the rest is read with its `nextToken`
-/// (PROTOCOL §5.2 "Bounded note and comment reads", §6.9 "Paged snapshots").
 @MainActor
 struct CommentStorePagingTests {
     private struct PageError: Error {}
@@ -38,7 +35,6 @@ struct CommentStorePagingTests {
         fake.responseMap["comment.unsubscribe"] = [:] as [String: Any]
         fake.simulateConnect()
         await store.subscribeToNote(workspaceId: "ws-1", noteId: "note-1")
-        // The connect observer resubscribes from its own task; let it settle.
         try await fake.waitForRequests("comment.subscribe", count: 2)
         try await waitUntil("comment.subscribe handler registration") { fake.hasSubscriptionHandler(id: "sub-1") }
         fake.clearRequestLog()
@@ -108,8 +104,6 @@ struct CommentStorePagingTests {
     }
 
     @Test func cutThreadsKeepTheirWholeThreadSummary() async throws {
-        // The summary fields describe the whole thread even when the daemon
-        // trims its `comments`, so iOS shows it without `comment.getThread`.
         let (store, fake) = try await liveStore()
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1", seq: 0, snapshot: [Self.thread("thread-1", count: 4000, truncated: true)]

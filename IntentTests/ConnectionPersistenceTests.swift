@@ -83,8 +83,6 @@ struct ConnectionPersistenceFailureTests {
     }
 }
 
-/// Tests for the multi-connection persistence layer (Keychain-backed connection list,
-/// active-connection pointer, legacy-pairing migration).
 @Suite(.serialized)
 struct ConnectionPersistenceTests {
     private let persistenceManager = PersistenceManager.shared
@@ -93,7 +91,6 @@ struct ConnectionPersistenceTests {
         _ = TestKeychainStorage.installed
     }
 
-    /// Remove all connection-related state (new blob, legacy entries, active pointer).
     private func resetConnectionState() {
         persistenceManager.deleteFromKeychain(account: persistenceManager.keychainAccountConnections)
         persistenceManager.deleteFromKeychain(account: persistenceManager.keychainAccountServer)
@@ -109,8 +106,6 @@ struct ConnectionPersistenceTests {
     ) -> PairedServer {
         PairedServer(hosts: hosts, port: port, name: name, pairedAt: Date())
     }
-
-    // MARK: - Load / upsert
 
     @Test func loadConnectionsIsEmptyByDefault() {
         resetConnectionState()
@@ -142,7 +137,6 @@ struct ConnectionPersistenceTests {
         )
         persistenceManager.upsertConnection(original)
 
-        // Same host set (reordered) + port: updates in place, preserves id and lastConnectedAt.
         let updated = StoredConnection(
             server: makeServer(hosts: ["10.0.0.1", "a.local"]),
             token: "tok-new"
@@ -161,9 +155,6 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        // ios#341: DNS names are case-insensitive, so a same-port re-pair of
-        // HOST.local as host.local is the same machine — merge into the
-        // stored record (keeping its spelling) rather than adding a second.
         let original = StoredConnection(server: makeServer(hosts: ["HOST.local"]), token: "tok-old")
         persistenceManager.upsertConnection(original)
         let stored = persistenceManager.upsertConnection(
@@ -190,9 +181,6 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        // Simulates a re-pair after the route refresh grew the stored host set:
-        // upsert [h], grow to [h, ip] via updateConnectionHosts, then re-pair
-        // with [h] again — must update the grown record, not insert a duplicate.
         let original = persistenceManager.upsertConnection(
             StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-old")
         )
@@ -206,7 +194,6 @@ struct ConnectionPersistenceTests {
         #expect(loaded.count == 1)
         #expect(stored.id == original.id)
         #expect(loaded.first?.token == "tok-new")
-        // Previously known routes are never dropped by a narrower re-pair.
         #expect(loaded.first?.server.hosts == ["192.168.1.10", "10.0.0.5"])
     }
 
@@ -219,10 +206,6 @@ struct ConnectionPersistenceTests {
         #expect(persistenceManager.loadConnections().count == 2)
     }
 
-    /// A tunnel-only re-pair (manual tc-address entry) carries no hosts, so
-    /// host overlap can never match — the tcAddress is the record identity.
-    /// Regression: without the tcAddress match key each re-pair inserted a
-    /// duplicate record, including after the record had learned routes.
     @Test func upsertSameTcAddressUpdatesInPlaceDespiteDisjointHosts() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -254,14 +237,10 @@ struct ConnectionPersistenceTests {
         #expect(loaded.count == 1)
         #expect(stored.id == original.id)
         #expect(loaded.first?.token == "tok-new")
-        // Learned routes survive the tunnel-only re-pair.
         #expect(loaded.first?.server.hosts == ["10.0.0.1"])
         #expect(loaded.first?.server.tcAddress == "tc-abc123")
     }
 
-    /// Records without a tcAddress never match on the tunnel key: two
-    /// tunnel-less records with disjoint hosts stay separate (nil == nil must
-    /// not collapse them).
     @Test func upsertNilTcAddressDoesNotMatchOnTunnelKey() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -281,8 +260,6 @@ struct ConnectionPersistenceTests {
         #expect(persistenceManager.loadConnections().count == 3)
     }
 
-    /// Same tc address on a different port is a different daemon listener —
-    /// port stays part of the identity like it is for host matches.
     @Test func upsertSameTcAddressDifferentPortCreatesSeparateEntry() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -321,16 +298,12 @@ struct ConnectionPersistenceTests {
     }
 
     @Test func mergeHostListsDedupesCaseVariantsKeepingFirstSpelling() {
-        // ios#341: DNS names are case-insensitive; a case-variant duplicate
-        // must not become a second route. Existing spelling is preserved.
         #expect(PersistenceManager.mergeHostLists(
             existing: ["Mac.local", "[2001:DB8::1]"],
             incoming: ["mac.local", "MAC.LOCAL", "[2001:db8::1]", "Other.local", "other.local"]
         )
             == ["Mac.local", "[2001:DB8::1]", "Other.local"])
     }
-
-    // MARK: - updateConnectionHosts
 
     @Test func updateConnectionHostsGrowsHostSetWithoutDuplicating() {
         resetConnectionState()
@@ -345,7 +318,6 @@ struct ConnectionPersistenceTests {
         #expect(loaded.count == 1)
         #expect(loaded.first?.id == stored.id)
         #expect(loaded.first?.server.hosts == ["192.168.1.10", "10.0.0.5"])
-        // Everything else on the record is preserved.
         #expect(loaded.first?.token == "tok")
         #expect(loaded.first?.server.port == stored.server.port)
         #expect(loaded.first?.server.name == stored.server.name)
@@ -399,8 +371,6 @@ struct ConnectionPersistenceTests {
         #expect(persistenceManager.loadConnections().first?.server.tcAddress == "tc-abc123")
     }
 
-    // MARK: - updateConnectionTcAddress
-
     @Test func updateConnectionTcAddressSetsAndReplaces() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -427,8 +397,6 @@ struct ConnectionPersistenceTests {
         #expect(persistenceManager.loadConnections().first?.server.tcAddress == nil)
     }
 
-    /// A re-pair without a tunnel address (manual entry, QR from a daemon
-    /// whose tunnel is down) must not drop the known address.
     @Test func upsertWithoutTcAddressPreservesExisting() {
         resetConnectionState()
         defer { resetConnectionState() }

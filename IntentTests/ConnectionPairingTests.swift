@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Tests for the connection display-name selection from a `host.status` result:
-/// prettyHostname > hostname > nil (caller falls back to host:port).
 struct ConnectionPairingTests {
     private func makePersistence(
         storage: InMemoryKeychainStorage
@@ -130,9 +128,6 @@ struct ConnectionPairingTests {
         #expect(fake.refreshHostRoutesCallCount == 0)
     }
 
-    /// A pairing over an undecodable saved-connections blob must not replace
-    /// it with a one-entry list; it fails with a distinct, recoverable error
-    /// and leaves the blob and active pointer alone (intent-hq/ios#265).
     @Test @MainActor func pairingOverUndecodableRegistryPreservesBlob() async throws {
         let storage = InMemoryKeychainStorage()
         let setup = try makePersistence(storage: storage)

@@ -16,7 +16,7 @@ The app saves each paired daemon as a `StoredConnection`: its pairing info, its 
 2. **Pairing identity.** `upsertConnection(_:)` updates an existing record in place, and keeps its id, when one of these matches:
    1. The certificate fingerprint.
    2. The same port and at least one shared host. Overlap, not set equality, is the key, because the post-connect route refresh grows the stored host set over time. A re-pair through one manual host must update the grown record.
-   3. The same port and the same Tailcat tunnel address (`tcAddress`). A manual tunnel-only re-pair has no hosts, so without this key each re-pair would add a duplicate.
+   3. The same port and the same Tailcat tunnel address (`tcAddress`). A manual tunnel-only re-pair has no hosts, so without this key each re-pair would add a duplicate. Two records without a `tcAddress` never match on this key; a missing address is not equal to another missing address (added from `ConnectionPersistenceTests` comments).
 3. **Host and tunnel merge.**
    1. On a match, existing hosts keep their order and are never dropped. New hosts are appended (`mergeHostLists(existing:incoming:)`).
    2. Hosts are deduplicated case-insensitively, because DNS names and IPv6 hex are case-insensitive (ios#341). The first spelling seen wins.
