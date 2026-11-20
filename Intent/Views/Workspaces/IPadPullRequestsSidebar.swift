@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// The iPad rail's Pull requests section: the same list, filters and swipe
-/// actions as the iPhone page, with the title opening the list options.
 struct IPadPullRequestsSidebar: View {
     let session: BackendSession
     let onCollapse: () -> Void
@@ -107,7 +105,6 @@ struct IPadPullRequestsSidebar: View {
     }
 }
 
-/// The selected pull request in the iPad main pane, with its own stack for file diffs.
 struct IPadPullRequestDetail: View {
     let item: PullRequestListItem
     let session: BackendSession

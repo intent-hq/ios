@@ -12,6 +12,7 @@ The Changes tab and commit views render diffs with syntax highlighting and horiz
 2. Building sources and mapping runs to rows scale with the file and run off the main thread.
 3. **Rows.** Rows are flattened with stable ids so a lazy stack builds only visible lines. Embedded diffs sit inside the commit view's scroll view and cannot build lazily, so they show at most `embeddedLineLimit` lines.
 4. **Width.** Column counts (tabs to 4-column stops, non-ASCII scalars as two) only shortlist the widest lines; the shortlist is measured with the real font. Content width includes gutters, marker, gaps and the default 16 pt horizontal padding.
+5. **Long and embedded diffs.** "Show All Lines" opens the full-page diff, which builds rows lazily, instead of expanding inline and rebuilding every row. A commit view keeps loaded diff heights until text sizing changes, because lazy layout can probe a collapsed height offscreen. The horizontal scroller has a fixed width from the widest line and a fixed height, so scrolling stays stable as rows load.
 
 ## Code
 

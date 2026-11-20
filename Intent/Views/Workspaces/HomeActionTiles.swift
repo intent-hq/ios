@@ -58,8 +58,6 @@ struct HomeActionTiles: View {
         .accessibilityIdentifier("intent.menu.tiles")
     }
 
-    /// Large text can make cards taller than a short landscape window, so the
-    /// viewport is capped like the wrapped grid and scrolls vertically when needed.
     private var carousel: some View {
         ScrollView([.horizontal, .vertical]) {
             HStack(alignment: .top, spacing: Layout.spacing) {
@@ -82,7 +80,6 @@ struct HomeActionTiles: View {
         } action: { availableWidth = $0 }
     }
 
-    /// Accessibility text gets one card per viewport so titles wrap at word boundaries.
     private var carouselTileWidth: CGFloat {
         Self.carouselTileWidth(in: availableWidth, accessibility: dynamicTypeSize.isAccessibilitySize)
     }

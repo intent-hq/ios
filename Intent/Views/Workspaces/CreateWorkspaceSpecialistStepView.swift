@@ -204,15 +204,12 @@ struct CreateWorkspaceSpecialistStepView: View {
 extension CreateWorkspaceView {
     static let createRequestTimeout: TimeInterval = 120
 
-    /// A failed cold load settles; an uncached load still in flight gates creation.
     static func showsOptionsLoading(
         storeIsLoading: Bool, storeHasLoaded: Bool, settled: Bool
     ) -> Bool {
         storeIsLoading || (!storeHasLoaded && !settled)
     }
 
-    // A missing provider needs no load; a failed catalog falls back to the daemon default.
-    // Nil means no provider is selected; false means its catalog has not loaded yet.
     // swiftlint:disable:next discouraged_optional_boolean
     static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
         catalogCached == false && !settled
@@ -274,8 +271,6 @@ extension CreateWorkspaceView {
             || initialAgent.provider != nil || !initialAgent.imageBlocks.isEmpty {
             var initialAgentParams: [String: Any] = [:]
             if let specialist = initialAgent.specialist { initialAgentParams["specialist"] = specialist.id }
-            // Always send the enabled selection, including Auggie. The host's
-            // default (or specialist default) may name a disabled provider.
             if let provider = initialAgent.provider {
                 initialAgentParams["provider"] = provider.id
             }

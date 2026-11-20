@@ -1,15 +1,12 @@
 import SwiftUI
 
 extension View {
-    /// Opens links to pull requests a workspace tracks in the pull request
-    /// page, pushed on the stack or in the iPad main pane; other links keep their handler.
     func pullRequestLinkRouting(inIPadDetail: Bool = false) -> some View {
         modifier(PullRequestLinkRouting(inIPadDetail: inIPadDetail))
     }
 }
 
 extension EnvironmentValues {
-    /// Opens a pull request page the way tracked links do; nil outside link routing.
     @Entry var openPullRequest: ((PullRequestListItem) -> Void)?
 }
 

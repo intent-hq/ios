@@ -43,7 +43,6 @@ struct WorkspaceScriptsMenu: View {
 
     var body: some View {
         let scripts = store.scripts(workspaceId: workspaceId)
-        // Read launch/connection state on MainActor, leaving only actions deferred.
         let rows = scripts.map { script in
             let content = Button {
                 Task { await store.launch(script) }

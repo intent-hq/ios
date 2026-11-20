@@ -3,7 +3,6 @@ import SwiftUI
 struct WorkspaceFileDiffView: View {
     @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     @ScaledMetric(relativeTo: .subheadline) private var statusIconSize: CGFloat = 15
-    /// Nil when `patch` supplies the diff (a pull request file's GitHub patch).
     let loader: WorkspaceDiffLoader?
     let path: String
     var staged = false
@@ -11,7 +10,6 @@ struct WorkspaceFileDiffView: View {
     var commitHash: String?
     var embedded = false
     var patch: String?
-    /// Off when the page's own header already names the file.
     var showsPath = true
     @State private var presentation: WorkspaceDiffPresentation?
     @State private var diffRows: WorkspaceDiffRows?
@@ -128,7 +126,6 @@ struct WorkspaceFileDiffView: View {
                     diffScrollView
                         .fixedSize(horizontal: false, vertical: true)
                     if let diffRows, diffRows.lineCount > WorkspaceDiffRows.embeddedLineLimit {
-                        // Expanding inline would rebuild every row; the full-page diff builds rows lazily.
                         Button("Show All \(diffRows.lineCount.formatted()) Lines") { showsFullDiff = true }
                             .buttonStyle(IntentButtonStyle(variant: .secondary))
                             .padding([.horizontal, .bottom])
@@ -180,7 +177,6 @@ struct WorkspaceFileDiffView: View {
     @ViewBuilder
     private var diffScrollView: some View {
         if embedded {
-            // The commit view's outer scroll view drives vertical scrolling, so rows cannot be lazy here.
             ScrollView(.horizontal) {
                 VStack(alignment: .leading, spacing: 0) { diffRowViews }
                     .frame(minWidth: viewportSize.width, alignment: .leading)
@@ -189,13 +185,11 @@ struct WorkspaceFileDiffView: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { diffContentHeight = $0 }
             }
             .defaultScrollAnchor(.topLeading)
-            // Keep lazy section measurements stable when the horizontal scroller moves offscreen.
             .frame(height: diffContentHeight)
             .modifier(DiffViewport(viewportSize: $viewportSize))
         } else {
             ScrollView([.horizontal, .vertical]) {
                 LazyVStack(alignment: .leading, spacing: 0) { diffRowViews }
-                    // A fixed width from the widest line keeps horizontal scrolling stable as rows load.
                     .frame(width: max(contentWidth, viewportSize.width), alignment: .leading)
                     .modifier(DiffTextStyle())
                     .frame(minHeight: viewportSize.height, alignment: .topLeading)

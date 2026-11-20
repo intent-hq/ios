@@ -175,8 +175,6 @@ struct ProviderModelStepView: View {
         }
     }
 
-    /// Guidance shown when providers exist but none are signed in; provider
-    /// sign-in flows run on the desktop seat and are not available on iOS.
     private var noProvidersSignedInPlaceholder: some View {
         VStack(alignment: .leading, spacing: Constants.ModalPicker.placeholderSpacing) {
             Text("No providers are signed in")

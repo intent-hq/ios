@@ -26,7 +26,6 @@ struct SpecialistStepView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Next", action: onNext)
                     .buttonStyle(IntentButtonStyle())
-                    // Toolbars can compress the padded label to an ellipsis (e.g. "N…"); keep its full width on every device.
                     .fixedSize(horizontal: true, vertical: false)
                     .disabled(selectedSpecialist == nil)
             }

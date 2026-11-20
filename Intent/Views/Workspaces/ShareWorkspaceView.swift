@@ -1,15 +1,11 @@
 import SwiftUI
 
-/// Opens the Share sheet for one workspace.
 struct ShareWorkspaceRequest: Identifiable, Equatable {
     let workspaceId: String
 
     var id: String { workspaceId }
 }
 
-/// Share sheet: create an invite link (for anyone, or for one GitHub account)
-/// and send or copy it. People only join by opening a link; members and open
-/// links are managed in Intent on the Mac. The sheet is as tall as its content.
 struct ShareWorkspaceView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: WorkspaceSharingModel
@@ -51,7 +47,6 @@ struct ShareWorkspaceView: View {
     }
 }
 
-/// Who can use the link, and the button that creates it.
 private struct ShareLinkForm: View {
     @Bindable var model: WorkspaceSharingModel
 
@@ -108,7 +103,6 @@ private struct ShareLinkForm: View {
     }
 }
 
-/// The new link: send it through the share sheet, or copy it.
 private struct ShareCreatedLink: View {
     let link: WorkspaceSharingModel.InviteLink
     @State private var copied = false

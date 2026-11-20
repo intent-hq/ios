@@ -42,7 +42,6 @@ final class WorkspacePromptFocus {
     }
 }
 
-/// Scoped to workspace creation: Return remains a newline on every device.
 class WorkspacePromptUITextView: UITextView {
     var onPasteImages: (() -> Void)?
     var allowsImagePaste = true
@@ -50,7 +49,6 @@ class WorkspacePromptUITextView: UITextView {
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(paste(_:)), imagePasteboard.hasImages() {
-            // hasImages is a metadata check; never read clipboard content on render/focus.
             return isEditable && allowsImagePaste && onPasteImages != nil
         }
         return super.canPerformAction(action, withSender: sender)
@@ -58,7 +56,6 @@ class WorkspacePromptUITextView: UITextView {
 
     override func paste(_ sender: Any?) {
         guard isEditable else { return }
-        // Both edit-menu Paste and Command-V use this responder action.
         guard imagePasteboard.hasImages() else {
             pasteStandardContent(sender)
             return
@@ -118,8 +115,6 @@ struct WorkspacePromptTextView: UIViewRepresentable {
         let fitting = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
         let lines = CreateWorkspaceView.initialMessageLineCountRange
         let contentHeight = min(max(fitting.height, font.lineHeight * CGFloat(lines.lowerBound)), font.lineHeight * CGFloat(lines.upperBound))
-        // The native editor must fill the prompt's blank area so taps can focus it.
-        // A minimum frame on its SwiftUI container only adds non-editable space.
         return CGSize(width: width, height: max(minimumHeight, contentHeight))
     }
 

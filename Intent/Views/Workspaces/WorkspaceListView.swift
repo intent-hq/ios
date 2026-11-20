@@ -73,7 +73,6 @@ struct WorkspaceListView: View {
         }
         .modifier(WorkspaceActionLauncher(
             isSearching: isSearching,
-            // The Intent menu switches between the two lists.
             onWorkspaces: showsPullRequests ? { listContent = .workspaces } : nil,
             onPullRequests: showsPullRequests ? nil : { listContent = .pullRequests },
             onCreateWorkspace: createWorkspace
@@ -225,7 +224,6 @@ struct WorkspaceListView: View {
         showRepo: Bool = true,
         usesVisionHitTarget: Bool = true
     ) -> some View {
-        // Snapshot store state and bindings here, not in SwiftUI's async row provider.
         let rows = workspaces.enumerated().map { index, workspace in
             let nextId = index + 1 < workspaces.count ? workspaces[index + 1].id : nil
             let content = workspaceButton(workspace, nextWorkspaceId: nextId, showRepo: showRepo, usesVisionHitTarget: usesVisionHitTarget)
@@ -330,7 +328,6 @@ private extension WorkspaceListView {
             }
             Spacer(minLength: 0)
             if isSearching, !usesVerticalBar { pageMenu } else if !usesVerticalBar {
-                // Reserve the menu's width without inflating the cap-trimmed title height.
                 Color.clear.frame(width: Constants.Accessibility.minimumTapTarget, height: 0)
             }
         }

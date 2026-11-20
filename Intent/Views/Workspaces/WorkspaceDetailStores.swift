@@ -1,9 +1,6 @@
 import Foundation
 import Observation
 
-/// The per-workspace-page stores over the page's session connection. A window
-/// keeps the stores of its most recently viewed workspaces in
-/// `WorkspaceDetailStoresCache`, so they stay readable during a connection drop.
 @MainActor
 @Observable
 final class WorkspaceDetailStores {
@@ -47,8 +44,6 @@ final class WorkspaceDetailStores {
     }
 }
 
-/// Per window: the stores of the last few workspaces viewed. Not observable —
-/// a lookup during view evaluation must not invalidate the view.
 @MainActor
 final class WorkspaceDetailStoresCache {
     static let retainedWorkspaceLimit = 5

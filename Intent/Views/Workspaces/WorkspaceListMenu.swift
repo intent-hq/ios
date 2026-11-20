@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Which list the workspace page shows; switched from its overflow menu.
 nonisolated enum WorkspaceListContentKind: String {
     case pullRequests
     case workspaces
@@ -8,7 +7,6 @@ nonisolated enum WorkspaceListContentKind: String {
 
 struct WorkspaceListMenu: View {
     @Binding var showArchived: Bool
-    // Native toolbar hosts must not rely on inherited observable objects (#745).
     let canCreateWorkspace: Bool
     let onCreateWorkspace: () -> Void
     let onRecentAgents: () -> Void

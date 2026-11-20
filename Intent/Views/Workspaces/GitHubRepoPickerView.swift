@@ -1,19 +1,5 @@
 import SwiftUI
 
-/// Searchable GitHub repo picker (Create Workspace Step 1): recent repos
-/// from the daemon's known-repo registry render immediately on top (no
-/// GitHub round-trip), the first page of the user's GitHub repos blends in
-/// below, both prefix-filtered client-side by the typed text, followed by
-/// deduped debounced global search results. When GitHub is not connected
-/// (`github.authStatus.isConfigured == false`) the screen shows
-/// desktop-setup guidance for existing repos; the new-repository action
-/// remains available. Recents are deliberately auth-gated at render time too: picking a repo needs
-/// GitHub for branch listing and workspace creation either way.
-///
-/// `store` is the session-owned cache: on a reopen the cached lists render
-/// immediately (no spinner) while `loadIfNeeded` revalidates silently.
-/// Search state stays per-picker (the store is shared by every picker on
-/// the session, so one picker's search must not surface in another).
 struct GitHubRepoPickerView: View {
     @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     var store: GitHubRepoStore
@@ -27,10 +13,7 @@ struct GitHubRepoPickerView: View {
 
     @State private var searchText = ""
     @State private var searchResults: [GitHubRepo] = []
-    /// The trimmed query the current `searchResults` answer; nil until a
-    /// search completes, so stale results never surface.
     @State private var completedSearchQuery: String?
-    /// The qualifying query currently in its debounce or remote-search phase.
     @State private var pendingSearchQuery: String?
     @State private var searchTask: Task<Void, Never>?
 
@@ -76,8 +59,6 @@ struct GitHubRepoPickerView: View {
             scheduleSearch(for: newValue)
         }
     }
-
-    // MARK: - Subviews
 
     private var newRepositoryButton: some View {
         Button(action: onCreateRepository) {
@@ -157,9 +138,6 @@ struct GitHubRepoPickerView: View {
         }
     }
 
-    /// Guidance shown when GitHub is not connected; the GitHub connect flow
-    /// runs on the desktop seat and is not available on iOS (same pattern as
-    /// the "no providers signed in" placeholder).
     private var notConnectedPlaceholder: some View {
         ContentUnavailableView {
             Label {
@@ -173,11 +151,6 @@ struct GitHubRepoPickerView: View {
         }
     }
 
-    // MARK: - Debounced search
-
-    /// Debounce global search ~300ms so rapid keystrokes coalesce into a
-    /// single request (FE parity). Queries shorter than the minimum clear
-    /// any previous results instead of searching.
     private func scheduleSearch(for text: String) {
         searchTask?.cancel()
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -192,9 +165,6 @@ struct GitHubRepoPickerView: View {
             try? await Task.sleep(for: Constants.GitHubRepoPicker.searchDebounce)
             guard !Task.isCancelled, pendingSearchQuery == query else { return }
             let results = await store.searchRepos(query: query)
-            // Publish results + the query they answer together, only if this
-            // task is still the latest — an out-of-order older response can't
-            // overwrite a newer one's results.
             guard !Task.isCancelled, pendingSearchQuery == query else { return }
             if case let .results(results) = results {
                 searchResults = results
@@ -311,8 +281,6 @@ private struct GitHubRepoLabel: View {
     }
 }
 
-/// Match Figma's cap-to-baseline text spacing while letting multiline and
-/// accessibility text grow naturally. No glyphs are clipped to a fixed height.
 private struct GitHubRepoLabelLayout: Layout {
     let capHeights: [CGFloat]
     let spacing: CGFloat

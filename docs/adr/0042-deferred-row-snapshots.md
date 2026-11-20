@@ -12,6 +12,8 @@ SwiftUI can call row builders on its async renderer. Plain `ForEach` content is 
 2. The list reads store state, resolves environment values and prepares main-actor actions before this call. The builder uses only the prepared values.
 3. A snapshot can hold lightweight `View` values. Their bodies stay lazy, and constructing a row does not build its label or read live store state.
 4. The initializer returns `ForEach` directly, so lazy containers keep row identity and counts.
+5. A row snapshot does not carry an opaque, non-Sendable modified view. Padding and similar modifiers go in the row's lazy body (`WorkspaceAgentListEntry`).
+6. Each entry is one identified layout child. Section expansion stays out of nested dynamic view lists, whose height estimates can cycle near the scroll boundary (`WorkspaceAgentListRow`).
 
 ## Consequences
 
@@ -21,4 +23,5 @@ SwiftUI can call row builders on its async renderer. Plain `ForEach` content is 
 
 - `ForEach`: `init(snapshots:id:content:)`
 - `AgentHistoryRowSnapshot`, `AgentHistoryRow`, `AgentHistoryList`
+- `WorkspaceAgentListEntry`, `WorkspaceAgentListRow`
 - Conversation rows with `@Sendable` builders over prepared values: `AssistantHistoryMenu`, `WorkspaceQuestionAnswerCards`, `AgentWaitingView`, `ProposalCardView`, `WorkspaceLinkedTextView`
