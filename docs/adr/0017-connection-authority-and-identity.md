@@ -22,7 +22,8 @@ A daemon admits a socket for a person (principal) with capabilities. Saved conne
 4. **Capability gates.** `supportsScriptMonitors` depends only on advertised capabilities, never on a maximum protocol version. The protocol major moves for unrelated changes (protocol 15 hid monitors, intent-hq/intent#7206). A breaking change to these methods changes the capability values.
 5. **Installation identity.** `PairingClientIdentity` is one local installation id shared by all windows and hosts, independent of any person's bearer. The server's principal-prefixed echo is never persisted.
 6. **Strict JSON booleans.** `ConnectionPrincipal` decodes booleans and numbers through `NSNumber` and checks `CFBoolean` identity, so a JSON boolean is never read as a number and a number is never read as a boolean.
-7. **Diagnostics context.** `DiagnosticConnectContext` is a closed enum given by the caller. It is never inferred from credentials or backend ids. Unannotated entry points stay unknown.
+7. **Startup status.** `DaemonStartupStatus` is owner-only. A snapshot describes work, never admission or authority.
+8. **Diagnostics context.** `DiagnosticConnectContext` is a closed enum given by the caller. It is never inferred from credentials or backend ids. Unannotated entry points stay unknown.
 
 ## Consequences
 

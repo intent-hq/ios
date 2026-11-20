@@ -2,12 +2,9 @@ import Foundation
 import Observation
 import Synchronization
 
-/// One backend-local catalog. Successful empty values are warm. A read is
-/// owned by the cache, so cancelling one caller cannot cancel another's RPC.
 @MainActor
 @Observable
 final class CreationCatalog<Element> {
-    // Nil means no successful catalog read; an empty array is a successfully loaded catalog.
     // swiftlint:disable:next discouraged_optional_collection
     private(set) var value: [Element]?
     private(set) var loadFailed = false
@@ -16,8 +13,6 @@ final class CreationCatalog<Element> {
     @ObservationIgnored private var consumers: Set<UUID> = []
     @ObservationIgnored private var callers: [UUID: Interest] = [:]
     @ObservationIgnored private var flight: Flight?
-    /// The most recently started read, kept after its flight retires so
-    /// tests can await a superseded read's real completion. Never read here.
     @ObservationIgnored private(set) var latestReadTask: Task<Void, Never>?
     private let fetch: @MainActor () async throws -> [Element]
 
@@ -50,8 +45,6 @@ final class CreationCatalog<Element> {
         retireIfUninterested()
     }
 
-    /// Explicit picker refreshes bypass freshness but join an existing read.
-    /// Label ensures never launch a silent read behind a valid cache hit.
     @discardableResult
     func ensure(force: Bool = false, consumer: UUID? = nil) async -> Bool {
         guard !Task.isCancelled else { return false }
@@ -74,8 +67,6 @@ final class CreationCatalog<Element> {
         }
     }
 
-    /// Bursts during one flight share at most one trailing read. If that read
-    /// is invalidated too, leave the cache stale for the next ensure/event.
     func invalidate(refresh: Bool) {
         revision &+= 1
         isFresh = false
@@ -86,8 +77,6 @@ final class CreationCatalog<Element> {
         if !consumers.isEmpty, !isFresh, flight == nil { _ = start() }
     }
 
-    /// Hard resets/backend teardown clear labels. A connection transition can
-    /// retain the last good value while rejecting every pre-transition reply.
     func reset(clear: Bool = true, releaseConsumers: Bool = false) {
         revision &+= 1
         isFresh = false
@@ -148,8 +137,6 @@ final class CreationCatalog<Element> {
     private func retireFlight() {
         guard let current = flight else { return }
         flight = nil
-        // A sent transport callback lives until its reply/timeout/disconnect.
-        // It cannot publish or launch a follow-up after this flight retires.
         if !current.sent { current.task?.cancel() }
         current.result.finish(false)
     }

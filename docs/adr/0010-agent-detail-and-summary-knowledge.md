@@ -31,6 +31,10 @@ Many screens show one agent: conversation windows, iPad panes, route validation,
    3. Mutation events publish display changes (for example `specialist`) flat in `data`, not in `AgentLite` metadata.
    4. The top-level and metadata attention fields describe the same values. They are mirrored, so a stale top-level value cannot mask a newer metadata value or clear.
    5. A status-only seed retires older liveness flags (`isStreaming`, `isProcessing`, `isResponding`). Explicit live overlays and newer events keep their own provenance.
+8. **Watched agents in a conversation.** `ConversationWatchedAgents` seeds summaries with sparse field presence and each participant's canonical workspace. Bundled display rows never grant detail authority.
+   1. The view reports real viewport intersection, not `LazyVStack` prefetch. Each window owns its own interest; one window cannot cancel another's.
+   2. Selecting an unresolved placeholder is an explicit detail interest. It shares the same backend/agent flight as visible rows and routes.
+   3. Enriched activity is display data, never a reason to discover an offscreen agent.
 
 ## Consequences
 
@@ -42,4 +46,5 @@ Many screens show one agent: conversation windows, iPad panes, route validation,
 - `AgentDetailStore`: `load(agentId:workspaceId:refresh:)`, `retain(agentId:)`, `release(agentId:consumer:)`, `invalidate(agentId:)`, `nextStateSequence()`, `retireRead(in:)`, `hasInterest(in:)`, `receivedDetail(_:previous:sequence:)`, `LoadInterest`
 - `AgentDetail`: `markerReadSequences`, `validate(agentId:workspaceId:)`
 - `AgentDetailRequestLimiter`: `acquire()`, `release()`
+- `ConversationWatchedAgents`: `setVisible(_:visible:consumer:)`, `selectedAgent(_:)`, `handleActivity(agentId:lastAgentResponse:digest:)`
 - `AgentSummaryStore`: `beginRead()`, `seed(_:workspaceId:since:)`, `seedStatuses(_:since:)`, `handleEvent(_:)`, `displayFields(_:)`
