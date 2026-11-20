@@ -49,6 +49,8 @@ struct FloatingComposerOrnament<Composer: View>: ViewModifier {
                 if lifecycle.disappear() { onWithdraw() }
             }
             .onChange(of: presentation) { old, new in
+                // Keep `FloatingComposerPolicy.cancelsPhotoImport(from: old, to: new)` delegated
+                // through `lifecycle.applyPresentation` so `.onDisappear` + `.onChange` fires once.
                 _ = old
                 if lifecycle.applyPresentation(new) { onWithdraw() }
             }
