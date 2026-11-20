@@ -23,6 +23,7 @@ struct ConversationTranscriptView: View {
     @Environment(\.conversationPresentation) var presentation
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @ScaledMetric(relativeTo: .caption) var actionIconSide: CGFloat = 12
+    @State private var viewportContentHeight: CGFloat = 0
 
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
 
@@ -178,6 +179,8 @@ private extension ConversationTranscriptView {
             }
             .padding(.horizontal, transcriptHorizontalInset)
             .padding(.top, Layout.transcriptTopPadding)
+            // Keep short transcripts bottom-aligned when the keyboard changes the viewport.
+            .frame(minHeight: viewportContentHeight, alignment: .bottom)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.width
             } action: { width in
@@ -195,6 +198,11 @@ private extension ConversationTranscriptView {
         .accessibilityIdentifier("transcript.scrollView")
         .demoAccessibilityValue(transcriptDemoReport)
         .demoStartupGestureProbe(scrollState: scrollState)
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            max(0, geometry.visibleRect.height - geometry.contentInsets.top - geometry.contentInsets.bottom)
+        } action: { _, height in
+            viewportContentHeight = height
+        }
         .onScrollGeometryChange(for: Bool.self) { geometry in
             ConversationTranscriptScrollPolicy.isNearHistoryTop(
                 contentOffsetY: geometry.contentOffset.y,
