@@ -57,15 +57,28 @@ extension AppCoordinatorTests {
             currentBackendID: current,
             target: other,
             supportsMultipleWindows: true,
-            isShowingSavedMachines: true,
+            choosesBackendInPlace: true,
             opensSeparateBackendWindows: true
-        ) == .rebindInPlace, "A window at Home picks what it shows in place")
+        ) == .rebindInPlace, "A window at Home or a connection failure picks what it shows in place")
         #expect(WindowRetargetRoute.route(
             currentBackendID: current,
             target: other,
             supportsMultipleWindows: true,
             opensSeparateBackendWindows: false
         ) == .rebindInPlace, "iPad keeps switching in place (ios#897)")
+    }
+
+    /// Regression (ios#1040 review): picking another saved machine on the
+    /// connection failure screen opened a second window and left the failed
+    /// one behind with auto-retry stopped.
+    @Test @MainActor func onlyAWindowShowingItsConnectedMachineOpensAnotherMachinesWindow() {
+        let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
+        coordinator.currentScreen = .connectionFailed(error: "Timed out")
+        #expect(coordinator.choosesBackendInPlace)
+        coordinator.currentScreen = .connecting
+        #expect(coordinator.choosesBackendInPlace)
+        coordinator.currentScreen = .workspaceList
+        #expect(!coordinator.choosesBackendInPlace)
     }
 
     // MARK: - Deep-link URL routing (intent://)

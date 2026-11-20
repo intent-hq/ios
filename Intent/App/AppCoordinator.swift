@@ -196,6 +196,13 @@ class AppCoordinator {
     /// The route `retargetWindow` will take for a target, set by the window
     /// root. When unset, a retarget is treated as rebinding in place.
     @ObservationIgnored var retargetRoute: ((BackendID) -> WindowRetargetRoute)?
+
+    /// A window that is not showing a connected machine (Home, pairing,
+    /// connecting, or a connection failure) picks another machine in place
+    /// instead of opening that machine's own window beside it.
+    var choosesBackendInPlace: Bool {
+        !currentScreen.supportsConnectionLossOverlay
+    }
     /// Hands a hijacked shared connection's re-dial to a window that stays
     /// on this backend, set by the session. When unset, this window re-dials.
     @ObservationIgnored var repairSharedConnection: (() -> Void)?

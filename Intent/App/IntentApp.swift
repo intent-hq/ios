@@ -96,8 +96,9 @@ struct IntentApp: App {
 /// window: picking another machine opens (or raises) that machine's window
 /// and this one stays. iPad and iPhone switch a bound window in place
 /// (ios#897; "Open in New Window" in a connection's context menu is the
-/// explicit iPad multi-window path), as does a window at Home, which is
-/// choosing what it shows.
+/// explicit iPad multi-window path), as does a window that is not showing
+/// a connected machine (Home, pairing, connecting or a connection
+/// failure), which is choosing what it shows.
 enum WindowRetargetRoute: Equatable {
     case openTargetWindow
     case rebindInPlace
@@ -115,12 +116,12 @@ enum WindowRetargetRoute: Equatable {
         currentBackendID: BackendID?,
         target: BackendID,
         supportsMultipleWindows: Bool,
-        isShowingSavedMachines: Bool = false,
+        choosesBackendInPlace: Bool = false,
         opensSeparateBackendWindows: Bool = platformOpensSeparateBackendWindows
     ) -> Self {
         guard supportsMultipleWindows else { return .rebindInPlace }
         guard let currentBackendID else { return .replaceWindow }
-        guard opensSeparateBackendWindows, !isShowingSavedMachines, currentBackendID != target else {
+        guard opensSeparateBackendWindows, !choosesBackendInPlace, currentBackendID != target else {
             return .rebindInPlace
         }
         return .openTargetWindow
@@ -136,8 +137,9 @@ enum WindowRetargetRoute: Equatable {
 struct SessionWindowRoot: View {
     let session: BackendSession
     let networkAvailability: NetworkAvailability
-    let retargetWindow: ((BackendID) -> Void)?
-    let retargetRoute: ((BackendID) -> WindowRetargetRoute)?
+    /// Window-root hooks; the Bool is the coordinator's `choosesBackendInPlace`.
+    let retargetWindow: ((BackendID, Bool) -> Void)?
+    let retargetRoute: ((BackendID, Bool) -> WindowRetargetRoute)?
     let returnToSavedMachines: (() -> Void)?
     @State private var coordinator: AppCoordinator
     @Environment(\.scenePhase) private var scenePhase
@@ -145,8 +147,8 @@ struct SessionWindowRoot: View {
     init(
         session: BackendSession,
         networkAvailability: NetworkAvailability = .shared,
-        retargetWindow: ((BackendID) -> Void)? = nil,
-        retargetRoute: ((BackendID) -> WindowRetargetRoute)? = nil,
+        retargetWindow: ((BackendID, Bool) -> Void)? = nil,
+        retargetRoute: ((BackendID, Bool) -> WindowRetargetRoute)? = nil,
         returnToSavedMachines: (() -> Void)? = nil,
         startingAtSavedMachines: Bool = false
     ) {
@@ -166,8 +168,13 @@ struct SessionWindowRoot: View {
             .environment(\.scriptMonitorPresentationDate, DemoScriptMonitorFixtures.configuredPresentationDate())
             #endif
             .onAppear {
-                coordinator.retargetWindow = retargetWindow
-                coordinator.retargetRoute = retargetRoute
+                let coordinator = coordinator
+                coordinator.retargetWindow = retargetWindow.map { hook in
+                    { [weak coordinator] target in hook(target, coordinator?.choosesBackendInPlace ?? false) }
+                }
+                coordinator.retargetRoute = retargetRoute.map { hook in
+                    { [weak coordinator] target in hook(target, coordinator?.choosesBackendInPlace ?? false) }
+                }
                 coordinator.returnWindowToSavedMachines = returnToSavedMachines
             }
             .onOpenURL { url in
@@ -255,8 +262,8 @@ struct BackendWindowRoot: View {
                 SessionWindowRoot(
                     session: session,
                     networkAvailability: windowSession.networkAvailability,
-                    retargetWindow: retarget,
-                    retargetRoute: retargetRoute(for:),
+                    retargetWindow: retarget(to:choosingInPlace:),
+                    retargetRoute: retargetRoute(for:choosingInPlace:),
                     returnToSavedMachines: windowSession.returnToSavedMachines,
                     startingAtSavedMachines: windowSession.isShowingSavedMachines
                 )
@@ -341,8 +348,8 @@ struct BackendWindowRoot: View {
     /// place, open the target's own window (visionOS), or replace this
     /// unbound pairing window with the target's own window so it stays
     /// raisable by value.
-    private func retarget(to target: BackendID) {
-        let route = retargetRoute(for: target)
+    private func retarget(to target: BackendID, choosingInPlace: Bool) {
+        let route = retargetRoute(for: target, choosingInPlace: choosingInPlace)
         windowSession.prepareForSelection(to: target, route: route)
         switch route {
         case .openTargetWindow:
@@ -361,12 +368,12 @@ struct BackendWindowRoot: View {
         }
     }
 
-    private func retargetRoute(for target: BackendID) -> WindowRetargetRoute {
+    private func retargetRoute(for target: BackendID, choosingInPlace: Bool) -> WindowRetargetRoute {
         WindowRetargetRoute.route(
             currentBackendID: backendID,
             target: target,
             supportsMultipleWindows: supportsMultipleWindows,
-            isShowingSavedMachines: windowSession.isShowingSavedMachines
+            choosesBackendInPlace: choosingInPlace || windowSession.isShowingSavedMachines
         )
     }
 

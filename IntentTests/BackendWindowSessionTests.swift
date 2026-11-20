@@ -299,7 +299,7 @@ extension BackendSessionRegistryTests {
             currentBackendID: originalBackend,
             target: target,
             supportsMultipleWindows: supportsMultipleWindows,
-            isShowingSavedMachines: true,
+            choosesBackendInPlace: true,
             opensSeparateBackendWindows: true
         ) == .rebindInPlace)
         window.prepareToRebind()
