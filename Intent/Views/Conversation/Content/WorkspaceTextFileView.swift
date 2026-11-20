@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// TextKit 2 lays out the visible viewport rather than one giant SwiftUI Text.
-/// Keep its native selection and scrolling; never access the legacy layoutManager.
 struct WorkspaceTextFileView: UIViewRepresentable {
     let file: WorkspaceTextFile
     var wrapLines = true

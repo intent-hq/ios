@@ -1,11 +1,7 @@
 import Photos
 import SwiftUI
 
-/// Formatting helpers for the chat-image action menus' non-interactive
-/// info rows (dimensions + file size).
 enum ImageInfoFormat {
-    /// Pixel dimensions as "W × H". `UIImage.size` is in points; `scale`
-    /// converts to pixels (base64-decoded images have scale 1).
     static func dimensionsText(for image: UIImage) -> String {
         dimensionsText(
             pixelWidth: Int((image.size.width * image.scale).rounded()),
@@ -17,14 +13,11 @@ enum ImageInfoFormat {
         "\(pixelWidth) × \(pixelHeight)"
     }
 
-    /// Localized file-size string (e.g. "1.2 MB").
     static func byteCountText(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 }
 
-/// Result of saving a chat image to Photos. Denial is kept apart from other
-/// failures so the alert can point the user to Settings only when that helps.
 enum ChatImageSaveOutcome: Equatable {
     case denied
     case failed
@@ -39,8 +32,6 @@ enum ChatImageSaveOutcome: Equatable {
     }
 }
 
-/// Saves a chat image to the user's photo library with add-only access
-/// (pairs with `NSPhotoLibraryAddUsageDescription` in Info.plist).
 enum ChatImageSaver {
     static func save(_ image: UIImage) async -> ChatImageSaveOutcome {
         await save(
@@ -54,7 +45,6 @@ enum ChatImageSaver {
         )
     }
 
-    /// Seams let tests inject authorization and write results.
     static func save(
         _ image: UIImage,
         requestAuthorization: () async -> PHAuthorizationStatus,
@@ -77,8 +67,6 @@ enum ChatImageSaver {
     }
 }
 
-/// Owns the visible Save Image outcome. Menu content is torn down when the
-/// menu closes, so the alert lives on the view that hosts the menu.
 @Observable final class ImageSaveAlertModel {
     struct Failure: Identifiable {
         let id = UUID()
@@ -125,18 +113,11 @@ private struct ImageSaveAlertModifier: ViewModifier {
 }
 
 extension View {
-    /// Install on every view whose menu contains `ImageActionMenuItems`.
     func imageSaveAlert() -> some View { modifier(ImageSaveAlertModifier()) }
 }
 
-/// Shared Save Image / Copy Image actions + info rows used by both the
-/// thumbnail long-press context menu and the lightbox ellipsis menu
-/// (FE parity: the chat-image ellipsis menu; iOS offers Save/Copy in place
-/// of Download/Copy path).
 struct ImageActionMenuItems: View {
     let image: UIImage
-    /// Original encoded bytes when known (base64 image blocks); the size
-    /// row falls back to a PNG re-encode of the loaded image when absent.
     var originalData: Data?
     @Environment(ImageSaveAlertModel.self) private var saveAlert: ImageSaveAlertModel?
 
@@ -197,13 +178,11 @@ struct InlineImageThumbnail: View {
     }
 }
 
-/// Compact cropped preview for attachment grids and video posters.
 struct SquareImageThumbnail: View {
     let image: UIImage
     let side: CGFloat
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Maximum transcript preview side, also used by square media cards.
     nonisolated static let transcriptSide: CGFloat = Constants.Conversation.ImageThumbnail.transcriptSide
 
     var body: some View {

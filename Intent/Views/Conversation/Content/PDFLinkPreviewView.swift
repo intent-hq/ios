@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// A link can be opened before its bytes are cached, unlike an inline PDF card.
 struct PDFLinkPreviewView: View {
     struct Link: Identifiable, Equatable {
         let workspaceId: String

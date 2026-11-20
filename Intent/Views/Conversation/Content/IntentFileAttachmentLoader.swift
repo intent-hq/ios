@@ -1,16 +1,6 @@
 import SwiftUI
 import Textual
 
-/// Routes intent-file and saved-asset Markdown images through the daemon,
-/// remote http(s) URLs through `RemoteImageLoader`, and everything else
-/// through the wrapped fallback loader.
-///
-/// Cleartext `http` is claimed deliberately: ATS (`NSAllowsLocalNetworking`
-/// only) permits local-network http — e.g. images served by the daemon at
-/// 127.0.0.1 — which therefore load and get the lightbox. Non-local http
-/// fails ATS inside `RemoteImageLoader` and falls through to the fallback
-/// loader, which shares URLSession's ATS policy and fails the same way, so
-/// routing it here loses nothing.
 nonisolated enum MarkdownImageRoute: Equatable {
     case fallback
     case intentFile(IntentFileLink)
@@ -18,8 +8,6 @@ nonisolated enum MarkdownImageRoute: Equatable {
     case workspaceAsset(WorkspaceAssetLink?)
 
     static func route(for url: URL) -> Self {
-        // Claim malformed saved-asset URLs too, so they fail locally instead
-        // of reaching Textual's network fallback.
         if url.scheme?.lowercased() == "workspace-asset" {
             return .workspaceAsset(WorkspaceAssetLink.parse(url))
         }
@@ -33,31 +21,15 @@ nonisolated enum MarkdownImageRoute: Equatable {
     }
 }
 
-/// Textual image-attachment loader that renders `![alt](intent://local/[ws-id/]file/<path>)`
-/// images/videos/PDFs and `workspace-asset://` media by fetching bytes from the daemon,
-/// and remote http(s) images via `RemoteImageLoader`. Videos open full-screen
-/// playback; images open the lightbox. Other URLs use the wrapped fallback loader
-/// (Textual's default network loader).
-///
-/// Never throws for intent-file or saved-asset links — failures degrade to
-/// a placeholder attachment without breaking the surrounding text.
-/// Failed remote loads fall through to the fallback loader, preserving its
-/// behavior for broken URLs.
 struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader {
-    /// Workspace resolving short-form links (no workspace segment in the URL).
     let workspaceId: String?
     let fallback: Fallback
-    /// Fetches and decodes a remote http(s) image; injectable for tests.
     var remoteImage: @Sendable (URL) async throws -> UIImage = { url in
         try await RemoteImageLoader.shared.image(for: url)
     }
-    /// Fetches an intent-file image from the daemon; injectable so a window
-    /// routes through its session's `WorkspaceFileImageLoader` instead of the
-    /// shared (default-backend) loader.
     var fileImage: @Sendable (_ workspaceId: String, _ path: String) async throws -> UIImage = { workspaceId, path in
         try await WorkspaceFileImageLoader.shared.image(workspaceId: workspaceId, path: path)
     }
-    /// Saved assets use the same session-bound loader, cache and decode limits.
     var assetMedia: @Sendable (String, String) async throws -> WorkspaceFileMedia = { workspaceId, assetId in
         try await WorkspaceFileImageLoader.shared.assetMedia(workspaceId: workspaceId, assetId: assetId)
     }
@@ -73,12 +45,6 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         text: String,
         environment: ColorEnvironmentValues
     ) async throws -> AnyAttachment {
-        // The `as any Textual.Attachment` cast pins AnyAttachment's
-        // existential initializer: newer compilers (Xcode 26.x) treat the
-        // `some`/`any` overload pair as ambiguous for concrete arguments.
-        // Module-qualified because inside this type `Attachment` resolves to
-        // the AttachmentLoader associated type (AnyAttachment), not the
-        // protocol.
         try await resolvedAttachment(for: url, text: text) {
             AnyAttachment(
                 try await fallback.attachment(for: url, text: text, environment: environment)
@@ -87,9 +53,6 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         }
     }
 
-    /// Environment-free core of `attachment(for:)`, testable without a
-    /// `ColorEnvironmentValues` (whose initializer is internal to Textual):
-    /// the fallback loader invocation is passed in as a closure.
     func resolvedAttachment(
         for url: URL,
         text: String,
@@ -175,7 +138,6 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
                 return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
                     link.assetId : text) as any Textual.Attachment)
             case .pdf, .text:
-                // Saved-asset documents are not supported by this attachment route.
                 return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
             }
         } catch {
@@ -197,9 +159,6 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         ) as any Textual.Attachment)
     }
 
-    /// Loaded remote image wrapped in the lightbox-capable attachment; nil on
-    /// fetch/decode failure so the remote route falls through to the wrapped
-    /// fallback loader.
     func remoteImageAttachment(for url: URL, text: String) async -> AnyAttachment? {
         guard let image = try? await remoteImage(url) else { return nil }
         return AnyAttachment(
@@ -208,9 +167,6 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     }
 }
 
-/// A loaded markdown image (intent-file, saved asset or remote http(s)) embedded in text;
-/// taps are routed by `MarkdownTextView`'s attachment tap handler to open the
-/// lightbox.
 struct IntentFileImageAttachment: Attachment {
     let image: UIImage
     let altText: String
@@ -218,7 +174,6 @@ struct IntentFileImageAttachment: Attachment {
     var description: String { altText }
 
     var body: some View {
-        // Textual's ideal-sized symbol must match the measured image proportions.
         InlineImageThumbnail(image: image)
             .accessibilityLabel(altText)
             .contextMenu {
@@ -231,7 +186,6 @@ struct IntentFileImageAttachment: Attachment {
         InlineImageThumbnail.size(for: image.size, proposedWidth: proposal.width)
     }
 
-    /// Square media-card bounds, clamped to the available text width.
     static func thumbnailSize(proposedWidth: CGFloat?) -> CGSize {
         let side = min(
             SquareImageThumbnail.transcriptSide,
@@ -245,8 +199,6 @@ struct IntentFileImageAttachment: Attachment {
     }
 }
 
-/// Placeholder attachment for non-image extensions, missing workspace, and
-/// fetch/decode failures.
 struct IntentFileFailureAttachment: Attachment {
     let altText: String
     var retrySource: IntentFileVideoFailureAttachment.RetrySource?
@@ -278,8 +230,6 @@ struct IntentFileFailureAttachment: Attachment {
     }
 
     func sizeThatFits(_: ProposedViewSize, in environment: TextEnvironmentValues) -> CGSize {
-        // Match the Inter label and native SF Symbol at the current text traits.
-        // Typed setters support Textual's off-main measurement without actor-isolated property access.
         let traits = UITraitCollection { mutableTraits in
             mutableTraits[UITraitPreferredContentSizeCategory.self] = UIContentSizeCategory(environment.dynamicTypeSize)
             mutableTraits[UITraitLegibilityWeight.self] = environment.legibilityWeight == .bold ? .bold : .regular

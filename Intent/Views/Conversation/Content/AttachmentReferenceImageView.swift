@@ -1,35 +1,21 @@
 import SwiftUI
 
-/// Renders an attachment-reference image block (`attachmentId`, no inline
-/// `data`): resolves and fetches asynchronously via `AttachmentImageLoader`,
-/// showing a loading placeholder, then the image (tap → lightbox), or a
-/// tap-to-retry placeholder on failure.
 struct AttachmentReferenceImageView: View {
     enum Style {
-        /// Assistant-row inline rendering: full image with its original proportions.
         case inline
-        /// User-row attachment grid: small fixed square thumbnail.
         case thumbnail
     }
 
     let workspaceId: String
     let attachmentId: String
     let style: Style
-    /// Explicit loader override (tests); when nil, the window session's
-    /// loader is used, falling back to the shared (default-backend) loader.
     var loader: AttachmentImageLoader?
-    /// The window's session, when present, so pinned windows resolve and
-    /// fetch attachments over their own backend connection.
     @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.conversationComposerFocus) private var composerFocus
     @State private var image: UIImage?
     @State private var failed = false
-    /// Bumped on retry taps so the `.task(id:)` re-runs the fetch.
     @State private var attempt = 0
-    /// The workspace|attachment key `image` was loaded for — if view
-    /// identity is ever reused for a different attachment, the mismatch
-    /// resets the latch so the stale image can't survive the guard below.
     @State private var loadedKey: String?
     @State private var lightboxPresented = false
     @ScaledMetric(relativeTo: .caption) private var retryIconSide: CGFloat = 12
@@ -49,7 +35,6 @@ struct AttachmentReferenceImageView: View {
                     image = loaded
                     loadedKey = key
                 } catch is CancellationError {
-                    // View scrolled away mid-fetch; not a failure.
                 } catch {
                     if !Task.isCancelled { failed = true }
                 }
@@ -112,7 +97,6 @@ struct AttachmentReferenceImageView: View {
         }
     }
 
-    /// Placeholder side before the image dimensions are available.
     private var side: CGFloat {
         switch style {
         case .inline: SquareImageThumbnail.transcriptSide
@@ -120,7 +104,6 @@ struct AttachmentReferenceImageView: View {
         }
     }
 
-    /// Placeholder square shown while image dimensions are unknown.
     private func placeholder<Content: View>(@ViewBuilder _ label: () -> Content) -> some View {
         VStack(spacing: Constants.Conversation.ImagePlaceholder.loadingLabelSpacing) { label() }
             .font(.caption)

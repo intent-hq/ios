@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// Compact chip for an `@context[...]` mention in a user message: provider
-/// icon + truncated decoded title on a muted rounded background — the iOS
-/// counterpart of cloudlands-fe's `ContextChip.svelte`. Chips whose `url`
-/// passes the `ExternalLink` http/https allowlist open it in the browser;
-/// chips without one (or with a rejected scheme) are static.
 struct ContextMentionChipView: View {
     let mention: ContextMention
     @Environment(\.colorScheme) var colorScheme
@@ -55,18 +50,12 @@ struct ContextMentionChipView: View {
         }
     }
 
-    /// Chip label: the decoded title hard-truncated to ~30 characters (the
-    /// FE truncates via CSS max-width; a character cap is the SwiftUI-simple
-    /// equivalent).
     static func displayTitle(_ title: String) -> String {
         title.count > Constants.Conversation.ContextMention.titleMaximumLength
             ? String(title.prefix(Constants.Conversation.ContextMention.titleMaximumLength)) + "…"
             : title
     }
 
-    /// SF Symbol per provider, mirroring the FE's provider→icon mapping
-    /// (github → pull-request-ish, linear → ticket, sentry → bug,
-    /// browser/external/unknown → link).
     static func iconName(for provider: String) -> String {
         switch provider {
         case "github": return "arrow.triangle.pull"
@@ -77,9 +66,6 @@ struct ContextMentionChipView: View {
     }
 }
 
-/// Minimal leading-aligned wrapping layout for a run of chips: places
-/// subviews left-to-right at their ideal size and wraps to a new line when
-/// the proposed width is exceeded.
 struct ChipFlowLayout: Layout {
     var spacing: CGFloat = Constants.Conversation.ContextMention.flowSpacing
 

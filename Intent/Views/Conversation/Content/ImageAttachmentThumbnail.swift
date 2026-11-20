@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Square rounded thumbnail for a user-attached image block; tapping opens
-/// the fullscreen lightbox (FE parity: ChatMessage.svelte attached images).
 struct ImageAttachmentThumbnail: View {
     let block: ContentBlock
     let workspaceId: String
@@ -12,8 +10,6 @@ struct ImageAttachmentThumbnail: View {
 
     var body: some View {
         if block.data == nil, let attachmentId = block.attachmentId {
-            // Attachment-reference block (PROTOCOL §5.5): fetch the bytes
-            // from the workspace's attachment store.
             AttachmentReferenceImageView(
                 workspaceId: workspaceId,
                 attachmentId: attachmentId,

@@ -112,7 +112,6 @@ final class LineNumberTextView: UITextView {
         } else {
             scrollAnchor(to: contentOffset.y, horizontalOffset: horizontalOffset)
         }
-        // TextKit 2 repositions estimated fragments once the viewport lays out; correct to the measured baseline.
         guard let anchor, let location, let measured = laidOutBaseline(at: location) else { return }
         let target = textContainerInset.top + measured - anchor.baseline
         if abs(target - contentOffset.y) > 0.5 { scrollAnchor(to: target, horizontalOffset: horizontalOffset) }
@@ -138,8 +137,6 @@ final class LineNumberTextView: UITextView {
         layoutIfNeeded()
     }
 
-    /// A fixed line height keeps empty lines as tall as text lines; TextKit 2
-    /// spaces empty paragraphs unevenly with `lineSpacing`. Reapplied when Dynamic Type changes the font.
     private func applyLineHeight() {
         let height = linePitch
         guard height != appliedLineHeight else { return }
@@ -162,7 +159,6 @@ final class LineNumberTextView: UITextView {
             right: Layout.horizontalPadding
         )
         if textContainerInset != inset { textContainerInset = inset }
-        // Apply after receiving our frame, including a saved unwrapped preference on first presentation.
         let containerSize = CGSize(
             width: wrapsLines ? max(1, bounds.width - inset.left - inset.right) : .greatestFiniteMagnitude,
             height: .greatestFiniteMagnitude
@@ -178,7 +174,6 @@ final class LineNumberTextView: UITextView {
         gutter.setNeedsDisplay()
     }
 
-    /// Every row, including empty ones, is this tall; fixed-height rows put the extra space above the text.
     var linePitch: CGFloat { ceil(numberFont.lineHeight) + Layout.lineSpacing }
 
     private var firstBaseline: CGFloat { linePitch + numberFont.descender }
@@ -202,7 +197,6 @@ final class LineNumberTextView: UITextView {
         var labels: [LineLabel] = []
         var start = viewport.location
         if !wrapsLines {
-            // TextKit's horizontal viewport can exclude short source lines.
             let offset = content.offset(from: content.documentRange.location, to: start)
             let precedingRows = Int(ceil(bounds.height / linePitch)) + 1
             let firstLine = max(1, lineIndex.line(at: offset) - precedingRows)

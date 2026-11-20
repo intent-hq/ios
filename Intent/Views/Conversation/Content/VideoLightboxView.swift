@@ -2,7 +2,6 @@ import AVKit
 import SwiftUI
 
 struct VideoLightboxView: View {
-    /// Retain the file independently of the transcript's attachment/cache.
     let video: WorkspaceVideo
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
@@ -59,8 +58,6 @@ struct VideoLightboxView: View {
     private func startPlayback() async {
         do {
             let lease = try await MediaAudioSession.shared.acquire(.playback)
-            // Dismissal may cancel this task while activation is blocking. Do
-            // not create a player after disappearance, or leak that activation.
             guard !Task.isCancelled, !isClosing else {
                 try? await MediaAudioSession.shared.release(lease)
                 return
