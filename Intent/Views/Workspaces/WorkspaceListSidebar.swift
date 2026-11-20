@@ -358,10 +358,13 @@ extension WorkspaceListSidebar {
     /// replaces the sidebar list's accent-tinted selection with a neutral grey.
     /// On visionOS that custom background also replaces the system row
     /// background that drew the gaze highlight (ios#339), so the hover effect
-    /// is reapplied to the row content in the selection's rounded shape.
+    /// is reapplied to the row. Hover and selection share one shape (HIG):
+    /// the row insets move inside the highlight so it covers the whole cell
+    /// the selection fills, and the selection stays a persistent fill under it.
     private func sidebarRow(_ workspace: Workspace, nextWorkspaceId: String?, showRepo: Bool = true) -> some View {
         sidebarRowContent(workspace, nextWorkspaceId: nextWorkspaceId, showRepo: showRepo)
             #if os(visionOS)
+            .padding(sidebarRowInset)
             .contentShape(
                 .hoverEffect,
                 .rect(cornerRadius: Constants.WorkspaceList.sidebarSelectionCornerRadius)
@@ -369,12 +372,7 @@ extension WorkspaceListSidebar {
             .hoverEffect()
             #endif
             .tag(workspace.id)
-            .listRowInsets(EdgeInsets(
-                top: isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset,
-                leading: isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset,
-                bottom: isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset,
-                trailing: isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset
-            ))
+            .listRowInsets(sidebarRowCellInsets)
             .listRowSeparator(.hidden)
             .listRowBackground(
                 RoundedRectangle(cornerRadius: selectionCornerRadius, style: .continuous)
@@ -411,6 +409,19 @@ extension WorkspaceListSidebar {
             searchFocused = false
             pendingAction = PendingAction(workspace: workspace, action: action)
         }
+        #endif
+    }
+
+    private var sidebarRowInset: CGFloat {
+        isEmbedded ? 0 : Constants.WorkspaceList.sidebarRowInset
+    }
+
+    /// visionOS pads the row content itself (see `sidebarRow`).
+    private var sidebarRowCellInsets: EdgeInsets {
+        #if os(visionOS)
+        EdgeInsets()
+        #else
+        EdgeInsets(top: sidebarRowInset, leading: sidebarRowInset, bottom: sidebarRowInset, trailing: sidebarRowInset)
         #endif
     }
 

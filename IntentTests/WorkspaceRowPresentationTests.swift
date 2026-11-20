@@ -387,6 +387,28 @@ extension WorkspaceRowPresentationTests {
         #expect(!outsideGuard.contains(".hoverEffect("))
     }
 
+    // Regression: the gaze highlight sat inside the 8 pt row insets while the
+    // selection filled the whole cell, so the status dot looked like it bled
+    // out of the hover. visionOS moves the insets inside the hover shape.
+    @Test func sidebarRowHoverCoversTheSelectionCellOnVisionOS() throws {
+        let source = try String(
+            contentsOf: TestSourceInputs.url(for: "Intent/Views/Workspaces/WorkspaceListSidebar.swift"),
+            encoding: .utf8
+        )
+        let rowHelper = try #require(source.components(separatedBy: "private func sidebarRow(").dropFirst().first)
+            .components(separatedBy: "private func sidebarRowContent(")[0]
+        let padding = try #require(rowHelper.range(of: ".padding(sidebarRowInset)"))
+        let hoverShape = try #require(rowHelper.range(of: ".hoverEffect,"))
+        #expect(padding.lowerBound < hoverShape.lowerBound, "Insets must sit inside the hover shape")
+        #expect(rowHelper.contains(".listRowInsets(sidebarRowCellInsets)"))
+        let cellInsets = try #require(source.components(separatedBy: "private var sidebarRowCellInsets: EdgeInsets {").dropFirst().first)
+            .components(separatedBy: "#endif")[0]
+        let visionGuard = "#if os(" + "visionOS)"
+        let vision = try #require(cellInsets.components(separatedBy: visionGuard).dropFirst().first)
+            .components(separatedBy: "#else")[0]
+        #expect(vision.trimmingCharacters(in: .whitespacesAndNewlines) == "EdgeInsets()")
+    }
+
     private struct RGBA {
         let red: CGFloat
         let green: CGFloat
