@@ -38,3 +38,4 @@ Agent avatars, agent rows and the agent history drawer appear on many screens. T
 - `AgentAvatarPulse`: `updatePulse()`
 - `AgentNotificationsMuteButton`
 - `AgentHistoryDrawer`, `AgentHistoryList`, `OpenAgentHistoryAction`
+- `AgentHistory`: `recording(…)`, `removing(…)`, `visible(_:savedConnectionIDs:)` (rules added from `Intent/Models/AgentHistoryEntry.swift` comments: an entry is keyed by saved connection and agent; a visit moves to the front, and a visit made before the workspace list loads keeps the title from an earlier visit; a device's entries for a workspace it reports deleted or archived are dropped; entries for forgotten connections are hidden)

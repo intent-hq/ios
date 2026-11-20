@@ -22,6 +22,8 @@ A conversation screen shares agent detail with other windows and iPad panes. Swi
 5. **Sending.**
    1. A suggested prompt sends only its text. It never attaches `pendingImages` and never clears the saved draft.
    2. A failed delivery is logged without the foreign error text. The retained message state owns recovery.
+   3. `ConversationSendAttempt` is session-local recovery, separate from the replaceable transcript. Its original identity never changes. Selections and placed references stay owned by the attempt until delivery is confirmed (`ConversationSendFileAccess` holds the extra leases). It is not a durable outbox or an idempotency key.
+   4. Only a send that failed before dispatch, as proven locally, can be retried (`canRetry`). The daemon auto-queues duplicate ordinary sends; it does not deduplicate them.
 6. **Photos picker.**
    1. Library videos import as files and never use image slots. Workspace conversations keep Photos open for videos when the images are full.
    2. Photos treats a limit of zero as unlimited. Mixed picks keep the full allowance, and the import rejects images beyond the remaining slots.

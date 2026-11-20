@@ -37,6 +37,12 @@
    3. Ignore `agent:message` (a lean echo of `agent:last-message`) and the delivery markers.
    4. Ignore `agent:permission:*`, `agent:process:*`, `agent:queue:*` and subscription bookkeeping. `isWaitingForOtherAgents` updates at the next idle or status boundary.
    5. Ignore delivery bookkeeping between agents, deletion scheduling (membership changes only at `agent:deleted`), and session stats.
+9. **List state and read scopes** (added from `Intent/Models/AgentListState.swift` comments).
+   1. `AgentListState` holds display state and request bookkeeping for one workspace. It holds no transcript or detail cache; all list reads seed `AgentSummaryStore` separately.
+   2. A successful read also establishes absence. A newer empty whole-bin read must reject unseen rows from an older, overlapping by-parent response (`AgentListReadScope`).
+   3. An orphan or retired read has authority over its own membership only. An incomplete cache cannot classify an arbitrary delegated row, so `contains(_:)` returns false for those scopes.
+   4. Orphan membership (`orphanedAgentIds`) comes only from the `orphanedOnly` read, never from the cache, because background parents may not be loaded yet.
+   5. When the daemon omits `delegatedCounts.orphaned`, the orphan-only read is unsupported and the orphaned group falls back to the whole delegated bin. Zero means supported (`AgentDelegatedCounts.orphaned`).
 
 ## Consequences
 

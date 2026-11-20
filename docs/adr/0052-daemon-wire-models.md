@@ -24,6 +24,12 @@ The app talks to daemons of many versions. New daemons add fields and enum value
    2. Only signed-out providers are not selectable. Unknown stays selectable, because probes can fail for a short time.
    3. When the daemon returns providers but none is selectable, the pickers show desktop-setup guidance instead of an empty menu (`noneSelectable`, monorepo#985).
    4. `ModelInfo.isDefault` and `effortLevels` come from `models.list` (protocol 5.30).
+6. **Background hooks (PROTOCOL §5.40).**
+   1. `code` arrives only on `hook.list`. `hook:*` event payloads never carry it, so an event fold copies the existing hook to keep it.
+   2. `lastLogs` and `lastState` are not modeled. Display does not need them; clients read them with `hook.list`.
+   3. `scheduled` and `running` are active. `dispatched`, `evicted`, `cancelled` and `expired` are terminal.
+   4. `expiresAt` (v3.1) is absent only on rows from before TTLs. `perpetual` (v6.0) re-arms the hook after a dispatch; it decodes as false when absent.
+7. **Comment threads.** `CommentThread` maps to intentd `CommentThreadSummary` from `comment.subscribe`.
 
 ## Consequences
 
@@ -36,3 +42,5 @@ The app talks to daemons of many versions. New daemons add fields and enum value
 - `WorkspacePullRequest`: `init?(wire:)`
 - `ProviderInfo`: `authenticated`, `isSelectable`; `Array<ProviderInfo>`: `noneSelectable`
 - `ModelInfo`
+- `BackgroundHook`: `State`, `expiresAt`, `perpetual`, `isActive`
+- `CommentThread`
