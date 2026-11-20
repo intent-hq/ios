@@ -24,7 +24,8 @@ The conversation composer collects photos, pasted images, library videos and fil
    4. Encoding is `@concurrent`, off the main actor; it can take hundreds of milliseconds per large photo. A cancelled send stops before the next photo.
 6. **Assistant.** The Assistant workspace has no filesystem root for placement (#619). It sends inline image blocks, which are a supported protocol arm, not an error fallback.
 7. **Imported videos.** `ImportedPhotoVideo` owns a disk-backed Photos export. Composer selections and send attempts share the owner, so removing a preview cannot delete a file still uploading. The file is copied before the Photos transfer callback returns, because its URL is valid only inside it. Copying and poster creation never read the whole movie into memory and run off the UI actor. `maxBytes` is 200 MiB, shared by composer and transcript; all other files keep the 1 GiB cap.
-8. **Placement failure.** A dropped send restores the draft silently; read-only mode explains the failure.
+8. **Inline image frames.** `OutgoingImagePayload.validateRequest(method:params:)` checks the whole request against the host's 40 MiB frame, shared with text, metadata and JSON escaping. It matches the `ConnectionManager` serializer and bounds the RPC id with `Int.min`.
+9. **Placement failure.** A dropped send restores the draft silently; read-only mode explains the failure.
 
 ## Code
 

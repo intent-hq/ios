@@ -1,5 +1,3 @@
-/// Fixed-capacity, least-recently-touched-first retention. Keeps recently
-/// viewed content readable during a connection drop (read-only mode).
 struct RecentRetention<Key: Hashable, Value> {
     let capacity: Int
     private(set) var keys: [Key] = []
@@ -11,7 +9,6 @@ struct RecentRetention<Key: Hashable, Value> {
 
     func value(for key: Key) -> Value? { values[key] }
 
-    /// Marks `key` most recent and drops the oldest entries beyond capacity.
     mutating func touch(_ key: Key, value: Value) {
         keys.removeAll { $0 == key }
         keys.append(key)

@@ -38,6 +38,15 @@ Stores follow daemon state through `*.subscribe` and `subscription.push` (protoc
    2. `refreshFailed` keeps the data and the message until the next read starts. Only `failingVisibly(_:)` produces it.
    3. `failingDuringRead(_:)` records a failure while the read continues (a trailing pass, or more pages); the end of the read shows it. `settled()` ends a read with no result and keeps a kept failure.
    4. Transitions return the next phase, so stores assign only real changes and an identical refetch does not invalidate observers.
+9. **Bounded reads (`PagedReads`, `server.capabilities.boundedReads: 1`).**
+   1. A bounded daemon answers list reads one page at a time with an opaque `nextToken` (`null` on the last page). It sends a collection snapshot's first page with `params.nextToken` and cuts a very large note in `note.get` with `contentTruncated`/`nextContentOffset`. Older daemons ignore `limit`, `nextToken` and `contentOffset` and answer in one reply, so every walk ends after one request.
+   2. Page sizes are the daemon maximums (`notePageLimit`, `commentPageLimit`, `workspacePageLimit`, `agentPageLimit`, `queuePageLimit`, `taskPageLimit`). `maxPages` stops any walk, so a misbehaving daemon cannot loop forever.
+   3. `requestAllPages(…)` and `requestWholeReply(…)` repeat `params` with each token. Page errors propagate, a continuation page without the field throws `MalformedPage`, and a walk that cannot reach the end (repeated token, `maxPages`) throws `IncompleteWalk`. A partial list is never returned as whole. `requestWholeReply` keeps the first page's envelope (whole-collection counts such as `retiredCount`) and returns a token-less or field-less first reply unchanged.
+   4. `requestAgentList(…)`: rows ascend by `(createdAt, id)` and variant params repeat on every page. `isCurrent` is checked before each page; a stale read stops with `CancellationError`.
+   5. `requestAllScripts(workspaceId:request:)`: `script.list` uses `cursor`/`nextCursor` (`Cursor.script`). The first request has no `limit` or `cursor`, because hosts without the capability reject them on the full view. A failed page fails the read.
+   6. `fillSnapshot(…)` gives each continuation page `pageAttempts` tries with doubling backoff and checks `isCurrent` after every suspension.
+   7. `PagedSnapshotFiller` drives one store's snapshot continuation. While `isFilling`, stores keep their previous list instead of a partial one (a partial workspace list would read as deleted workspaces). A failed walk publishes what it has, keeps `isFilling` through the backoff, and resubscribes after a delay that grows with consecutive failures. A newer snapshot, a reset of the reconciler (`epoch`), `cancel()` or a stale owner stops a walk silently. The resubscribe runs outside the walk's task, because resubscribing cancels the filler and a cancelled task would make the requests throw at once.
+   8. `NoteContentPages.readWholeNote(…)` follows the `note.get` content cursor on UTF-8 boundaries (§5.2). A note that changes between pages (`rev`) restarts the read, up to `wholeNoteAttempts`. If pages cannot be joined into exactly `contentBytes`, or a later page keeps failing, the first cut reply is returned as a prefix. The first request's errors and cancellations propagate unchanged.
 
 ## Consequences
 
@@ -52,5 +61,6 @@ Stores follow daemon state through `*.subscribe` and `subscription.push` (protoc
 - `SubscriptionPush`: `parse(method:params:)`, `nextToken`; `DeltaReconciler`: `fillFromPage(_:)`, `seed(id:value:)`, `patch(id:_:)`, `epoch`
 - `CommentStore`: `subscribeLiveState(workspaceId:noteId:generation:)`, `handleSubscriptionPush(_:)`, `fillSnapshot(reconciler:firstToken:)`
 - `LiveSubscription`: `acknowledge(_:)`, `requestResnapshot()`, `endResnapshot()`
+- `PagedReads`: `requestAllPages(…)`, `requestWholeReply(…)`, `requestAgentList(…)`, `requestAllScripts(workspaceId:request:)`, `fillSnapshot(…)`, `maxPages`, `IncompleteWalk`, `MalformedPage`, `Cursor`; `PagedSnapshotFiller`: `start(…)`, `cancel()`, `resubscribeOutsideWalk(_:)`; `NoteContentPages`: `readWholeNote(…)`
 - `LoadPhase`: `beginningKeepingFailure()`, `failingDuringRead(_:)`, `failingVisibly(_:)`, `settled()`
 - `ConnectionManager`: `registerSubscriptionHandler(id:handler:)`

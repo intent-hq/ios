@@ -45,7 +45,8 @@ A saved daemon has several host routes and can have a Tailcat tunnel address. `C
     5. Path classification uses interface metadata, never name prefixes.
 11. **Network availability.** `NetworkAvailability` is presentation-only default-path evidence, independent of socket and retry ownership. Neither a satisfied nor an unsatisfied general path proves an endpoint is reachable. It is shared across windows, never with `ConnectionManager`'s per-socket monitor. Each foreground scene holds one lease (`acquire()`), including during startup and reconnection; it is released on background or teardown, not on socket loss. After the last release, the next acquire waits for a fresh real path callback.
 12. **Path snapshots.** `NetworkPathSnapshot.unsatisfiedReason` matters only for an unsatisfied path and does not diagnose Airplane Mode. `isSatisfied` keeps the transport's existing satisfied interpretation. `physicalInterfaces` keeps `NWPath` preference order, even under a virtual primary.
-13. **Network copy diagnostics.** `NetworkCopyDiagnostics` is temporary, opt-in phone evidence. It never accepts free-form text or writes data. Recording does not subscribe the presenter to later events.
+13. **Socket path evidence.** `SocketPathObservation` captures connection-queue evidence before adoption without actor-hop ordering races. A general `NWPathMonitor` describes default routing, not this endpoint's reachability. `ready(path:)` replaces setup-time evidence; `observe(_:)` installs then replays, and notifications read current state.
+14. **Network copy diagnostics.** `NetworkCopyDiagnostics` is temporary, opt-in phone evidence. It never accepts free-form text or writes data. Recording does not subscribe the presenter to later events.
 
 ## Consequences
 
@@ -58,4 +59,4 @@ A saved daemon has several host routes and can have a Tailcat tunnel address. `C
 - `HostRaceOutcome`, `RacedConnection`, `RaceMailbox`, `TunnelEstablishmentFailure`
 - `ConnectionManager` (startup, routes, requests): `readyRace(…)`, `observeStartupLifecycle()`, `scheduleHostRoutesRefresh()`, `refreshHostRoutes()`, `mergeHosts(existing:reported:)`, `refreshStoredDisplayName(token:port:context:)`, `hostRefreshIsCurrent(_:)`, `defaultRequestTimeout`, `awaitResponse(…)`, `startHeartbeat()`
 - `ConnectionRequestTransport`: `makeInProcessTransport(…)`
-- `NetworkAvailability`: `acquire()`, `Lease`; `NetworkPathSnapshot`, `NetworkCopyDiagnostics`
+- `NetworkAvailability`: `acquire()`, `Lease`; `NetworkPathSnapshot`, `NetworkCopyDiagnostics`, `SocketPathObservation`: `ready(path:)`, `observe(_:)`

@@ -20,6 +20,10 @@ The app connects to daemons over WSS with a pinned certificate fingerprint. Manu
 5. **Safe failure text.** `FailureCause` holds a static domain name, the numeric code and a static label for known codes. It never holds foreign error strings, hosts or user input, so Release builds can show it.
 6. **Timeout and order.** `probeTimeout` is 4 s per host, the same as the per-host WebSocket timeout in `ConnectionManager` host racing. Multi-host QR payloads probe hosts in order, so a hung host must fail fast. `probeFirst(…)` returns the first fingerprint, else the last host's result, so the failure stage survives.
 7. **Tailcat.** `probeViaTunnel(…)` opens the tunnel, probes its loopback forwarder and closes it, so tunnel pairing is pinned like direct hosts. An out-of-range port is rejected as `invalidPort` before dialing. The probe closure must not throw: close-on-all-paths depends on the linear open → probe → close flow, because an async `defer` cannot await `close()`.
+8. **Pairing flow.** `PairingFlow` is shared by QR scans and `intent://pair` deep links. A payload fingerprint is pinned directly. A missing one is resolved by the probe and the user must confirm trust. A failed probe aborts.
+   1. `connect(…)` always has a non-nil fingerprint and persists through `ConnectionPairing.finalize`. It dials the presenting window's own connection (window model v2 has no default session).
+   2. A cancelled pairing (deep-link sheet dismissed) is not persisted even if the connect completes first, and the new authenticated socket is not left open without UI.
+   3. `PairingDiagnostics.scanner(…)` records closed capability and failure values only, never camera errors or QR text.
 
 ## Consequences
 
@@ -27,4 +31,5 @@ The app connects to daemons over WSS with a pinned certificate fingerprint. Manu
 
 ## Code
 
+- `PairingFlow`: `resolveFingerprint(…)`, `connect(…)`; `PairingDiagnostics`: `scanner(…)`
 - `CertFingerprintProbe`: `probe(…)`, `probeFirst(…)`, `probeViaTunnel(…)`, `classify(…)`, `makeProbeConnection(…)`, `probeTimeout`, `FailureCause`, `ProbeResult`, `outcome(forProbe:)`

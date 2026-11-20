@@ -20,8 +20,6 @@ enum OutgoingImagePayload {
         }
     }
 
-    /// Inline images share the host's 40 MiB frame with text, metadata and JSON
-    /// escaping. Match ConnectionManager's serializer; Int.min bounds RPC id size.
     func validateRequest(method: String, params: [String: Any]) throws {
         guard case .inline = self else { return }
         let envelope: [String: Any] = ["jsonrpc": "2.0", "id": Int.min, "method": method, "params": params]

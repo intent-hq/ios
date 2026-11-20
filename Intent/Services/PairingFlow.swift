@@ -1,28 +1,12 @@
 import Foundation
 
-/// Shared pairing-connection flow for QR scans (QRScannerView) and
-/// `intent://pair` deep links (DeepLinkPairingView). Pairing connections are
-/// always pinned over wss: a payload fingerprint is pinned directly, a
-/// missing fingerprint is resolved by probing the server certificate and
-/// asking the user to trust it, and a failed probe aborts — there is never a
-/// plain-ws fallback.
 enum PairingFlow {
-    /// How to pin the connection for a parsed pairing payload.
     enum FingerprintResolution: Equatable {
-        /// No payload fingerprint and the probe failed — abort. The message
-        /// names the stage the probe failed at (unreachable, timeout, TLS
-        /// handshake, no certificate).
         case failed(message: String)
-        /// The payload carried no fingerprint: the server certificate was
-        /// probed; the user must confirm trust before connecting pinned.
         case needsUserConfirmation(String)
-        /// The payload carried a fingerprint — connect pinned immediately.
         case pinned(String)
     }
 
-    /// Resolve the certificate fingerprint to pin for a payload. `probe` is
-    /// injectable for tests; the default performs the real TLS probe across
-    /// the payload's hosts.
     static func resolveFingerprint(
         for payload: PairingPayload,
         diagnostics: DiagnosticStore = .shared,
@@ -49,13 +33,6 @@ enum PairingFlow {
         }
     }
 
-    /// Connect over wss with the fingerprint pinned and persist the pairing
-    /// via ConnectionPairing.finalize. Every pairing path goes through here
-    /// with a non-nil fingerprint (from the payload or the trust-confirmed
-    /// probe), so pairing can never fall back to plain ws://.
-    /// `connectionManager` is the window session's own connection (window
-    /// model v2: there is no default session), so the pairing dials the
-    /// connection the presenting window will keep using.
     static func connect(
         payload: PairingPayload,
         certFingerprint: String,
@@ -83,10 +60,6 @@ enum PairingFlow {
             PairingDiagnostics.phase(.connect, error is CancellationError || Task.isCancelled ? .cancelled : .failed, store: diagnostics)
             throw error
         }
-        // A cancelled pairing (deep-link sheet dismissed mid-flight) must
-        // not be persisted after the connect happens to complete first —
-        // and the just-established authenticated socket must not be left
-        // dangling with no UI reflecting it.
         if Task.isCancelled || connectionManager.pairingAttemptID != attemptID {
             PairingDiagnostics.phase(.connect, .cancelled, store: diagnostics)
             throw CancellationError()
@@ -111,7 +84,6 @@ enum PairingFlow {
             PairingDiagnostics.phase(.save, .succeeded, store: diagnostics)
             return stored
         } catch {
-            // The persistence task owns the save failure; this is phase context.
             PairingDiagnostics.phase(.save, error is CancellationError ? .cancelled : .failed, store: diagnostics)
             throw error
         }

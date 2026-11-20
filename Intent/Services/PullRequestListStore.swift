@@ -1,12 +1,6 @@
 import Foundation
 import Observation
 
-/// Pull requests across the repositories of the known workspaces — the
-/// mobile counterpart of the FE Home pull requests list.
-///
-/// Reads `github.authStatus`, then `github.pulls.search` in batches of
-/// `batchSize` repositories (FE `repositories()` parity). Each batch keeps its
-/// own `nextToken`, so "load more" only re-asks batches with more results.
 @MainActor
 @Observable final class PullRequestListStore {
     nonisolated enum Filter: String, CaseIterable {
@@ -14,7 +8,6 @@ import Observation
         case created = "Mine"
         case reviewRequested = "Review"
 
-        /// Segment order: your own pull requests first.
         static let allCases: [Self] = [.created, .reviewRequested, .all]
 
         var wireValue: String {
@@ -41,8 +34,6 @@ import Observation
         var text = ""
     }
 
-    /// A `github.pulls.search` reply without a `pulls` list: an error, never
-    /// an empty result.
     enum ResponseError: LocalizedError, Equatable {
         case malformed
 
@@ -57,7 +48,6 @@ import Observation
     private(set) var items: [PullRequestListItem] = []
     private(set) var phase: Phase = .idle
     private(set) var isLoadingMore = false
-    /// A failed "load more"; the rows already loaded stay visible.
     private(set) var loadMoreError: String?
     private(set) var loadedQuery: Query?
     var hasMore: Bool { cursors.contains { $0 != nil } }
@@ -70,8 +60,6 @@ import Observation
         self.connection = connection
     }
 
-    /// Replaces the list for `query`. A newer call supersedes an older one;
-    /// rows from the previous query stay visible until the new page lands.
     func load(_ query: Query) async {
         generation &+= 1
         let current = generation
@@ -99,8 +87,6 @@ import Observation
         } catch {
             guard current == generation else { return }
             AppLog.github.error("[PullRequestListStore] load failed: \(error)")
-            // Rows of another query must not pass for this query's results;
-            // a failed refresh of the same query keeps them under an error row.
             if loadedQuery != query {
                 items = []
                 cursors = []
@@ -152,8 +138,6 @@ import Observation
         phase = .ready
     }
 
-    /// One request per batch; with `more`, batches without a cursor are
-    /// skipped. Rows are newest-updated first across batches.
     private func fetch(
         _ query: Query,
         batches: [[PullRequestListRepository]],

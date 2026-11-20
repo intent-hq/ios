@@ -36,11 +36,18 @@ Several small stores show workspace side data: assistant threads, background hoo
    3. A returned terminal id means the shell runs on the daemon. It is recorded even if the connection changed meanwhile; dropping it would orphan the PTY.
    4. A terminal whose own event arrived during a list request is newer than that list row.
    5. `MobileTerminalConnection.replay(snapshot:pending:)` merges the buffer and stream, which overlap while a snapshot request is in flight.
+5. **Pull requests (FE Home parity).**
+   1. `PullRequestListStore` reads `github.authStatus`, then `github.pulls.search` in batches of `batchSize` repositories (FE `repositories()` parity). Each batch keeps its own `nextToken`; "load more" asks only batches with more results. Rows are newest-updated first across batches. Own pull requests are the first segment.
+   2. A reply without `pulls` is an error, never an empty result. A newer `load(_:)` supersedes an older one; rows of another query never pass for this query's results, while a failed refresh of the same query keeps its rows under an error. A failed "load more" keeps loaded rows.
+   3. `PullRequestDetailStore` loads detail, checks, reviews and files independently; one failure leaves the others visible with their own retry.
+6. **Skills.** `SkillCatalogStore` reuses a successful catalog per agent and connection, because skills do not change during a session. Failures are not cached. Offline, the visible catalog is cleared so keyboard acceptance cannot insert a hidden suggestion; the cache repopulates it on reconnect.
 
 ## Code
 
 - `AssistantStore`: `startObservingIfNeeded()`, `refresh()`, `loadPhase`
 - `MonitoredPrStore`: `flush(monitorId:mode:)`, `cancel(monitorId:)`, `foldMonitorEvent(…)`, `FoldResult`
 - `MobileTerminalStore`: `errors`, `title(for:)`, `rename(_:to:)`; `MobileTerminalConnection`: `replay(snapshot:pending:)`
+- `PullRequestListStore`: `load(_:)`, `loadMore`, `fetch`; `PullRequestDetailStore`: `loadAll`
+- `SkillCatalogStore`: `refresh(workspaceId:agentId:connection:)`
 - `BackgroundHookStore`: `runNow(hookId:)`, `cancel(hookId:)`, `foldHookEvent(…)`, `FoldResult`
 - `MonitoredPrStore`: `foldMonitorEvent(…)`
