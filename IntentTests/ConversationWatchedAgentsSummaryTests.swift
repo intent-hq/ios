@@ -122,8 +122,6 @@ extension ConversationWatchedAgentsTests {
         for _ in 0..<30 { await Task.yield() }
         connection.pendingMethods = []
         connection.responseMap["agent.get"] = ["agent": ["id": "child", "workspaceId": "workspace", "name": "Child"]]
-        // The old wire operation may outlive its cancelled final interest. A
-        // replacement generation, when needed, is also part of the ledger.
         let pending = connection.traffic().calls("agent.get").filter { $0.completed == nil }
         #expect(pending.count <= 2)
         for _ in pending {

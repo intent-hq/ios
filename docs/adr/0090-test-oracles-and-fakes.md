@@ -39,6 +39,8 @@ Many unit tests check that the app matches another implementation: the desktop a
    7. A frame the daemon already sent can arrive after close. It costs bytes even though its orphaned registration has no local consumer.
    8. Media budget tests use the real session media caches and a fixed, valid PNG, so the count does not depend on an OS encoder. A portable harness that stubs these caches must not report the test as run.
    9. Traces matched with the desktop use the daemon's canonical `tool_result` field, so the desktop's strict decoder reads the same content. Older iOS-only fixtures may still use aliases. `ConversationStreamingFixture` holds matched traces only, with no reducer: tests feed its frames through `SubscriptionPush` and the store. Its text uses UTF-8 beyond ASCII to catch character and byte confusion.
+   10. The request recorder's sent ledger is a wire record. A caller's local cancellation is not a server reply and leaves the request in the ledger; only a timeout, a terminal transport boundary, removes it. A wire operation can outlive its cancelled final interest, and a replacement generation is also counted.
+   11. Image budget fixtures separate the limits: a scale-3 rectangular image catches point and pixel confusion, a 2048-pixel square meets the edge cap but not the byte cap, and high-entropy pixels test byte limits apart from dimension limits.
 6. **Design expectations** in rendered design tests are independent values from the design (for example the question card shell and 10% outline, #756), checked on the composited result including opacity, not values read back from the code under test.
 
 ## Consequences

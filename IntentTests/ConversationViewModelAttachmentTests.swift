@@ -6,8 +6,6 @@ import Testing
 import UIKit
 
 extension ConversationViewModelTests {
-    // MARK: - Image placement (attachment references, monorepo#3338)
-
     @Test(arguments: [false, true])
     func assistantImagesReachSendAndQueueWithoutWorkspacePlacement(queue: Bool) async throws {
         let (viewModel, fake) = makeFakeBackedVM(workspaceId: Workspace.chiefWorkspaceId)
@@ -47,7 +45,6 @@ extension ConversationViewModelTests {
     func assistantOversizedRequestPreservesTextAndImagesWithoutDispatch(queue: Bool) async throws {
         let (viewModel, fake) = makeFakeBackedVM(workspaceId: Workspace.chiefWorkspaceId)
         let image = try #require(UIImage(systemName: "star"))
-        // Escaped text alone fills the 40 MiB wire limit, before image/envelope overhead.
         let text = String(repeating: "\"", count: 20 * 1024 * 1024)
         viewModel.messageText = ""
         if queue {
@@ -74,7 +71,6 @@ extension ConversationViewModelTests {
     @Test(arguments: [false, true])
     func inlineImageRequestLimitIncludesBase64AndEnvelope(queue: Bool) async throws {
         let (viewModel, fake) = makeFakeBackedVM(workspaceId: Workspace.chiefWorkspaceId)
-        // A legal 30 MiB raw payload expands to 40 MiB before JSON overhead.
         let payload = OutgoingImagePayload.inline([
             ["type": "image", "mimeType": "image/jpeg", "data": String(repeating: "A", count: 40 * 1024 * 1024)]
         ])
@@ -113,9 +109,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func buildImageBlocksPlacesImagesAndBuildsReferenceBlocks() async throws {
-        // Ordinary workspaces place images (`file.placeAttachment`) and the wire
-        // block is `{ type: "image", attachmentId, mimeType }` — never
-        // inline base64 (FE parity: toImageReferenceBlocks).
         let (viewModel, fake) = makeFakeBackedVM()
 
         await viewModel.sendMessage("with image", images: [try #require(UIImage(systemName: "star"))])
@@ -137,9 +130,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func failedPlacementSurfacesErrorAndDoesNotSend() async throws {
-        // FAIL-CLOSED (FE parity): a placement failure aborts the send — no
-        // agent.sendMessage goes out, the error surfaces, and the composer
-        // state (text + captured images) is restored.
         let (viewModel, fake) = makeFakeBackedVM()
         fake.errorMap["file.placeAttachment"] = NSError(
             domain: "WebSocket",
@@ -163,8 +153,6 @@ extension ConversationViewModelTests {
         let (assistant, queue) = route
         let (viewModel, fake) = makeFakeBackedVM(workspaceId: assistant ? Workspace.chiefWorkspaceId : "test-ws")
         fake.responseMap["agent.queueMessage"] = [:] as [String: Any]
-        // The scale-3 rectangular case catches point/pixel confusion. The
-        // 2048-square case already meets the edge cap but exceeds the byte cap.
         let width = highResolution ? 4096 : 2048
         let source = try makeIncompressibleImage(width: width, height: 2048)
         let image = UIImage(cgImage: try #require(source.cgImage), scale: 3, orientation: .right)
@@ -187,7 +175,6 @@ extension ConversationViewModelTests {
             let encoded = try #require(block["data"] as? String)
             return try #require(Data(base64Encoded: encoded))
         }
-        // Each allowed image keeps a 1 MiB share of the aggregate budget.
         #expect(payloads.reduce(0) { $0 + $1.count } <= limit * 1024 * 1024)
         for data in payloads {
             #expect(data.count <= 1024 * 1024)
@@ -206,8 +193,6 @@ extension ConversationViewModelTests {
 
     @Test(arguments: [false, true], [false, true])
     func aggregateOversizedImagesSurfaceErrorBeforeAnyPlacement(assistant: Bool, queue: Bool) async throws {
-        // A programmatic/recovered selection can bypass the picker's count
-        // limit. The actual JPEG budget must still be enforced before any RPC.
         let (viewModel, fake) = makeFakeBackedVM(workspaceId: assistant ? Workspace.chiefWorkspaceId : "test-ws")
         let image = try makeIncompressibleImage(width: 1024, height: 1024)
         viewModel.messageText = ""
@@ -224,8 +209,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func queueMessageFailedPlacementKeepsPendingImages() async throws {
-        // The queue path never pre-clears pendingImages; a placement failure
-        // must keep them attached and never reach agent.queueMessage.
         let (viewModel, fake) = makeFakeBackedVM()
         fake.errorMap["file.placeAttachment"] = NSError(
             domain: "WebSocket",
@@ -255,7 +238,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func sendMessageWithoutImagesSkipsPlacement() async throws {
-        // Text-only sends never touch the attachment registry.
         let (viewModel, fake) = makeFakeBackedVM()
 
         await viewModel.sendMessage("plain text")
@@ -268,13 +250,7 @@ extension ConversationViewModelTests {
 }
 
 extension ConversationViewModelTests {
-    // MARK: - File placement (send-time uploads)
-
     @Test func sendMessagePlacesFilesAndBuildsFileBlocks() async throws {
-        // Sending with a pending file places it (`file.placeAttachment`,
-        // single-shot under 25 MB) and the wire block is
-        // `{ type: "file", attachmentId, fileName, mimeType, size }`; the
-        // pending list clears only after the successful send.
         let (viewModel, fake) = makeFakeBackedVM()
         fake.responseMap["file.placeAttachment"] = [
             "attachmentId": "att-f1",
@@ -309,9 +285,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func failedFilePlacementSurfacesErrorAndDoesNotSend() async throws {
-        // FAIL-CLOSED: a file placement failure aborts the send — no
-        // agent.sendMessage goes out, the error surfaces, the draft text is
-        // restored, and the pending files stay attached.
         let (viewModel, fake) = makeFakeBackedVM()
         fake.errorMap["file.placeAttachment"] = NSError(
             domain: "WebSocket",
@@ -335,8 +308,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func oversizedPendingFileFailsWithoutAnyRPC() async {
-        // A pending file whose pick-time size exceeds the daemon's 1 GiB cap
-        // fails the send client-side with an explicit error.
         let (viewModel, fake) = makeFakeBackedVM()
         viewModel.pendingFiles.append(PendingFile(
             url: URL(fileURLWithPath: "/tmp/huge.bin"),
@@ -392,7 +363,6 @@ extension ConversationViewModelTests {
         #expect(viewModel.pendingFiles.count == 1)
     }
 
-    /// Write a small temp file and return its URL (caller removes it).
     private func makeTempFile(named name: String, contents: String) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -402,7 +372,6 @@ extension ConversationViewModelTests {
         return url
     }
 
-    /// High-entropy pixels exercise byte limits independently of dimension limits.
     private func makeIncompressibleImage(width: Int, height: Int) throws -> UIImage {
         let bitsPerComponent = 8
         let bytesPerPixel = 4
@@ -427,8 +396,6 @@ extension ConversationViewModelTests {
         }
         return UIImage(cgImage: try #require(context.makeImage()))
     }
-
-    // MARK: - Image handling
 
     @Test func addImageAppendsToPendingImages() throws {
         let viewModel = makeVM()

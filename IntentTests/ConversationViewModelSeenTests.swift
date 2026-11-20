@@ -12,14 +12,7 @@ extension ConversationViewModelTests {
     private static let millisecondsPerSecond = 1000.0
     private static let markSeenPollDelayNanoseconds: UInt64 = 5_000_000
 
-    // MARK: - Image attachment state regression tests
-
     @Test func regressionCaptureImagesThenClearBeforeSend() async throws {
-        // Regression test: the send flow captures images into a local variable
-        // and clears pendingImages BEFORE the async network call. This ensures
-        // the UI immediately reflects the cleared state while the captured images
-        // are still available for the send operation.
-        // This mirrors the fix in MessageInputView.sendCurrentMessage().
         let viewModel = makeVM()
         let img1 = try #require(UIImage(systemName: "star"))
         let img2 = try #require(UIImage(systemName: "circle"))
@@ -27,29 +20,19 @@ extension ConversationViewModelTests {
         viewModel.addImage(img2)
         #expect(viewModel.pendingImages.count == 2)
 
-        // Simulate the fixed send flow: capture images, then clear pendingImages
         let capturedImages = viewModel.pendingImages
         viewModel.pendingImages.removeAll()
 
-        // pendingImages should be empty immediately (UI updates)
         #expect(viewModel.pendingImages.isEmpty)
 
-        // But the captured images should still be available for the send call
         #expect(capturedImages.count == 2)
 
-        // sendMessage with explicit images works even though pendingImages is
-        // empty. With no server, placement fails — and the FAIL-CLOSED restore
-        // path (surfacePlacementFailure) re-attaches the captured images so
-        // nothing is silently lost.
         await viewModel.sendMessage("test with images", images: capturedImages)
 
         #expect(viewModel.imagePlacementError != nil)
         #expect(viewModel.pendingImages.count == 2, "captured images restored on failed placement")
     }
 
-    // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
-
-    /// Fake-backed VM with a short markSeen debounce for trigger tests.
     private func makeSeenVM(debounce: Duration = ConversationViewModelTests.defaultMarkSeenDebounce)
         -> (viewModel: ConversationViewModel, fake: FakeConnectionManager) {
         let viewModel = makeVM()
@@ -61,8 +44,6 @@ extension ConversationViewModelTests {
         return (viewModel, fake)
     }
 
-    /// Poll (yielding the main actor) until `agent.markSeen` has been called
-    /// `count` times or the timeout elapses.
     private func waitForMarkSeen(
         _ fake: FakeConnectionManager,
         count: Int = 1,
@@ -97,14 +78,12 @@ extension ConversationViewModelTests {
 
     @Test func turnFinishOffScreenDoesNotMarkSeen() async throws {
         let (viewModel, fake) = makeSeenVM()
-        // No conversationAppeared() — the conversation is not on screen.
         viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
 
         viewModel.store.isStreaming = true
         viewModel.store.isStreaming = false
 
         #expect(viewModel.markSeenDebounceTask == nil, "no debounce is scheduled off screen")
-        // Turn finish is gated on the conversation being on screen.
         try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
@@ -137,18 +116,13 @@ extension ConversationViewModelTests {
         viewModel.store.messages = [textMessage(role: .assistant, text: "old", id: "m1")]
         viewModel.store.lastSeenMessageId = "m1"
         viewModel.scenePhaseChanged(isActive: false)
-        // Let the backgrounding boundary fire settle (it dedupes against the
-        // current marker, so no RPC goes out for it).
         try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
 
-        // A turn finishing while backgrounded must not schedule the debounce
-        // — otherwise m2 (newer than the marker) would be sent below.
         viewModel.store.messages.append(textMessage(role: .assistant, text: "new", id: "m2"))
         viewModel.store.isStreaming = true
         viewModel.store.isStreaming = false
 
         #expect(viewModel.markSeenDebounceTask == nil, "no debounce is scheduled while inactive")
-        // Turn finish is gated on the app being active.
         try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
@@ -159,7 +133,6 @@ extension ConversationViewModelTests {
         viewModel.conversationAppeared()
 
         #expect(viewModel.markSeenDebounceTask == nil, "entry schedules no debounce")
-        // Entry never marks seen — the divider anchor must survive.
         try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
@@ -182,7 +155,6 @@ extension ConversationViewModelTests {
 
     @Test func sendMessageSchedulesDebouncedMarkSeenWithoutFocusGate() async throws {
         let (viewModel, fake) = makeSeenVM()
-        // No conversationAppeared() — composing is proof of looking.
 
         await viewModel.sendMessage("hello")
 
@@ -197,9 +169,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func failedSendDoesNotScheduleMarkSeen() async throws {
-        // Regression (PR #112 review): a failed send delivered nothing, so
-        // the seen marker must not advance — markSeen is scheduled only on
-        // the sendMessage success path (desktop parity).
         let (viewModel, fake) = makeSeenVM()
         fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
         viewModel.store.messages = [textMessage(role: .assistant, text: "unseen", id: "m1")]
@@ -207,12 +176,10 @@ extension ConversationViewModelTests {
         await viewModel.sendMessage("hello")
 
         #expect(viewModel.markSeenDebounceTask == nil, "a failed send schedules no debounce")
-        // A failed send must not schedule the debounced markSeen.
         try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
     @Test func leavingConversationFiresMarkSeenImmediately() async {
-        // Debounce far beyond the poll window: a call proves the immediate path.
         let (viewModel, fake) = makeSeenVM(debounce: .seconds(10))
         viewModel.conversationAppeared()
         viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
@@ -230,15 +197,13 @@ extension ConversationViewModelTests {
         viewModel.conversationAppeared()
         viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
         viewModel.store.isStreaming = true
-        viewModel.store.isStreaming = false // schedules the 200ms debounce
+        viewModel.store.isStreaming = false
         let pendingDebounce = viewModel.markSeenDebounceTask
         #expect(pendingDebounce != nil)
 
-        viewModel.conversationDisappeared() // immediate fire supersedes the debounce
+        viewModel.conversationDisappeared()
         #expect(viewModel.markSeenDebounceTask == nil, "the debounce is dropped, not left to fire")
         await waitForMarkSeen(fake)
-        // A message lands after the boundary; the cancelled debounce must NOT
-        // fire a second call targeting it once it unwinds.
         viewModel.store.messages.append(textMessage(role: .assistant, text: "late", id: "m2"))
 
         await pendingDebounce?.value
@@ -272,16 +237,9 @@ extension ConversationViewModelTests {
 
         viewModel.conversationDisappeared()
 
-        // All triggers funnel through the store's dedupe.
         try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
-    // MARK: - Pending files
-
-    /// Writes a real temp file so `addFiles` can resolve name/size via
-    /// `resourceValues`. Plain file URLs are not security-scoped, so
-    /// `startAccessingSecurityScopedResource()` returning false is exercised
-    /// implicitly (no balancing stop is owed).
     private func makeTempFile(name: String, bytes: Int) throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

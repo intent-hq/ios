@@ -49,6 +49,7 @@ Not every transcript row is a plain user or assistant message. The daemon also w
     2. No divider when there is no marker, the marker is the newest message, or the marker id is not in the transcript (for example after `agent.editAndRegenerate`).
     3. A latched nil means "entered, no divider" for the rest of the session. It differs from not latched (`NewMessagesDividerLatch`). A latched anchor that leaves the transcript hides the divider; it is not derived again.
     4. After the entry scroll settles, follow-to-bottom stays on when the distance to the bottom is within the at-bottom threshold (50). A larger distance, or an unknown distance, disables follow, so a later follow cannot pull the user off unread rows (`followDisabledAfterEntryScroll`).
+    5. When `agent.markSeen` fires (added from `ConversationViewModelSeenTests` comments): entry never marks seen, so the divider anchor survives. A finished turn marks seen after a short debounce, only while the conversation is on screen (`conversationAppeared()`) and the app is active. A send marks seen only on success, like the desktop: composing is proof of looking, but a failed send delivered nothing. `conversationDisappeared()` marks seen at once and cancels the debounce, so a row that lands later is not marked. Every trigger goes through the store's dedupe against the current marker.
 
 ## Consequences
 

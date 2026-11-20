@@ -6,8 +6,6 @@ import Testing
 import UIKit
 
 extension ConversationViewModelTests {
-    // MARK: - Agent Q&A pending questions (wizard glue)
-
     @Test func pendingQuestionsDerivedFromLastAssistant() throws {
         let viewModel = makeVM()
         viewModel.store.messages = [
@@ -67,9 +65,6 @@ extension ConversationViewModelTests {
         #expect(viewModel.suggestedPrompts == ["Run tests"])
     }
 
-    /// Wire the view model's store AND upload service to a
-    /// FakeConnectionManager so the `agent.sendMessage` /
-    /// `file.placeAttachment` outcomes are controlled per test.
     func makeFakeBackedVM(sendError: Error? = nil, workspaceId: String = "test-ws")
         -> (viewModel: ConversationViewModel, fake: FakeConnectionManager) {
         let viewModel = makeVM(workspaceId: workspaceId)
@@ -92,9 +87,6 @@ extension ConversationViewModelTests {
         return (viewModel, fake)
     }
 
-    /// The init-injected upload service must feed the attachment pipeline so
-    /// pinned windows place attachments on their own backend, not the
-    /// default one.
     @Test func initRoutesInjectedUploadServiceIntoAttachmentPipeline() {
         let service = AttachmentUploadService(connection: FakeConnectionManager())
         let viewModel = ConversationViewModel(
@@ -132,10 +124,7 @@ extension ConversationViewModelTests {
         #expect(last.role == .user)
         let text = last.contentBlocks.compactMap { $0.resolvedText }.joined()
         #expect(text == "Q: Which auth method?\nA: OAuth")
-        // The trailing user message supersedes the questions derivationally,
-        // so the wizard hides while the send is in flight and after it lands.
         #expect(viewModel.pendingQuestions == nil)
-        // Text-only answers keep the existing wire shape and skip uploads.
         let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
         #expect(sent.params["imageBlocks"] == nil)
         #expect(sent.params["fileBlocks"] == nil)
@@ -146,11 +135,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func submitQuestionAnswersTagsWireMessageWithQuestionAnswersMetadata() async throws {
-        // Regression (intent-hq/monorepo#1789): the daemon only retires the
-        // question hold (and the workspace's needs_attention status) when the
-        // answer send carries messageMetadata { type: "question_answers",
-        // answeredQuestionsMessageId } naming the question-bearing assistant
-        // message — an untagged answer leaves the hold pending forever.
         let (viewModel, fake) = makeFakeBackedVM()
         viewModel.store.messages = [questionMessage(id: "a1")]
         let answers = try firstAnswer(viewModel)
@@ -164,12 +148,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func submitQuestionAnswersTagsWithMountTimeIdEvenWhenDerivationFlips() async throws {
-        // Regression (PR #84 review): the wizard hands its mount-time
-        // question-bearing message id to the submit — never re-derived after
-        // the onComplete Task hop. If a pushed stream start (isStreaming) or
-        // a superseding row flips the pendingQuestions derivation nil in that
-        // window, the answer must STILL go out tagged with the mount-time id;
-        // an untagged send would silently reproduce the #1789 symptom.
         let (viewModel, fake) = makeFakeBackedVM()
         viewModel.store.messages = [questionMessage(id: "a1")]
         let answers = try firstAnswer(viewModel)
@@ -185,7 +163,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func plainSendMessageCarriesNoMessageMetadata() async throws {
-        // Ordinary sends must stay byte-identical to before: no metadata key.
         let (viewModel, fake) = makeFakeBackedVM()
 
         await viewModel.sendMessage("just a normal message")
@@ -232,9 +209,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func failedDismissSurfacesVisibleError() async {
-        // Regression (intent-hq/monorepo#1800): a failed dismiss must surface
-        // an explicit user-visible error, not just silently re-pend the
-        // wizard — and the surface must be non-destructive (rollback intact).
         let (viewModel, fake) = makeFakeBackedVM()
         fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
         viewModel.store.messages = [questionMessage(id: "a1")]
@@ -255,7 +229,6 @@ extension ConversationViewModelTests {
 
 extension ConversationViewModelTests {
     @Test func successfulDismissRetryClearsPriorError() async {
-        // A later successful dismiss must not leave a stale error surfaced.
         let (viewModel, fake) = makeFakeBackedVM()
         fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
         viewModel.store.messages = [questionMessage(id: "a1")]
@@ -292,9 +265,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func failedSubmitRollsBackOptimisticMessageAndRestoresQuestions() async throws {
-        // Regression (PR #55 review): a failed send must not permanently
-        // supersede the pending questions — the optimistic user message is
-        // rolled back so the wizard re-derives and returns.
         let (viewModel, _) = makeFakeBackedVM(
             sendError: NSError(domain: "WebSocket", code: -32_000)
         )
@@ -309,8 +279,6 @@ extension ConversationViewModelTests {
         #expect(viewModel.isStreaming == false)
         #expect(viewModel.pendingQuestions != nil, "questions re-pend after failure")
     }
-
-    // MARK: - Sticky wizard on the daemon marker (PROTOCOL §5.5 pendingQuestionsMessageId)
 
     @Test func pendingQuestionsStaysWhileStreamingWhenMarkerNamesQuestionRow() throws {
         let viewModel = makeVM()
@@ -350,9 +318,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func submitQuestionAnswersHidesWizardBeforeDaemonClearsMarker() async throws {
-        // The optimistic answer row mirrors the question_answers tag, so the
-        // marker-authoritative gate hides the wizard on Send — before any
-        // agent:updated marker clear arrives — and never pops it back in.
         let (viewModel, _) = makeFakeBackedVM()
         viewModel.store.messages = [questionMessage(id: "a1")]
         viewModel.store.pendingQuestionsMessageId = "a1"
@@ -371,12 +336,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func submitQuestionAnswersStaysHiddenWhenDaemonAutoQueuesAnswer() async throws {
-        // Regression (PR #210 review): when the tagged answer is auto-queued
-        // (agent busy / turn startup), the optimistic tagged row is removed
-        // from the transcript while the daemon still names the set in
-        // pendingQuestionsMessageId — the wizard must not pop back in and
-        // invite a duplicate submission. The queue entry's tag counts as the
-        // answer until the drain lands the user row / clears the marker.
         let (viewModel, fake) = makeFakeBackedVM()
         fake.responseMap["agent.sendMessage"] = [
             "success": true,
@@ -404,7 +363,6 @@ extension ConversationViewModelTests {
         #expect(viewModel.store.pendingQuestionsMessageId == "a1", "no daemon update has landed yet")
         #expect(viewModel.pendingQuestions == nil, "the queued tagged answer keeps the wizard hidden")
 
-        // The drain delivers the row and the daemon clears the marker.
         viewModel.store.queuedMessages = []
         viewModel.store.pendingQuestionsMessageId = ""
         #expect(viewModel.pendingQuestions == nil)
