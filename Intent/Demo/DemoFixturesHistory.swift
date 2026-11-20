@@ -2,8 +2,6 @@
 import Foundation
 
 extension DemoFixtures {
-    /// Opt-in varied-height pages with deterministic transport gates; ordinary
-    /// demo and screenshot fixtures stay intact.
     static var usesHistoryPages: Bool {
         LaunchOptions.current.contains("--demo-history-pages")
     }
@@ -56,8 +54,6 @@ extension DemoFixtures {
 
     private static func historyMessage(_ index: Int) -> [String: Any] {
         let detail = "We checked the payment flow and kept the investigation notes available for the next review. "
-        // The middle page is short enough to stay in the prefetch band after
-        // insertion, exercising chained loading without another scroll gesture.
         let paragraphs = (historyPageSize..<(historyMessageCount - historyPageSize)).contains(index) ? 1 : 1 + index % historyParagraphVariants
         var text = "History message \(index + 1). " + String(repeating: detail, count: paragraphs)
         if index == historyMessageCount - 1 {
@@ -69,13 +65,10 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
-    /// Non-transcript labels and future events share each response's snapshot time.
     static func iso(minutesAgo: Double) -> String {
         iso(minutesAgo: minutesAgo, relativeTo: snapshotTimestampAnchor ?? Date())
     }
 
-    /// Transcript timestamp relative to the process-stable message anchor, so
-    /// independently rebuilt snapshots preserve immutable message identity.
     static func transcriptIso(minutesAgo: Double) -> String {
         iso(minutesAgo: minutesAgo, relativeTo: transcriptTimestampAnchor)
     }

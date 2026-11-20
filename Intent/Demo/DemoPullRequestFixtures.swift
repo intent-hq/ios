@@ -1,8 +1,6 @@
 #if DEBUG
 import Foundation
 
-/// Demo `github.pulls.search` results over the demo workspaces' repositories.
-/// Honors the batch, `state`, `filter` and `query` parameters.
 enum DemoPullRequestFixtures {
     private struct Pull {
         let repo: String
@@ -68,8 +66,6 @@ enum DemoPullRequestFixtures {
             "headRef": "feature/pr-\(pull.number)"
         ]
     }
-
-    // MARK: - Detail
 
     private static func detailResponse(for method: String, params: [String: Any]) -> Any? {
         guard method.hasPrefix("github.pulls."), method != "github.pulls.search",

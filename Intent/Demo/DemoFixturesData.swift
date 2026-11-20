@@ -2,9 +2,6 @@
 import Foundation
 
 extension DemoFixtures {
-    // MARK: - Workspaces
-
-    // Literal numeric payloads keep the simulated daemon responses readable and auditable.
     // swiftlint:disable no_magic_numbers
 
     static var workspaces: [[String: Any]] {
@@ -166,8 +163,6 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
-    // MARK: - Notes
-
     static var notes: [[String: Any]] {
         [
             [
@@ -274,8 +269,6 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
-    // MARK: - Agents
-
     static var agents: [[String: Any]] {
         [
             [
@@ -306,11 +299,6 @@ extension DemoFixtures {
         ]
     }
 
-    /// Agents of `longConversationWorkspaceId`: the single top-level agent
-    /// whose transcript is `longConversationMessages` (the only foreground
-    /// row on the workspace overview), plus its three delegated sub-agents
-    /// (`createdByAgentId`, background) that the coordinator waits on — the
-    /// rows of the "Waiting for all" footer.
     static var longConversationAgents: [[String: Any]] {
         let delegateDigests = [
             "Done: after_fork reset landed, 100-run loop clean at 4 workers.",
@@ -355,10 +343,6 @@ extension DemoFixtures {
         ] + delegates
     }
 
-    /// `agent.getSubscriptions` for `longConversationAgentId` (PROTOCOL
-    /// §5.5): one `after_all` delegation group over
-    /// `longConversationDelegateIds` with the first delegate complete, so the
-    /// conversation enters with the "Waiting for all (1/3)" footer.
     static var longConversationSubscriptions: [String: Any] {
         [
             "subscriptions": [
@@ -379,8 +363,6 @@ extension DemoFixtures {
         ]
     }
 
-    /// Background hooks of `longConversationWorkspaceId` (PROTOCOL §5.40):
-    /// one scheduled hook owned by `longConversationAgentId`, mid-TTL.
     static var longConversationHooks: [[String: Any]] {
         [
             [
@@ -402,8 +384,6 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
-    // MARK: - Conversation
-
     static var conversationMessages: [[String: Any]] {
         [
             [
@@ -476,8 +456,6 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
-    // MARK: - Tasks
-
     static var tasks: [[String: Any]] {
         [
             [

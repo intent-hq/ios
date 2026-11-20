@@ -2,7 +2,6 @@
 import Foundation
 import Network
 
-/// File-gated UI fixture only; never changes host/device networking or a socket.
 final class DemoNetworkPathMonitor: NetworkPathMonitoring {
     private let directory: URL
     private var task: Task<Void, Never>?
@@ -29,7 +28,6 @@ final class DemoNetworkPathMonitor: NetworkPathMonitoring {
                 try Task.checkCancellation()
                 onUpdate(NetworkPathSnapshot(status: .satisfied, interfaces: [("demo-radio", .cellular)]))
             } catch {
-                // Scene background/teardown retires this monitor and any pending report.
             }
         }
     }

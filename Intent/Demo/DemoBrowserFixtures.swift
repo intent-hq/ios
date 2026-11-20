@@ -6,7 +6,6 @@ enum DemoBrowserFixtures {
     private static var scriptRuntimes: [String: [String: [String: Any]]] = [:]
     private static var removedScripts: [String: Set<String>] = [:]
 
-    // Nil keeps the ordinary demo transcript when this scenario was not requested.
     static var conversationMessages: [[String: Any]]? { // swiftlint:disable:this discouraged_optional_collection
         guard LaunchOptions.current.contains("--demo-browsers") else { return nil }
         return [
@@ -64,7 +63,6 @@ enum DemoBrowserFixtures {
         }
     }
 
-    /// Separate entry point keeps the launch fixture testable without process arguments.
     static func scriptResponse(for method: String, params: [String: Any], longList: Bool = false) -> Any? {
         guard let workspaceId = params["workspaceId"] as? String else { return nil }
         let scriptId = params["scriptId"] as? String ?? ""
@@ -109,7 +107,6 @@ enum DemoBrowserFixtures {
     }
 
     private static func initialRuntime(scriptId: String, longList: Bool) -> [String: Any] {
-        // Completed runs make the opt-in rows visible without changing the default demo.
         if longList, scriptId.hasPrefix("demo-scroll-script-") {
             return ["status": "exited", "exitCode": 0, "restartCount": 0]
         }

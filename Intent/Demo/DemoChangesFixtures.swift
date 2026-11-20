@@ -10,10 +10,8 @@ enum DemoChangesFixtures {
     static let largeDiffArgumentPrefix = "--demo-large-diff="
     private static let largeDiffLongLineInterval = 25
     private static let largeDiffLongLineEntries = 24
-    /// Each run of six lines is three context lines, one deletion and two additions.
     private static let largeDiffPatternLength = 6
     private static let largeDiffContextLines = 3
-    /// Changed lines in every demo file diff, for measuring large diffs (`--demo-large-diff=2000`).
     static var largeDiffLineCount: Int? { largeDiffLineCount(from: LaunchOptions.current.arguments) }
 
     static func largeDiffLineCount(from arguments: [String]) -> Int? {
@@ -22,7 +20,6 @@ enum DemoChangesFixtures {
         return count
     }
 
-    /// Swift-like source with a long line every 25 lines so horizontal scrolling matters.
     static func largeDiffSource(lineCount: Int, prefix: String) -> String {
         (1...max(lineCount, 1)).map { index in
             index.isMultiple(of: largeDiffLongLineInterval)
@@ -131,7 +128,6 @@ enum DemoChangesFixtures {
         ]
     }
 
-    /// Repeating runs of context, deletion and additions totalling `lineCount` lines.
     private static func largeHunk(lineCount: Int) -> [String: Any] {
         let source = largeDiffSource(lineCount: lineCount, prefix: "value").split(separator: "\n").map(String.init)
         var oldNumber = 1

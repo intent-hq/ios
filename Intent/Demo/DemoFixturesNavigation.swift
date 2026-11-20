@@ -19,9 +19,6 @@ extension DemoFixtures {
 }
 
 #if DEBUG
-/// Demo-only (`--demo-toast`): holds an agent-completion toast in the app's toast position for
-/// UI evidence. The demo window has no backend, so the routed toast would never present there.
-/// A tap opens the agent as a real toast or notification does, before any workspace list read.
 struct DemoToastOverlay: ViewModifier {
     @Environment(AppCoordinator.self) private var coordinator
     @State private var isDismissed = false

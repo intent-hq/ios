@@ -1,8 +1,6 @@
 #if DEBUG
 import Foundation
 
-/// Saved-machine fixtures for Settings screenshots and interaction tests.
-/// Only the existing ephemeral demo store is written; normal launch is untouched.
 enum DemoSettings {
     private static let port = 5181
     private static var startupBackendID: BackendID?
@@ -27,9 +25,6 @@ enum DemoSettings {
         }
     }
 
-    /// Native scene restoration outlives the ephemeral demo records. Consume
-    /// the seeded primary only on the first actual window appearance so later
-    /// foregrounding and newly opened Travel windows keep their own selection.
     static func consumeStartupBackendID() -> BackendID? {
         defer { startupBackendID = nil }
         return startupBackendID

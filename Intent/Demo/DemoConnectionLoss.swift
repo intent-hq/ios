@@ -2,9 +2,6 @@
 import Foundation
 import SwiftUI
 
-/// Opt-in UI regression seam, like the transcript fixture gates: only demo
-/// mode reads trigger files. Drives the real connection publisher, never the
-/// coordinator's overlay flag. A scenario runs once even after Home/reselection.
 enum DemoConnectionLoss {
     private static let directoryPrefix = "--demo-connection-loss-directory="
     private static let demoPort = 443
@@ -19,8 +16,6 @@ enum DemoConnectionLoss {
             .map { String($0.dropFirst("--demo-background-loss=".count)) }
     }
 
-    /// Persistent evidence catches even one-frame presentations that XCUITest
-    /// misses while activate() waits for the application to settle.
     static func record(_ event: String) {
         guard let directory else { return }
         try? Data().write(to: directory.appendingPathComponent(event))
@@ -30,7 +25,6 @@ enum DemoConnectionLoss {
         guard let scenario = backgroundScenario else { return }
         if phase == .background, !backgroundLossStarted {
             backgroundLossStarted = true
-            // A real background drop keeps reconnecting; it never stops by itself.
             if scenario != "activation-quick" { connection.connectionState = .reconnecting(attempt: 1) }
             record("did-background")
         } else if phase == .active, backgroundLossStarted {
@@ -39,7 +33,6 @@ enum DemoConnectionLoss {
         }
     }
 
-    /// Independent injected monitor, shared by demo scenes just like the live owner.
     static let networkAvailability: NetworkAvailability? = {
         guard let directory else { return nil }
         return NetworkAvailability { DemoNetworkPathMonitor(directory: directory) }
@@ -52,7 +45,6 @@ enum DemoConnectionLoss {
         return URL(fileURLWithPath: String(argument.dropFirst(directoryPrefix.count)))
     }
 
-    /// Hold fixture data independently from the optional startup timeout trigger.
     static var initialDataGate: DemoFixtures.ResponseGate? {
         guard let directory,
               LaunchOptions.current.contains("--demo-connection-loss-pending-startup") else { return nil }
@@ -67,9 +59,6 @@ enum DemoConnectionLoss {
         return initialDataGate
     }
 
-    /// With `--demo-connection-loss-hold-conversations`, conversation and note loads that
-    /// start after the drop wait for the `conversation-data` trigger, so content
-    /// never viewed before the drop stays unloaded until the test says so.
     static func conversationLoadGate(for method: String) -> DemoFixtures.ResponseGate? {
         guard let directory, ["agent.get", "chat.subscribe", "note.list", "note.get"].contains(method),
               LaunchOptions.current.contains("--demo-connection-loss-hold-conversations"),
@@ -129,7 +118,6 @@ enum DemoConnectionLoss {
             DemoConnectionTransport.isDropped = false
             connection.connectionState = .connected
         } catch {
-            // Root teardown cancels the scenario; it must not revive Home.
         }
     }
 
@@ -140,8 +128,6 @@ enum DemoConnectionLoss {
         if scenario == "sustained" {
             try await DemoFixtures.wait(for: .triggerFile(directory.appendingPathComponent("recover")))
         } else {
-            // Deliberately span rendering frames, but recover within production
-            // grace. Tests synchronize on evidence, never on guessed sleeps.
             try await Task.sleep(for: .milliseconds(quickRecoveryMilliseconds))
         }
         try Task.checkCancellation()

@@ -2,8 +2,6 @@
 import Foundation
 
 extension DemoFixtures {
-    /// Uniform rows isolate entry positioning from tool hydration and footer
-    /// resizing. Only explicit UI-test launches use this long unread transcript.
     static func startupTranscriptRequested(by arguments: [String]) -> Bool {
         arguments.contains("--demo-startup-transcript")
     }
@@ -13,8 +11,6 @@ extension DemoFixtures {
     private static let startupRowCount = 50
 
     #if DEBUG
-    /// Withhold snapshots, not ACKs, to demonstrate receiving and timeout/retry
-    /// feedback. Once the file exists, the next subscription serves its snapshot.
     static func startupSnapshotIsHeld(for method: String, params: [String: Any], arguments: [String]) -> Bool {
         guard method == "chat.subscribe", params["agentId"] as? String == longConversationAgentId,
               let file = triggerFile(from: arguments, prefix: "--demo-chat-delivery-trigger-file=") else { return false }

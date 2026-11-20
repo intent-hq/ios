@@ -2,7 +2,6 @@
 import Foundation
 
 extension DemoFixtures {
-    // Fixture output intentionally models a long numbered source listing.
     // swiftlint:disable no_magic_numbers
     // swiftlint:disable:next large_tuple
     static let longConversationTruncatedToolCalls: [(id: String, file: String, symbol: String)] = [
@@ -13,11 +12,7 @@ extension DemoFixtures {
     static let truncatedOutputPreviewLength = 160
 
     enum LongConversationSlimToolRowLayout: String, CaseIterable {
-        /// The tool blocks open the assistant's text message, matching a
-        /// coordinator turn on the daemon.
         case leading
-        /// The tool blocks occupy their own assistant message immediately
-        /// before the related text message, making the row independently tappable.
         case standalone
     }
 
@@ -35,9 +30,7 @@ extension DemoFixtures {
             .last ?? .leading
     }
 
-    // Nil means the requested fixture block does not exist, not an empty result block.
     // swiftlint:disable discouraged_optional_collection
-    /// Full result block for a slim-truncated fixture tool result.
     static func longConversationFullBlock(id blockId: String?) -> [String: Any]? {
         guard let call = longConversationTruncatedToolCalls.first(where: { "\($0.id)-result" == blockId }) else {
             return nil
@@ -65,7 +58,6 @@ extension DemoFixtures {
     // swiftlint:enable large_tuple
 
     // swiftlint:disable large_tuple
-    /// A multi-screen numbered listing that expands the tool row after hydration.
     private static func longConversationFullOutput(
         for call: (id: String, file: String, symbol: String)
     ) -> String {
