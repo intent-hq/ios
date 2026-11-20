@@ -1,7 +1,5 @@
 import Foundation
 
-/// Per-stream bookkeeping includes the write currently in flight. Credit is
-/// returned by delivered(), never when a DATA frame is merely received.
 nonisolated struct BrowserTunnelFlow {
     static let maximumQueuedFrames = 128
     static let maximumQueuedBytes = BrowserTunnelFrame.maximumPayloadSize

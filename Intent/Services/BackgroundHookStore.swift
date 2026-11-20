@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 
-/// A conversation's lease on the session-owned workspace hook cache.
 @MainActor
 @Observable class BackgroundHookStore {
     let source: WorkspaceStatusStore<BackgroundHook>
@@ -69,8 +68,6 @@ import Observation
 
     func handleEvent(_: String, params: Any) { source.handleEvent(params) }
 
-    /// `hook.runNow` (§5.40) — ack only; the run's outcome arrives as
-    /// `hook:*` events.
     func runNow(hookId: String) async {
         guard let wsId = workspaceId else { return }
         do {
@@ -83,7 +80,6 @@ import Observation
         }
     }
 
-    /// `hook.cancel` (§5.40) — the `hook:cancelled` event drops the hook.
     func cancel(hookId: String) async {
         guard let wsId = workspaceId else { return }
         do {
@@ -96,9 +92,6 @@ import Observation
         }
     }
 
-    // MARK: - Event folding
-
-    /// Event types that end a hook's life — they drop from the list.
     private static let terminalHookEvents: Set<String> = [
         "hook:dispatched",
         "hook:evicted",
@@ -108,14 +101,9 @@ import Observation
 
     struct FoldResult {
         let hooks: [BackgroundHook]
-        /// The event referenced a hook this list has never seen — the fold
-        /// cannot invent the missing wire fields (`delayMs`, `createdAt`),
-        /// so the caller should re-run `hook.list` to converge.
         let needsRefetch: Bool
     }
 
-    /// Pure fold of one `hook:*` event into the current hook list
-    /// (mirrors the cloudlands-fe `foldHookEvent`).
     static func foldHookEvent(
         hooks: [BackgroundHook],
         eventType: String,
@@ -149,8 +137,6 @@ import Observation
         case "hook:run-started":
             next[index].state = .running
         case "hook:run-completed":
-            // `nextRunAt` present ⇒ the hook stays scheduled; absent ⇒ a
-            // terminal dispatched/evicted event follows and drops it (§6.5).
             next[index].state = .scheduled
             next[index].nextRunAt = data["nextRunAt"] as? String
         default:

@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// Display knowledge only. No read in this store starts an RPC, and none of
-/// these projections may satisfy an AgentDetailStore load.
 @MainActor @Observable
 final class AgentSummaryStore {
     struct ReadBoundary {
@@ -28,8 +26,6 @@ final class AgentSummaryStore {
     private var sequence = 0
     private var epoch = 0
 
-    /// A successful response owns only its supplied fields, in RPC start order.
-    /// A late list cannot replace a newer detail or event, but may fill omissions.
     func beginRead() -> ReadBoundary {
         sequence &+= 1
         return ReadBoundary(epoch: epoch, sequence: sequence)
@@ -60,8 +56,6 @@ final class AgentSummaryStore {
         if let workspaceId, workspace != workspaceId { return }
         if let known = identities[id], let workspace, known != workspace { return }
         if let workspace {
-            // Before a read establishes identity, events can supply provisional
-            // display data. Discard fields from another workspace on resolution.
             patches[id] = patches[id]?.filter { $0.value.workspaceId == nil || $0.value.workspaceId == workspace }
         }
         var fields = displayFields(row)
@@ -116,7 +110,6 @@ final class AgentSummaryStore {
 
     private func eventFields(type: String, data: [String: Any], workspace: String?) -> [String: Any] {
         var fields = data.filter { Self.keys.contains($0.key) && $0.key != "id" }
-        // Mutations publish these display changes flat, unlike AgentLite metadata.
         fields["specialist"] = data["specialist"]
         fields["attentionRequestCleared"] = data["attentionRequestCleared"]
         fields["workspaceId"] = workspace
@@ -141,8 +134,6 @@ final class AgentSummaryStore {
         let metadata = row["metadata"] as? [String: Any] ?? [:]
         for (key, value) in metadata { fields[.metadata(key)] = value }
         if let specialist = row["specialist"] { fields[.metadata("specialist")] = specialist }
-        // Both wire surfaces describe the same attention fields. Mirroring them
-        // avoids a stale top-level value masking a newer metadata value (or clear).
         for key in Self.attentionKeys {
             let value: Any? = row["attentionRequestCleared"] as? Bool == true ? NSNull() : row[key] ?? metadata[key]
             if let value {
@@ -151,8 +142,6 @@ final class AgentSummaryStore {
             }
         }
         if let status = row["status"] as? String, Self.inactiveStatuses.contains(status.lowercased()) {
-            // Status-only subscriptions must retire older liveness. Explicit
-            // live overlays and newer events retain their own field provenance.
             for key in ["isStreaming", "isProcessing", "isResponding"] where row[key] == nil {
                 fields[.value(key)] = false
             }

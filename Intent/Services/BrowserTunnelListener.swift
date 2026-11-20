@@ -1,7 +1,6 @@
 import Foundation
 import Network
 
-/// Explicitly binds IPv4 loopback, never an unspecified/all-interface address.
 @MainActor
 final class BrowserTunnelListener {
     private static let readyTimeoutSeconds = 5
@@ -109,7 +108,6 @@ final class BrowserTunnelListener {
     }
 }
 
-/// Network callbacks remain off MainActor and transfer only Sendable values.
 nonisolated enum BrowserTunnelTCP {
     static let readSize = 16_384
 
