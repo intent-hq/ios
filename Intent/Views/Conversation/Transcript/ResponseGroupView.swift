@@ -226,7 +226,7 @@ struct ResponseGroupBody: View, Equatable {
 
     private var collapsedHeaderOpacity: Double {
         guard group.activity != nil, !isExpanded, contrast == .standard else { return 1 }
-        return colorScheme == .dark ? 0.9 : 0.85
+        return colorScheme == .dark ? Layout.collapsedSummaryDarkOpacity : Layout.collapsedSummaryLightOpacity
     }
 
     @ViewBuilder

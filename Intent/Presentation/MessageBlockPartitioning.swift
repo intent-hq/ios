@@ -167,8 +167,8 @@ enum MessageBlockPartitioning {
         func finishRun() {
             guard let first = run.first else { return }
             let tools = run.count { $0.type == .toolUse }
-            let thinking = run.count {
-                $0.type == .thinking && $0.resolvedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            let thinking = run.count { block in
+                block.type == .thinking && block.resolvedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             }
             if tools + thinking >= 2 {
                 result.append(.group(ResponseGroup(
