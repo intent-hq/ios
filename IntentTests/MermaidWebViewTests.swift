@@ -117,7 +117,6 @@ private enum MermaidJavaScriptProbe {
             guard let reply, reply.result == nil else { return }
             reply.result = error.map { .failure($0) } ?? .success(value)
         }
-        // A WebKit async call may never resume, even after its task is cancelled.
         while reply.result == nil {
             try Task.checkCancellation()
             guard ContinuousClock.now < deadline else { throw URLError(.timedOut) }

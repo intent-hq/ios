@@ -3,8 +3,6 @@ import Foundation
 import Testing
 
 struct NoteContentSegmentsTests {
-    // MARK: - segments(for:)
-
     @Test func plainMarkdownIsOneSegment() {
         let content = "# Title\n\nSome paragraph text."
         #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
@@ -63,8 +61,6 @@ struct NoteContentSegmentsTests {
     }
 
     @Test func starBulletsStayMarkdown() {
-        // The daemon's task.update parser (parse_dash_checkbox) accepts only
-        // `-` bullets, so a `* [ ]` line must not become an interactive row.
         let content = "* [ ] Star bullet\n* [x] Star done"
         #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
     }
@@ -133,8 +129,6 @@ struct NoteContentSegmentsTests {
         #expect(line.marker == "x")
         #expect(line.text == "Done")
     }
-
-    // MARK: - replacingCheckboxMarker
 
     @Test func rewritesMarkerForEachStatus() {
         let content = "intro\n- [ ] Task"

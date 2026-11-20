@@ -5,7 +5,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Ports of the desktop cases in new-messages-divider.test.ts.
 struct NewMessagesDividerAnchorTests {
     private let ids = ["m1", "m2", "m3", "m4"]
 
@@ -53,9 +52,6 @@ struct NewMessagesDividerLatchedTests {
     }
 
     @Test func keepsLatchedAnchorEvenWhenNewest() {
-        // The entry-time resolver never latches the newest message, but a
-        // latched anchor that BECAME newest (trailing rows truncated) still
-        // renders as-is.
         #expect(NewMessagesDivider.resolveLatchedAnchor(
             messageIds: ids,
             latchedAnchorId: "m4"
@@ -90,20 +86,13 @@ struct NewMessagesDividerLatchedTests {
     }
 }
 
-/// Entry-scroll follow decision in the bottom-anchored list (distance to
-/// bottom ≈ 0 is the visual bottom; threshold mirrors the list's at-bottom
-/// detection).
 struct NewMessagesDividerEntryScrollTests {
     @Test func followStaysEnabledWhenClampedAtBottom() {
-        // Unseen tail fits on screen: the divider scroll clamps at the
-        // bottom, so follow-to-bottom keeps today's behavior.
         #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 0))
         #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 50))
     }
 
     @Test func followStaysEnabledWhileBouncedPastBottom() {
-        // A scroll view can rest or bounce past the end of its content
-        // (negative distance) — still the visual bottom.
         #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: -59))
     }
 
@@ -112,9 +101,6 @@ struct NewMessagesDividerEntryScrollTests {
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 2000))
     }
 
-    /// Regression: an unknown distance after landing on the divider must not
-    /// be read as bottom-pinned (which hid Go to End and let a later follow
-    /// pull the user off the divider).
     @Test func followDisabledWhenDistanceIsUnknownAfterDividerLanding() {
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: nil))
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(
@@ -135,9 +121,6 @@ struct NewMessagesDividerEntryScrollTests {
     }
 }
 
-/// Regression coverage for intent-hq/ios#270: the finder must resolve the
-/// transcript UIScrollView once attached to a window, not from an eager
-/// one-shot walk that runs before the hierarchy exists.
 @MainActor
 struct ScrollViewFinderTests {
     @Test func firstScrollViewAncestorFindsNearestScrollView() {
@@ -168,7 +151,6 @@ struct ScrollViewFinderTests {
         let host = UIView()
         scrollView.addSubview(host)
         host.addSubview(finder)
-        // Detached hierarchy: nothing resolves yet (mirrors makeUIView time).
         #expect(proxy.scrollView == nil)
         #expect(!proxy.hasResolvedScrollView)
         #expect(!ScrollViewFinder.hasKeyboardDismissTap(scrollView))
@@ -182,7 +164,6 @@ struct ScrollViewFinderTests {
         let tapCount = { scrollView.gestureRecognizers?.count ?? 0 }
         let installed = tapCount()
 
-        // Re-attaching re-runs the walk without duplicating the gesture.
         scrollView.removeFromSuperview()
         window.addSubview(scrollView)
         #expect(proxy.scrollView === scrollView)
@@ -199,8 +180,6 @@ struct ScrollViewFinderTests {
         #expect(!ScrollViewFinder.hasKeyboardDismissTap(scrollView))
     }
 
-    /// The `updateUIView` path: a proxy handed to an already-hosted finder
-    /// resolves at once rather than on the next window move.
     @Test func finderResolvesProxyAssignedAfterWindowAttach() {
         let finder = ScrollViewFinder.FinderView()
         let scrollView = UIScrollView()
@@ -215,7 +194,6 @@ struct ScrollViewFinderTests {
         #expect(ScrollViewFinder.hasKeyboardDismissTap(scrollView))
         let installed = scrollView.gestureRecognizers?.count ?? 0
 
-        // Re-assigning the same proxy is a no-op.
         finder.proxy = proxy
         #expect(scrollView.gestureRecognizers?.count == installed)
     }

@@ -4,10 +4,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// `NoteDetailView` owns a `NoteStore` and, while on screen, has it refresh
-/// the open note on every note event. That refresh must die with the view:
-/// no stale `note.get` after dismissal, and the store must deallocate so its
-/// event handler is unregistered (intent-hq/ios#250).
 @Suite(.serialized)
 @MainActor
 final class NoteDetailViewLifecycleTests {
@@ -36,13 +32,10 @@ final class NoteDetailViewLifecycleTests {
         fake.responseMap["note.list"] = ["notes": []]
         fake.responseMap["agent.list"] = ["agents": []]
         fake.responseMap["workspace.list"] = ["workspaces": []]
-        // `note.get` stays unconfigured: the fake throws, which the view
-        // treats as a transient error and keeps rendering.
 
         weak var weakStore: NoteStore?
         var host: Host? = Host(connection: fake, persistence: persistence) { weakStore = $0 }
 
-        // Wait for this view's refresh stream, independent of other session observers.
         try await Self.waitUntil("note detail observes changes") {
             weakStore?.noteChangeContinuations.count == 1
         }
@@ -50,20 +43,17 @@ final class NoteDetailViewLifecycleTests {
         let loads = fake.requestLog.filter { $0.method == "note.get" }.count
         #expect(loads == 1, "the initial load fetched the note once")
 
-        // Live: a note event refreshes the open note.
         deliverNoteUpdated(on: fake)
         try await Self.waitUntil("live refresh") {
             fake.requestLog.filter { $0.method == "note.get" }.count == loads + 1
         }
 
-        // Dismiss the screen.
         host?.tearDown()
         host = nil
 
         try await Self.waitUntil("NoteStore released after dismissal") { weakStore == nil }
         #expect(weakStore == nil, "the detail view's NoteStore must deallocate once the view is gone")
 
-        // Stale: no refresh may run for a note event after dismissal.
         let afterTeardown = fake.requestLog.filter { $0.method == "note.get" }.count
         deliverNoteUpdated(on: fake)
         try await Task.sleep(nanoseconds: 300_000_000)
@@ -148,10 +138,6 @@ final class NoteDetailViewLifecycleTests {
         }
     }
 
-    /// Hosts a `NoteDetailView` in a window (so `.task` / `.onDisappear`
-    /// fire) and tears it down like a popped screen. Everything that could
-    /// keep the view alive — root view, controller, window — lives here so
-    /// dropping the host drops them all.
     @MainActor
     private final class Host {
         private var controller: UIHostingController<AnyView>?
@@ -201,7 +187,6 @@ final class NoteDetailViewLifecycleTests {
             let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
             controller.view.frame = window.bounds
             if let scene {
-                // Accessibility needs a connected scene and real controller containment.
                 window.windowScene = scene
                 window.rootViewController = controller
                 window.isHidden = false

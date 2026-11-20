@@ -103,15 +103,12 @@ struct MarkdownTextViewTests {
         #expect(replaced(text) == text)
     }
 
-    // MARK: - Attachment tap routing
-
     @Test func tappedIntentFileImageAttachmentYieldsItsImage() {
         let image = UIImage()
         let attachment = AnyAttachment(IntentFileImageAttachment(image: image, altText: "alt"))
         #expect(MarkdownTextView.lightboxImage(for: attachment) === image)
     }
 
-    // A lazy transcript can measure a new row before it appears or receives callbacks.
     @MainActor
     @Test(arguments: [
         "A complete paragraph must participate in the first sizing pass.",
@@ -124,7 +121,6 @@ struct MarkdownTextViewTests {
         #expect(size.width.isFinite && size.width > 0)
     }
 
-    // Fixed input must not grow or shrink after its initial natural-height measurement.
     @MainActor
     @Test(arguments: [
         "First paragraph.\n\nSecond paragraph.",
@@ -152,7 +148,6 @@ struct MarkdownTextViewTests {
         let wide = "WWWWWWWW"
         let prose = try await renderedSize(narrow)
         let wideProse = try await renderedSize(wide)
-        // Negative control: these glyphs must differ in the proportional body face.
         #expect(wideProse.width > prose.width)
         for fence in ["`", "```\n"] {
             let closing = fence == "`" ? "`" : "\n```"

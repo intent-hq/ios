@@ -3,11 +3,7 @@ import Foundation
 import Testing
 
 extension ModelsTests {
-    // MARK: - SpecialistInfo wire decoding (specialist.list)
-
     @Test func specialistInfoWireDecodesResolvedFields() throws {
-        // Fixture mirroring a daemon specialist.list entry carrying the
-        // additive resolvedModel/resolvedProvider preview fields (PROTOCOL §5.11).
         let info = SpecialistInfo(wire: [
             "id": "implementor",
             "name": "Implementor",
@@ -24,8 +20,6 @@ extension ModelsTests {
     }
 
     @Test func specialistInfoWireDecodesOmittedResolvedFields() throws {
-        // Both fields are omitted when resolution yields the provider CLI
-        // default — clients render "Provider default".
         let info = SpecialistInfo(wire: [
             "id": "implementor",
             "name": "Implementor",
@@ -78,8 +72,6 @@ extension ModelsTests {
     }
 
     @Test func specialistInfoWireDecodesPickerMetadata() throws {
-        // role/teamAgents/icon picker metadata (PROTOCOL §5.11), mirroring
-        // the bundled spec-writer frontmatter.
         let info = SpecialistInfo(wire: [
             "id": "spec-writer",
             "name": "Coordinator",
@@ -124,9 +116,6 @@ extension ModelsTests {
     }
 
     @Test func modalPickableDropsHiddenAndInternalSpecialists() {
-        // Internal specialists stay out of the New Agent picker only —
-        // they remain in the unfiltered list for by-id lookups (mirrors
-        // the FE's filterModalPickableSpecialists).
         let specialists = [
             SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans", role: "orchestrator"),
             SpecialistInfo(id: "chief-of-staff", name: "Chief of Staff", description: "Chief", hidden: true),
@@ -138,8 +127,6 @@ extension ModelsTests {
     }
 
     @Test func orchestratorResolvesFirstOrchestratorByIdOrder() {
-        // First role: "orchestrator" by id order regardless of list sort
-        // (mirrors the FE's selectOrchestratorSpecialist).
         let specialists = [
             SpecialistInfo(id: "z-orchestrator", name: "Z", description: "Z", role: "orchestrator"),
             SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", role: "internal"),
@@ -159,8 +146,6 @@ extension ModelsTests {
 }
 
 extension ModelsTests {
-    // MARK: - TaskDisplayStatus (PROTOCOL §5.4 task-status vocabulary)
-
     @Test func taskDisplayStatusParsesFullVocabulary() {
         #expect(TaskDisplayStatus(wire: "not_started") == .notStarted)
         #expect(TaskDisplayStatus(wire: "waiting") == .waiting)
@@ -256,8 +241,6 @@ extension ModelsTests {
     }
 
     @Test func noteTaskMetadataDefaultsWhenOmitted() {
-        // Task metadata with only status: the omitted-when-empty fields
-        // default to empty/nil (PROTOCOL §5.2).
         let taskNote = Note.parseNote([
             "id": "t1",
             "title": "Task",
@@ -269,7 +252,6 @@ extension ModelsTests {
         #expect(taskNote?.unmetDependsOn.isEmpty == true)
         #expect(taskNote?.estimatedEffort == nil)
 
-        // Non-task note: same defaults.
         let plainNote = Note.parseNote(["id": "note-2", "title": "Plain"])
         #expect(plainNote?.assignedAgentIds.isEmpty == true)
         #expect(plainNote?.dependsOn.isEmpty == true)
@@ -311,8 +293,6 @@ extension ModelsTests {
         #expect(restatused?.estimatedEffort == "30m")
     }
 
-    // MARK: - Slim note.list projection (PROTOCOL §5.2 projection: "slim")
-
     @Test func noteParsesSlimProjectionFields() {
         let note = Note.parseNote([
             "id": "n1",
@@ -327,13 +307,11 @@ extension ModelsTests {
     }
 
     @Test func fullRowsAndEmptyNotesAreNeverContentStale() {
-        // Full row: no contentLength marker.
         let full = Note.parseNote(["id": "n1", "title": "Full", "content": "body"])
         #expect(full?.contentPreview == nil)
         #expect(full?.contentLength == nil)
         #expect(full?.isContentStale == false)
 
-        // Genuinely empty note on a slim row.
         let empty = Note.parseNote([
             "id": "n2",
             "title": "Empty",
@@ -352,7 +330,6 @@ extension ModelsTests {
         ])
         #expect(slim?.preview == "Heading")
 
-        // Full content still wins when present.
         let full = Note.parseNote([
             "id": "n2",
             "title": "Full",

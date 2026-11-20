@@ -10,7 +10,6 @@ struct MonitoredPrStoreTests {
         let isActive: Bool
     }
 
-    /// The full §5.42 `prMonitor.list` sample row from PROTOCOL.md.
     func makeMonitorDict(
         monitorId: String = "prm-1",
         state: String = "active"
@@ -59,8 +58,6 @@ struct MonitoredPrStoreTests {
         ]
     }
 
-    /// A minimal wire row: only the always-present fields (a monitor that
-    /// has no successful poll baseline yet).
     func makeMinimalMonitorDict() -> [String: Any] {
         [
             "monitorId": "prm-2",
@@ -75,8 +72,6 @@ struct MonitoredPrStoreTests {
             "updatedAt": "2026-08-07T11:58:00.000Z"
         ]
     }
-
-    // MARK: - Model parsing
 
     @Test func parsesFullProtocolSample() throws {
         let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict()))
@@ -136,8 +131,6 @@ struct MonitoredPrStoreTests {
 
     @Test func parsesSnapshotOptionalFieldsAsNilWhenAbsent() throws {
         var dict = makeMonitorDict()
-        // A degraded snapshot: `mergeable` still computing,
-        // no blocked reason, unreadable branch rules (needed omitted).
         dict["lastSnapshot"] = [
             "state": "open",
             "isDraft": true,
@@ -189,7 +182,6 @@ struct MonitoredPrStoreTests {
         #expect(MonitoredPr.parseMonitor(makeMonitorDict(state: "someFutureState")) == nil)
     }
 
-    /// The canonical §6.5 `prMonitor:*` event data payload.
     func makeEventData(
         monitorId: String = "prm-1",
         state: String = "active",

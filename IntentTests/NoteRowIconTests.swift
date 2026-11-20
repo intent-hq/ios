@@ -29,8 +29,6 @@ struct NoteRowIconTests {
         "- [ ] [Task \(id)](intent://local/task/\(id))"
     }
 
-    // MARK: - Branch selection
-
     @Test func taskNoteGetsItsMetadataStatusIcon() {
         let note = makeNote(id: "t1", taskStatus: "in_progress")
         #expect(NoteRowIcon.kind(for: note, notes: []) == .taskStatus(.inProgress))
@@ -74,14 +72,10 @@ struct NoteRowIconTests {
     }
 
     @Test func allCancelledLinksFallBackToDocumentIcon() {
-        // Cancelled tasks are excluded from the total, so the ring has no
-        // denominator and the note falls back to the doc icon.
         let notes = [makeNote(id: "a", taskStatus: "cancelled")]
         let note = makeNote(id: "n1", content: link("a"))
         #expect(NoteRowIcon.kind(for: note, notes: notes) == .document)
     }
-
-    // MARK: - Children-derived status (fe hasChildrenStatus)
 
     @Test func parentTaskNoteWithAllChildrenCompleteShowsComplete() {
         let parent = makeNote(id: "p", taskStatus: "in_progress")
