@@ -18,20 +18,15 @@ nonisolated enum WorkspaceDiffRow: Identifiable, Sendable {
     }
 }
 
-/// Flattened diff rows with stable IDs, so a lazy stack only builds the lines on screen.
 nonisolated struct WorkspaceDiffRows: Sendable {
-    /// Embedded diffs sit inside the commit view's scroll view, so they cannot build rows lazily.
     static let embeddedLineLimit = 100
     private static let tabWidth = 4
     private static let wideColumns = 2
-    /// Lines measured with the real font; column counts only shortlist them.
     private static let widthCandidates = 4
 
     let rows: [WorkspaceDiffRow]
     let lineCount: Int
-    /// The hunk heading expected to render widest in a monospaced font.
     let widestHeading: String
-    /// Displayed lines with the most columns, widest first.
     let widestLines: [String]
 
     init(hunks: [WorkspaceDiffHunk]) {
@@ -62,7 +57,6 @@ nonisolated struct WorkspaceDiffRows: Sendable {
         self.widestLines = widestLines.map(\.text)
     }
 
-    /// Rows up to and including the `limit`th line; nil shows every row.
     func rows(limit: Int?) -> ArraySlice<WorkspaceDiffRow> {
         guard let limit, limit < lineCount else { return rows[...] }
         var seen = 0
@@ -74,8 +68,6 @@ nonisolated struct WorkspaceDiffRows: Sendable {
         return rows[...]
     }
 
-    /// Approximate monospaced columns: tabs advance to the next 4-column stop and non-ASCII scalars,
-    /// which include wide CJK and emoji, take two.
     static func columns(_ text: String) -> Int {
         var columns = 0
         for scalar in text.unicodeScalars {
@@ -95,12 +87,9 @@ nonisolated struct WorkspaceDiffRows: Sendable {
 }
 
 extension WorkspaceDiffRows {
-    /// Horizontal padding on every diff row (SwiftUI's default `.padding(.horizontal)` on iOS).
     static let horizontalPadding: CGFloat = 16
-    /// A line row is old number, new number, marker and content: three gaps.
     private static let lineRowGaps: CGFloat = 3
 
-    /// The UIKit equivalent of `.system(.caption, design: .monospaced)` at `size`.
     @MainActor
     static func font(for size: DynamicTypeSize) -> UIFont {
         let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(size))
@@ -108,7 +97,6 @@ extension WorkspaceDiffRows {
         return .monospacedSystemFont(ofSize: pointSize, weight: .regular)
     }
 
-    /// Width of the widest row, including line-number gutters, marker, spacing and padding.
     func contentWidth(font: UIFont) -> CGFloat {
         let padding = Self.horizontalPadding * 2
         let gutter = WorkspaceChangesLayout.lineNumberWidth * 2

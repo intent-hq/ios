@@ -1,8 +1,5 @@
 import Foundation
 
-/// Classifies a tool_use block into a compact display (icon + verb + subject)
-/// for the conversation tool rows. Extracted from ToolCallView so the
-/// classification path is unit-testable.
 enum ToolClassifier {
     enum Icon: String {
         case agent = "Agents"
@@ -31,20 +28,15 @@ enum ToolClassifier {
 
     static func cleanToolName(_ name: String) -> String {
         var cleanedName = name
-        // Strip MCP prefixes
         if let range = cleanedName.range(of: #"^mcp__[^_]+__"#, options: .regularExpression) {
             cleanedName = String(cleanedName[range.upperBound...])
         }
-        // Strip common suffixes
         for suffix in ["_workspace-mcp", "-workspace-mcp"] where cleanedName.hasSuffix(suffix) {
             cleanedName = String(cleanedName.dropLast(suffix.count))
         }
         return cleanedName
     }
 
-    /// Detect prose ACP titles (human-readable, not tool identifiers): either
-    /// colon-prefixed like "sub-agent-explore: Explore …" or 3+ words. Mirrors
-    /// the desktop classifier's isProseToolName.
     static func isProseTitle(_ title: String) -> Bool {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) != nil else { return false }
@@ -73,7 +65,6 @@ extension ToolClassifier {
         let clean = context.clean
         let pathVal = context.pathValue
         let url = context.url
-        // GitHub API
         if clean.contains("github") {
             let method = input["method"]?.value as? String ?? "GET"
             let apiPath = pathVal
@@ -86,7 +77,6 @@ extension ToolClassifier {
             return ToolDisplay(icon: .github, verb: "GitHub", subject: subject, path: nil)
         }
 
-        // Linear
         if clean.contains("linear") {
             let summary = input["summary"]?.value as? String
             return ToolDisplay(
@@ -99,7 +89,6 @@ extension ToolClassifier {
             )
         }
 
-        // Web fetch
         if clean.contains("web-fetch") || clean.contains("web_fetch") || clean == "fetch" {
             let subject = url.map { url in
                 String(url.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
@@ -107,7 +96,6 @@ extension ToolClassifier {
             return ToolDisplay(icon: .web, verb: "Fetch", subject: subject, path: nil)
         }
 
-        // Browser
         if clean.contains("browser") || clean.contains("screenshot") || clean.contains("snapshot") {
             return ToolDisplay(icon: .browser, verb: "Browser", subject: nil, path: nil)
         }
@@ -120,7 +108,6 @@ extension ToolClassifier {
     static func classifyAgents(_ context: ClassificationContext) -> ToolDisplay? {
         let input = context.input
         let clean = context.clean
-        // Agent operations
         if clean.contains("agent") || clean.contains("delegate") || (clean.contains("report") && clean.contains("parent")) {
             if clean.contains("create") {
                 let agentName = input["name"]?.value as? String
@@ -221,7 +208,6 @@ extension ToolClassifier {
     static func classifyTasksAndGit(_ context: ClassificationContext) -> ToolDisplay? {
         let input = context.input
         let clean = context.clean
-        // Task operations
         if clean.contains("task") {
             if clean.contains("view") || clean.contains("list") { return ToolDisplay(icon: .task, verb: "View", subject: "task list", path: nil) }
             if clean.contains("add") { return ToolDisplay(icon: .task, verb: "Add", subject: "task", path: nil) }
@@ -230,7 +216,6 @@ extension ToolClassifier {
             return ToolDisplay(icon: .task, verb: "Task", subject: nil, path: nil)
         }
 
-        // Git operations
         if clean.contains("git") || clean.contains("commit") || clean.contains("stage") || clean.contains("merge") {
             if clean.contains("status") { return ToolDisplay(icon: .git, verb: "Git status", subject: nil, path: nil) }
             if clean.contains("commit") {
@@ -262,10 +247,6 @@ extension ToolClassifier {
         let command = context.command
         let url = context.url
         let name = context.name
-        // Prose _acpTitle fallback: render the human-readable title verbatim
-        // rather than the generic spanner row (mid-turn blocks often carry
-        // ONLY the title — providers send raw_input: null). Guarded by a prose
-        // check so raw tool-name-shaped titles keep the cleaned-name fallback.
         if let title = acpTitle, isProseTitle(title) {
             let lower = title.lowercased()
             let icon: Icon = lower.contains("agent") ? .agent
@@ -280,7 +261,6 @@ extension ToolClassifier {
             )
         }
 
-        // Generic fallback: use tool name as verb, first meaningful input as subject
         let fallbackSubject = (pathVal ?? query ?? infoReq ?? command ?? url).map { subject in
             String(subject.prefix(Constants.Conversation.ToolClassifier.compactSubjectMaximumLength))
         }

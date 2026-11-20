@@ -1,8 +1,6 @@
 import Foundation
 import Textual
 
-/// Shared source preparation and semantic parsing only. Textual still resolves
-/// attachments and applies the current session, style and layout on each view.
 @MainActor
 final class MarkdownContentCache: MarkupParser {
     static let shared = MarkdownContentCache()
@@ -35,12 +33,8 @@ final class MarkdownContentCache: MarkupParser {
         private static let sourceOverhead = 128
     }
 
-    // Bump these when preparation or parser semantics change. This parser has ONE
-    // fixed configuration: Foundation defaults, nil base URL, no syntax extensions.
-    // Future options must get distinct keys before sharing this semantic store.
     private static let preparationVersion = 1
     private static let parserVersion = 1
-    /// Offsets the chat variant's key so it never shares an entry with plain parses.
     private static let standaloneLinkRowsVariant = 1 << 16
     private static let preparedCostLimit = 2_097_152
     private static let parsedCostLimit = 8_388_608
@@ -88,8 +82,6 @@ final class MarkdownContentCache: MarkupParser {
         )
     }
 
-    /// The parse with each single-link paragraph rewritten into a
-    /// `StandaloneLinkRow` block, cached separately from the plain parse.
     func attributedStringWithLinkRows(for input: String) throws -> AttributedString {
         let plain = try attributedString(for: input)
         return parsed.value(
@@ -100,15 +92,12 @@ final class MarkdownContentCache: MarkupParser {
         )
     }
 
-    /// Foundation's storage size is opaque. Charge conservatively for source,
-    /// attributed characters and semantic runs; this is not a heap-size claim.
     private static func parsedCost(input: String, value: AttributedString) -> Int {
         input.utf8.count * semanticSourceMultiplier
             + String(value.characters).utf8.count * 2
             + value.runs.count * semanticRunOverhead
     }
 
-    /// Chat's parser: standalone link lines become full-width rows.
     struct LinkRowsParser: MarkupParser {
         func attributedString(for input: String) throws -> AttributedString {
             try MarkdownContentCache.shared.attributedStringWithLinkRows(for: input)

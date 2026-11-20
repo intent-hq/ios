@@ -16,6 +16,7 @@ The app has two edge drawers (Connections on the left, agent history on the righ
    1. Each drawer pan uses its own recognizer class (`EdgeDrawerPanRecognizer`), so nested drawers never wait on each other.
    2. Row actions and scrolling wait until the drawer's direction and edge gate rejects the pan.
    3. The coordinator reads `isOpen` as a live binding. UIKit can ask the gesture to begin before SwiftUI refreshes the representable.
+   4. `EdgeDrawerDrag` works in the drawer's opening frame: distances from its own edge, positive toward opening. Screen-space translations, velocities and positions convert once (`towardOpening`, `distanceFromEdge`).
 3. **Pane swipe.**
    1. A swipe right goes back and a swipe left goes forward. The pane only hints at the drag; the destination replaces it after commit.
    2. `isSwiping` stays true until a committed swipe finishes its animation, so pages can slide.

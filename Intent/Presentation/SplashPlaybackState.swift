@@ -1,9 +1,6 @@
 import Foundation
 import QuartzCore
 
-/// Monotonic time source for splash playback (ios#247). Injectable so tests
-/// step time deterministically; production samples `CACurrentMediaTime`,
-/// which wall-clock (NTP) adjustments never move.
 protocol SplashPlaybackClock: AnyObject {
     var now: TimeInterval { get }
 }
@@ -12,7 +9,6 @@ final class MediaTimeSplashClock: SplashPlaybackClock {
     var now: TimeInterval { CACurrentMediaTime() }
 }
 
-/// Playback position on one monotonic clock that excludes time spent paused.
 struct SplashPlaybackState {
     private let clock: any SplashPlaybackClock
     private(set) var accumulatedTime: TimeInterval = 0

@@ -20,7 +20,6 @@ struct SlashSkillContext: Equatable {
     }
 }
 
-/// Lowercases every name and description once per catalog so each query only matches and sorts.
 struct SkillSearchIndex {
     private enum MatchRank: Int {
         case exact, prefix, name, description

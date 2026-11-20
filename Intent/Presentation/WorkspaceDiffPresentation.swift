@@ -26,8 +26,6 @@ nonisolated struct WorkspaceDiffPresentation: Sendable {
         line.content.hasSuffix("\n") ? String(line.content.dropLast()) : line.content
     }
 
-    /// Commit diffs retain complete source. Working/staged diffs only expose hunks:
-    /// lexer state starts fresh at each contiguous hunk side, never across omitted lines.
     func sources() -> [Source] {
         if let oldSource, let newSource {
             return [fullSource(oldSource, old: true), fullSource(newSource, old: false)]
@@ -52,7 +50,6 @@ nonisolated struct WorkspaceDiffPresentation: Sendable {
                       number > 0, number <= lines.count else { continue }
                 let text = lines[number - 1]
                 let displayed = Self.displayedContent(line)
-                // The builder's no-newline annotation is display-only, never lexer input.
                 guard displayed == text || displayed == text + "  ⟵ No newline at end of file" else { continue }
                 mappings.append(Mapping(row: RowID(hunk: hunkIndex, line: lineIndex), range: ranges[number - 1]))
             }
@@ -126,7 +123,6 @@ enum WorkspaceDiffSyntax {
         }
     ) async -> [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] {
         guard !Task.isCancelled else { return [:] }
-        // Building sources and mapping runs to rows scale with the file; keep both off the main thread.
         let sources = await Task.detached(priority: .userInitiated) { presentation.sources() }.value
         guard sources.reduce(0, { $0 + $1.text.utf8.count }) <= FileSyntaxHighlighter.maxBytes else { return [:] }
         var result: [WorkspaceDiffPresentation.RowID: [FileSyntaxRun]] = [:]

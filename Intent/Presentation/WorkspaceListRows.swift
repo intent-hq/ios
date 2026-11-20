@@ -1,9 +1,7 @@
 import Foundation
 
-/// The user's current list settings for one window's workspace list.
 struct WorkspaceListPresentation: Equatable {
     var viewMode: ViewMode
-    /// Collapsed group keys per grouped view mode.
     var collapsedGroups: [ViewMode: Set<String>]
     var searchText: String
 
@@ -28,17 +26,13 @@ struct WorkspaceListPresentation: Equatable {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Searching always shows every group expanded so matches are never hidden.
     func isGroupExpanded(_ key: String, in mode: ViewMode) -> Bool {
         !normalizedSearchText.isEmpty || collapsedGroups[mode]?.contains(key) != true
     }
 }
 
-/// Pure row derivation shared by the workspace list and iPad auto-selection,
-/// so "first workspace" always means the top row the user sees.
 @MainActor
 enum WorkspaceListRows {
-    /// Most recent first, without deleted (and, unless shown, archived) workspaces.
     static func sorted(
         _ workspaces: [Workspace],
         includeArchived: Bool,
@@ -65,8 +59,6 @@ enum WorkspaceListRows {
         }
     }
 
-    /// Groups keyed by repo in first-seen order, which follows each group's
-    /// most recent member when the input is already sorted.
     static func byRepo(_ workspaces: [Workspace]) -> [(String, [Workspace])] {
         var keys: [String] = []
         var groups: [String: [Workspace]] = [:]
@@ -89,7 +81,6 @@ enum WorkspaceListRows {
             .map { ($0.key.label, $0.value) }
     }
 
-    /// Workspace rows in on-screen order: collapsed groups contribute no rows.
     static func visible(
         filtered: [Workspace],
         presentation: WorkspaceListPresentation

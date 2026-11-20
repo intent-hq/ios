@@ -28,3 +28,12 @@ The daemon owns workspace status. It sends `displayStatus` as a snake_case wire 
 
 - `WorkspaceDisplayStatus`: `init?(wireValue:)`, `allCases`, `sortOrder`, `unknown`
 - `WorkspaceListViewModel`: `resolveDisplayStatus(for:)`, `hasUnreadAttention(_:)`, `hasRunningAgents(_:)`, `showsWaitingDot(_:)`, `groupedByRepo`, `collapsedGroups`, `isGroupExpanded(_:in:)`, `toggleGroup(_:in:)`
+
+## Addendum: PR pill (recorded 2026-11-20 from code comments)
+
+1. The metadata line follows the desktop `WorkspaceCard` (PROTOCOL §6.9). The primary pill is `selectPrimaryPr` over `pullRequests` merged with the workspace's monitors. An empty or absent `pullRequests` falls back to the single `activePullRequest` row before the merge, as in the desktop `mapWorkspacePRs`.
+2. "+N" is `countOtherMonitors` against the primary's repo-qualified number.
+3. The legacy `prStatus` / `prNumber` fields apply only when that pool is empty (intent-hq/ios#1091 tracks their removal).
+
+- `WorkspaceRowView`: `derivePrIndicator`, `legacyPillStatus(_:)`, `PrIndicatorModel`
+- `WorkspaceListRows`: `sorted`, `byRepo(_:)`, `visible` apply the group order above.
