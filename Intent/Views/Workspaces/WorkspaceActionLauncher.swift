@@ -56,10 +56,8 @@ struct WorkspaceActionLauncher: ViewModifier {
     // Keep the original modifier chain and ordering on devices without a vertical bar.
     private func floatingMenu(content: Content) -> some View {
         content
-            // Raised attention rows hide while the menu is open; the launcher's
-            // clearance keeps floating-composer transcripts out from under it.
+            // Raised attention rows hide while the menu is open.
             .environment(\.workspaceActionMenuOpen, isOpen)
-            .environment(\.workspaceActionLauncherClearance, isSearching ? 0 : AssistantLaunchButton.scrollClearance)
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)

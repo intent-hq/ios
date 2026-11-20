@@ -44,9 +44,6 @@ enum WorkspaceActionMenuDepth {
 extension EnvironmentValues {
     /// Whether an enclosing Intent menu is open over this content.
     @Entry var workspaceActionMenuOpen = false
-    /// Bottom room a floating Intent launcher needs over this content (0
-    /// when no launcher floats here, e.g. while searching or in a sheet).
-    @Entry var workspaceActionLauncherClearance: CGFloat = 0
 }
 
 extension View {

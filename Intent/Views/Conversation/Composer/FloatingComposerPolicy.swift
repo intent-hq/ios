@@ -105,15 +105,6 @@ enum FloatingComposerPolicy {
             composerVisible || usesPhoneQuestionPresentation ? nil : questionInputTop
         }
     }
-
-    /// Room the transcript keeps below its last row so a floating Intent
-    /// launcher (bottom-right) never covers it. Only a floating host needs
-    /// it — inline hosts lift the launcher above their composer, unchanged —
-    /// and only where a launcher floats over the chat (`launcherClearance`
-    /// is 0 elsewhere, e.g. the Assistant sheet).
-    static func transcriptBottomClearance(host: ComposerHost, launcherClearance: CGFloat) -> CGFloat {
-        host == .floatingOrnament ? launcherClearance : 0
-    }
 }
 
 /// Stateful lifecycle machine owned by `FloatingComposerOrnament` so unit tests

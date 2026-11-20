@@ -61,16 +61,6 @@ struct AssistantLauncherLayoutTests {
         #expect(spatial.menuBottomInset >= old.menuBottomInset + 24)
     }
 
-    @Test func transcriptEndsAboveBothControlStates() {
-        let layout = AssistantLauncherLayout.spatial
-        let clearance = FloatingComposerPolicy.transcriptBottomClearance(
-            host: .floatingOrnament, launcherClearance: layout.scrollClearance
-        )
-        #expect(clearance > layout.diameter + layout.launcherBottomInset)
-        #expect(clearance > layout.closeSize + layout.menuBottomInset)
-        #expect(clearance > AssistantLauncherLayout.handheld.scrollClearance)
-    }
-
     @Test func menuAndLauncherKeepTheSameTrailingEdgeAtNarrowWidths() {
         let layout = AssistantLauncherLayout.spatial
         // HomeActionTiles supplies the original 24pt content inset itself.

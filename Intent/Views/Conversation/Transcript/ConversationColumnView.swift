@@ -10,8 +10,6 @@ struct ConversationColumnView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
-    /// Room a floating Intent launcher needs over this chat (0 when none).
-    @Environment(\.workspaceActionLauncherClearance) private var launcherClearance
     @State private var questionWizardCollapsed = false
     @State private var submittingQuestions: PendingQuestionSet?
     @State private var conversationHeight: CGFloat = 0
@@ -125,8 +123,7 @@ struct ConversationColumnView: View {
                     viewModel: viewModel,
                     scrollState: transcriptScrollState,
                     onNavigateToNote: onNavigateToNote,
-                    onNavigateToAgent: onNavigateToAgent,
-                    bottomClearance: FloatingComposerPolicy.transcriptBottomClearance(host: composerHost, launcherClearance: launcherClearance)
+                    onNavigateToAgent: onNavigateToAgent
                 )
                 .environment(\.workspaceTranscriptDesign, usesWorkspaceDesign)
                 .overlay(alignment: .top) {
