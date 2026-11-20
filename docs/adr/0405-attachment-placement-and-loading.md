@@ -91,7 +91,7 @@ This matches the frontend's `attachment-image-url.ts`.
 
 ### 8. Resolved paths cache for the session; failures do not
 
-Applies to: `AttachmentImageLoader.pathCache`, `AttachmentImageLoader.resolvePath(...)`
+Applies to: `AttachmentImageLoader.pathCache`, `AttachmentImageLoader.inFlight`, `AttachmentImageLoader.resolvePath(...)`
 
 Attachment rows are immutable: an id never changes its path. Resolved paths
 therefore cache for the session, keyed by workspace id and attachment id.
@@ -99,6 +99,9 @@ Resolution failures are not cached, because a transient daemon error may
 succeed on the next render pass. The path is stored inside the resolution task,
 so an awaiter cancelled early (the view scrolled away) does not lose a
 completed resolution.
+
+`inFlight` holds the running resolutions, so concurrent requests for the same
+attachment share one `file.getAttachmentInfo` round-trip.
 
 The cache is deliberately uncapped (ios#264). It grows only with distinct
 attachments that the transcript rendered, at about 280 B per entry as measured
