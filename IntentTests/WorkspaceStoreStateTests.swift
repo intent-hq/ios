@@ -4,8 +4,6 @@ import Observation
 import Synchronization
 import Testing
 
-// MARK: - Unread attention flag tests
-
 @MainActor
 struct WorkspaceStoreAttentionTests {
     private func makeWorkspace(id: String, attention: String?) -> Workspace {
@@ -48,12 +46,10 @@ struct WorkspaceStoreAttentionTests {
 
     @Test func clearUnreadAttentionLocallyGuardedOnUnread() {
         let store = WorkspaceStore(forTesting: true)
-        // review_required must survive (mirrors the server-side markSeen guard)
         store.workspaces = [makeWorkspace(id: "ws-1", attention: "review_required")]
         store.clearUnreadAttentionLocally(workspaceId: "ws-1")
         #expect(store.workspaces[0].attention == "review_required")
 
-        // Absent flag stays absent
         store.workspaces = [makeWorkspace(id: "ws-2", attention: nil)]
         store.clearUnreadAttentionLocally(workspaceId: "ws-2")
         #expect(store.workspaces[0].attention == nil)
@@ -76,8 +72,6 @@ struct WorkspaceStoreAttentionTests {
         )
     }
 }
-
-// MARK: - Waiting flag tests (protocol 6.17)
 
 @MainActor
 struct WorkspaceStoreWaitingTests {
@@ -128,7 +122,6 @@ struct WorkspaceStoreWaitingTests {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1")]
 
-        // Wrapped shape from the websocket-event-bridge
         store.handleEvent("event", params: [
             "subscriptionId": "sub-1",
             "event": [
@@ -140,7 +133,6 @@ struct WorkspaceStoreWaitingTests {
         ] as [String: Any])
         #expect(store.workspaces[0].waiting == true)
 
-        // Transition back to not-waiting
         store.handleEvent("event", params: [
             "event": [
                 "type": "workspace:waiting-changed",
@@ -205,8 +197,6 @@ struct WorkspaceStoreWaitingTests {
     }
 
     @Test func fullRowRefreshDropsWaitingWhenOmitted() throws {
-        // A full-row refresh (workspace.list / snapshot) that omits `waiting`
-        // means false — the flag must not stick from an older row.
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", waiting: true)]
 
@@ -216,12 +206,8 @@ struct WorkspaceStoreWaitingTests {
     }
 }
 
-// MARK: - Fetch publish-order regression tests
-
 @MainActor
 struct WorkspaceStorePublishOrderTests {
-    /// Regression: workspace observers must see the completed fetch timestamp at
-    /// the exact moment a fetched workspace list invalidates their dependency.
     @Test func publishFetchedWorkspaces_observerSeesLastUpdatedAtInvalidation() throws {
         enum ObservationState {
             case observed(Bool)
@@ -263,14 +249,8 @@ struct WorkspaceStorePublishOrderTests {
     }
 }
 
-// MARK: - Per-connection routing
-
-/// Stores constructed over distinct injected connections (one per pinned
-/// backend session) must fetch, subscribe, and publish independently.
 @MainActor
 struct WorkspaceStoreConnectionRoutingTests {
-    /// Poll (bounded) until the condition holds — avoids fixed-sleep
-    /// flakiness for assertions on Task-spawned work.
     private func waitFor(_ condition: () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }

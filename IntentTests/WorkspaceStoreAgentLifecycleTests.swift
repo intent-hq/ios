@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS).
-/// `nonisolated`: the `@Test(arguments:)` expansion reads this outside the main actor.
 nonisolated private let kAgentLifecycleEventTypes = [
     "agent:started",
     "agent:completed",
@@ -40,9 +38,6 @@ struct WorkspaceStoreAgentLifecycleTests {
         )
     }
 
-    // MARK: - Agent lifecycle events never bump lastActivity locally
-    // (lastActivity is intentd-derived; see docs/protocol/methods/workspace.md)
-
     @Test(arguments: kAgentLifecycleEventTypes)
     func agentLifecycleEventLeavesLastActivityUntouched(eventType: String) {
         let store = WorkspaceStore(forTesting: true)
@@ -69,8 +64,6 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces.isEmpty)
     }
 
-    // MARK: - Unknown agent events are logged but don't update state
-
     @Test func unknownAgentEventLeavesLastActivityUntouched() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-07-17T10:00:00Z")]
@@ -85,18 +78,14 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces[0].lastActivity == "2026-07-17T10:00:00Z")
     }
 
-    // MARK: - Subscription.push race condition prevention
-
     @Test func snapshotPushBeforeSubscriptionIdReturnsIsProcessed() async {
         let store = WorkspaceStore(forTesting: true)
 
-        // Initialize reconciler manually (simulates subscribeLiveState's synchronous init)
         await store.setTestReconciler(DeltaReconciler<Workspace>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in WorkspaceStore.parseWorkspace(dict) }
         ))
 
-        // Feed a snapshot push BEFORE workspaceSubscriptionId is set (simulates race)
         let snapshotParams: [String: Any] = [
             "subscriptionId": "sub-123",
             "kind": "snapshot",
@@ -107,13 +96,10 @@ struct WorkspaceStoreAgentLifecycleTests {
         ]
         store.handleEvent("subscription.push", params: snapshotParams)
 
-        // Verify the snapshot was processed even though subscriptionId wasn't set yet
         #expect(store.workspaces.count == 1)
         #expect(store.workspaces[0].id == "ws-1")
         #expect(store.workspaces[0].title == "Test Workspace")
     }
-
-    // MARK: - addOrUpdate dedupe (workspace.create response vs subscription delta race, #1066)
 
     private func makeLiveStore(snapshot: [[String: Any]]) async -> WorkspaceStore {
         let store = WorkspaceStore(forTesting: true)
@@ -140,7 +126,6 @@ struct WorkspaceStoreAgentLifecycleTests {
     }
 
     @Test func addOrUpdateAfterDeltaAddedKeepsSingleRow() async throws {
-        // Delta beats the workspace.create response (the common case)
         let store = await makeLiveStore(snapshot: [])
         store.handleEvent("subscription.push", params: deltaPush(
             seq: 1,
@@ -156,7 +141,6 @@ struct WorkspaceStoreAgentLifecycleTests {
     }
 
     @Test func addOrUpdateBeforeDeltaKeepsSingleRow() async throws {
-        // workspace.create response beats the delta
         let store = await makeLiveStore(snapshot: [["id": "ws-1", "title": "Existing"]])
 
         let response = try #require(WorkspaceStore.parseWorkspace(["id": "ws-new", "title": "<Untitled>"]))
@@ -174,8 +158,6 @@ struct WorkspaceStoreAgentLifecycleTests {
     }
 
     @Test func addOrUpdateSurvivesUnrelatedDelta() async throws {
-        // The seeded reconciler entry keeps the manual row across a delta apply
-        // that doesn't mention the new workspace
         let store = await makeLiveStore(snapshot: [["id": "ws-1", "title": "Existing"]])
 
         let response = try #require(WorkspaceStore.parseWorkspace(["id": "ws-new", "title": "<Untitled>"]))
@@ -192,8 +174,6 @@ struct WorkspaceStoreAgentLifecycleTests {
     }
 
     @Test func addOrUpdatePublishesLastActivityAsReceived() throws {
-        // The workspace.create response is the daemon's row; no local
-        // timestamp is layered on top of it
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-new", lastActivity: "2026-07-17T12:00:00Z")]
 
@@ -222,7 +202,6 @@ struct WorkspaceStoreAgentLifecycleTests {
     }
 
     @Test func addOrUpdateWithoutReconcilerReplacesExistingRow() throws {
-        // Legacy (non-live) mode: no reconciler, upsert still dedupes by id
         let store = WorkspaceStore(forTesting: true)
 
         let first = try #require(WorkspaceStore.parseWorkspace(["id": "ws-new", "title": "<Untitled>"]))

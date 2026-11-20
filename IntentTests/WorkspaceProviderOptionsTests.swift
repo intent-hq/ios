@@ -343,8 +343,6 @@ extension WorkspaceProviderOptionsTests {
         let consumer = UUID()
         store.retainSpecialists(consumer: consumer)
         await store.ensureSpecialists(consumer: consumer)
-        // A previously opened workspace picker does not retain a creation
-        // interest merely because its policy was loaded on this session.
         await store.workspaceProviderOptions.load()
         let checkpoint = connection.checkpoint
         connection.simulateDisconnect()

@@ -21,7 +21,6 @@ extension WorkspaceRowPresentationTests {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = format == "fractional"
             ? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]
-        // Stay halfway between hour boundaries so rendering cannot change the label.
         let timestamp = format == "invalid"
             ? "not-a-timestamp" : formatter.string(from: Date(timeIntervalSinceNow: -9000))
         let expected = format == "invalid" ? "not-a-timestamp" : "2h"
@@ -161,7 +160,6 @@ extension WorkspaceRowPresentationTests {
             .environment(\.colorScheme, scheme)
             .environment(\.dynamicTypeSize, .large)
             let pixels = try secondaryTextPixels(content)
-            // Independent Figma Grey 500 reference, rather than the palette under test.
             let expected = [140, 140, 137, 255]
             #expect(pixelCount(expected, in: pixels) > 20, "Missing secondary text color: \(status), \(scheme)")
             let oldMuted = try premultipliedChannels(Theme.mutedForeground(for: scheme))

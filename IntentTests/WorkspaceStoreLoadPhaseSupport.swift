@@ -1,8 +1,6 @@
 import Foundation
 @testable import Intent
 
-/// Test seams for coordinator fixtures that toggle "a read is running" and
-/// "a list was published" independently, as the store's single phase does.
 @MainActor
 extension WorkspaceStore {
     func setLoading(_ loading: Bool) {

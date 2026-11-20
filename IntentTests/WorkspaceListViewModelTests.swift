@@ -5,8 +5,6 @@ import Testing
 
 @Suite(.serialized)
 struct WorkspaceListViewModelTests {
-    // MARK: - Helpers
-
     private func makeWorkspace(
         id: String = "1",
         title: String = "Test",
@@ -60,8 +58,6 @@ struct WorkspaceListViewModelTests {
         WorkspaceStore.shared.setLoading(false)
     }
 
-    // MARK: - Observation forwarding
-
     @Test @MainActor func storeChangesInvalidateObservedProperties() async {
         let viewModel = setUp([])
         defer { tearDown() }
@@ -87,8 +83,6 @@ struct WorkspaceListViewModelTests {
         #expect(viewModel.workspaces.map(\.id) == ["updated"])
         #expect(viewModel.isLoading)
     }
-
-    // MARK: - filteredWorkspaces
 
     @Test func displayStatusWireValuesRemainExactAndCaseSensitive() {
         #expect(WorkspaceDisplayStatus(wireValue: "PR_OPEN") == nil)
@@ -177,8 +171,6 @@ struct WorkspaceListViewModelTests {
     }
 
     @Test @MainActor func filteredWorkspaces_lastActivityWinsOverCreatedAtAndUpdatedAt() {
-        // "1" has the newest createdAt/updatedAt but an older lastActivity;
-        // lastActivity must decide, as in the FE.
         let workspaces = [
             makeWorkspace(
                 id: "1",
@@ -216,8 +208,6 @@ struct WorkspaceListViewModelTests {
         let viewModel = setUp(workspaces)
         defer { tearDown() }
 
-        // updatedOnly → 03-01, createdOverUpdated → 02-01 (createdAt beats
-        // updatedAt), activity → 01-15 (lastActivity beats createdAt).
         #expect(viewModel.filteredWorkspaces.map(\.id) == ["updatedOnly", "createdOverUpdated", "activity"])
     }
 
@@ -236,8 +226,6 @@ struct WorkspaceListViewModelTests {
     }
 
     @Test @MainActor func filteredWorkspaces_comparesParsedTimesAcrossFractionalPrecision() {
-        // As strings, "…00:00:00Z" > "…00:00:00.500Z" ('Z' > '.'); parsed, the
-        // fractional stamp is later and must sort first.
         let workspaces = [
             makeWorkspace(id: "whole", lastActivity: "2026-01-01T00:00:00Z"),
             makeWorkspace(id: "fractional", lastActivity: "2026-01-01T00:00:00.500Z"),
@@ -248,8 +236,6 @@ struct WorkspaceListViewModelTests {
 
         #expect(viewModel.filteredWorkspaces.map(\.id) == ["fractional", "whole", "earlierFractional"])
     }
-
-    // MARK: - groupedByRepo
 
     @Test @MainActor func groupedByRepo_groupsByOwnerAndName() {
         let workspaces = [
@@ -278,8 +264,6 @@ struct WorkspaceListViewModelTests {
     }
 
     @Test @MainActor func groupedByRepo_ordersGroupsByMostRecentMember_notAlphabetically() {
-        // "zeta/late" has the single most recent workspace; "acme/app" has an
-        // older one plus the oldest. Alphabetical would put acme first.
         let workspaces = [
             makeWorkspace(
                 id: "a-old",
@@ -306,11 +290,8 @@ struct WorkspaceListViewModelTests {
 
         let groups = viewModel.groupedByRepo
         #expect(groups.map(\.0) == ["zeta/late", "acme/app", "mid/unstamped"])
-        // Members keep the activity order inside their group.
         #expect(groups[1].1.map(\.id) == ["a-mid", "a-old"])
     }
-
-    // MARK: - groupedByStatus
 
     @Test @MainActor func groupedByStatus_groupsAndSortsBySortOrder() {
         let workspaces = [
@@ -324,7 +305,6 @@ struct WorkspaceListViewModelTests {
 
         let groups = viewModel.groupedByStatus
         #expect(groups.count == 4)
-        // Sorted by sortOrder: idle(3), notStarted(4), inProgress(5), prOpen(7)
         #expect(groups[0].0 == "Idle")
         #expect(groups[1].0 == "No Code Changes")
         #expect(groups[2].0 == "In Progress")
@@ -350,11 +330,8 @@ struct WorkspaceListViewModelTests {
 
     @Test @MainActor func groupedByStatus_usesBackendDisplayStatusExclusively() {
         let workspaces = [
-            // BE says in_progress; local prStatus never overrides it
             makeWorkspace(id: "1", title: "Reopened", displayStatus: "in_progress", prStatus: "Merged"),
-            // BE-only prReady status (sortOrder 8, after prOpen)
             makeWorkspace(id: "2", title: "Mergeable", displayStatus: "pr_ready", prStatus: "Open"),
-            // No BE value — defaults to notStarted, not derived from prStatus
             makeWorkspace(id: "3", title: "Legacy", prStatus: "Open")
         ]
         let viewModel = setUp(workspaces)
@@ -428,23 +405,16 @@ extension WorkspaceListViewModelTests {
     }
 }
 
-/// Duplicate windows bound to one backend all observe the same
-/// FeedbackEvent/WindowCueEvent; the claim registry lets exactly one
-/// window's emitter play each event.
 @Suite @MainActor struct WindowSoundClaimRegistryTests {
     @Test func twoWindowsOnOneBackend_exactlyOnePlaybackPerEvent() {
         let registry = WindowSoundClaimRegistry()
         let event = UUID()
-        // Both duplicate windows observe the same event id; only the
-        // first observer plays.
         #expect(registry.claim(event))
         #expect(!registry.claim(event))
     }
 
     @Test func windowsOnDifferentBackends_unaffected() {
         let registry = WindowSoundClaimRegistry()
-        // Different backends publish distinct events (fresh ids); each
-        // window's claim succeeds.
         #expect(registry.claim(UUID()))
         #expect(registry.claim(UUID()))
     }
@@ -468,8 +438,6 @@ extension WorkspaceListViewModelTests {
         #expect(registry.claim(old))
         #expect(registry.claim(UUID()))
         #expect(registry.claim(UUID()))
-        // `old` was evicted (FIFO); the bound only needs to cover ids
-        // still observable within a MainActor turn of publication.
         #expect(registry.claim(old))
     }
 }

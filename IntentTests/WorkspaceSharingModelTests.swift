@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// The Share sheet's model against a scripted host: what it sends to create
-/// an invite link (for anyone or one account), what it shows, and how
-/// failures read.
 @MainActor
 struct WorkspaceSharingModelTests {
     final class Host {
