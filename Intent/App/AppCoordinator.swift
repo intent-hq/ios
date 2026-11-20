@@ -291,7 +291,6 @@ extension AppCoordinator {
                     if wasDisconnected {
                         waitForWorkspaceLoadThenClearOverlay()
                         revalidateCurrentAgentAfterReconnect()
-                    } else {
                     }
                 default:
                     break
