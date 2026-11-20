@@ -432,13 +432,15 @@ extension AppCoordinatorTests {
 
     // MARK: - Window retarget policy (window model v2)
 
-    @Test func retargetRouteSwitchesBoundWindowInPlaceOnMultiWindowPlatforms() {
+    @Test func retargetRouteSwitchesBoundWindowInPlaceOnIPad() {
         #expect(
             WindowRetargetRoute.route(
                 currentBackendID: BackendID(UUID()),
-                supportsMultipleWindows: true
+                target: BackendID(UUID()),
+                supportsMultipleWindows: true,
+                opensSeparateBackendWindows: false
             ) == .rebindInPlace,
-            "Picking another connection reuses the window; only the explicit Open in New Window action spawns one"
+            "On iPad picking another connection reuses the window; only the explicit Open in New Window action spawns one"
         )
     }
 }
