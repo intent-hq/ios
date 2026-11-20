@@ -234,7 +234,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     func testDismissRequiresConfirmationAndCancelPreservesQuestions() throws {
         let app = try openQuestions()
         let transcript = app.scrollViews["transcript.scrollView"]
-        let lastTool = app.buttons["Edit design-system.astro"]
+        let lastTool = app.buttons["3 tool calls"]
         XCTAssertTrue(waitUntilVisible(lastTool, in: transcript, timeout: Self.timeout))
         tap(app.buttons["question.dismiss"])
         let confirmation = app.sheets["Dismiss questions?"]

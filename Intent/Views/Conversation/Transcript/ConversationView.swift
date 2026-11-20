@@ -1,6 +1,10 @@
 import SwiftUI
 import UIKit
 
+extension EnvironmentValues {
+    @Entry var collapseToolActivity = true
+}
+
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
     @State private var proposals: ProposalActionStore
@@ -66,6 +70,7 @@ private struct ConversationViewContent: View {
     var onAgentUnavailable: (() -> Void)?
     var assistantStore: AssistantStore?
     var onShowAssistantHistory: (() -> Void)?
+    @AppStorage("conversation.collapseToolActivity") private var collapseToolActivity = true
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
@@ -302,6 +307,7 @@ private extension ConversationViewContent {
             usesWorkspaceDesign: usesWorkspaceDesign,
             answeringWorkspaceQuestions: $answeringWorkspaceQuestions
         ) { agentPresentation.present(.demoCover) }
+            .environment(\.collapseToolActivity, collapseToolActivity)
     }
 
     private var dismissQuestionsErrorPresented: Binding<Bool> {
@@ -377,6 +383,9 @@ private extension ConversationViewContent {
             }
             .disabledWhileReadOnly()
             .accessibilityIdentifier("conversation.actions.rename")
+            Divider()
+            Toggle("Collapse tool activity", isOn: $collapseToolActivity)
+                .accessibilityIdentifier("conversation.actions.collapseToolActivity")
             Divider()
             Button(role: .destructive) {
                 handleAgentAction(.delete)
