@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Shown above a note whose body is only a prefix: the daemon cut a note too
-/// large for one read and the rest could not be loaded (PROTOCOL §5.2
-/// "Bounded note and comment reads"). Offers a retry of the whole read.
 struct NoteTruncationNotice: View {
     let shownBytes: Int
     let totalBytes: Int?
@@ -35,7 +32,6 @@ struct NoteTruncationNotice: View {
         .accessibilityIdentifier("note-truncation-notice")
     }
 
-    /// "This note is only partly loaded. Showing the first 469 KB of 1.2 MB."
     static func message(shownBytes: Int, totalBytes: Int?) -> String {
         let shown = ByteCountFormatter.string(fromByteCount: Int64(shownBytes), countStyle: .file)
         guard let totalBytes, totalBytes > shownBytes else {

@@ -1,23 +1,12 @@
 import SwiftUI
 
-/// Renders note content as interleaved markdown, Mermaid diagrams, and native task rows
-/// (plain checkbox rows + linked-task cards), matching the fe's
-/// `TaskItemNodeView` treatment instead of the old emoji marker substitution.
 struct NoteContentView: View {
     let content: String
     var workspaceId: String?
-    /// Resolve a note ID against the workspace note list (live linked-task
-    /// title/status); nil when unknown.
     let resolveNote: (String) -> Note?
-    /// Handler for URL taps inside markdown segments.
     var onOpenURL: ((URL) -> OpenURLAction.Result)?
-    /// Open a linked task note by ID (same path as intent link handling).
     var onOpenTaskNote: (String) -> Void
-    /// Write a plain checkbox line's status; args: 1-based line,
-    /// "todo" | "in-progress" | "done".
     var onSetLineStatus: (Int, String) -> Void
-    /// Write a linked task note's status; args: task note ID, task-note
-    /// status word (PROTOCOL §5.4 vocabulary).
     var onSetTaskNoteStatus: (String, String) -> Void
 
     var body: some View {
@@ -25,7 +14,6 @@ struct NoteContentView: View {
         let rows = segments.enumerated().map { offset, segment in
             (id: offset, content: segmentContent(segment))
         }
-        // Linked notes resolve on MainActor; row providers only return prepared values.
         VStack(alignment: .leading, spacing: Constants.Notes.Content.segmentSpacing) {
             ForEach(rows, id: \.id) { @Sendable row in
                 row.content
@@ -57,14 +45,11 @@ struct NoteContentView: View {
     }
 }
 
-/// Indent for nested checkboxes: ~6pt per leading whitespace column, capped.
 private func indentPadding(_ columns: Int) -> CGFloat {
     CGFloat(min(columns, Constants.Notes.Content.maximumIndentColumns))
         * Constants.Notes.Content.indentWidthPerColumn
 }
 
-/// A plain checkbox line: tappable status icon cycling
-/// todo → in-progress → done → todo, plus the line's inline markdown text.
 private struct PlainTaskRow: View {
     let line: NoteTaskLine
     let workspaceId: String?
@@ -100,8 +85,6 @@ private struct PlainTaskRow: View {
     }
 }
 
-/// A linked-task line rendered as a bordered card (fe `TaskItemNodeView` card
-/// layout): live status icon with a status menu, task title, tap to open.
 private struct LinkedTaskCardRow: View {
     let line: NoteTaskLine
     let linked: LinkedTaskRef
@@ -111,7 +94,6 @@ private struct LinkedTaskCardRow: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    /// The 8 task-note statuses (PROTOCOL §5.4) offered by the status menu.
     private static let statusOptions: [(status: TaskDisplayStatus, wire: String)] = [
         (.notStarted, "not_started"),
         (.waiting, "waiting"),
@@ -123,8 +105,6 @@ private struct LinkedTaskCardRow: View {
         (.cancelled, "cancelled")
     ]
 
-    /// Live status from the linked note when resolved, else the checkbox
-    /// marker fallback.
     private var status: TaskDisplayStatus {
         resolvedNote?.taskDisplayStatus ?? line.markerStatus
     }

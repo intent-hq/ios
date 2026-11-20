@@ -1,24 +1,14 @@
 import SwiftUI
 
-/// Metadata header shown above a task note's content, matching the fe's
-/// `NoteMetadataBar.svelte`: status (interactive), assigned agents, and
-/// relation chips (depends on / depended on by / conflicts with). Rows with
-/// no data are hidden; relation chips navigate to the related note.
 struct TaskMetadataHeaderView: View {
     let note: Note
-    /// All workspace notes (relation chip titles/statuses + reverse edges).
     let notes: [Note]
-    /// Resolve an agent ID to a display name; nil when unknown.
     let resolveAgentName: (String) -> String?
-    /// Resolve an agent ID to its creation date (assignee ordering); nil when unknown.
     let resolveAgentCreatedAt: (String) -> Date?
-    /// Navigate to a related note by ID.
     let onNavigateToNote: (String) -> Void
-    /// Write this task note's metadata status (PROTOCOL §5.4 vocabulary).
     let onSetStatus: (String) -> Void
     @Environment(\.colorScheme) var colorScheme
 
-    /// The 8 task-note statuses (PROTOCOL §5.4) offered by the status menu.
     private static let statusOptions: [(status: TaskDisplayStatus, wire: String)] = [
         (.notStarted, "not_started"),
         (.waiting, "waiting"),
@@ -30,10 +20,6 @@ struct TaskMetadataHeaderView: View {
         (.cancelled, "cancelled")
     ]
 
-    /// Reverse dependency edges computed client-side (fe parity): non-archived
-    /// task notes whose `dependsOn` includes `noteId`, sorted by id for stable
-    /// order. Archived notes are excluded — the note list hides them and
-    /// navigating to one is treated as not found.
     static func dependedOnBy(noteId: String, in notes: [Note]) -> [String] {
         notes
             .filter { !$0.isArchived && $0.id != noteId && $0.dependsOn.contains(noteId) }
@@ -41,16 +27,10 @@ struct TaskMetadataHeaderView: View {
             .sorted()
     }
 
-    /// Whether a depends-on chip shows the unmet highlight: the dependency is
-    /// in `unmetDependsOn` and the task itself is not complete (fe parity —
-    /// unmet highlighting is suppressed once the task is complete).
     static func showsUnmetDependency(_ depId: String, note: Note) -> Bool {
         note.taskStatus != "complete" && note.unmetDependsOn.contains(depId)
     }
 
-    /// Assignee ids for display (fe parity): deduplicated preserving first
-    /// occurrence, then sorted by agent creation date (oldest first; agents
-    /// with no resolvable date sort last, keeping their wire order).
     static func sortedAssigneeIds(
         _ ids: [String],
         createdAt: (String) -> Date?
@@ -98,8 +78,6 @@ struct TaskMetadataHeaderView: View {
             Divider()
         }
     }
-
-    // MARK: - Rows
 
     private func row(_ label: String, @ViewBuilder content: () -> some View) -> some View {
         HStack(alignment: .top, spacing: Constants.Notes.Metadata.rowSpacing) {
@@ -153,7 +131,6 @@ struct TaskMetadataHeaderView: View {
                 .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Metadata.chipCornerRadius))
             return (id: agentId, content: content)
         }
-        // Resolve names and environment values on MainActor, before the row provider.
         return VStack(alignment: .leading, spacing: Constants.Notes.Metadata.chipStackSpacing) {
             ForEach(rows, id: \.id) { @Sendable row in
                 row.content
@@ -178,7 +155,6 @@ struct TaskMetadataHeaderView: View {
         }
     }
 
-    /// Short display fallback for an unresolvable agent ID.
     static func truncatedId(_ id: String) -> String {
         id.count <= Constants.Notes.Metadata.fallbackIdMaximumLength
             ? id
@@ -186,15 +162,11 @@ struct TaskMetadataHeaderView: View {
     }
 }
 
-/// Relation chip variants, matching fe `TaskRelationLink.svelte`.
 enum ChipVariant {
     case conflict
     case dependency
 }
 
-/// Clickable chip linking to a related task note (fe `TaskRelationLink`):
-/// live status icon (dependency) or warning triangle (conflict), title, and
-/// an hourglass marker on unmet dependencies.
 private struct TaskRelationChip: View {
     @ScaledMetric(relativeTo: .caption2) private var warningIconSize: CGFloat = 11
     let relatedNote: Note?
@@ -204,7 +176,6 @@ private struct TaskRelationChip: View {
     let onTap: () -> Void
     @Environment(\.colorScheme) var colorScheme
 
-    // fe `text-warning` treatment for conflict chips (shared #f59e0b amber).
     private static let warning = TaskStatusIconView.Palette.amber
 
     private var title: String {

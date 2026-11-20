@@ -63,8 +63,6 @@ struct NoteListView: View {
     }
 }
 
-// MARK: - Tree Node View (recursive)
-
 struct NoteTreeNodeView: View {
     let note: Note
     let noteStore: NoteStore
@@ -93,7 +91,6 @@ struct NoteTreeNodeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // This note's row — chevron and title have separate tap targets
             NoteRowView(
                 note: note,
                 allNotes: noteStore.notes,
@@ -107,7 +104,6 @@ struct NoteTreeNodeView: View {
                 coordinator.onSelectNote(note.id, workspaceId: workspaceId, noteTitle: note.title)
             }
 
-            // Children (if expanded)
             if hasChildren, !isCollapsed {
                 VStack(spacing: WorkspaceDetailStyle.taskRowSpacing) {
                     ForEach(children) { child in
@@ -138,11 +134,8 @@ struct NoteTreeNodeView: View {
     }
 }
 
-// MARK: - Note Row View
-
 struct NoteRowView: View {
     let note: Note
-    /// Resolve live task progress from the complete note list.
     var allNotes: [Note] = []
     var depth: Int = 0
     var hasChildren: Bool = false
@@ -223,7 +216,6 @@ struct NoteRowView: View {
                 lineLimit: NoteRowLayout.titleLineLimit(usesAccessibilityLayout: usesAccessibilityLayout),
                 alignsWithCheckbox: depth == 0
             )
-                // Center short nested titles on the checkbox; wrapped titles retain their cap-top alignment.
                 .frame(minHeight: depth > 0 ? WorkspaceDetailStyle.iconSize : nil)
                 .tracking(depth == 0 ? WorkspaceDetailStyle.rowTitleTracking : WorkspaceDetailStyle.bodyTracking)
                 .foregroundStyle(WorkspaceDetailStyle.foreground(for: colorScheme))
@@ -279,7 +271,6 @@ private struct NoteRowText: View {
 }
 
 enum NoteRowLayout {
-    // Expand each button's hit area into the row gap without changing visible spacing.
     static let tapTargetPadding = (Constants.Accessibility.minimumTapTarget - WorkspaceDetailStyle.iconSize) / 2
 
     static var disclosureTargetSize: CGFloat {
