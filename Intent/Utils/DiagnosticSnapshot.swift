@@ -27,7 +27,6 @@ nonisolated struct DiagnosticRecord: Codable, Equatable, Sendable {
 nonisolated struct DiagnosticSnapshot: Sendable {
     let jsonLines: Data
     let metadata: Metadata
-    // In-memory review validity only; never serialized into the report.
     let historyRevision: UUID
     let expiresAt: Date
 
@@ -46,8 +45,6 @@ nonisolated struct DiagnosticSnapshot: Sendable {
         let loss: DiagnosticLoss
 
         init(generatedAt: Date, retainedRecords: Int, loss: DiagnosticLoss) {
-            // App metadata is read internally and restricted to numeric version
-            // strings. No device name, locale, path or stable device identifier.
             appVersion = Self.version(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString"))
             appBuild = Self.version(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion"))
             let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -71,8 +68,6 @@ nonisolated struct DiagnosticSnapshot: Sendable {
     func metadataJSON() throws -> Data { try DiagnosticEncoding.encoder().encode(metadata) }
 }
 
-/// Best-effort current-process indicators, deliberately not a promise of
-/// lossless capture. Abrupt termination can also lose the indicators themselves.
 nonisolated struct DiagnosticLoss: Codable, Sendable {
     var queueOverflow: UInt64 = 0
     var invalidScope: UInt64 = 0

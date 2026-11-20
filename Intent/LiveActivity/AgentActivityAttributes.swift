@@ -3,14 +3,11 @@ import Foundation
 import ActivityKit
 #endif
 
-/// One running workspace shown in the agent Live Activity. Shared by the app, which
-/// publishes it, and the widget extension, which renders it.
 nonisolated struct AgentActivityRow: Codable, Hashable, Identifiable, Sendable {
     let connectionId: UUID
     let workspaceId: String
     let title: String
     let detail: String?
-    /// The agent a tap opens; nil when no agent was reported.
     let agentId: String?
     let agentName: String?
 
@@ -27,8 +24,6 @@ nonisolated struct AgentActivityRow: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// `intent://agent?...` — opens one agent from a Live Activity tap through
-/// the same routing as a tapped notification.
 nonisolated struct AgentActivityLink: Equatable, Sendable {
     static let host = "agent"
 
@@ -80,12 +75,9 @@ nonisolated struct AgentActivityLink: Equatable, Sendable {
 #if os(iOS)
 nonisolated struct AgentActivityAttributes: ActivityAttributes, Sendable {
     nonisolated struct ContentState: Codable, Hashable, Sendable {
-        /// The first running workspaces, capped so the payload stays small.
         var rows: [AgentActivityRow]
         var runningCount: Int
-        /// Unix seconds, so the push relay's JSON decodes without a date strategy.
         var updatedAt: Double
-        /// The agent that just finished; the relay sets it when the last one stops.
         var finished: AgentActivityRow?
 
         var updatedDate: Date { Date(timeIntervalSince1970: updatedAt) }

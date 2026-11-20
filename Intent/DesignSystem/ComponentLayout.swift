@@ -33,7 +33,6 @@ extension Constants {
         static let startAngle = Angle.radians(-.pi / 2)
     }
 
-    /// Shape geometry must remain readable outside the main actor.
     nonisolated enum IntentLogo {
         static let viewBoxSize: CGFloat = 24
         static let strokeWidth: CGFloat = 2.06

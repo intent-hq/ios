@@ -1,16 +1,12 @@
 import Foundation
 import Synchronization
 
-/// Synchronous, bounded ingress for callbacks. One independent worker drains
-/// the buffer; no Task per event and no file I/O while holding the intake lock.
 nonisolated final class DiagnosticStore: Sendable {
     static let shared = DiagnosticStore()
 
     struct Scope: Sendable {
-        // DiagnosticIntake needs same-file access; broader access would allow fabricated source sessions.
         // swiftlint:disable:next strict_fileprivate
         fileprivate let session: UUID
-        // DiagnosticIntake allocates ordinals in this file; callers must not fabricate source IDs.
         // swiftlint:disable:next strict_fileprivate
         fileprivate let ordinal: UInt64
     }
@@ -22,7 +18,6 @@ nonisolated final class DiagnosticStore: Sendable {
         self.init(storage: DiagnosticFileStorage.applicationStorage)
     }
 
-    /// Internal dependency injection. Production uses shared, with fixed limits.
     init(
         storage: any DiagnosticStorage,
         limits: DiagnosticLimits = DiagnosticLimits(),
@@ -34,8 +29,6 @@ nonisolated final class DiagnosticStore: Sendable {
         scheduleDrain()
     }
 
-    /// Never pass a backend/scene/request ID: scopes are allocated here and
-    /// only have meaning within this launch. Rotation does not reuse ordinals.
     func makeScope() -> Scope? { intake.makeScope() }
 
     @discardableResult
@@ -45,17 +38,10 @@ nonisolated final class DiagnosticStore: Sendable {
         return accepted
     }
 
-    /// Flushes all events admitted before this call reaches the writer. Returns
-    /// a value snapshot, never the history file's unsanitized bytes or URL.
     func snapshot() async -> DiagnosticSnapshot { await writer.snapshot() }
 
-    /// Clear linearizes at the writer: already queued events are discarded;
-    /// events admitted after that point are new history. False means deletion
-    /// could not be confirmed (for example, protected files before unlock).
     func clearHistory() async -> Bool { await writer.clearHistory() }
 
-    /// One pinned, fixed-entry ZIP workspace. The sharing layer must end the
-    /// lease after its consumer finishes. Orphans are deleted on next launch.
     func beginReport() async -> DiagnosticReport? { await writer.beginReport() }
     func endReport(_ report: DiagnosticReport) async -> Bool { await writer.endReport(report) }
 
@@ -66,7 +52,6 @@ nonisolated final class DiagnosticStore: Sendable {
     private func scheduleDrain() {
         guard intake.scheduleWorker() else { return }
         let writer = writer
-        // Deliberately independent of UI cancellation, priority and task locals.
         Task.detached(priority: .utility) { await writer.drain() }
     }
 }
@@ -84,7 +69,6 @@ nonisolated struct DiagnosticReport: Sendable {
     }
 }
 
-/// Lock covers only bounded value operations, never storage or suspension.
 nonisolated final class DiagnosticIntake: Sendable {
     private struct State {
         var records: [DiagnosticRecord] = []

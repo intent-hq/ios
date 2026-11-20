@@ -1,12 +1,6 @@
 import AVFAudio
 import Foundation
 
-/// Synthesizes the agent-notification chime as a WAV file on disk.
-///
-/// visionOS emits the notification sound from the source window's scene via
-/// RealityKit (`WindowFeedbackSoundEmitter`), which needs a loadable audio
-/// file, and the bundle ships no audio assets. The chime (two decaying
-/// sine tones) is generated once and cached in the temporary directory.
 enum NotificationChime {
     @MainActor
     static func playForegroundSound() async {
@@ -18,7 +12,6 @@ enum NotificationChime {
         player.stop()
     }
 
-    /// 16-bit mono PCM.
     private static let sampleRate = 44_100
     private static let duration = 0.6
     private static let riffHeaderByteCount = 44
@@ -38,8 +31,6 @@ enum NotificationChime {
     private static let normalizedAmplitudeLimit = 1.0
     private static let int16AmplitudeLimit = 32_766.0
 
-    /// URL of the cached chime WAV, generating it on first use. Nil only
-    /// when the file cannot be written.
     static func fileURL() -> URL? {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("intent-notification-chime-v2.wav")
@@ -52,7 +43,6 @@ enum NotificationChime {
         }
     }
 
-    /// Complete WAV bytes (44-byte RIFF header + 16-bit little-endian PCM).
     static func wavData() -> Data {
         let samples = chimeSamples()
         var data = Data(capacity: Self.riffHeaderByteCount + samples.count * Self.bytesPerSample)
@@ -82,7 +72,6 @@ enum NotificationChime {
         return data
     }
 
-    /// A quiet C5/E5 pair with rounded attacks and a fade to silence.
     static func chimeSamples() -> [Int16] {
         let count = Int(Double(sampleRate) * duration)
         return (0..<count).map { sampleIndex in

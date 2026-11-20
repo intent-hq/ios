@@ -1,8 +1,5 @@
 import Foundation
 
-/// A saved asset belongs to the URL's workspace and has one percent-decoded
-/// identifier. Query/fragment hints are not part of its identity; in particular,
-/// a Markdown-authored backend hint must never select a different session.
 nonisolated struct WorkspaceAssetLink: Equatable {
     let workspaceId: String
     let assetId: String

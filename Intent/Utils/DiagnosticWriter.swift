@@ -1,7 +1,5 @@
 import Foundation
 
-/// All file work and retained history live on this non-main actor. Each batch
-/// commits atomically, so relaunch sees either complete old or complete new data.
 actor DiagnosticWriter {
     private let storage: any DiagnosticStorage
     private let intake: DiagnosticIntake
@@ -31,7 +29,6 @@ actor DiagnosticWriter {
         repeat {
             flushBatch()
             if intake.finishBatch() { return }
-            // Fairness for snapshot/clear without one task per record.
             await Task.yield()
         } while true
     }
@@ -56,12 +53,9 @@ actor DiagnosticWriter {
         records = []
         historyRevision = UUID()
         loss = DiagnosticLoss()
-        // Never reload pre-clear history if removing a protected file failed.
         loaded = true
         var succeeded = true
         do { try storage.clearHistory() } catch { succeeded = false }
-        // A different window may still have a system share consumer. Its
-        // immutable report is removed by endReport, not underneath the reader.
         if activeReport == nil {
             do { try storage.clearReports() } catch { succeeded = false }
         }
@@ -82,8 +76,6 @@ actor DiagnosticWriter {
             return .needsReview(self.snapshot())
         }
         guard let report = beginReport(snapshot: snapshot) else { return .unavailable }
-        // File preparation may cross the retention boundary or a clock rollback.
-        // Use one observation for both time bounds and the revision check.
         let finishedAt = observeTime()
         guard isValid(snapshot, at: finishedAt) else {
             _ = endReport(report)
@@ -117,8 +109,6 @@ actor DiagnosticWriter {
 
     func endReport(_ report: DiagnosticReport) -> Bool {
         guard let activeReport, activeReport.matches(report) else { return false }
-        // Even if deletion fails, the consumer has finished. The next prepare
-        // or Clear retries deletion, without accumulating report directories.
         defer { self.activeReport = nil }
         do {
             try storage.clearReports()
@@ -134,8 +124,6 @@ actor DiagnosticWriter {
         if let lastObservedTime, timestamp < lastObservedTime {
             historyRevision = UUID()
         }
-        // Track the latest observation, not a high-water mark: a fresh review
-        // after rollback must be usable without waiting for the clock to catch up.
         lastObservedTime = timestamp
         return Date(timeIntervalSince1970: timestamp.timeIntervalSince1970.rounded(.down))
     }
@@ -184,8 +172,6 @@ actor DiagnosticWriter {
             loaded = true
             loss.historyReset = true
         } catch {
-            // Retry on a later batch if storage becomes available. Do not turn
-            // unreadable history into an empty replacement before a safe read.
             loss.storageUnavailable = true
         }
     }
@@ -209,9 +195,6 @@ actor DiagnosticWriter {
     private func expire(at timestamp: Date) {
         let cutoff = timestamp.addingTimeInterval(-limits.age)
         let previous = records.count
-        // Age by FIRST occurrence: we cannot subtract expired occurrences from
-        // a summary without retaining every timestamp. Clock rollback purges
-        // future records instead of extending their retention indefinitely.
         records.removeAll { $0.firstTimestamp <= cutoff || $0.lastTimestamp > timestamp }
         loss.expiredRecords += UInt64(previous - records.count)
         if records.count != previous {
@@ -240,8 +223,6 @@ actor DiagnosticWriter {
             lines.append(line)
             kept.append(record)
         }
-        // Eviction invalidates older reviews, not an active consumer's report.
-        // Arrivals that fit leave the reviewed bytes shareable unchanged.
         if full { historyRevision = UUID() }
         records = kept.reversed()
         return lines.reversed().reduce(into: Data()) { data, line in

@@ -1,9 +1,5 @@
 import Foundation
 
-/// Deliberately not a general archive library: two fixed UTF-8 names, stored
-/// (uncompressed) entries, no paths supplied by callers, extras, or timestamps.
-/// Classic ZIP APPNOTE local headers + central directory + end record. Sizes
-/// are bounded well below ZIP64 and all integers are written little-endian.
 nonisolated enum DiagnosticZIP {
     enum Failure: Error { case oversized }
 
@@ -11,13 +7,12 @@ nonisolated enum DiagnosticZIP {
     private static let maximumHeaderBytes = 1024
     static let maximumArchiveBytes = DiagnosticLimits.maximumHistoryBytes + maximumMetadataBytes + maximumHeaderBytes
 
-    // Classic ZIP APPNOTE signatures and fixed fields for stored UTF-8 entries.
     private static let localHeaderSignature: UInt32 = 0x04034b50
     private static let centralDirectorySignature: UInt32 = 0x02014b50
     private static let endOfDirectorySignature: UInt32 = 0x06054b50
     private static let version20: UInt16 = 20
     private static let utf8Flag: UInt16 = 0x0800
-    private static let dosEpochDate: UInt16 = 0x0021 // 1980-01-01; no filesystem metadata
+    private static let dosEpochDate: UInt16 = 0x0021
     private static let reversedCRC32Polynomial: UInt32 = 0xedb88320
     private static let checksumCancellationInterval = 16_384
 
@@ -53,21 +48,21 @@ nonisolated enum DiagnosticZIP {
         append(localHeaderSignature, to: &data)
         append(version20, to: &data)
         append(utf8Flag, to: &data)
-        append(UInt16(0), to: &data) // Stored
-        append(UInt16(0), to: &data) // DOS time
+        append(UInt16(0), to: &data)
+        append(UInt16(0), to: &data)
         append(dosEpochDate, to: &data)
         append(entry.checksum, to: &data)
         append(UInt32(entry.bytes.count), to: &data)
         append(UInt32(entry.bytes.count), to: &data)
         append(UInt16(entry.name.count), to: &data)
-        append(UInt16(0), to: &data) // No extras
+        append(UInt16(0), to: &data)
         data.append(entry.name)
         data.append(entry.bytes)
     }
 
     private static func appendCentral(_ entry: Entry, to data: inout Data) {
         append(centralDirectorySignature, to: &data)
-        append(version20, to: &data) // Made by DOS, version 2.0
+        append(version20, to: &data)
         append(version20, to: &data)
         append(utf8Flag, to: &data)
         append(UInt16(0), to: &data)
@@ -77,11 +72,11 @@ nonisolated enum DiagnosticZIP {
         append(UInt32(entry.bytes.count), to: &data)
         append(UInt32(entry.bytes.count), to: &data)
         append(UInt16(entry.name.count), to: &data)
-        append(UInt16(0), to: &data) // Extra length
-        append(UInt16(0), to: &data) // Comment length
-        append(UInt16(0), to: &data) // Disk
-        append(UInt16(0), to: &data) // Internal attributes
-        append(UInt32(0), to: &data) // External attributes (not a symlink)
+        append(UInt16(0), to: &data)
+        append(UInt16(0), to: &data)
+        append(UInt16(0), to: &data)
+        append(UInt16(0), to: &data)
+        append(UInt32(0), to: &data)
         append(entry.offset, to: &data)
         data.append(entry.name)
     }

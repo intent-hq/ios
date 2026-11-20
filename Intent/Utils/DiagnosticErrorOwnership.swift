@@ -1,9 +1,6 @@
 import Foundation
 import Synchronization
 
-/// In-memory provenance, never serialized. Only app-owned boundaries attach a
-/// receipt; a server's domain/code/message cannot manufacture one. Copies of an
-/// NSError retain the same receipt, so propagation through stores records once.
 nonisolated final class DiagnosticErrorReceipt: Sendable {
     let failure: DiagnosticFailure
     private let claimed: Mutex<Bool>
@@ -25,8 +22,6 @@ nonisolated final class DiagnosticErrorReceipt: Sendable {
 nonisolated enum DiagnosticErrorOwnership {
     private static let receiptKey = "IntentDiagnosticReceipt"
 
-    /// Retains the existing error domain, code and UI text. The receipt contains
-    /// only closed diagnostics and never reads that text back for classification.
     static func attaching(
         to error: NSError, failure: DiagnosticFailure, suppressed: Bool = false
     ) -> NSError {
@@ -42,9 +37,6 @@ nonisolated enum DiagnosticErrorOwnership {
         return TransportDiagnosticFailure.classify(error)
     }
 
-    /// Feature owners use this for propagated request failures AND local errors.
-    /// Requests already recorded at transport ingress are not recorded again.
-    /// Cancellation and explicitly suppressed teardown receipts are benign.
     @discardableResult
     static func record(
         _ error: any Error,
@@ -58,13 +50,8 @@ nonisolated enum DiagnosticErrorOwnership {
     }
 }
 
-/// Opt-in request ownership for an enclosing operation. Later feature producers
-/// can set a closed operation/site/outcome before calling request; no protocol
-/// signature changes or free-form method names enter the diagnostic channel.
 nonisolated enum DiagnosticRequestContext {
     enum Recording: Sendable {
-        /// The feature decides whether a rejection is benign compatibility,
-        /// recovered, or terminal, then claims the receipt in its own catch.
         case deferred
         case immediate
     }
@@ -81,14 +68,11 @@ nonisolated enum DiagnosticRequestContext {
 }
 
 extension DiagnosticErrorOwnership {
-    /// A request that failed only because the Mac connection dropped (or was
-    /// not up). Read-only mode covers these, so they never raise an alert.
     static func isConnectionLoss(_ error: any Error) -> Bool {
         let classification = failure(for: error).classification
         return classification == .connectionClosed || classification == .notConnected
     }
 
-    /// The text for an error alert, or nil when the drop itself is the cause.
     static func alertMessage(for error: any Error) -> String? {
         isConnectionLoss(error) ? nil : error.localizedDescription
     }

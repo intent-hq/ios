@@ -1,10 +1,6 @@
 import SwiftUI
 
-/// The desktop agent avatar design catalog, ported from cloudlands-fe
-/// `avatar-design.ts`. Builtin designs map to specialists; fallback designs
-/// are picked deterministically from the agent id.
 enum AgentAvatarDesign: String, CaseIterable {
-    // CaseIterable order mirrors the desktop avatar catalog and is behaviorally significant.
     // swiftlint:disable sorted_enum_cases
     case coordinator
     case implementor
@@ -30,20 +26,14 @@ enum AgentAvatarDesign: String, CaseIterable {
         .fallbackDots
     ]
 
-    /// The named built-in designs a specialist `icon` may reference —
-    /// everything except the seeded fallbacks (mirrors
-    /// `builtinAgentAvatarDesigns` in avatar-design.ts).
     static let builtinDesigns: [Self] =
         Self.allCases.filter { !Self.fallbackDesigns.contains($0) }
 
-    /// Whether a specialist `icon` value names one of the built-in designs
-    /// (mirrors `isBuiltinAgentAvatarDesign` in avatar-design.ts).
     static func isBuiltinDesign(_ value: String) -> Bool {
         guard let design = Self(rawValue: value) else { return false }
         return Self.builtinDesigns.contains(design)
     }
 
-    /// Mirrors `builtinSpecialistAvatarDesigns` in avatar-design.ts.
     static let builtinSpecialistDesigns: [String: Self] = [
         "coordinator": .coordinator,
         "spec-writer": .coordinator,
@@ -56,10 +46,6 @@ enum AgentAvatarDesign: String, CaseIterable {
         "ralph": .ralph
     ]
 
-    /// Resolve the avatar design for an agent. Precedence: a valid specialist
-    /// `icon` (PROTOCOL §5.11) → the hard-coded specialist-id map → the
-    /// seeded fallback (mirrors `getAgentAvatarDesign` in avatar-design.ts).
-    /// Unknown/absent icons degrade to the pre-icon behavior.
     static func design(agentId: String, specialist: String?, icon: String? = nil) -> Self {
         if let icon, Self.isBuiltinDesign(icon), let design = Self(rawValue: icon) {
             return design
@@ -70,12 +56,6 @@ enum AgentAvatarDesign: String, CaseIterable {
         return Self.fallbackDesign(agentId: agentId)
     }
 
-    /// Deterministic fallback pick seeded from the agent id. Mirrors the
-    /// desktop `stringToSeededRandom(agentId).pick(...)` (string hash + one
-    /// LCG step) bit-for-bit: JS evaluates `seed * 1103515245 + 12345` in
-    /// float64, losing low bits for seeds >= 2^22, and `& 0x7fffffff`
-    /// applies ToUint32 — so the LCG step is computed in `Double` here
-    /// rather than exact integer math.
     static func fallbackDesign(agentId: String) -> Self {
         var hash: Int32 = 0
         for unit in agentId.utf16 {
@@ -95,14 +75,12 @@ enum AgentAvatarDesign: String, CaseIterable {
     }
 }
 
-/// Precomputed glyph geometry in the desktop 16×16 viewBox space.
 struct AgentAvatarGlyph {
     var strokePath = Path()
     var fillPath = Path()
 }
 
 extension AgentAvatarDesign {
-    /// Brand assets keep the flat stroke ends used by the iOS icon set.
     var imageResource: ImageResource? {
         switch self {
         case .coordinator: .dandelion
@@ -140,7 +118,6 @@ extension AgentAvatarDesign {
         }
     }
 
-    // Keep verbatim 16×16 artwork coordinates beside their SVG paths to match AgentAvatarArt.svelte.
     // swiftlint:disable no_magic_numbers
     private static func makeBuiltinGlyph(_ design: AgentAvatarDesign) -> AgentAvatarGlyph {
         var (stroke, fill) = (Path(), Path())
@@ -350,8 +327,6 @@ private struct SVGPathParser {
 }
 
 extension Path {
-    /// Parses absolute-command SVG path data — the M/L/H/V/C subset the
-    /// desktop avatar glyphs use. Unsupported input stops parsing early.
     init(svgPathData data: String) {
         self.init()
         var parser = SVGPathParser(data)

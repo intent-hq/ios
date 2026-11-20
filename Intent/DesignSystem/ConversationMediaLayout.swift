@@ -15,7 +15,6 @@ extension Constants.Conversation {
     }
 
     enum ImagePlaceholder {
-        /// Shared by the failure view and Textual's intrinsic-size calculation.
         nonisolated static let failureLabelSpacing: CGFloat = 4
         static let loadingLabelSpacing: CGFloat = 2
         static let backgroundOpacity: Double = 0.5
@@ -23,7 +22,6 @@ extension Constants.Conversation {
 }
 
 extension Constants.Conversation.ImageThumbnail {
-    /// Assistant image blocks and markdown images share the 160pt square.
     nonisolated static let transcriptSide: CGFloat = 160
     static let attachmentSide: CGFloat = 60
 }

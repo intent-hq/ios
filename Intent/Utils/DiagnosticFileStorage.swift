@@ -1,7 +1,5 @@
 import Foundation
 
-/// Only the writer actor calls this synchronous file API. The injectable
-/// boundary is for storage-failure tests, not for event producers.
 nonisolated protocol DiagnosticStorage: Sendable {
     func prepare() throws
     func readHistory(maximumBytes: Int) throws -> Data
@@ -55,7 +53,6 @@ nonisolated struct DiagnosticFileStorage: DiagnosticStorage {
         try prepare()
         try clearReports()
         try prepareDirectory(reports)
-        // Only the bounded ZIP is written: no duplicate loose report files.
         let archive = try DiagnosticZIP.encode(snapshot)
         try Task.checkCancellation()
         try write(archive, to: reports.appendingPathComponent("diagnostics.zip"))
@@ -69,7 +66,6 @@ nonisolated struct DiagnosticFileStorage: DiagnosticStorage {
             withIntermediateDirectories: true,
             attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
         )
-        // Apply policy to pre-existing directories too; never sync diagnostics.
         try FileManager.default.setAttributes(
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
             ofItemAtPath: url.path
