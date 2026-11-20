@@ -59,7 +59,7 @@ def _block_end(src: str, start: int) -> int:
     raise LexError("unclosed block comment")
 
 
-def _string_end(src: str, start: int, spans: list[tuple[int, int]] | None = None) -> int | None:
+def _string_end(src: str, start: int, spans: list[tuple[int, int]] | None = None, code: list[str] | None = None) -> int | None:
     index = start
     while index < len(src) and src[index] == "#":
         index += 1
@@ -79,7 +79,7 @@ def _string_end(src: str, start: int, spans: list[tuple[int, int]] | None = None
         if src.startswith(escape, index):
             index += len(escape)
             if index < len(src) and src[index] == "(":
-                index = _interpolation_end(src, index, spans)
+                index = _interpolation_end(src, index, spans, code)
             else:
                 index += 1
         else:
@@ -87,11 +87,18 @@ def _string_end(src: str, start: int, spans: list[tuple[int, int]] | None = None
     raise LexError("unclosed string literal")
 
 
-def _interpolation_end(src: str, opener: int, spans: list[tuple[int, int]] | None = None) -> int:
-    """Scan an interpolation as Swift code: nested literals and comments are
-    skipped lexically, and comments are recorded in `spans`."""
+def _interpolation_end(src: str, opener: int, spans: list[tuple[int, int]] | None = None, code: list[str] | None = None) -> int:
+    """Scan an interpolation as Swift code: nested literals (strings and
+    regexes) and comments are skipped lexically, and comments are recorded in
+    `spans`."""
+    if code is None:
+        code = list(src)
     depth, index = 0, opener
     while index < len(src):
+        literal = _regex_end(src, index, code)
+        if literal is not None:
+            index = literal
+            continue
         if src.startswith("//", index):
             newline = src.find("\n", index)
             end = len(src) if newline < 0 else newline
@@ -105,7 +112,7 @@ def _interpolation_end(src: str, opener: int, spans: list[tuple[int, int]] | Non
                 spans.append((index, end))
             index = end
             continue
-        literal = _string_end(src, index, spans)
+        literal = _string_end(src, index, spans, code)
         if literal is not None:
             index = literal
             continue
@@ -168,7 +175,7 @@ def comment_spans(src: str) -> list[tuple[int, int]]:
             index = _block_end(src, index)
             spans.append((start, index))
         else:
-            end = _string_end(src, index, spans)
+            end = _string_end(src, index, spans, code)
             if end is None:
                 end = _regex_end(src, index, code)
             if end is None:

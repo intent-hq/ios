@@ -58,6 +58,11 @@ class LexerTests(unittest.TestCase):
     def test_quotes_and_parens_in_interpolated_comments_are_skipped(self):
         self.assertEqual(counted('let s = "\\(f(x) /* ") ( */)"\n'), [1])
 
+    def test_regex_literals_inside_interpolations_are_not_comments(self):
+        self.assertEqual(counted('let s = "\\( #/[/*]/# )"\n'), [])
+        self.assertEqual(counted('let s = "\\(text.contains(/a\\/b/))" // x\n'), [1])
+        self.assertEqual(counted('let s = "\\(a / b)" // x\n'), [1])
+
     def test_unclosed_literal_is_an_error(self):
         with self.assertRaises(LexError):
             classify('let a = "open\n')
@@ -114,6 +119,10 @@ class StripTests(unittest.TestCase):
 
     def test_strip_removes_comments_inside_interpolations(self):
         self.assertEqual(self.strip('let s = "\\(1 /* note */)"\n'), 'let s = "\\(1)"\n')
+
+    def test_strip_leaves_regex_literals_in_interpolations(self):
+        source = 'let s = "\\( #/[/*]/# )" // x\n'
+        self.assertEqual(self.strip(source), 'let s = "\\( #/[/*]/# )"\n')
 
     def test_strip_collapses_blanks_around_a_removed_block(self):
         self.assertEqual(self.strip("a\n\n// x\n\nb\n"), "a\n\nb\n")
