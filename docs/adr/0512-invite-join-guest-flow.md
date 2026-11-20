@@ -167,8 +167,10 @@ Applies to: `InviteJoinModel.join(over:)`, `accept(as:preview:client:)`, `prove(
   through to the proof, which asks again.
 - `prove` publishes and proves with one fresh challenge when the host found the
   proof stale. There is no new prompt, because consent stands.
-- Nothing is sent to the host before the person confirms
-  (`InviteJoinConfirmation`). `existingAccess` is a login this device already
+- The flow accepts no credential and publishes or proves no identity before
+  the person confirms (`InviteJoinConfirmation`). Before that it only reads from
+  the host: `join(over:)` fetches the preview with `client.inspect()`, and
+  `proveOnOwnMac` fetches a challenge with `client.challenge()`. `existingAccess` is a login this device already
   holds (`invite.accept`); `proveOnMac` is a proof published by the person's own
   Mac (`invite.prove`). `answer(true)` confirms and `answer(false)` declines.
 - `start()` starts the join, or restarts it after a failure.

@@ -203,6 +203,7 @@ What callers and future changes must respect. Omit when the decisions say it all
 | [0911](0911-transcript-geometry-re-pinning.md) | Transcript geometry edges and re-pinning |
 | [0912](0912-transcript-rows-end-marker-and-recovery.md) | Transcript rows, end marker, and unrealized-end recovery |
 | [0913](0913-transcript-demo-instrumentation.md) | Transcript demo instrumentation |
+| [0914](0914-conversation-column-composer-and-question-presentation.md) | Conversation column composer, question presentation, and status rows |
 | [1001](1001-create-workspace-options-and-branch-loading.md) | Create Workspace reads options and branches from session stores and gates Create on settled loads |
 | [1002](1002-add-agent-specialist-picker.md) | The add-agent specialist picker shares the session options cache |
 | [1003](1003-github-repo-picker.md) | The GitHub repo picker merges recents, own repos and debounced search |

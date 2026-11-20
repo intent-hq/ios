@@ -68,11 +68,12 @@ visionOS. The visionOS `QRScannerView` keeps the same API so call sites compile,
 and directs the user to manual token entry. Its `onPaired` is unused; it exists
 so call sites pass the same arguments as on iOS.
 
-### 8. Invite links send nothing until Join
+### 8. Invite links accept and prove nothing until Join
 
 Applies to: `InviteJoinView`
 
 `InviteJoinView` is the sheet for an `intent://invite` link: someone shared a
-workspace with this person. Nothing is sent to the host beyond reading the
-invite's preview until the person taps Join. The flow is in `InviteJoinModel`
+workspace with this person. Until the person taps Join, the flow only reads from
+the host: the invite's preview and, when the person must prove an identity, a
+challenge. It accepts no credential and publishes no proof before Join. The flow is in `InviteJoinModel`
 (`Intent/Services/InviteJoinFlow.swift`).

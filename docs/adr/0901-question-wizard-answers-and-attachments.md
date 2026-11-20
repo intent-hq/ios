@@ -16,8 +16,9 @@ question set can carry its own attachments.
 
 Applies to: `QuestionWizardView`
 
-The wizard is a sequential Agent Q&A wizard. It renders in the composer slot or
-in the floating workspace panel. The host remounts it whenever a different
+The wizard is a sequential Agent Q&A wizard. On iOS it renders in the composer
+slot or in the floating workspace panel. On visionOS it renders in a sheet, and
+the composer slot shows only an opener banner (ADR-0914). The host remounts it whenever a different
 question set pends, so the wizard does not reset its own drafts.
 
 ### 2. `workspaceAvailableHeight` opts in to the floating panel
