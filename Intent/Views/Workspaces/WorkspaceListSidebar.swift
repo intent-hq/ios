@@ -71,7 +71,7 @@ struct WorkspaceListSidebar: View {
                     isSearching: $isSearching,
                     isFocused: $searchFocused,
                     surfaceColor: isFocusedSearch ? IPadShellStyle.panel(for: colorScheme) : nil,
-                    horizontalPadding: isFocusedSearch ? contentInset : Constants.WorkspaceSearch.contentSpacing,
+                    horizontalPadding: isFocusedSearch ? contentInset : Constants.WorkspaceSearch.windowCornerInset,
                     focusesOnAppear: !isEmbedded
                 )
                 .keepsReadOnlyPillAbove()

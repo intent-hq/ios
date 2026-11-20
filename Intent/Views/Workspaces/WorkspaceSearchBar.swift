@@ -128,7 +128,8 @@ struct WorkspaceSearchInput: View {
     var placeholder: LocalizedStringKey = "Search workspaces"
     var identifierPrefix = "workspaces.search"
     var surfaceColor: Color?
-    var horizontalPadding: CGFloat = Constants.WorkspaceSearch.contentSpacing
+    var horizontalPadding: CGFloat = Constants.WorkspaceSearch.windowCornerInset
+    var bottomPadding: CGFloat = Constants.WorkspaceSearch.windowCornerBottomPadding
     var focusesOnAppear = true
     @ScaledMetric(relativeTo: .body) private var inputTracking: CGFloat = -0.32
 
@@ -159,7 +160,8 @@ struct WorkspaceSearchInput: View {
             .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, horizontalPadding)
-        .padding(.vertical, Constants.WorkspaceSearch.bottomPadding)
+        .padding(.top, Constants.WorkspaceSearch.bottomPadding)
+        .padding(.bottom, bottomPadding)
     }
 
     private var searchField: some View {

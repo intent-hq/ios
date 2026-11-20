@@ -288,6 +288,18 @@ extension Constants.WorkspaceSearch {
     static let borderWidth: CGFloat = 0.5
     static let bottomPadding: CGFloat = 8
     static let focusAnimationDuration: Double = 0.2
+
+    // The bottom search field sits in a window corner. visionOS fixes the
+    // window's corner radius, so the field's inset keeps its corners
+    // concentric with the window's (HIG) instead of being cut by it.
+    #if os(visionOS)
+    static let visionWindowCornerRadius: CGFloat = 46
+    static let windowCornerInset: CGFloat = visionWindowCornerRadius - cornerRadius
+    static let windowCornerBottomPadding: CGFloat = windowCornerInset
+    #else
+    static let windowCornerInset: CGFloat = contentSpacing
+    static let windowCornerBottomPadding: CGFloat = bottomPadding
+    #endif
 }
 
 extension Constants.WorkspaceDetail {
