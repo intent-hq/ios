@@ -16,7 +16,6 @@ struct NotificationSoundPolicyTests {
 
     @Test(arguments: [(Float(0), false), (0.01, true), (1, true)])
     func volumeGatedSoundsRequireAudibleOutput(volume: Float, plays: Bool) {
-        // Notification settings never affect these paths.
         let policy = policy(volume: volume, soundEnabled: false)
 
         #expect(policy.scheduledNotificationPlaysSound() == plays)
@@ -26,7 +25,6 @@ struct NotificationSoundPolicyTests {
 
     @Test(arguments: [false, true], [Float(0), 1])
     func foregroundBannerFollowsNotificationSoundSetting(soundEnabled: Bool, volume: Float) async {
-        // Output volume never affects foreground banners: its read can be stale.
         let policy = policy(volume: volume, soundEnabled: soundEnabled)
 
         #expect(await policy.foregroundBannerPlaysSound(requested: true) == soundEnabled)

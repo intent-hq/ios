@@ -4,8 +4,6 @@ import Foundation
 import Testing
 
 extension NoteStoreIntegrationTests {
-    // MARK: - fetchNote classification
-
     @Test func fetchNoteFoundReturnsNote() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -31,8 +29,6 @@ extension NoteStoreIntegrationTests {
     @Test func fetchNoteNotFoundOnRpcNotFound() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        // note.get answers -32602 with data.code == "not-found" for a
-        // nonexistent note (docs/PROTOCOL.md §3.3/§9)
         fake.errorMap["note.get"] = NSError(
             domain: "WebSocket",
             code: -32_602,
@@ -45,7 +41,6 @@ extension NoteStoreIntegrationTests {
         let result = await store.fetchNote(noteId: "note-gone", workspaceId: "ws-1")
 
         if case .notFound = result {
-            // pass
         } else {
             Issue.record("Expected .notFound, got \(result)")
         }
@@ -54,8 +49,6 @@ extension NoteStoreIntegrationTests {
     @Test func fetchNoteTransientOnBare32602() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        // -32602 without data.code == "not-found" (invalid-params or a legacy
-        // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
         fake.errorMap["note.get"] = NSError(
             domain: "WebSocket",
             code: -32_602,
@@ -65,7 +58,6 @@ extension NoteStoreIntegrationTests {
         let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
 
         if case .transientError = result {
-            // pass
         } else {
             Issue.record("Expected .transientError for a -32602 without data.code == \"not-found\", got \(result)")
         }
@@ -86,7 +78,6 @@ extension NoteStoreIntegrationTests {
         let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
 
         if case .transientError = result {
-            // pass
         } else {
             Issue.record("Expected .transientError for data.code == \"invalid-params\", got \(result)")
         }
@@ -109,7 +100,6 @@ extension NoteStoreIntegrationTests {
         let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
 
         if case .notFound = result {
-            // pass
         } else {
             Issue.record("Expected .notFound for archived note, got \(result)")
         }
@@ -118,7 +108,6 @@ extension NoteStoreIntegrationTests {
     @Test func fetchNoteTransientOnTimeout() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        // Transport-level timeout (ConnectionManager code -2) must not read as deletion
         fake.errorMap["note.get"] = NSError(
             domain: "WebSocket",
             code: -2,
@@ -128,7 +117,6 @@ extension NoteStoreIntegrationTests {
         let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
 
         if case .transientError = result {
-            // pass
         } else {
             Issue.record("Expected .transientError, got \(result)")
         }
@@ -146,7 +134,6 @@ extension NoteStoreIntegrationTests {
         let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
 
         if case .transientError = result {
-            // pass
         } else {
             Issue.record("Expected .transientError for non-RPC error, got \(result)")
         }
@@ -154,8 +141,6 @@ extension NoteStoreIntegrationTests {
 }
 
 extension NoteStoreIntegrationTests {
-    // MARK: - Slim note.list projection (PROTOCOL §5.2 projection: "slim")
-
     @Test func fetchNotesRequestsSlimProjection() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -185,8 +170,6 @@ extension NoteStoreIntegrationTests {
     @Test func fetchNotesFallsBackToFullListOn32602() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        // Daemon rejecting the projection param (-32602 Invalid params):
-        // fetchNotes must retry once without it.
         fake.errorQueueMap["note.list"] = [
             NSError(
                 domain: "WebSocket",
@@ -236,7 +219,6 @@ extension NoteStoreIntegrationTests {
     @Test func slimReListKeepsLoadedContentAtSameUpdatedAt() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        // First list: full row already cached (e.g. hydrated via note.get).
         fake.responseMap["note.list"] = [
             "notes": [
             [
@@ -251,8 +233,6 @@ extension NoteStoreIntegrationTests {
         await store.fetchNotes(workspaceId: "ws-1")
         #expect(store.notes.first?.content == "full body")
 
-        // Re-list serves a slim row at the same updatedAt: the loaded body
-        // must not be clobbered.
         fake.responseMap["note.list"] = [
             "notes": [
             [
@@ -286,8 +266,6 @@ extension NoteStoreIntegrationTests {
         ]
         await store.fetchNotes(workspaceId: "ws-1")
 
-        // Slim row with a different updatedAt: the cached body cannot be
-        // proven current, so the stale marker must win.
         fake.responseMap["note.list"] = [
             "notes": [
             [
@@ -308,8 +286,6 @@ extension NoteStoreIntegrationTests {
     @Test func fetchNotesHydratesStaleSpecRow() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        // Slim list with a stale spec row: the spec's content links task
-        // notes (progress ring), so fetchNotes hydrates it via note.get.
         fake.responseMap["note.list"] = [
             "notes": [
                 [
@@ -348,7 +324,6 @@ extension NoteStoreIntegrationTests {
         #expect(fake.paramsForMethod("note.get").first?["noteId"] as? String == "spec")
         let spec = store.note(byId: "spec")
         #expect(spec?.content == "- [x] done\n- [ ] todo item that overflows")
-        // Non-spec rows stay slim.
         #expect(store.note(byId: "note-1")?.isContentStale == true)
     }
 

@@ -4,12 +4,6 @@ import Testing
 import UIKit
 import UserNotifications
 
-// MARK: - Cross-session aggregation
-
-/// NotificationManager stays a process-wide singleton but must alert for
-/// every live backend session: backend sessions attach observers on their
-/// own connections and events are tagged with the source `BackendID`
-/// (window model v2: there is no default session to deduplicate against).
 @Suite("NotificationManager cross-session aggregation", .serialized)
 @MainActor
 final class NotificationSessionAggregationTests {
@@ -18,9 +12,6 @@ final class NotificationSessionAggregationTests {
         0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22
     ))
 
-    /// Per-test isolated persistence (same pattern as
-    /// BackendSessionRegistryTests) so AppCoordinator never touches the
-    /// real app container.
     private let persistence: PersistenceManager
     private let suiteName: String
 
@@ -103,7 +94,6 @@ final class NotificationSessionAggregationTests {
         ]
     }
 
-    /// Poll (bounded) until the condition holds; fail at the call site on timeout.
     private func waitFor(
         _ description: String,
         sourceLocation: SourceLocation = #_sourceLocation,
@@ -120,13 +110,9 @@ final class NotificationSessionAggregationTests {
         )
     }
 
-    /// Drain the MainActor queue so spawned handler Tasks have run before
-    /// negative assertions.
     private func drainMainQueue() async {
         for _ in 0..<20 { await Task.yield() }
     }
-
-    // MARK: - Observer lifecycle
 
     @Test func attachRegistersOneHandlerAndDetachRemovesIt() {
         let (manager, _) = makeManager(defaultConnection: FakeConnectionManager())
@@ -161,8 +147,6 @@ final class NotificationSessionAggregationTests {
             "A transient pairing session has no backend to observe"
         )
     }
-
-    // MARK: - Backend-session alerts
 
     @Test func idleEventPresentsToastTaggedWithSourceBackend() async throws {
         let defaultFake = FakeConnectionManager()
@@ -254,8 +238,6 @@ final class NotificationSessionAggregationTests {
         #expect(center.requests.isEmpty)
     }
 
-    // MARK: - Alert-chime / attention-cue dedup (visionOS double chime)
-
     private func makeCueWorkspace(id: String, attention: String? = nil) -> Workspace {
         Workspace(
             id: id,
@@ -281,8 +263,6 @@ final class NotificationSessionAggregationTests {
     }
 
     @Test func idleAlertChimeThenAttentionFlipYieldsOneAudibleTrigger() async throws {
-        // agent:idle chimes via the observed session, then the same
-        // completion flips the workspace to unread: the cue stays silent.
         let (manager, _) = makeManager(
             defaultConnection: FakeConnectionManager(),
             windowEmitsFeedbackSound: true
@@ -321,8 +301,6 @@ final class NotificationSessionAggregationTests {
     }
 
     @Test func attentionCueThenIdleAlertYieldsOneAudibleTrigger() async throws {
-        // Reverse arrival order: the workspace snapshot flips first, then
-        // the agent:idle alert arrives — the chime is suppressed.
         let (manager, _) = makeManager(
             defaultConnection: FakeConnectionManager(),
             windowEmitsFeedbackSound: true

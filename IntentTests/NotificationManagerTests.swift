@@ -110,8 +110,6 @@ struct NotificationManagerTests {
         )
     }
 
-    // MARK: - shouldSuppressIdleAlert
-
     @Test func coordinatorWaitingOnChildrenSuppresses() {
         let agents = [makeAgent(id: "coord", isWaitingForOtherAgents: true, waitingForAgentIds: ["child"])]
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "coord", agents: agents) == true)
@@ -149,8 +147,6 @@ struct NotificationManagerTests {
     }
 
     @Test func idleAgentOwnActivityFlagsDoNotSuppress() {
-        // Only OTHER agents' activity gates the alert — the idle agent's own
-        // just-finished flags must not suppress its completion alert.
         let agents = [makeAgent(id: "idle", isStreaming: true, isResponding: true)]
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "idle", agents: agents) == false)
     }
@@ -166,14 +162,11 @@ struct NotificationManagerTests {
     }
 
     @Test func mutedOtherAgentDoesNotSuppressIdleAgent() {
-        // Mute is per agent: another agent's mute never quiets this one.
         let agents = [makeAgent(id: "idle"), makeAgent(id: "other", notificationsMuted: true)]
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "idle", agents: agents) == false)
     }
 
     @Test func mutedActiveOtherAgentDoesNotSuppressIdleAgent() {
-        // A muted agent's own idle is suppressed, so its activity must not hold
-        // back an unmuted agent's completion or the workspace never notifies.
         let agents = [
             makeAgent(id: "idle"),
             makeAgent(id: "muted-active", isStreaming: true, notificationsMuted: true)
@@ -204,8 +197,6 @@ struct NotificationManagerTests {
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "gone", agents: agents) == false)
     }
 
-    // MARK: - shouldSkipIdleEventFastPath
-
     @Test func backgroundEventFlagSkips() {
         #expect(NotificationManager.shouldSkipIdleEventFastPath(["isBackground": true]) == true)
     }
@@ -235,11 +226,6 @@ struct NotificationManagerTests {
     }
 }
 
-// MARK: - Notification chime synthesis
-
-/// The chime WAV backs the visionOS window-emitted sound
-/// (`WindowFeedbackSoundEmitter`); the synthesis is platform-independent so
-/// the iOS suite validates it.
 @Suite("NotificationChime synthesis")
 struct NotificationChimeTests {
     @Test func wavDataHasValidRiffHeader() {
