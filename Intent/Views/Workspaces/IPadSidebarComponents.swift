@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Section chrome shared by the persistent iPad sidebars.
 enum IPadSidebarStyle {
     static let inset: CGFloat = 24
     static let compactInset: CGFloat = 8

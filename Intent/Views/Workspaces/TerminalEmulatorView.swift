@@ -29,7 +29,6 @@ struct TerminalPresentationObserver: UIViewControllerRepresentable {
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            // SwiftUI onAppear runs before the cover's presentation animation finishes.
             onPresented?()
         }
     }

@@ -229,7 +229,6 @@ struct WorkspaceChangesView: View {
     private var commitsSection: some View {
         let commits = store.commits
         let divider = rowDivider
-        // The overlay must not reread the store when SwiftUI requests a commit row.
         let rows = commits.map { commit in
             let showsDivider = commit.id != commits.last?.id
             let content = commitRow(commit)

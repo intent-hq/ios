@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// One pull request file's diff on its own page, under the pull request
-/// page's header: back, the file name with its folder, and no actions.
 struct PullRequestFileDiffPage: View {
     let file: PullRequestFile
     @Environment(\.dismiss) private var dismiss
