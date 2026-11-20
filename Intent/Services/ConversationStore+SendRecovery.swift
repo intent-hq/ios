@@ -3,8 +3,6 @@ import SwiftUI
 import UIKit
 
 extension ConversationStore {
-    /// Called before attachment placement suspends. New sends always receive a
-    /// new identity, even when their text happens to match an older failure.
     func beginSendAttempt(
         agentId: String,
         content: String,
@@ -77,17 +75,12 @@ extension ConversationStore {
         } catch {
             sendThinkingMessageIds.remove(messageId)
             guard let current = sendAttempts.firstIndex(where: { $0.id == messageId }) else { throw error }
-            // An authoritative echo may beat a timeout/error response. Never
-            // demote that positive acceptance evidence back to uncertainty.
             if sendAttempts[current].status.isConfirmed { return }
             if error is OutgoingImagePayload.RequestError {
                 sendAttempts[current].status = .notSent
-                // The selection must be edited, not replayed at the same size.
                 sendAttempts[current].isPrepared = false
                 throw error
             }
-            // Only app-owned pre-dispatch provenance establishes non-delivery.
-            // A remote RPC can reuse WebSocket/-4; its code alone is not proof.
             let failure = DiagnosticErrorOwnership.failure(for: error)
             sendAttempts[current].status = failure.origin == .localRequest && failure.classification == .notConnected
                 ? .notSent : .unconfirmed
@@ -130,18 +123,11 @@ extension ConversationStore {
         }
     }
 
-    /// Positive rows only: missing pages, malformed reads, projected queues and
-    /// absent ids are never evidence that a mutation did not happen.
     func reconcileSendAttempts(messages incoming: [ConversationMessage]) {
         for message in incoming where message.role == .user && message.hasReportedContentBlocks {
-            // AgentMessage reads lift this out of row metadata. A nested legacy
-            // copy must not override the canonical top-level correlation.
             let appId = message.appMessageId ?? message.metadata["userAppMessageId"]?.stringValue
             guard let attemptId = sendAttemptId(rowId: message.id, appMessageId: appId) else { continue }
             confirmSendAttempt(attemptId, status: .accepted, confirmedMessageId: message.id)
-            // RPC acceptance is terminal for status, not transcript identity.
-            // Only authoritative rows may refine an already accepted association;
-            // late RPC/queue results still stop at confirmSendAttempt's guard.
             if let index = sendAttempts.firstIndex(where: { $0.id == attemptId }) {
                 sendAttempts[index].confirmedMessageId = message.id
             }
@@ -162,19 +148,13 @@ extension ConversationStore {
     private func sendAttemptId(rowId: String, appMessageId: String?) -> String? {
         let matches = sendAttempts.filter { attempt in
             guard agentId == nil || attempt.agentId == agentId else { return false }
-            // Present correlation is exclusive, including unknown IDs. Only
-            // its absence permits direct or previously confirmed row identity.
             if let appMessageId { return attempt.id == appMessageId }
             return attempt.id == rowId || attempt.confirmedMessageId == rowId
         }
-        // Count attempts, not matching fields: two identities on one attempt
-        // are fine, but a row naming different attempts settles none.
         guard matches.count == 1 else { return nil }
         return matches.first?.id
     }
 
-    /// Read-only and explicitly user-triggered; never resends a mutation. It can
-    /// confirm a matching row, but cannot turn an absent row into a safe retry.
     func inspectSendAttempt(_ messageId: String) async {
         guard let index = sendAttempts.firstIndex(where: { $0.id == messageId }),
               sendAttempts[index].status == .unconfirmed || sendAttempts[index].status == .queued,
@@ -194,7 +174,6 @@ extension ConversationStore {
             reconcileSendAttempts(messages: [message])
         }
         guard sendAttempts.contains(where: { $0.id == messageId }), !Task.isCancelled else { return }
-        // fetchQueue reconciles only the response rows, not cached/optimistic data.
         try? await commands.fetchQueue(agentId: attempt.agentId)
     }
 }

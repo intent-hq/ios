@@ -2,22 +2,15 @@ import Combine
 import Foundation
 import Observation
 
-/// BackendSession owns the shared catalogs. Conversation label ensures are
-/// independent of the creation picker's explicit provider/auth refreshes.
 @MainActor
 @Observable class CreationOptionsStore {
-    /// Host enablement for workspace and agent creation; conversation model
-    /// menus can still load catalogs for existing agents on disabled providers.
     let workspaceProviderOptions: WorkspaceProviderOptions
     var specialists: [SpecialistInfo] { specialistCatalog.value ?? [] }
     var providers: [ProviderInfo] = []
-    /// The explicit picker load. A silent revalidation of a loaded catalog
-    /// stays `.loaded`, so the picker never shows a spinner over cached lists.
     private(set) var loadPhase = LoadPhase.idle
     var isLoading: Bool { loadPhase.isLoading }
     var hasLoaded: Bool { loadPhase.hasLoaded }
     var lastLoadedAt: Date? { loadPhase.lastLoadedAt }
-    /// Connection/reset identity only. Catalog events must not force agent.get.
     private(set) var loadGeneration = 0
 
     let specialistCatalog: CreationCatalog<SpecialistInfo>
@@ -34,12 +27,7 @@ import Observation
     @ObservationIgnored var observedFeedReady = false
     @ObservationIgnored var previousConnectionState: ConnectionState
     @ObservationIgnored private var loadTask: Task<Void, Never>?
-    /// The most recently spawned `loadTask`, kept after `invalidate()` drops
-    /// `loadTask` so tests can await a superseded load's real completion.
-    /// Never read by the store.
     @ObservationIgnored private(set) var latestLoadTask: Task<Void, Never>?
-    /// The most recent reconnect revalidation spawned for an open creation
-    /// picker, for tests to await. Never read by the store.
     @ObservationIgnored var latestCreationRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var loadIdentity = UUID()
     @ObservationIgnored private var loadRequiresInterest = false
@@ -64,7 +52,6 @@ import Observation
                 throw CocoaError(.coderReadCorrupt)
             }
             return items.compactMap { item in
-                // Labels historically also accepted a missing description.
                 var label = item
                 if label["description"] == nil { label["description"] = "" }
                 return SpecialistInfo(wire: label)
@@ -79,8 +66,6 @@ import Observation
         for catalog in modelCatalogs.values { catalog.reset(releaseConsumers: true) }
     }
 
-    /// Explicit creation-picker entry/refresh retains stale-while-revalidate.
-    /// Label consumers call ensureSpecialists/ensureModels instead.
     func loadIfNeeded(force: Bool = false, consumer: UUID? = nil) async {
         guard isActive, !Task.isCancelled else { return }
         if let consumer, !creationConsumers.contains(consumer) { return }
@@ -131,7 +116,6 @@ import Observation
         for catalog in modelCatalogs.values { catalog.reset(clear: clear) }
     }
 
-    /// Release all session observers and interests before disconnecting.
     func reset() {
         isActive = false
         invalidate()
@@ -146,9 +130,6 @@ import Observation
         feedObserver = nil
     }
 
-    /// `host.providerAuthStatus` (PROTOCOL §5.14); `authenticated` is
-    /// tri-state (true / false / nil unknown). Returns false on transport
-    /// error, leaving `providers` unchanged.
     private func fetchProviders(generation: Int, identity: UUID) async -> Bool {
         do {
             guard !Task.isCancelled, identity == loadIdentity else { return false }
@@ -172,7 +153,6 @@ import Observation
         }
     }
 
-    // Nil keeps a missing provider catalog distinct from a successfully loaded empty catalog.
     // swiftlint:disable:next discouraged_optional_collection
     func models(for providerId: String) -> [ModelInfo]? { modelCatalogs[providerId]?.value }
 
@@ -188,8 +168,6 @@ import Observation
         await modelCatalog(for: providerId).ensure(consumer: consumer)
     }
 
-    /// User-opened pickers still revalidate warm catalogs. Concurrent callers
-    /// share that revalidation; the automatic label path never calls this API.
     func loadModelsIfNeeded(providerId: String, force: Bool = false, consumer: UUID? = nil) async {
         guard isActive, !Task.isCancelled else { return }
         observeSession()

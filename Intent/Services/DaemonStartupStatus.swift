@@ -1,6 +1,5 @@
 import Foundation
 
-/// Owner-only status. A snapshot describes work, never admission or authority.
 nonisolated struct DaemonStartupStatus: Equatable, Sendable {
     enum Phase: String, Sendable { case preparing, indexing, finalizing, ready, failed }
     enum FinalizingStep: String, Sendable { case anchors, committing, services }

@@ -1,34 +1,15 @@
 import Foundation
 
-/// Parsed subscription.push envelope from the daemon.
-///
-/// Nonisolated so `parse` can run in the off-main inbound frame parse
-/// (`ConnectionManager.parseInboundFrame`), where chat-channel payloads are
-/// also pre-decoded into typed values (`snapshotMessages`,
-/// `DeltaPayload.chatBlocks`) so MainActor only merges them. `@unchecked
-/// Sendable`: the raw dictionaries are parsed JSON containers that are never
+/// `@unchecked Sendable`: the raw dictionaries are parsed JSON containers that are never
 /// mutated after parse.
 nonisolated struct SubscriptionPush: @unchecked Sendable {
     let subscriptionId: String
     let kind: Kind
     let seq: Int
-    // Nil means no snapshot payload; an empty snapshot authoritatively clears the collection.
     let snapshot: [[String: Any]]? // swiftlint:disable:this discouraged_optional_collection
-    /// Paged collection snapshot continuation (protocol §6.9 "Paged snapshots"):
-    /// the list-read token for the rows after this first page, or nil when the
-    /// snapshot holds the whole collection (and for every non-snapshot push).
     let nextToken: String?
     let delta: DeltaPayload?
-    // Snapshot-level metadata for object-shaped snapshots (chat channel):
-    // agentId, truncated, totalMessages, nextToken, plus activity flags like
-    // isResponding, isWaitingOnTool, turnInFlight, lastStreamActivityAt.
-    // Nil for array-shaped snapshots (collection channels).
-    // Nil identifies a collection snapshot; even empty metadata identifies a conversation snapshot.
     let snapshotMeta: [String: Any]? // swiftlint:disable:this discouraged_optional_collection
-    // Chat-channel snapshot `messages` pre-decoded by `parse` (undecodable
-    // rows dropped, matching `ConversationMessage.parseMessage`). Nil for
-    // collection channels and for pushes built without `parse`.
-    // Nil requests fallback decoding; an empty array is an already-decoded empty result.
     let snapshotMessages: [ConversationMessage]? // swiftlint:disable:this discouraged_optional_collection
 
     enum Kind {
@@ -51,24 +32,16 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         return .collectionSnapshot(rows)
     }
 
-    /// One chat-channel block delta entity (PROTOCOL §7.1) with its `block`
-    /// decoded into a `ContentBlock`.
     struct ChatBlockEntity {
         let messageId: String
         let appMessageId: String?
         let block: ContentBlock
-        /// Append-only text/thinking fragment, kept outside the full block
-        /// model. The reducer uses it only after a snapshot echoes incremental.
         let textDelta: String?
-        /// Role of the owning message; defaults to `.assistant` when absent.
         let role: MessageRole
         let timestamp: String?
         let streamingComplete: Bool
-        /// The persisted row's metadata, carried only by re-read and terminal
-        /// entities (PROTOCOL 07 §7.1); empty when the entity has none.
         let metadata: [String: AnyCodable]
 
-        /// Nil when the entity is not block-shaped or its block does not decode.
         init?(entity: [String: Any]) {
             guard let shaped = ShapedChatBlockEntity(entity: entity),
                   let block = ContentBlock.decode(shaped.block, fallbackIdentity: shaped.fallbackIdentity)
@@ -96,9 +69,6 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
             return (try? JSONDecoder().decode([String: AnyCodable].self, from: data)) ?? [:]
         }
 
-        /// Decodes every entity's block in one `ContentBlock.decodeBatch`
-        /// pass (ios#258): same elements, in order, as mapping `init?(entity:)`
-        /// (non-block-shaped entities and undecodable blocks dropped).
         static func decodeAll(_ entities: [[String: Any]]) -> [Self] {
             let shaped = entities.compactMap { ShapedChatBlockEntity(entity: $0) }
             let blocks = ContentBlock.decodeBatch(
@@ -111,9 +81,6 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         }
     }
 
-    /// A block-shaped entity (`messageId` + `block`) before its block is
-    /// decoded; the shape check shared by `ChatBlockEntity`'s per-entity and
-    /// batched paths.
     private struct ShapedChatBlockEntity {
         let entity: [String: Any]
         let messageId: String
@@ -127,8 +94,6 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
                   let block = entity["block"] as? [String: Any] else { return nil }
             let type = block["type"] as? String
             if type == "text" || type == "thinking", block["textDelta"] != nil {
-                // Full text is authoritative. Reject malformed mixed payloads;
-                // fragment-only blocks need a stable wire id to append safely.
                 if let text = block["text"] ?? block["content"] {
                     guard text is String else { return nil }
                     textDelta = nil
@@ -150,18 +115,12 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         let added: [[String: Any]]
         let updated: [[String: Any]]
         let removedIds: [String]
-        // `added` then `updated` pre-decoded as chat block entities by
-        // `parse` (entities that are not block-shaped or do not decode are
-        // dropped). Nil when no entity is block-shaped (collection channels)
-        // and for payloads built without `parse`.
-        // Nil requests fallback decoding; an empty array means decoding produced no valid blocks.
         let chatBlocks: [ChatBlockEntity]? // swiftlint:disable:this discouraged_optional_collection
 
         init(
             added: [[String: Any]],
             updated: [[String: Any]],
             removedIds: [String],
-            // Nil preserves fallback decoding for callers that have not pre-decoded the delta.
             chatBlocks: [ChatBlockEntity]? = nil // swiftlint:disable:this discouraged_optional_collection
         ) {
             self.added = added
@@ -170,11 +129,6 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
             self.chatBlocks = chatBlocks
         }
 
-        // Decodes `added` + `updated` into chat block entities; nil when none
-        // of them is block-shaped.
-        // Nil preserves the distinction between a collection delta and a chat
-        // delta whose block-shaped rows all failed decoding.
-        // Nil means no block-shaped entities; an empty array means their decoding failed.
         // swiftlint:disable:next discouraged_optional_collection
         static func decodeChatBlocks(added: [[String: Any]], updated: [[String: Any]]) -> [ChatBlockEntity]? {
             let entities = added + updated
@@ -187,12 +141,9 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         subscriptionId: String,
         kind: Kind,
         seq: Int,
-        // Nil represents a delta push without a snapshot, not an empty snapshot.
         snapshot: [[String: Any]]?, // swiftlint:disable:this discouraged_optional_collection
         delta: DeltaPayload?,
-        // Nil preserves collection-shaped payloads; empty metadata still marks a conversation snapshot.
         snapshotMeta: [String: Any]? = nil, // swiftlint:disable:this discouraged_optional_collection
-        // Nil leaves decoding to the consumer; an empty array records a completed decode.
         snapshotMessages: [ConversationMessage]? = nil, // swiftlint:disable:this discouraged_optional_collection
         nextToken: String? = nil
     ) {
@@ -244,9 +195,6 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         )
     }
 
-    /// Parse a daemon notification into a SubscriptionPush, or nil if it isn't one.
-    /// Chat-channel payloads are decoded into typed values here so the caller's
-    /// isolation domain (off-main in the live frame pump) pays the decode cost.
     static func parse(method: String, params: Any) -> Self? {
         guard method == "subscription.push",
               let dict = params as? [String: Any],
@@ -260,7 +208,7 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         }
         guard dict["kind"] as? String == "delta",
               let deltaDict = dict["delta"] as? [String: Any] else {
-            return nil // Malformed or unknown push kind.
+            return nil
         }
         let added = (deltaDict["added"] as? [[String: Any]]) ?? []
         let updated = (deltaDict["updated"] as? [[String: Any]]) ?? []
@@ -314,18 +262,13 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
     }
 }
 
-/// Reconciles snapshot/delta pushes into an id-keyed collection with stable ordering.
 class DeltaReconciler<T> {
     private var items = [String: T]()
     private var orderedIds = [String]()
     private var expectedSeq = 0
     private var seeded = false
-    /// Ids a delta or local seed added or updated since the last snapshot;
-    /// newer than any later snapshot page row (see `fillFromPage`).
     private var changedSinceSnapshot = Set<String>()
-    /// Ids a delta removed since the last snapshot; a later page must not re-add them.
     private var removedSinceSnapshot = Set<String>()
-    /// Bumped by every snapshot and reset, so a stale page walk can tell it was superseded.
     private(set) var epoch = 0
 
     private let getId: ([String: Any]) -> String?
@@ -345,7 +288,6 @@ class DeltaReconciler<T> {
     @_optimize(none)
     deinit {}
 
-    /// Forget all state so the next snapshot rebuilds from scratch.
     func reset() {
         items.removeAll()
         orderedIds.removeAll()
@@ -356,7 +298,6 @@ class DeltaReconciler<T> {
         epoch &+= 1
     }
 
-    /// Replace the whole collection from a snapshot push.
     func applySnapshot(seq: Int, rawItems: [[String: Any]]) {
         items.removeAll()
         orderedIds.removeAll()
@@ -370,7 +311,6 @@ class DeltaReconciler<T> {
         seeded = true
     }
 
-    /// Apply a contiguous delta; false means a gap → caller should resnapshot.
     func applyDelta(seq: Int, delta: SubscriptionPush.DeltaPayload) -> Bool {
         guard seeded, seq == expectedSeq else {
             return false
@@ -387,14 +327,10 @@ class DeltaReconciler<T> {
         return true
     }
 
-    /// Current collection as an array preserving server snapshot/insertion order.
     func values() -> [T] {
         orderedIds.compactMap { items[$0] }
     }
 
-    /// Insert or update an already-normalized value without touching sequence
-    /// tracking (e.g. an optimistic row from an RPC response). New ids are
-    /// placed at the front; existing ids keep their position.
     func seed(id: String, value: T) {
         if items[id] == nil {
             orderedIds.insert(id, at: 0)
@@ -403,21 +339,12 @@ class DeltaReconciler<T> {
         changedSinceSnapshot.insert(id)
     }
 
-    /// Applies a local change to the current row for `id`, if present, and
-    /// keeps later snapshot pages from overriding it. Unlike `seed`, this
-    /// never inserts a row: while a paged snapshot fills, a row not read yet
-    /// comes from its page.
     func patch(id: String, _ transform: (T) -> T) {
         guard let current = items[id] else { return }
         items[id] = transform(current)
         changedSinceSnapshot.insert(id)
     }
 
-    /// Adds the rows of a later page of a paged snapshot (protocol §6.9).
-    /// A row a delta (or local seed) changed or removed since the snapshot is
-    /// newer than the page, so it is skipped. Any other row is upserted; a
-    /// list walk that serves the same row twice (`comment.list` rounds) keeps
-    /// the later, newer one.
     func fillFromPage(_ rawItems: [[String: Any]]) {
         for raw in rawItems {
             guard let id = getId(raw),

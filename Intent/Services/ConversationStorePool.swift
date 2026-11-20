@@ -1,9 +1,5 @@
 import Foundation
 
-/// Backend-local identity for an active conversation. Models own leases and
-/// presentation state; only the final lease releases the shared live channel.
-/// The most recently opened conversations stay in memory after their screen
-/// closes so they remain readable during a connection drop.
 @MainActor
 final class ConversationStorePool {
     static let retainedConversationLimit = 10

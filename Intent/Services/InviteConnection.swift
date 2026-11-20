@@ -1,14 +1,6 @@
 import Foundation
 import os
 
-// The guest side of the host's unauthenticated `/invite` endpoint (protocol
-// §5.48 "Joining by invite"). It serves exactly `invite.inspect`,
-// `invite.accept`, `invite.challenge` and `invite.prove`, with no hello. Every
-// request carries the invite secret, so request and response text is never
-// logged, and server-authored error text is dropped: only the documented
-// `error.data.code` values leave this file.
-
-/// A forge account named by its stable id (`{ provider, host, externalUserId }`).
 nonisolated struct InviteIdentity: Equatable, Sendable {
     static let githubHost = "github.com"
 
@@ -19,7 +11,6 @@ nonisolated struct InviteIdentity: Equatable, Sendable {
     var isGitHub: Bool { provider == "github" }
     var json: [String: Any] { ["provider": provider, "host": host, "externalUserId": externalUserId] }
 
-    /// Validates the canonical wire form and never repairs it.
     static func parse(_ value: Any?) -> Self? {
         guard let row = value as? [String: Any],
               let provider = row["provider"] as? String, provider == "github" || provider == "gitlab",
@@ -35,27 +26,20 @@ nonisolated struct InviteIdentity: Equatable, Sendable {
     }
 }
 
-/// Which forge account the invite requires.
 nonisolated enum InvitePin: Equatable, Sendable {
     case pinned(InviteIdentity)
-    /// The host omitted `pinIdentity` (older host): the requirement is unknown.
     case unknown
-    /// Explicit `null`: anyone with the link may join.
     case unpinned
 }
 
-/// `invite.inspect` / `invite.challenge`: the invite's preview for the consent prompt.
 nonisolated struct InvitePreview: Equatable, Sendable {
     let scope: InviteLink.Scope
     let workspaceId: String?
     let workspaceTitle: String?
-    /// The host's display name (collaboration name, pretty or plain hostname).
     let hostName: String?
     let pin: InvitePin
-    /// Set on `invite.challenge` only: the single-use nonce the proof must carry.
     let nonce: String?
 
-    /// Validates a preview for `scope`; nil when the response does not match.
     static func parse(_ value: Any, scope: InviteLink.Scope, requiresNonce: Bool) -> Self? {
         guard let row = value as? [String: Any] else { return nil }
         let pin: InvitePin
@@ -92,14 +76,12 @@ nonisolated struct InvitePreview: Equatable, Sendable {
         )
     }
 
-    /// A refreshed challenge may change only its nonce.
     func describesSameInvite(as other: Self) -> Bool {
         scope == other.scope && workspaceId == other.workspaceId && workspaceTitle == other.workspaceTitle
             && hostName == other.hostName && pin == other.pin
     }
 }
 
-/// `invite.prove` / `invite.accept`: the person's credential for this host, returned once.
 nonisolated struct InviteCredential: Equatable, Sendable {
     let token: String
     let principalId: String
@@ -128,7 +110,6 @@ nonisolated struct InviteCredential: Equatable, Sendable {
     }
 }
 
-/// The proof `invite.prove` names: a GitHub gist, or a snippet on a GitLab instance.
 nonisolated struct InviteProof: Equatable, Sendable {
     let provider: String
     let host: String
@@ -142,13 +123,10 @@ nonisolated struct InviteProof: Equatable, Sendable {
     }
 }
 
-/// Why an invite step failed, reduced to bounded codes that are safe to log and show.
 nonisolated enum InviteFailure: Error, Equatable, Sendable {
     case certificateMismatch
     case connectionClosed
-    /// The host answered with a shape this app cannot trust.
     case invalidResponse
-    /// A documented `/invite` refusal (`error.data.code`); empty for any other error.
     case refused(String)
     case timedOut
     case tunnelUnavailable
@@ -167,19 +145,15 @@ nonisolated enum InviteFailure: Error, Equatable, Sendable {
     }
 }
 
-/// One JSON-RPC call over an open `/invite` socket. Abstracted for tests.
 nonisolated protocol InviteTransport: Sendable {
-    /// Display label of the route that answered (a host, or the tunnel).
     var routeLabel: String { get }
 
     func call(_ method: String, params: [String: Any], timeout: Duration) async throws -> Any
     func close() async
 }
 
-/// The four `/invite` methods with response validation.
 nonisolated struct InviteClient: Sendable {
     private static let requestSeconds: Int64 = 30
-    /// The host reads the proof back from the forge before answering.
     private static let proveSeconds: Int64 = 60
     static let requestTimeout: Duration = .seconds(requestSeconds)
     static let proveTimeout: Duration = .seconds(proveSeconds)
@@ -187,8 +161,6 @@ nonisolated struct InviteClient: Sendable {
     let transport: any InviteTransport
     let link: InviteLink
 
-    /// A host join sends `scope: "host"` on every call (§5.49); omission
-    /// means workspace scope, so workspace links keep the legacy shape.
     private var credentials: [String: Any] {
         var params: [String: Any] = ["inviteId": link.inviteId, "secret": link.secret]
         if link.scope == .host { params["scope"] = InviteLink.Scope.host.rawValue }
@@ -224,8 +196,6 @@ nonisolated struct InviteClient: Sendable {
     }
 }
 
-/// A pin-verified `/invite` WebSocket, dialed over the link's direct hosts
-/// (legacy links only) and its Tailcat tunnel.
 nonisolated final class InviteSocket: InviteTransport {
     let routeLabel: String
     private let connection: RacedConnection
@@ -322,8 +292,6 @@ nonisolated final class InviteSocket: InviteTransport {
         return Int(exactly: id)
     }
 
-    /// The result of the response numbered `id`, nil for any other frame.
-    /// Errors keep only the documented `error.data.code`.
     static func response(to id: Int, in message: URLSessionWebSocketTask.Message) throws -> Any? {
         let data: Data
         switch message {

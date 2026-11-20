@@ -37,14 +37,10 @@ import Observation
 @MainActor
 @Observable
 final class ConversationCommands {
-    // JSON-RPC Invalid params, also used by the daemon for unknown entity ids.
     private static let invalidParametersErrorCode = -32_602
 
     struct AgentState {
         let isStreaming: Bool
-        /// PROTOCOL §5.5 three-state marker: `nil` when absent from the
-        /// response (legacy daemon), `""` when written-empty (nothing
-        /// pending), else the question-bearing message id. Never coerced.
         let pendingQuestionsMessageId: String?
         let dismissedQuestionsMessageId: String?
         let lastSeenMessageId: String?
@@ -119,7 +115,6 @@ extension ConversationCommands {
         )
     }
 
-    /// Seeks one message; nil if absent, with unknown-id errors classified by the caller.
     func fetchMessage(
         agentId: String,
         messageId: String,
@@ -160,7 +155,6 @@ extension ConversationCommands {
             "content": request.content,
             "workspaceId": request.workspaceId,
             "messageId": request.messageId,
-            // Correlates auto-queue + drain; NOT a replay/dedup guarantee (PROTOCOL §5.5).
             "userAppMessageId": request.messageId
         ]
         request.imagePayload.apply(to: &params)
@@ -175,8 +169,6 @@ extension ConversationCommands {
             throw ConversationSendError.invalidAcknowledgement
         }
         if !queued { return SendAcceptance(queued: false, messageId: response["messageId"] as? String) }
-        // Seed only if no newer queue event/read landed during the request.
-        // The store also skips seeding when a transcript echo already won.
         var seed: QueuedMessage?
         if let dictionary = response["queuedMessage"] as? [String: Any],
            let data = try? JSONSerialization.data(withJSONObject: dictionary),
@@ -276,14 +268,6 @@ extension ConversationCommands {
 
     func queueSeedSupersedes(_ receivedAt: Int) -> Bool { receivedAt < queueSeedSequence }
 
-    /// Replaces the queue from every agent.getQueue page (positions are
-    /// whole-queue). Malformed envelopes preserve existing rows; a valid empty
-    /// array clears them. Later acknowledged changes and processing removals
-    /// fold in without discarding unrelated seed rows. The page token is a
-    /// queue position, so a walk overtaken by a queue event, processing
-    /// removal, local mutation, reset or newer read (up to its last reply)
-    /// stops without publishing; the daemon's following `agent:queue:updated`
-    /// carries the whole queue, and any re-read starts from the first page.
     func fetchQueue(agentId: String) async throws {
         let generation = resetGeneration
         let readGeneration = queueReadGeneration
@@ -301,7 +285,6 @@ extension ConversationCommands {
                     paged = true
                     guard !Task.isCancelled, generation == resetGeneration,
                           readGeneration == queueReadGeneration else { throw CancellationError() }
-                    // Drains and local edits shift positions too, even when they fold into this read.
                     guard read.revision == queueRevision, read.mutations.isEmpty else { throw QueueReadSuperseded() }
                 }
                 return try await connectionManager.request("agent.getQueue", params: params)
@@ -312,8 +295,6 @@ extension ConversationCommands {
         guard !Task.isCancelled, generation == resetGeneration,
               readGeneration == queueReadGeneration else { throw CancellationError() }
         guard read.revision == queueRevision else { return }
-        // A change while the last page was in flight can have shifted it too. One
-        // page is a single snapshot, so its folded-in changes still apply.
         guard !paged || read.mutations.isEmpty else { return }
         guard let response = result as? [String: Any],
               let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
