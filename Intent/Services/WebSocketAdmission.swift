@@ -3,8 +3,6 @@ import Foundation
 extension WebSocketConnection {
     private static let startupRequestID = -3
 
-    /// Bootstrap sockets stay outside the app's message pump. Even a ready
-    /// snapshot retires this socket; only a fresh hello can admit a principal.
     func admittedHandshake(
         helloRequest: Data,
         onStartup: @escaping @Sendable (DaemonStartupState) async throws -> Void = { _ in }
@@ -52,8 +50,6 @@ extension WebSocketConnection {
                     throw error
                 }
                 try await onUpdate(.unavailable)
-                // Includes close-on-ready and failed/timed-out polling. No
-                // cached progress remains current and no mutation is replayed.
                 throw DaemonStartupError.reconnect
             }
         }

@@ -1,8 +1,6 @@
 import Foundation
 import Security
 
-/// Injectable Security seam. Duplicate adds are retried from a fresh read;
-/// they must never fall through to an unconditional overwrite.
 protocol SyncedKeychainWriting: SyncedKeychainListing {
     func add(_ attributes: [String: Any]) -> OSStatus
     func update(matching query: [String: Any], attributes: [String: Any]) -> OSStatus
@@ -25,9 +23,6 @@ extension SecItemSyncedKeychain: SyncedKeychainWriting {
     }
 }
 
-/// Publishes only durably saved local edits. Uses the raw shared dictionary
-/// as the base so desktop-owned and future v1 fields survive a re-pair.
-/// The shared registry remains LWW; iCloud supplies no cross-device CAS.
 struct SyncedBackendPublisher {
     enum Outcome: Equatable {
         case published
@@ -41,8 +36,6 @@ struct SyncedBackendPublisher {
 
     private static let millisecondsPerSecond: Double = 1000
 
-    /// Only the app's shared persistence opts into real publication. Test
-    /// managers must inject their writer; demo and preview stores stay local.
     static func production() -> Self? {
         guard !DemoMode.isEnabled,
               NSClassFromString("XCTestCase") == nil,
@@ -51,10 +44,6 @@ struct SyncedBackendPublisher {
         return Self(keychain: SecItemSyncedKeychain(), accessGroup: SyncedBackendRegistry.resolveSharedAccessGroup())
     }
 
-    /// A deliberate pairing may supersede a removal already observed at the
-    /// time of that action. Clock skew and same-millisecond re-pairs cannot
-    /// make that edit older than its known predecessor. A retry never calls
-    /// this: it uses the clock saved atomically with the new token.
     func pairingClock(for connection: StoredConnection) -> Double {
         var clock = max(
             floor(now().timeIntervalSince1970 * Self.millisecondsPerSecond),
@@ -68,8 +57,6 @@ struct SyncedBackendPublisher {
         return clock
     }
 
-    /// One bounded attempt. Failures keep the pending edit for a later
-    /// foreground pass, including across process restarts.
     func publish(_ connection: StoredConnection) -> Outcome {
         guard let clock = connection.pendingSyncUpdatedAt,
               let target = target(for: connection),
@@ -77,24 +64,18 @@ struct SyncedBackendPublisher {
         else { return .retry }
         let entries = rows.compactMap(Entry.init)
         let winner = self.winner(in: entries, connection: connection, target: target)
-        // Include expired tombstones here: an old local pairing must not
-        // revive a deletion merely because its reader-side TTL elapsed.
         if let winner, winner.record.updatedAt >= clock {
             return acknowledges(connection, record: winner.record, clock: clock)
                 ? .published : .superseded(winner.record)
         }
         let host = winner?.record.port == connection.server.port ? winner?.record.host ?? target.host : target.host
         let account = Self.account(host: host, port: connection.server.port)
-        // Freeze unreadable/newer-schema rows for this identity, and never
-        // replace a different certificate reusing the same host:port.
         guard !rows.contains(where: { blocks($0, connection: connection, accounts: [target.account, account]) })
         else { return .retry }
         guard let payload = payload(connection, host: host, winner: winner, clock: clock) else { return .retry }
         return write(payload, account: account, rows: rows, exists: entries.contains { $0.account == account })
     }
 
-    /// Automatic route observations patch a live row only. They cannot add a
-    /// missing/deleted backend or restamp stale credentials over newer edits.
     func publishRoutes(_ connection: StoredConnection) -> Outcome {
         guard let pending = connection.pendingRoutePublication,
               let target = target(for: connection), let rows = readRows(),
@@ -116,8 +97,6 @@ struct SyncedBackendPublisher {
 
     private func selectedRoute(_ pending: PendingBackendRoutePublication, record: SyncedBackendRecord) -> String? {
         guard let desired = pending.tcAddress else { return record.tcAddress }
-        // Host-only edits must not restamp a stale tunnel observation. Keep a
-        // winning shared tunnel while still publishing newly learned hosts.
         if let remote = record.tcAddress, remote != desired, remote != pending.previousTcAddress,
            record.updatedAt >= (pending.tcUpdatedAt ?? pending.updatedAt) {
             return remote
@@ -144,8 +123,6 @@ struct SyncedBackendPublisher {
     private func write(_ payload: Data, account: String, rows: [[String: Any]], exists: Bool) -> Outcome {
         guard let accessGroup else { return .retry }
         let query = Self.itemQuery(account: account, accessGroup: accessGroup)
-        // Re-read immediately before mutation to catch local concurrent
-        // writers and preserve edits that landed during preparation.
         guard let freshRows = readRows(), Self.sameRows(rows, freshRows) else { return .retry }
         let status: OSStatus
         if exists {
@@ -159,9 +136,6 @@ struct SyncedBackendPublisher {
         return status == errSecSuccess ? .published : .retry
     }
 
-    /// An equal clock alone is not proof that this device wrote the row.
-    /// Only equivalent connection fields acknowledge a failed local save;
-    /// a competing edit must still reach the ordinary importer/live cache.
     private func acknowledges(_ connection: StoredConnection, record: SyncedBackendRecord, clock: Double) -> Bool {
         record.updatedAt == clock && !record.deleted
             && record.token == connection.token
@@ -266,7 +240,6 @@ struct SyncedBackendPublisher {
         ]
     }
 
-    // nil is an unknown registry; an empty array is a successful empty read.
     private func readRows() -> [[String: Any]]? { // swiftlint:disable:this discouraged_optional_collection
         guard let accessGroup else { return nil }
         switch keychain.list(matching: SyncedBackendRegistry.listQuery(accessGroup: accessGroup)) {
@@ -277,8 +250,6 @@ struct SyncedBackendPublisher {
     }
 
     private static func sameRows(_ lhs: [[String: Any]], _ rhs: [[String: Any]]) -> Bool {
-        // Only account and bytes affect our decision. Keychain row ordering
-        // and modification-date attributes are not part of the payload.
         func signatures(_ rows: [[String: Any]]) -> [String] {
             rows
                 .map { row in

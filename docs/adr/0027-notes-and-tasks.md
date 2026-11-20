@@ -29,9 +29,15 @@
    1. `updateTaskLineStatus(noteId:workspaceId:line:status:)` uses `task.update`, an atomic single-line edit. `line` is 1-based and `status` uses the checkbox vocabulary (`todo`, `in-progress`, `done`).
    2. `updateTaskNoteStatus(noteId:workspaceId:status:)` uses `task.updateNoteStatus` with the task-note vocabulary.
    3. Both apply optimistically and roll back on error. `rollback(_:)` restores only that note by id, so concurrent changes to other notes stay. The `note:updated` event reconciles the rest.
+9. **Tasks (`TaskStore`).**
+   1. `task.list` without `limit`/`nextToken` answers the whole list. A reply with `nextToken` is read to the end before publishing; a failed page keeps the previous list. A paged live snapshot is filled through paged `task.list` (`WorkspaceTask` rows parse like the snapshot's task notes).
+   2. Bus events arrive wrapped as `{ subscriptionId, event: { type, workspaceId, timestamp, data } }`. Events are scoped to this workspace to avoid cross-workspace refetches.
+   3. Like `AgentStore` and `WorkspaceStore`, the store uses an explicit allowlist. Only events that can change a rendered field (id, title, status, updatedAt) or membership refetch: `task:created` and `task:status-changed`. `task:agent-linked`/`task:agent-unlinked` are ignored; the assignee is not on the row. Body and title edits arrive as `note:updated`, not `task:*`.
+   4. `task:ready-tasks-changed` is classified by `data.triggeredBy.reason`. Readiness is not rendered, so `relations-changed` is ignored, except `note-deleted`: intentd's `delete_note` emits no other `task:*` type, so that is the only signal that a row left the list. The emission without a reason pairs with `task:status-changed`, which already refetches.
 
 ## Code
 
 - `NoteStore`: `loadPhase`, `prepareForWorkspaceChange(to:)`, `resetForFetchIfWorkspaceChanged(to:)`, `fetchNotes(workspaceId:)`, `onConnected()`, `scheduleReconnect(generation:)`, `observeConnection(dropInitialState:)`, `requestNoteList(workspaceId:)`, `mergeSlimRows(_:)`, `upsertFullNote(_:workspaceId:)`, `isCachedRowNewer(_:thanFetched:)`, `fetchNote(noteId:workspaceId:)`, `NoteFetchResult`
+- `TaskStore`: `_fetchAll()`, `handleEvent`, `refetchEventTypes`, `ignoredEventTypes`, `readyTasksChangedReasonClassification`, `readyTasksChangedWithoutReason`, `classify(type:data:)`, `fillSnapshot(reconciler:firstToken:)`
 - `NoteStore` (collections): `sortedNotes`, `rootNotes`
 - `NoteStore` (live state, task status): `suspendObservation()`, `resumeObservation(workspaceId:)`, `fillSnapshot(reconciler:firstToken:)`, `updateTaskLineStatus(noteId:workspaceId:line:status:)`, `updateTaskNoteStatus(noteId:workspaceId:status:)`, `rollback(_:)`
