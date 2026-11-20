@@ -194,7 +194,6 @@ final class MobileTerminalConnection {
         }
     }
 
-    // The buffer and stream overlap while a snapshot request is in flight.
     nonisolated static func replay(snapshot: Data, pending: Data) -> Data {
         guard !pending.isEmpty else { return snapshot }
         let bytes = pending.map(Int.init) + [-1] + snapshot.suffix(pending.count).map(Int.init)

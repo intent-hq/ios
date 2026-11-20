@@ -28,6 +28,16 @@ Stores follow daemon state through `*.subscribe` and `subscription.push` (protoc
    2. Ids a delta or local seed changed since the snapshot are newer than any later page row; ids a delta removed must not be re-added by a page. `epoch` advances on every snapshot and reset, so a stale page walk sees it was superseded.
    3. `fillFromPage(_:)` skips those rows and upserts the rest. A walk that serves a row twice keeps the later one.
    4. `seed(id:value:)` puts new ids at the front and keeps existing positions, without touching sequence tracking. `patch(id:_:)` changes an existing row only; while a snapshot fills, an unread row comes from its page.
+7. **`LiveSubscription` state.** One enum replaces the acknowledged id, a "live" flag and a resnapshot guard that each store kept side by side; every combination is a case, and stores change it only through named transitions.
+   1. The id is the subscription whose push handler the store registered. During a resnapshot it is the old id while `*.unsubscribe` runs, nil while resubscribing, and the new id once acknowledged.
+   2. `acknowledge(_:)` keeps the feed and any running resnapshot, and returns the previous id. The caller unregisters that handler, even when it equals the new id.
+   3. `requestResnapshot()` returns false while a resnapshot runs; the feed changes only when the resnapshot body starts. `endResnapshot()` is a no-op after a teardown ended it.
+   4. A store refetches on events only while not live, to avoid double application. During a resnapshot, a baseline refetch bridges the gap.
+8. **`LoadPhase` (ios#462).** One finite list read: not started, running, succeeded, or failed before any success. A failed refresh keeps the last success, so cached rows stay instead of an error. A failed first read shows `LoadFailureView` with Retry.
+   1. `loadingKeepingFailure` keeps a shown failure on screen until the read ends (Retry, or an event refresh after a failure). Only `beginningKeepingFailure()` and `failingDuringRead(_:)` produce it.
+   2. `refreshFailed` keeps the data and the message until the next read starts. Only `failingVisibly(_:)` produces it.
+   3. `failingDuringRead(_:)` records a failure while the read continues (a trailing pass, or more pages); the end of the read shows it. `settled()` ends a read with no result and keeps a kept failure.
+   4. Transitions return the next phase, so stores assign only real changes and an identical refetch does not invalidate observers.
 
 ## Consequences
 
@@ -41,5 +51,6 @@ Stores follow daemon state through `*.subscribe` and `subscription.push` (protoc
 - `EventClassification`
 - `SubscriptionPush`: `parse(method:params:)`, `nextToken`; `DeltaReconciler`: `fillFromPage(_:)`, `seed(id:value:)`, `patch(id:_:)`, `epoch`
 - `CommentStore`: `subscribeLiveState(workspaceId:noteId:generation:)`, `handleSubscriptionPush(_:)`, `fillSnapshot(reconciler:firstToken:)`
-- `LiveSubscription`: `requestResnapshot()`
+- `LiveSubscription`: `acknowledge(_:)`, `requestResnapshot()`, `endResnapshot()`
+- `LoadPhase`: `beginningKeepingFailure()`, `failingDuringRead(_:)`, `failingVisibly(_:)`, `settled()`
 - `ConnectionManager`: `registerSubscriptionHandler(id:handler:)`

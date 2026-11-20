@@ -61,15 +61,11 @@ enum InvitedSyncMerge {
     }
 }
 
-/// Token-free removal memory/outbox, alongside the existing backend journal.
-/// Saved before credential writes so a locked Keychain cannot undo forgetting.
 struct InvitedSyncJournal: Codable {
     var floors: [String: Double] = [:]
     var removals: [String: Data] = [:]
     var retired: [String: [String]] = [:]
     var clock: Double = 0
-    // Absent in existing journals means no retry exception. This local-only
-    // field contains hashes/provenance, never bearer payloads.
     var pendingLegacy: [InvitedLegacyMigration.Receipt] = []
 
     private enum CodingKeys: String, CodingKey { case floors, removals, retired, clock, pendingLegacy }
@@ -132,7 +128,7 @@ struct InvitedSyncJournal: Codable {
             return false
         }
         pendingLegacy[index].personKey = personKey
-        observe([]) // An already observed removal also covers this newly bound row.
+        observe([])
         return true
     }
 

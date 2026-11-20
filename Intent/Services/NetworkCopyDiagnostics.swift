@@ -4,7 +4,6 @@ import Network
 import Observation
 import SwiftUI
 
-/// Temporary, opt-in phone evidence. Never accepts free-form text or writes data.
 @MainActor @Observable
 final class NetworkCopyDiagnostics {
     static let launchArgument = "--diagnose-network-copy"
@@ -68,7 +67,6 @@ final class NetworkCopyDiagnostics {
         let event: Event
     }
 
-    // Recording must not subscribe the presenter to subsequent diagnostic events.
     @ObservationIgnored private(set) var entries: [Entry] = []
     @ObservationIgnored private var sequence = 0
     private(set) var readout = ""

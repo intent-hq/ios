@@ -43,6 +43,9 @@ A saved daemon has several host routes and can have a Tailcat tunnel address. `C
     3. Platforms without a TailcatKit build (visionOS) use `UnavailableTunnelDialer`. A tunnel candidate then fails with a clear unavailable error under the tunnel label; it does not crash.
     4. `WebSocketMessageAssembler.MessageAssembler` decodes text only from a complete message. A multi-byte UTF-8 character split across fragments must not be decoded early. A malformed message does not affect the next one.
     5. Path classification uses interface metadata, never name prefixes.
+11. **Network availability.** `NetworkAvailability` is presentation-only default-path evidence, independent of socket and retry ownership. Neither a satisfied nor an unsatisfied general path proves an endpoint is reachable. It is shared across windows, never with `ConnectionManager`'s per-socket monitor. Each foreground scene holds one lease (`acquire()`), including during startup and reconnection; it is released on background or teardown, not on socket loss. After the last release, the next acquire waits for a fresh real path callback.
+12. **Path snapshots.** `NetworkPathSnapshot.unsatisfiedReason` matters only for an unsatisfied path and does not diagnose Airplane Mode. `isSatisfied` keeps the transport's existing satisfied interpretation. `physicalInterfaces` keeps `NWPath` preference order, even under a virtual primary.
+13. **Network copy diagnostics.** `NetworkCopyDiagnostics` is temporary, opt-in phone evidence. It never accepts free-form text or writes data. Recording does not subscribe the presenter to later events.
 
 ## Consequences
 
@@ -55,3 +58,4 @@ A saved daemon has several host routes and can have a Tailcat tunnel address. `C
 - `HostRaceOutcome`, `RacedConnection`, `RaceMailbox`, `TunnelEstablishmentFailure`
 - `ConnectionManager` (startup, routes, requests): `readyRace(…)`, `observeStartupLifecycle()`, `scheduleHostRoutesRefresh()`, `refreshHostRoutes()`, `mergeHosts(existing:reported:)`, `refreshStoredDisplayName(token:port:context:)`, `hostRefreshIsCurrent(_:)`, `defaultRequestTimeout`, `awaitResponse(…)`, `startHeartbeat()`
 - `ConnectionRequestTransport`: `makeInProcessTransport(…)`
+- `NetworkAvailability`: `acquire()`, `Lease`; `NetworkPathSnapshot`, `NetworkCopyDiagnostics`

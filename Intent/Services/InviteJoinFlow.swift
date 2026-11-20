@@ -1,26 +1,18 @@
 import Foundation
 import Observation
 
-/// What the join needs from the app: the host transport, saved connections,
-/// the person's own Mac, and how to save and open the result. Injected so
-/// the flow is testable without sockets or persistence.
 @MainActor
 struct InviteJoinEnvironment {
     var openTransport: (InviteLink) async throws -> any InviteTransport
     var savedConnections: () -> [StoredConnection]
     var openOwnDaemon: (StoredConnection) async throws -> any InviteOwnDaemon
-    /// Persists a new credential as an invited session (PairingFlow) and returns its record.
     var saveCredential: (InviteLink, InviteCredential) async throws -> StoredConnection
-    /// Routes this window to `connection`, opening `workspaceId` when set.
     var open: (StoredConnection, String?) -> Void
 }
 
-/// What the person is asked to confirm before anything is sent to the host.
 nonisolated struct InviteJoinConfirmation: Equatable, Sendable {
     enum Method: Equatable, Sendable {
-        /// A login this device already holds for the host (`invite.accept`).
         case existingAccess
-        /// A proof published by the person's own Mac (`invite.prove`).
         case proveOnMac(macName: String, providerName: String)
     }
 
@@ -31,19 +23,12 @@ nonisolated struct InviteJoinConfirmation: Equatable, Sendable {
     let method: Method
 }
 
-/// A plain-language reason the join stopped.
 nonisolated struct InviteJoinProblem: Equatable, Sendable {
     let title: String
     let message: String
-    /// Whether trying again could help (offers Try Again).
     let retryable: Bool
 }
 
-/// Drives one `intent://invite` join, mirroring the desktop flow
-/// (cloudlands-fe `invite-deep-link.ts`): a returning guest presents the
-/// login this device already has for the host; a first-time guest proves a
-/// GitHub/GitLab account through their own paired Mac. The result is saved
-/// as an invited session (synced to the person's other devices) and opened.
 @MainActor
 @Observable
 final class InviteJoinModel {
@@ -51,9 +36,7 @@ final class InviteJoinModel {
         case connecting
         case confirm(InviteJoinConfirmation)
         case joining
-        /// This device has no own Mac to make the identity proof.
         case needsOwnMac
-        /// The own Mac has no GitHub/GitLab account signed in for this invite.
         case needsSignIn(providerName: String, macName: String)
         case failed(InviteJoinProblem)
         case finished
@@ -70,14 +53,12 @@ final class InviteJoinModel {
         self.environment = environment
     }
 
-    /// Starts (or, after a failure, restarts) the join.
     func start() {
         cancel()
         phase = .connecting
         run = Task { [weak self] in await self?.join() }
     }
 
-    /// The person confirmed (true) or declined (false) the prompt.
     func answer(_ confirmed: Bool) {
         decision?.resume(returning: confirmed)
         decision = nil
@@ -89,8 +70,6 @@ final class InviteJoinModel {
         run = nil
     }
 
-    // MARK: - Flow
-
     private func join() async {
         var transport: (any InviteTransport)?
         do {
@@ -99,7 +78,6 @@ final class InviteJoinModel {
             try Task.checkCancellation()
             try await join(over: InviteClient(transport: opened, link: link))
         } catch is CancellationError {
-            // Dismissed: nothing to show.
         } catch {
             if !Task.isCancelled { phase = .failed(Self.problem(for: error)) }
         }
@@ -112,15 +90,12 @@ final class InviteJoinModel {
         let saved = environment.savedConnections()
         let sameHost = saved.filter { InvitedSyncKey.sameFingerprint($0.server.certFingerprint, link.fingerprint) }
         if let owned = sameHost.first(where: { $0.principal?.isOwner == true }) {
-            // The person owns this host: nothing to join.
             finish(owned, workspaceId: preview.workspaceId)
             return
         }
         let guests = sameHost
             .filter { $0.principal.map { !$0.isOwner } == true && !$0.token.isEmpty }
             .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
-        // Only the confirmed person may join: when the host no longer knows
-        // that login, fall through to the proof, which asks again.
         if let guest = guests.first {
             let login = guest.principal?.login ?? guest.displayName
             guard try await confirm(preview: preview, login: login, method: .existingAccess) else { return }
@@ -130,7 +105,6 @@ final class InviteJoinModel {
         try await proveOnOwnMac(preview: preview, client: client, saved: saved)
     }
 
-    /// Returning guest: false when the host no longer knows this login.
     private func accept(as guest: StoredConnection, preview: InvitePreview, client: InviteClient) async throws -> Bool {
         let credential: InviteCredential
         do {
@@ -175,8 +149,6 @@ final class InviteJoinModel {
         guard try await confirm(preview: preview, login: account.login, method: method) else { return }
         let session = ProofSession(client: client, daemon: daemon, account: account, preview: preview)
         let (credential, proof) = try await prove(session, challenge: challenge)
-        // Point of no return: the host minted the credential and the proof is
-        // spent. Remove it before saving, which dials the new host.
         await InviteIdentityProof.delete(proof, collaboration: account.collaboration, on: daemon)
         guard matches(credential, preview),
               credential.identity == nil || account.identity == nil || credential.identity == account.identity else {
@@ -193,8 +165,6 @@ final class InviteJoinModel {
         let preview: InvitePreview
     }
 
-    /// Publishes the proof and proves it, with one fresh challenge (no new
-    /// prompt: consent stands) when the host found the proof stale.
     private func prove(_ session: ProofSession, challenge first: InvitePreview) async throws -> (InviteCredential, InviteProof) {
         let hostLabel = session.preview.hostName ?? link.hosts.first ?? "Intent"
         var challenge = first
@@ -258,7 +228,6 @@ final class InviteJoinModel {
     }
 }
 
-/// Failures the flow raises itself.
 nonisolated enum InviteJoinError: Error, Equatable {
     case ownMacUnreachable(name: String)
 }

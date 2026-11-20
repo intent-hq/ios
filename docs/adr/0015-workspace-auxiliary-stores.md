@@ -19,8 +19,28 @@ Several small stores show workspace side data: assistant threads, background hoo
    3. An event for an unknown hook sets `needsRefetch`. The fold cannot invent wire fields such as `delayMs` or `createdAt`.
    4. An event with `nextRunAt` keeps the hook scheduled. Without it, a terminal dispatched or evicted event follows and drops it.
    5. A `hook.list` reply that was in flight never brings back a hook that a later event removed, and never refills a list that `unsubscribe()` cleared. A complete cancellation event replays over a stale seed without a recovery read (added from `BackgroundHookStoreTests` comments).
+3. **Monitored PRs (§5.42, §6.5; from test comments).**
+   1. `foldMonitorEvent(…)` is a pure fold. A re-arm refreshes the baseline on the daemon, so the fold hides pre-re-arm pending state and refetches to converge on the refreshed row.
+   2. `check` nil omits the key (presence detection), so the request stays compatible with daemons that predate it.
+   3. A monitor that disappeared while disconnected and was replaced by a different one is not resurrected by reissuing an RPC without applying its reply.
+   4. A `prMonitor.list` reply that was in flight never brings back a monitor that a complete cancellation event removed, and never refills a list that `unsubscribe()` cleared.
+   5. Deinit removes the event handler (monorepo#2211).
+3. **PR monitors (§5.42).**
+   1. `MonitoredPrStore` gives a conversation a lease on the same monitor cache that workspace rows use.
+   2. `flush(monitorId:mode:)` only acknowledges; the outcome arrives as `prMonitor:*` events. `check: true` makes the daemon re-poll the PR first and flush changes against the emit baseline. `daemonDefault` omits the key, so older daemons get the pre-check request. `cancel(monitorId:)` relies on `prMonitor:cancelled` to drop the monitor.
+   3. `foldMonitorEvent(…)` is a pure fold. Payloads carry only `{ workspaceId, agentId, monitorId, repo, prNumber, state }` (plus `changes`), so an unknown monitor sets `needsRefetch`.
+   4. Cancelled rows are dropped, as `prMonitor.list` excludes them. Registration and idempotent re-arm refresh the baseline server-side, so pending state clears at once and the list is refetched. A merged or closed PR keeps its row as completed, with the final wake delivered.
+4. **Terminals.**
+   1. `MobileTerminalStore` keys errors by workspace, so a background refresh never shows on another workspace's screen.
+   2. Titles: the user's name, else the running program, else the last program, else the terminal's name. User names win. An empty name returns to automatic naming. A rename of an ended terminal or a stale handle to a reused id is ignored.
+   3. A returned terminal id means the shell runs on the daemon. It is recorded even if the connection changed meanwhile; dropping it would orphan the PTY.
+   4. A terminal whose own event arrived during a list request is newer than that list row.
+   5. `MobileTerminalConnection.replay(snapshot:pending:)` merges the buffer and stream, which overlap while a snapshot request is in flight.
 
 ## Code
 
 - `AssistantStore`: `startObservingIfNeeded()`, `refresh()`, `loadPhase`
+- `MonitoredPrStore`: `flush(monitorId:mode:)`, `cancel(monitorId:)`, `foldMonitorEvent(…)`, `FoldResult`
+- `MobileTerminalStore`: `errors`, `title(for:)`, `rename(_:to:)`; `MobileTerminalConnection`: `replay(snapshot:pending:)`
 - `BackgroundHookStore`: `runNow(hookId:)`, `cancel(hookId:)`, `foldHookEvent(…)`, `FoldResult`
+- `MonitoredPrStore`: `foldMonitorEvent(…)`

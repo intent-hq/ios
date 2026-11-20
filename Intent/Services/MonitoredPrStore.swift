@@ -18,7 +18,6 @@ enum PrMonitorFlushMode {
     }
 }
 
-/// A conversation's lease on the same monitor cache used by workspace rows.
 @MainActor
 @Observable class MonitoredPrStore {
     private enum MonitorEventKind {
@@ -96,11 +95,6 @@ enum PrMonitorFlushMode {
 
     func handleEvent(_: String, params: Any) { source.handleEvent("", params: params) }
 
-    /// `prMonitor.flush` (§5.42) — delivers a monitor's pending consolidated
-    /// wake now; ack only, the outcome arrives as `prMonitor:*` events.
-    /// `check: true` makes the daemon re-poll the PR first and flush anything
-    /// that changed vs. the emit baseline (additive param, default `false`);
-    /// daemonDefault omits the key so older daemons see the pre-check request.
     func flush(monitorId: String, mode: PrMonitorFlushMode = .daemonDefault) async {
         guard let wsId = workspaceId else { return }
         var params: [String: Any] = [
@@ -115,8 +109,6 @@ enum PrMonitorFlushMode {
         }
     }
 
-    /// `prMonitor.cancel` (§5.42) — the `prMonitor:cancelled` event drops
-    /// the monitor.
     func cancel(monitorId: String) async {
         guard let wsId = workspaceId else { return }
         do {
@@ -129,20 +121,11 @@ enum PrMonitorFlushMode {
         }
     }
 
-    // MARK: - Event folding
-
     struct FoldResult {
         let monitors: [MonitoredPr]
-        /// The event referenced a monitor this list has never seen — the
-        /// fold cannot invent the missing wire fields (`createdAt`,
-        /// `lastSnapshot`, …) since `prMonitor:*` payloads carry only
-        /// `{ workspaceId, agentId, monitorId, repo, prNumber, state }`
-        /// (plus `changes` on `prMonitor:changed`), so the caller should
-        /// re-run `prMonitor.list` to converge.
         let needsRefetch: Bool
     }
 
-    /// Pure fold of one `prMonitor:*` event into the current monitor list.
     static func foldMonitorEvent(
         monitors: [MonitoredPr],
         eventType: String,
@@ -153,7 +136,6 @@ enum PrMonitorFlushMode {
             return FoldResult(monitors: monitors, needsRefetch: false)
         }
 
-        // Cancelled rows are excluded from `prMonitor.list` — drop them.
         if eventKind == .cancelled {
             return FoldResult(
                 monitors: monitors.filter { $0.monitorId != monitorId },
@@ -173,10 +155,6 @@ enum PrMonitorFlushMode {
         var next = monitors
         switch eventKind {
         case .registered:
-            // Fires on registration and on an idempotent re-arm; a re-arm
-            // refreshes the monitor's baseline server-side, so clear the
-            // pre-re-arm pending state immediately and refetch to converge
-            // on the refreshed row (fresh `lastSnapshot`, timestamps, …).
             next[index].state = payloadState ?? .active
             next[index].pendingChanges = []
             next[index].hasPendingChanges = false
@@ -189,14 +167,11 @@ enum PrMonitorFlushMode {
                 next[index].hasPendingChanges = !changes.isEmpty
             }
         case .emitted:
-            // The consolidated wake was delivered — pending changes cleared.
             next[index].state = payloadState ?? next[index].state
             next[index].pendingChanges = []
             next[index].hasPendingChanges = false
             next[index].pendingSince = nil
         case .completed:
-            // PR merged/closed — the row is retained (completed monitors
-            // stay visible) with the immediate final wake delivered.
             next[index].state = payloadState ?? .completed
             next[index].pendingChanges = []
             next[index].hasPendingChanges = false
