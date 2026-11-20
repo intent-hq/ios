@@ -14,15 +14,10 @@ final class ConversationLiveTranscript {
     @ObservationIgnored private var cachedMessageIDs: Set<String> = []
     @ObservationIgnored private var messageIDsNeedRefresh = true
 
-    /// Geometry callbacks share one membership snapshot until messages change.
-    /// Invalidate at the array owner so queued callbacks see deletions even
-    /// before SwiftUI's onChange runs, including same-count replacements.
     var messageIDs: Set<String> {
-        _ = messages // Keep cached reads observable to SwiftUI consumers.
+        _ = messages
         if messageIDsNeedRefresh {
             let updatedIDs = Set(messages.lazy.map(\.id))
-            // Retain shared Set storage on content-only edits so consumers'
-            // equality guards stay constant-time on subsequent geometry ticks.
             if updatedIDs != cachedMessageIDs { cachedMessageIDs = updatedIDs }
             messageIDsNeedRefresh = false
         }
@@ -60,62 +55,28 @@ final class ConversationLiveTranscript {
     @ObservationIgnored var olderHistorySeeded = false
 
     @ObservationIgnored var onStreamingChanged: (@MainActor (Bool) -> Void)?
-    /// Fired when `chat.subscribe` is rejected for the still-bound agent.
     @ObservationIgnored var onSubscribeError: (@MainActor (Error) -> Void)?
-    /// Fired after the live chat channel replaced (snapshot) or merged (delta)
-    /// the transcript, so the owner can reconcile state keyed on row residency.
     @ObservationIgnored var onTranscriptReplaced: (@MainActor () -> Void)?
-    /// Only incoming server rows, never the merged array containing optimistic
-    /// local rows. A delta about another message cannot confirm a local send.
     @ObservationIgnored var onAuthoritativeMessages: (@MainActor ([ConversationMessage], Bool) -> Void)?
 
     let connectionManager: ConnectionManagerRouting
     var agentId: String?
     var workspaceId: String?
-    /// Advances whenever the bound agent changes (or on `reset()`), never on a
-    /// same-agent rebind. `whileBound` compares against it so work started
-    /// under an earlier binding cannot publish into a later one.
     @ObservationIgnored var bindingGeneration = 0
-    /// Advances on every `chat.subscribe` registration and channel teardown
-    /// (`reset`, reconnect), same-agent ones included. A reply, push, timeout
-    /// or retry that outlived its registration is validated against it after
-    /// each suspension and dropped, so it cannot replace or clear the newer
-    /// channel.
     @ObservationIgnored var registrationGeneration = 0
-    /// Advances each time the live chat channel applies a snapshot or delta.
-    /// A streaming-state response captured before it moved is stale.
     @ObservationIgnored var liveStateVersion = 0
-    /// Ceiling on the seq-0 snapshot after a `chat.subscribe` ack; past it the
-    /// registration is presumed stale and replaced on the retry schedule.
     @ObservationIgnored var snapshotTimeout = ConversationLiveTranscript.defaultSnapshotTimeout
-    /// Self-heal backoff for a rejected registration or a missing seq-0
-    /// snapshot: one delayed re-registration, doubling per consecutive
-    /// failure up to `maxRetryDelay`, reset when a snapshot applies or the
-    /// transport reconnects (mirrors cloudlands-fe's `LiveChatClient`).
     @ObservationIgnored var initialRetryDelay = ConversationLiveTranscript.defaultInitialRetryDelay
     @ObservationIgnored var maxRetryDelay = ConversationLiveTranscript.defaultMaxRetryDelay
-    /// Delay of the next scheduled retry; `nil` until the first failure after
-    /// a reset, so it starts from `initialRetryDelay`.
     @ObservationIgnored var nextRetryDelay: Duration?
     @ObservationIgnored var snapshotTimeoutTask: Task<Void, Never>?
     @ObservationIgnored var retryTask: Task<Void, Never>?
-    /// `awaitSnapshot` calls parked until the owed seq-0 snapshot applies,
-    /// the binding is torn down, or their own `snapshotTimeout` deadline.
     @ObservationIgnored var snapshotWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
-    /// A registration's seq-0 snapshot is owed: raised by `subscribe`, held
-    /// across rejection, timeout, retry and reconnect (each re-registers for
-    /// the same binding), cleared when a snapshot applies or the binding is
-    /// torn down.
     @ObservationIgnored var snapshotPending = false // swiftlint:disable:this state_phase_flag
 
     enum ChatChannel: Equatable {
-        /// No registration: before the first subscribe, after a rejection,
-        /// reconnect or reset.
         case inactive
-        /// A registration is open (requested or acked) and its seq-0 snapshot
-        /// has not applied yet.
         case registering
-        /// A snapshot applied: the channel owns the transcript and streaming flag.
         case live
     }
 
@@ -127,30 +88,15 @@ final class ConversationLiveTranscript {
     }
     @ObservationIgnored var chatSubscriptionId: String?
     var chatChannelActive: Bool { chatChannel != .inactive }
-    /// While false (no channel yet, rejected registration, reconnect), the
-    /// content-free `agent:stream:*` firehose is the only liveness signal.
     var chatLive: Bool { chatChannel == .live }
     var chatSeeded: Bool { chatLive }
-    /// Only the latest accepted snapshot can enable fragment appends.
     @ObservationIgnored var incrementalDeltas = false
-    /// A known encoding-parameter rejection is remembered for this connection;
-    /// reconnect/reset clears it so a changed daemon can negotiate again.
     @ObservationIgnored var useFullDeltaEncoding = false
     private var chatExpectedSeq = 0
-    /// Registration whose gap / rejected-empty-snapshot recovery is scheduled
-    /// or in flight. Recovery is owned per registration: it validates this
-    /// token before every mutation and after every suspension, and the token
-    /// stops matching the moment a newer registration (its own replacement
-    /// included), `reset` or reconnect advances `registrationGeneration`, so
-    /// a superseded recovery can neither touch the newer channel nor block
-    /// its own recovery.
     @ObservationIgnored var recoveryGeneration: Int?
     var resnapshotInProgress: Bool {
         recoveryGeneration == registrationGeneration
     }
-    /// One rejected empty snapshot gets a replacement subscription. If that
-    /// replacement also reports empty after recovery completes, accept it as
-    /// an authoritative deletion instead of resubscribing without a bound.
     @ObservationIgnored var emptySnapshotRecoveryAttempts = 0
     private let timestampFormatter = ISO8601DateFormatter()
     @ObservationIgnored var hydratedBlocks: [String: ContentBlock] = [:]
@@ -219,8 +165,6 @@ extension ConversationLiveTranscript {
         }
     }
 
-    /// Schedules recovery for the current registration; the token is taken
-    /// here, so a registration opened before the work runs supersedes it.
     private func scheduleResnapshot() {
         let generation = registrationGeneration
         recoveryGeneration = generation
@@ -248,8 +192,6 @@ extension ConversationLiveTranscript {
         chatExpectedSeq = push.seq + 1
         liveStateVersion &+= 1
         resetBackoff()
-        // `parse` pre-decodes off MainActor; the fallback covers pushes built
-        // directly from raw dictionaries (tests).
         replaceHistory(with: snapshotMessages, metadata: push.snapshotMeta ?? [:])
         discardHydratedText(in: snapshotMessages)
         remergeHydratedBlocks()
@@ -288,7 +230,6 @@ extension ConversationLiveTranscript {
                 AppLog.conversation.warning(
                     "[ConversationStore] Rejecting empty chat snapshot over populated transcript, resubscribing..."
                 )
-                // The registration answered; only its content is in doubt.
                 resumeSnapshotWaiters()
                 if !resnapshotInProgress {
                     emptySnapshotRecoveryAttempts += 1

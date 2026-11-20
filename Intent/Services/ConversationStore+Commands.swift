@@ -2,8 +2,6 @@ import Foundation
 import SwiftUI
 
 extension ConversationStore {
-    // MARK: - Send message
-
     func sendMessage(
         agentId: String,
         content: String,
@@ -32,8 +30,6 @@ extension ConversationStore {
         }
     }
 
-    // MARK: - Questions and seen marker
-
     func dismissQuestions(agentId: String, messageId: String, workspaceId: String) async throws {
         try await commands.dismissQuestions(
             agentId: agentId,
@@ -49,8 +45,6 @@ extension ConversationStore {
             messages: messages
         )
     }
-
-    // MARK: - Queue commands
 
     func queueMessage(
         agentId: String,
@@ -122,8 +116,6 @@ extension ConversationStore {
         try await commands.removeQueuedMessage(agentId: agentId, messageId: messageId)
     }
 
-    // MARK: - Models
-
     func setModel(agentId: String, modelId: String, workspaceId: String, providerId: String? = nil) async throws {
         try await commands.setModel(
             agentId: agentId,
@@ -136,8 +128,6 @@ extension ConversationStore {
     func setReasoningEffort(agentId: String, workspaceId: String, effort: String?) async throws {
         try await commands.setReasoningEffort(agentId: agentId, workspaceId: workspaceId, effort: effort)
     }
-
-    // MARK: - Agent subscriptions
 
     func invalidateSubscriptions() {
         guard subscriptionReads.invalidate() else { return }
@@ -183,8 +173,6 @@ extension ConversationStore {
             workspaceId: workspaceId
         )
     }
-
-    // MARK: - Cleanup
 
     func reset() {
         deactivateStreaming()

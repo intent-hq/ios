@@ -15,8 +15,6 @@ extension ConversationLiveTranscript {
             bindingGeneration &+= 1
             resetOlderHistory()
             emptySnapshotRecoveryAttempts = 0
-            // Snapshot waits and recovery timers belong to the binding they
-            // were armed under; a new agent starts its own.
             cancelSnapshotRecovery()
             resumeSnapshotWaiters()
         }
@@ -27,7 +25,6 @@ extension ConversationLiveTranscript {
         traceEvent("TranscriptBound", "messages=\(messages.count) seeded=\(chatSeeded) loading=\(isLoading)")
     }
 
-    /// Returns `work` only while the transcript remains on its original agent.
     func whileBound<T: Sendable>(_ work: () async throws -> T) async rethrows -> T? {
         let generation = bindingGeneration
         let value = try await work()
@@ -38,8 +35,6 @@ extension ConversationLiveTranscript {
         return value
     }
 
-    /// `blockId` is the requested block's id: a hydrated body served without
-    /// its own `id` keeps the identity of the row it replaces.
     @concurrent
     nonisolated static func decodeMessageBlock(
         _ result: InboundJSONValue,

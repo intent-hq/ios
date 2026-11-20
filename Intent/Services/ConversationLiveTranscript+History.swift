@@ -11,7 +11,6 @@ extension ConversationLiveTranscript {
         var outcome = "failed"
         defer {
             ConversationTrace.end("OlderMessagesFetch", interval, "\(traceContext) historyGeneration=\(generation) outcome=\(outcome)")
-            // A superseded request cannot dismiss a newer request's loader.
             if generation == olderHistoryGeneration { isLoadingOlderMessages = false }
         }
         do {
@@ -25,11 +24,7 @@ extension ConversationLiveTranscript {
                 return
             }
             var residentIds = Set(messages.map(\.id))
-            // The daemon serves each page oldest-first. Existing live rows win
-            // over page duplicates, including any newer content or hydration.
             let older = page.messages.filter { residentIds.insert($0.id).inserted }
-            // Capture the current reading intent before publishing changes that
-            // can replace the measured row frames. No suspension separates them.
             if !older.isEmpty { beforePrepend?() }
             messages.insert(contentsOf: older, at: 0)
             remergeHydratedBlocks()
@@ -57,9 +52,6 @@ extension ConversationLiveTranscript {
         olderMessagesError = nil
     }
 
-    /// Full snapshots own their suffix; preserve only the connected older
-    /// prefix. A resume snapshot is instead an append since an existing row,
-    /// so even an empty resume with nextToken:null retains the older cursor.
     func replaceHistory(with incoming: [ConversationMessage], metadata: [String: Any]) {
         invalidateOlderMessagesLoad()
         if olderHistorySeeded, metadata["resumed"] as? Bool == true {

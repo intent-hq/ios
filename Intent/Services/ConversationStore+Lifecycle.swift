@@ -2,8 +2,6 @@ import Combine
 import Foundation
 
 extension ConversationStore {
-    /// Test-only helper: activate the chat channel and set its subscriptionId,
-    /// bypassing the real subscribe flow, so the strict push gate accepts test payloads.
     func setTestChatChannel(subscriptionId: String) {
         liveTranscript.setTestChannel(subscriptionId: subscriptionId)
     }
@@ -14,27 +12,6 @@ extension ConversationStore {
         let seen: Int
     }
 
-    // MARK: - Metadata reconciliation
-
-    /// Fetch the agent's current state via `agent.get` and restore `isStreaming`.
-    /// Considers the STAB-125 `turnInFlight` turn-liveness flag alongside
-    /// `isStreaming`/`isResponding` (the headless daemon reports liveness via
-    /// `turnInFlight`; `isStreaming`/`isResponding` may always be false).
-    /// With `raiseOnly` the flag is only ever raised, never cleared — used as a
-    /// backstop on view load so it cannot clobber snapshot/optimistic state.
-    /// A reply (or error) that lands while the store is bound to a different
-    /// agent than the one the request was issued for — or unbound by a
-    /// `reset()` since the request was issued — is dropped entirely: it must
-    /// not touch the new conversation's streaming state, nor mark
-    /// the new agent deleted on a not-found for the previous one. A request
-    /// issued while still unbound (view load, before `subscribeLiveChat`
-    /// binds the same agent) stays valid.
-    /// A marker changed by a push or local command during the read is kept.
-    /// Untouched markers still seed from the detail, so an unrelated update
-    /// cannot leave the entry seen marker or pending question unknown.
-    /// With `liveStateVersion`, the streaming flag is also left alone when the
-    /// live chat channel advanced past that version while the request was in
-    /// flight: the channel is authoritative and the reply predates it.
     func fetchAgentStreamingState(
         agentId: String,
         raiseOnly: Bool = false,
@@ -71,8 +48,6 @@ extension ConversationStore {
     }
 
     private func applyFetchedMarkers(_ state: ConversationCommands.AgentState, revisions: MarkerRevisions) {
-        // Each marker has its own revision: a pending-question push must not
-        // erase an otherwise authoritative entry seen marker (and vice versa).
         if revisions.pending == commands.pendingMarkerRevision, let pendingId = state.pendingQuestionsMessageId {
             pendingQuestionsMessageId = pendingId
         }
@@ -82,8 +57,6 @@ extension ConversationStore {
         if revisions.seen == commands.seenMarkerRevision, let seenId = state.lastSeenMessageId { lastSeenMessageId = seenId }
     }
 
-    /// Event-triggered reads belong to this view activation, unlike independent
-    /// route validation. Canceling them removes only their shared-detail interest.
     @discardableResult
     func scheduleMetadataRefresh(raiseOnly: Bool = true, liveStateVersion: Int? = nil) -> Task<Void, Never>? {
         guard let agentId else { return nil }
@@ -140,8 +113,6 @@ extension ConversationStore {
         }
     }
 
-    // MARK: - Binding
-
     func bindAgent(_ agentId: String?) {
         if let bound = self.agentId, bound != agentId {
             cancelBootstrap()
@@ -151,8 +122,6 @@ extension ConversationStore {
         }
         self.agentId = agentId
     }
-
-    // MARK: - Marked question recovery (aroundMessageId seek, PROTOCOL §5.5)
 
     func reconcilePendingQuestionRecovery() {
         guard case .set(let markedId) = PendingQuestionSet.MarkerState(pendingQuestionsMessageId),
@@ -276,8 +245,6 @@ extension ConversationStore {
             message: message
         )
     }
-
-    // MARK: - Slim block hydration (agent.getMessageBlock, PROTOCOL §5.5)
 
     static func hydratedBlockKey(messageId: String, blockId: String) -> String {
         ConversationLiveTranscript.hydratedBlockKey(

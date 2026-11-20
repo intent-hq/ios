@@ -2,10 +2,6 @@ import Foundation
 import SwiftUI
 
 extension ConversationStore {
-    // MARK: - Streaming subscription
-
-    /// Binding is entirely local. ConnectionManager owns the backend-wide
-    /// agent feed; a view must never wait for or open its own remote feed.
     @discardableResult
     func bindStreaming(agentId: String, workspaceId: String?) -> Int {
         if streamingEventsActive, self.agentId == agentId, self.workspaceId == workspaceId {
@@ -39,7 +35,6 @@ extension ConversationStore {
         streamingEventsActive = false
         if let eventHandlerId { connectionManager.removeEventHandler(id: eventHandlerId) }
         eventHandlerId = nil
-        // Preserve visible rows and send recovery state while releasing ownership.
         liveTranscript.releaseActiveRegistration()
         liveTranscript.prepareForReconnect()
         liveTranscript.snapshotPending = false
@@ -47,11 +42,6 @@ extension ConversationStore {
         clearPendingQuestionRecovery()
     }
 
-    // MARK: - Live chat subscription
-
-    /// Opens the `chat.subscribe` channel that is the transcript's only
-    /// source; returns once the registration is acked. Its seq-0 snapshot
-    /// (or the snapshot timeout) is awaited via `awaitLiveChatSnapshot`.
     func subscribeLiveChat(agentId: String, workspaceId: String? = nil) async {
         bindAgent(agentId)
         if let workspaceId {
@@ -61,9 +51,6 @@ extension ConversationStore {
         reconcilePendingQuestionRecovery()
     }
 
-    /// Parks until the owed `chat.subscribe` seq-0 snapshot applied (a
-    /// rejected or silent registration keeps it owed to the retry), the
-    /// binding was torn down, or the wait's `snapshotTimeout` bound elapsed.
     func awaitLiveChatSnapshot() async {
         await liveTranscript.awaitSnapshot()
         reconcilePendingQuestionRecovery()
@@ -104,8 +91,6 @@ extension ConversationStore {
             pendingWorkspaceEvents.append(PendingWorkspaceEvent(
                 event: event, receivedAt: receivedAt, confirmedMarkerRevisions: commands.confirmedMarkerRevisions
             ))
-            // The shared detail store coalesces these callers. Keep the event
-            // until authority succeeds, including after a failed initial read.
             scheduleMetadataRefresh()
             return
         }
@@ -171,10 +156,6 @@ extension ConversationStore {
         invalidateSubscriptions()
     }
 
-    /// `agent:stream:*` carries no transcript content: the `chat.subscribe`
-    /// channel is the transcript's only source and owns the streaming flag
-    /// once its snapshot applied (`chatLive`). Until then the firehose is the
-    /// only liveness signal, so it raises and lowers the flag alone.
     private func handleAgentStreamEvent(_ eventType: String, data: [String: Any], receivedAt: Int) {
         switch eventType {
         case "agent:stream:start", "agent:stream:activity":
@@ -212,12 +193,6 @@ extension ConversationStore {
         refreshStateAfterTurnBoundary()
     }
 
-    /// A turn boundary re-reads the agent's state (streaming flag + markers)
-    /// via `agent.get`. The channel is authoritative for the flag: the version
-    /// is captured now, before the read is scheduled, so a reply that lands
-    /// after a snapshot or delta advanced the channel — including the seq-0
-    /// snapshot of an initial load the event raced — leaves the flag alone
-    /// while still applying the markers.
     private func refreshStateAfterTurnBoundary() {
         guard let agentId else { return }
         let liveStateVersion = liveTranscript.liveStateVersion
