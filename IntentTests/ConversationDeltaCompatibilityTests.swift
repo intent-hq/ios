@@ -58,7 +58,6 @@ struct ConversationDeltaCompatibilityTests {
         await live.subscribe(agentId: "agent")
         #expect(connection.paramsForMethod("chat.subscribe").count == 2)
         #expect(surfacedErrors == 1 && live.chatSubscriptionId == nil)
-        // Even later retries on this connection omit the rejected field.
         await live.subscribe(agentId: "agent")
         #expect(connection.paramsForMethod("chat.subscribe").count == 3)
         #expect(connection.paramsForMethod("chat.subscribe").last?["deltaEncoding"] == nil)

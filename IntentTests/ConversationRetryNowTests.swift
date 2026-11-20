@@ -6,8 +6,6 @@ import Testing
 struct ConversationRetryNowTests {
     private static let longWait: Duration = .seconds(30)
 
-    /// Manual retry must bypass both a rejected registration's backoff and an
-    /// acked registration's snapshot timeout, with only one new subscription.
     @Test(arguments: [false, true])
     func retryNowCancelsPendingRecoveryAndRegistersOnce(awaitingSnapshot: Bool) async throws {
         let fake = FakeConnectionManager()
@@ -46,8 +44,6 @@ struct ConversationRetryNowTests {
         store.reset()
     }
 
-    /// The user can leave while release is in flight. Manual retry must not
-    /// revive that conversation or disturb the next conversation's channel.
     @Test func retryNowDoesNotReviveConversationAfterRebind() async throws {
         let fake = FakeConnectionManager()
         fake.connectionState = .connected

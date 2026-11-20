@@ -16,10 +16,8 @@ extension ConversationTranscriptScrollPolicyTests {
         let renderedWhileActive = probe.accessibilityValue
         #expect(renderedWhileActive?.hasPrefix("phase=gesture ") == true)
 
-        // SwiftUI can publish idle while UIKit still reports deceleration.
         state.isUserScrollPhase = false
         #expect(probe.accessibilityValue?.hasPrefix("phase=gesture ") == true)
-        // No view update, layout or observable state write follows this edge.
         scrollView.activeFlag = nil
         #expect(probe.accessibilityValue?.hasPrefix("phase=idle ") == true)
         #expect(renderedWhileActive?.hasPrefix("phase=gesture ") == true)

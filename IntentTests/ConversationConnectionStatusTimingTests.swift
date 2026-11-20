@@ -23,14 +23,12 @@ struct ConversationConnectionStatusTimingTests {
         #expect(!timing.isDelayed(phase: "connecting", at: start.addingTimeInterval(7.99)))
         #expect(timing.isDelayed(phase: "connecting", at: start.addingTimeInterval(8)))
 
-        // A new phase hides delay details even before the view's onChange runs.
         #expect(!timing.isDelayed(phase: "requesting", at: start.addingTimeInterval(10)))
         timing.update(phase: "requesting", at: start.addingTimeInterval(10))
         #expect(!timing.isDelayed(phase: "requesting", at: start.addingTimeInterval(17.99)))
         #expect(timing.isDelayed(phase: "requesting", at: start.addingTimeInterval(18)))
         #expect(timing.elapsed(at: start.addingTimeInterval(18)) == .seconds(18))
 
-        // Startup phases can use the same clock independently of transcript stages.
         timing.update(phase: "starting-provider", at: start.addingTimeInterval(20))
         timing.update(phase: "starting-session", at: start.addingTimeInterval(25))
         #expect(!timing.isDelayed(phase: "starting-session", at: start.addingTimeInterval(32.99)))

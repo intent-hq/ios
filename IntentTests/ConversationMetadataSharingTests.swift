@@ -41,8 +41,6 @@ struct ConversationMetadataSharingTests {
         try await waitUntil("buffered marker awaiting authority") { !viewModel.store.pendingWorkspaceEvents.isEmpty }
         #expect(viewModel.store.lastSeenMessageId != "new-seen")
         #expect(!viewModel.store.metadataReadyForEntry && !viewModel.isEntryScrollReady)
-        // ConversationView's conditional metadata-generation task starts while
-        // cards mount. All three consumers must join the same detail flight.
         let block = ContentBlock(type: .resource, resource: .init(
             uri: nil, mimeType: "application/vnd.intent.proposal+json", text: """
             {"kind":"bulk-op","payload":{"operation":"workspace.bulkArchive","ids":["alpha"]},
@@ -63,7 +61,7 @@ struct ConversationMetadataSharingTests {
         await load.value
         await viewRefresh.value
         await cardMount.value
-        await proposals.loadIfNeeded() // A later card after the first read settled.
+        await proposals.loadIfNeeded()
         #expect(viewModel.store.lastSeenMessageId == "new-seen")
         #expect(viewModel.store.pendingQuestionsMessageId?.isEmpty == true)
         #expect(viewModel.store.dismissedQuestionsMessageId == "new-dismissed")
@@ -136,7 +134,7 @@ struct ConversationMetadataSharingTests {
         fixture.connection.resolvePending("workspace.list", with: ["workspaces": []])
         await firstTitle.value
         await secondTitle.value
-        await workspaces.fetchIfNeeded() // Successful empty lists are warm too.
+        await workspaces.fetchIfNeeded()
         #expect(fixture.connection.traffic().calls("workspace.list").count == 1)
         #expect(fixture.connection.traffic().requests.count == 9)
         #expect(fixture.connection.traffic().pendingCount == 0)
@@ -195,8 +193,6 @@ struct ConversationMetadataSharingTests {
 
 extension ConversationMetadataSharingTests {
     private func dispatchMetadataRefresh(_ eventType: String, store: ConversationStore, fixture: ConversationStartupFixture) {
-        // The session listener invalidates incomplete updates before the view
-        // handles them. Dispatch synchronously to hold the view's queued task.
         if eventType == "agent:updated" { fixture.details.invalidate(agentId: ConversationStartupFixture.parentId) }
         var data = ["agentId": ConversationStartupFixture.parentId]
         if eventType == "agent:status-changed" { data["status"] = "idle" }
@@ -219,7 +215,6 @@ extension ConversationMetadataSharingTests {
             fixture.connection.traffic().calls("agent.get").count > 1
         }
 
-        // A valid, unleased restored-route read still seeds the next activation.
         _ = try await fixture.details.load(agentId: ConversationStartupFixture.parentId)
         await viewModel.load()
         #expect(fixture.connection.traffic().calls("agent.get").count == 2)

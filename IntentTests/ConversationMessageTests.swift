@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-// MARK: - AnyCodable Tests
-
 struct AnyCodableTests {
     private func isArrayValue(_ match: AnyCodableArrayMatch) -> Bool {
         if case .value = match { true } else { false }
@@ -94,8 +92,6 @@ struct AnyCodableTests {
         #expect(str.isNull == false)
     }
 }
-
-// MARK: - ContentBlock Tests
 
 struct QuestionsDismissedNoticeTests {
     private let noticeText = "User dismissed your 2 questions without answering."
@@ -199,8 +195,6 @@ struct QuestionsDismissedNoticeTests {
     }
 }
 
-// MARK: - ConversationMessage Tests
-
 struct ConversationMessageTests {
     @Test func parseMessageFull() {
         let dict: [String: Any] = [
@@ -286,8 +280,6 @@ struct ConversationMessageTests {
         #expect(decoded.turnNumber == 1)
     }
 
-    /// Transcript rows compare messages by value (`MessageRowContent`): equal
-    /// content must compare equal, and any changed block must not.
     @Test func equalityTracksContentBlockChanges() {
         let base = ConversationMessage(
             id: "msg-eq",
@@ -334,8 +326,6 @@ struct ConversationMessageTests {
     }
 }
 
-// MARK: - QueuedMessage Tests
-
 struct QueuedMessageTests {
     @Test func initAndCodable() throws {
         let msg = QueuedMessage(id: "q-1", content: "hello", queuedAt: "2025-01-01T00:00:00Z", position: 0)
@@ -360,8 +350,6 @@ struct QueuedMessageTests {
     }
 
     @Test func imageBlockReferenceArmOmitsDataKey() throws {
-        // Attachment-registry reference (PROTOCOL §5.5, monorepo#3338):
-        // encodes attachmentId and never emits a "data" key.
         let img = ImageBlock(type: "image", attachmentId: "att-9", mimeType: "image/jpeg")
         let encoded = try JSONEncoder().encode(img)
         let json = try #require(
@@ -376,10 +364,6 @@ struct QueuedMessageTests {
     }
 
     @Test func decodesImageReferenceWithoutMimeType() throws {
-        // The wire reference arm is { type, attachmentId, mimeType? }
-        // (PROTOCOL §5.5) — a spec-legal entry without mimeType (e.g.
-        // authored by another client) must not fail the element decode,
-        // which would blank the whole [QueuedMessage] queue view.
         let json = """
         {"id": "q-3", "content": "img", "queuedAt": "2025-01-01T00:00:00Z", "position": 0, \
         "imageBlocks": [{"type": "image", "attachmentId": "att-9"}]}
@@ -391,7 +375,6 @@ struct QueuedMessageTests {
     }
 
     @Test func decodesWithoutMessageMetadata() throws {
-        // Backward compat: wire entries without messageMetadata must decode.
         let json = """
         {"id": "q-1", "content": "hello", "queuedAt": "2025-01-01T00:00:00Z", "position": 0}
         """
@@ -410,8 +393,6 @@ struct QueuedMessageTests {
         #expect(decoded.messageMetadata["type"]?.stringValue == "agent_message")
         #expect(decoded.messageMetadata["fromAgentId"]?.stringValue == "agent-2")
     }
-
-    // MARK: isUserMessage predicate (shared with FE, see spec Background)
 
     private func queued(metadata: [String: AnyCodable] = [:]) -> QueuedMessage {
         QueuedMessage(
@@ -441,8 +422,6 @@ struct QueuedMessageTests {
     }
 
     @Test func isUserMessageTrueWithQuestionAnswersType() {
-        // The Q&A wizard's auto-queued answer entry is user-authored despite
-        // carrying a string `type` (fe parity, cloudlands-fe #1167).
         #expect(queued(metadata: [
             "type": AnyCodable("question_answers"),
             "answeredQuestionsMessageId": AnyCodable("qm-1")
@@ -450,8 +429,6 @@ struct QueuedMessageTests {
     }
 
     @Test func isUserMessageQuestionAnswersExemptionPrecedesOtherRules() {
-        // Matches fe ordering: the question_answers exemption returns early,
-        // before the fromAgentId and source hide rules.
         #expect(queued(metadata: [
             "type": AnyCodable("question_answers"),
             "fromAgentId": AnyCodable("agent-2"),
@@ -468,8 +445,6 @@ struct QueuedMessageTests {
     }
 
     @Test func isUserMessageTrueWithWhitespaceOnlyFromAgentId() {
-        // fe parity: `isUserQueuedMessage` trims `fromAgentId` before its
-        // non-empty check, so a whitespace-only value is treated as absent.
         #expect(queued(metadata: ["fromAgentId": AnyCodable("   ")]).isUserMessage)
         #expect(queued(metadata: ["fromAgentId": AnyCodable("\t\n")]).isUserMessage)
     }
@@ -483,7 +458,6 @@ struct QueuedMessageTests {
     }
 
     @Test func isUserMessageTrueWithNonStringMarkers() {
-        // Malformed marker values fail open.
         #expect(queued(metadata: [
             "type": AnyCodable(42),
             "fromAgentId": AnyCodable(true)

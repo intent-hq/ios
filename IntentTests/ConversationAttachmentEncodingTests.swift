@@ -4,7 +4,6 @@ import Synchronization
 import Testing
 import UIKit
 
-/// Send-time photo encoding runs off the main actor and keeps its limits.
 @MainActor
 struct ConversationAttachmentEncodingTests {
     private typealias PlacementError = ConversationAttachmentPipeline.ImagePlacementError

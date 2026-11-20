@@ -8,7 +8,7 @@ struct ContentBlockTests {
         let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .text)
         #expect(block.resolvedText == "Hello world")
-        #expect(!block.id.isEmpty) // deterministic fallback identity (ios#257)
+        #expect(!block.id.isEmpty)
     }
 
     @Test func decodeToolUseBlock() throws {
@@ -43,8 +43,6 @@ struct ContentBlockTests {
     }
 
     @Test func decodeAttachmentReferenceImageBlock() throws {
-        // Persisted attachment-reference image block (PROTOCOL §5.5 v7.4):
-        // carries attachmentId + mimeType, no inline data.
         let json = #"{"type":"image","attachmentId":"att-42","mimeType":"image/jpeg"}"#
         let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .image)
@@ -53,8 +51,6 @@ struct ContentBlockTests {
         #expect(block.data == nil)
         #expect(!block.isSlimTruncated)
     }
-
-    // MARK: Slim projection flags (PROTOCOL §5.5)
 
     @Test func decodeSlimTruncatedToolUseBlock() throws {
         let json = #"{"type":"tool_use","name":"write_file","input":{"path":"foo.txt"},"inputTruncated":true,"inputBytes":900000}"#
@@ -83,7 +79,6 @@ struct ContentBlockTests {
     }
 
     @Test func decodeSlimTruncatedImageWithoutThumbnail() throws {
-        // Legacy rows / failed thumbnail generation: data omitted entirely.
         let json = #"{"type":"image","mimeType":"image/png","dataTruncated":true,"dataBytes":4000000}"#
         let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.data == nil)
@@ -141,8 +136,6 @@ struct ContentBlockTests {
         #expect(block.resolvedMetadata["kind"]?.stringValue == "a")
     }
 }
-
-// MARK: - AttentionNotice Tests
 
 struct AttentionNoticeTests {
     private func systemMessage(blocks: [[String: Any]], role: String = "system") -> ConversationMessage? {
@@ -236,8 +229,6 @@ struct AttentionNoticeTests {
     }
 }
 
-// MARK: - ModelChangeNotice Tests (FE `model-change-notice.ts` parity)
-
 struct ModelChangeNoticeTests {
     private let noticeText = "Model changed from claude-4 to gpt-5."
 
@@ -277,7 +268,6 @@ struct ModelChangeNoticeTests {
     }
 
     @Test func nullModelIdsMapToNil() throws {
-        // `from`/`to` are null for "provider default model" (PROTOCOL §5.5).
         let msg = message(metadata: [
             "type": "model_changed",
             "from": NSNull(),
@@ -314,7 +304,6 @@ struct ModelChangeNoticeTests {
     }
 
     @Test func emptyStringFieldsMapToNil() throws {
-        // FE parity: asString requires value.length > 0.
         let msg = message(metadata: [
             "type": "model_changed",
             "from": "",
@@ -332,8 +321,6 @@ struct ModelChangeNoticeTests {
     }
 
     @Test func classifiesRegardlessOfRole() {
-        // FE parity: discriminates purely on metadata.type, tolerant of the
-        // exact non-user/non-assistant role the daemon persists.
         let msg = message(metadata: ["type": "model_changed"], role: "model_change")
         #expect(msg?.modelChangeNotice != nil)
         #expect(msg?.role == .system)
@@ -404,9 +391,6 @@ struct ModelChangeNoticeTests {
     }
 
     @Test func malformedMetadataKeepsAttentionAndBannerPaths() {
-        // A system row without model_changed metadata still classifies down
-        // the existing chain: attention notices stay attention notices, and
-        // unclassified rows keep the banner fallback via joinedTextContent.
         let attention = ConversationMessage.parseMessage([
             "id": "msg-a",
             "role": "system",
@@ -423,5 +407,3 @@ struct ModelChangeNoticeTests {
         #expect(plain?.joinedTextContent == noticeText)
     }
 }
-
-// MARK: - QuestionsDismissedNotice Tests (FE `questions-dismissed-notice.ts` parity)

@@ -18,8 +18,6 @@ struct ConversationDesignTests {
 
     @Test(arguments: [ColorScheme.light, .dark])
     func increasedContrastKeepsSupportingContentReadable(scheme: ColorScheme) throws {
-        // Tests the composited result, including opacity; merely comparing RGB would miss
-        // a regression where the composer placeholder still uses its faint standard alpha.
         let foregrounds: [(ColorScheme, ColorSchemeContrast) -> Color] = [
             Palette.secondaryForeground, Palette.detailForeground, Palette.subtitleForeground,
             Palette.placeholderForeground, Palette.blockerForeground, Palette.blockerBodyForeground
@@ -37,9 +35,6 @@ struct ConversationDesignTests {
 
     @Test(arguments: [ColorScheme.light, .dark])
     func standardAnswerCardsRenderSelectedFillAndSubtleOutlineOnEveryEdge(scheme: ColorScheme) throws {
-        // Independent design values: white selection in light mode, neutral raised
-        // fill in dark mode, and a 10% outline on every edge of both selected and
-        // unselected standard cards (#756).
         let shell: [Double] = scheme == .light ? [240, 240, 235] : [39, 39, 39]
         let raised: [Double] = scheme == .light ? [255, 255, 255] : [61, 61, 60]
         let outline = scheme == .light ? 0.0 : 255.0
@@ -65,8 +60,6 @@ struct ConversationDesignTests {
     }
 
     private func standardAnswerCardPixels(scheme: ColorScheme, selected: Bool, edge: CardEdge) throws -> [UInt8] {
-        // ImageRenderer starts with the standard environment; no device-level
-        // contrast override is injected. Increased Contrast remains a separate policy.
         let renderer = ImageRenderer(content: WorkspaceQuestionAnswerCards(
             options: [QuestionOption(label: "Mountains", description: "Fresh air and a quiet cabin.")],
             selectedIndices: selected ? [0] : [],
@@ -77,8 +70,6 @@ struct ConversationDesignTests {
             .environment(\.colorScheme, scheme))
         renderer.scale = 1
         let image = try #require(renderer.cgImage)
-        // Sample 8 pixels inward from the middle of a straight edge, away from text
-        // and corners; pixel 0 is the outline and pixel 7 is the blank inset.
         let midX = image.width / 2
         let midY = image.height / 2
         let rect: CGRect = switch edge {
@@ -102,7 +93,6 @@ struct ConversationDesignTests {
             ))
             context.draw(strip, in: CGRect(x: 0, y: 0, width: strip.width, height: strip.height))
         }
-        // Order samples from the outer edge inward.
         let pixelCount = 8
         let ordered: [Int] = switch edge {
         case .leading, .top: Array(0..<pixelCount)

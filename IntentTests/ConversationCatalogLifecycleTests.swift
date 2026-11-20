@@ -34,8 +34,6 @@ extension ConversationStartupRPCTests {
                 && fixture.options.modelCatalog(for: "auggie").isFresh
                 && connection.traffic().pendingCount == 0
         }
-        // This is the actual separate SwiftUI catalog task, included even if
-        // its scheduling happens after every fast reconnect response.
         if !duringBootstrap { await viewModel.loadModelCatalogIfNeeded() }
         let traffic = connection.traffic(since: checkpoint)
         printCatalogLedger(duringBootstrap ? "full-reconnect-during-bootstrap" : "full-reconnect-with-deferred-task", traffic)
@@ -58,8 +56,6 @@ extension ConversationStartupRPCTests {
         await viewModel.loadModelCatalogIfNeeded()
         printCatalogLedger("startup-cold", connection.traffic())
         #expect(connection.traffic().requests.count == 10)
-        // The explicit chat snapshot limit adds 11 request bytes (,"limit":50)
-        // and the paged queue read 12 (,"limit":200).
         #expect(connection.traffic().totalBytes == 2425)
         let retained = connection.checkpoint
         await viewModel.load()
@@ -70,7 +66,6 @@ extension ConversationStartupRPCTests {
         #expect(connection.traffic(since: retained).requests.isEmpty)
         printCatalogLedger("retained-and-second-window", connection.traffic(since: retained))
 
-        // A window keeps workspace status warm across conversation switches.
         let window = UUID()
         fixture.session.retainWorkspaceStatus(workspaceId: ConversationStartupFixture.workspaceId, consumer: window)
         await fixture.session.hooksStore.load(workspaceId: ConversationStartupFixture.workspaceId)

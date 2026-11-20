@@ -29,6 +29,14 @@ Many unit tests check that the app matches another implementation: the desktop a
    5. To assert a transient "reconnecting" state, the recovery fixture server parks admission replies (`client.hello`, `principal.me`) with `holdHandshakes()`. No replacement can be adopted until `releaseHandshakes()`, however fast it dials, so the assertion cannot race a fast recovery (ios#261, `awaitParkedReplacement(on:timeout:sourceLocation:after:)`).
    6. The loopback pairing server retains every accepted `NWConnection` for its lifetime. An unreferenced `NWConnection` deallocates and drops the socket.
 
+5. **Conversation startup RPC budgets.**
+   1. Budget tests count every frame at the connection boundary (`RPCTraffic`), including deferred completions and cleanup, and assert exact byte totals. A request change that adds bytes (for example an explicit `limit`) must update the total on purpose.
+   2. A scripted daemon rejection (`RPCFixtureRejection`) carries a JSON error and stays in the ledger. A local cancellation or error has no JSON response and adds no bytes.
+   3. `ConversationBudgetEvidence.emit(_:_:)` writes the same test body's traffic as an artifact only when `STARTUP_BUDGET_DIRECTORY` is set. It is connection-boundary JSON, not a socket capture or a first-paint measurement.
+   4. `ConversationBudgetFixture` uses valid persisted wire rows shared with the desktop source replay. Lifecycle fixtures keep their own registration ids.
+   5. A test that counts requests releases every recorded request before the count, so a duplicate read fails the count instead of leaving a fake continuation orphaned.
+6. **Design expectations** in rendered design tests are independent values from the design (for example the question card shell and 10% outline, #756), checked on the composited result including opacity, not values read back from the code under test.
+
 ## Consequences
 
 - When the desktop changes its algorithm, update the fixtures from the desktop code, not from the Swift output.
@@ -43,5 +51,6 @@ Many unit tests check that the app matches another implementation: the desktop a
 - `AttachmentUploadService`; `AttachmentUploadServiceTests`
 - `BackendKeychainFixtures`, `BackendKeychainConformanceSupport`, `MemorySyncedKeychain`
 - `FakeConnectionManager`: `pendingMethods`, `resolvePending(_:with:)`
+- `RPCTraffic`, `RPCFixtureRejection`, `ConversationBudgetEvidence`, `ConversationBudgetFixture`; `ConversationCatalogLifecycleTests`, `ConversationDesignTests`
 - `TestKeychainStorage`, `BackgroundPresentationClock`, `ConnectionManagerTests.awaitParkedReplacement(on:timeout:sourceLocation:after:)`; `AppCoordinatorTests`, `AppCoordinatorAutoOpenTests`, `AppCoordinatorBackgroundRecoveryTests`
 - `AttachmentImageLoaderTests`, `AgentStoreTests`, `AgentStoreScopedLifecycleTests`, `BackendSessionRegistryTests`

@@ -117,8 +117,6 @@ extension ConversationTranscriptScrollPolicyTests {
         let realized = ConversationTranscriptViewportAnchor.Measurement(
             frame: frame, divider: "new-seen", generation: generation, ownershipRevision: state.viewportOwnershipRevision
         )
-        // An intersecting row can remain away from zero when content bounds
-        // clamp the requested top alignment. Its measured offset still wins.
         let geometry = ConversationTranscriptScrollPolicy.ViewportGeometry(
             contentOffsetY: frame.minY < 0 ? 0 : 600, contentHeight: 1200, containerHeight: 600, topInset: 0, bottomInset: 0
         )
@@ -164,11 +162,8 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(state.resumeViewportTarget() == "row-31")
         let revision = state.viewportOwnershipRevision
         if derealizes {
-            // A lazy row leaving the host is not removal from the transcript.
             state.viewportAnchor.remove(id: "row-31", generation: generation, entryGeneration: generation, ownershipRevision: revision)
         } else {
-            // Rehosting can measure the retained offset before scrollTo moves
-            // the target to the top; this is not confirmation of that move.
             let beforeScroll = ConversationTranscriptViewportAnchor.Measurement(
                 frame: CGRect(x: 0, y: savedY, width: 300, height: 64), divider: "seen", generation: generation, ownershipRevision: revision
             )
@@ -312,7 +307,6 @@ extension ConversationTranscriptScrollPolicyTests {
     @MainActor private func applyViewportEvent(
         _ event: ConversationTranscriptRecoveryLifecycle.Event, to state: ConversationTranscriptScrollState
     ) {
-        // The view stores this exact reducer result before executing its effects.
         state.lifecycle = ConversationTranscriptRecoveryLifecycle.transition(state.lifecycle, event).state
     }
 
@@ -343,12 +337,10 @@ extension ConversationTranscriptScrollPolicyTests {
             frame: before.offsetBy(dx: 0, dy: 39), divider: "seen", generation: generation, ownershipRevision: oldRevision
         )
         if gesture {
-            // The view uses these calls even after initial entry has completed.
             state.observeViewportGesture(isInteracting: true)
             state.preservePresentedViewport(distanceToBottom: 900)
             state.observeViewportGesture(isInteracting: false)
         } else {
-            // Both an explicit follow claim and disappearance retire ownership.
             state.retireViewportRestoration()
         }
         #expect(state.initialScrollGeneration == generation)
