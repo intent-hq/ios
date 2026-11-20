@@ -51,8 +51,6 @@ final class WorkspaceBrowserStore {
 
     func browsers(workspaceId: String) -> [WorkspaceBrowser] {
         let hiddenIds = dismissed[workspaceId, default: []]
-        // Filter sources first so a dismissed script cannot consume an unrelated
-        // tab during merging, or reappear as a tab once the script stops.
         let servers = WorkspaceBrowser.merging(
             scripts: detected[workspaceId, default: []].filter { !hiddenIds.contains($0.id) },
             tabs: tabs[workspaceId, default: []].filter { !hiddenIds.contains($0.id) }
@@ -124,8 +122,6 @@ final class WorkspaceBrowserStore {
                 let scripts = await discovery(workspaceId: workspaceId, method: "script.list", key: "scripts")
                 guard isCurrent(currentGeneration), revisions[workspaceId, default: 0] == revision else { continue }
                 let browserTabs = await discovery(workspaceId: workspaceId, method: "browser.listTabs", key: "tabs")
-                // Events can invalidate a list already in flight. Coalesce all of them
-                // into one trailing fetch rather than publishing the stale snapshot.
                 guard isCurrent(currentGeneration), revisions[workspaceId, default: 0] == revision else { continue }
                 if scripts.error == nil { detected[workspaceId] = scripts.browsers }
                 if browserTabs.error == nil { tabs[workspaceId] = browserTabs.browsers }

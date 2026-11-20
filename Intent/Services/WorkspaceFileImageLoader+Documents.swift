@@ -25,8 +25,6 @@ extension WorkspaceFileImageLoader {
         return video
     }
 
-    /// Stream videos to disk on the global executor; only one decoded chunk is
-    /// held in memory. Image and saved-asset assembly keep their smaller cap.
     @concurrent
     nonisolated private static func fetchVideo(
         chunkRequester: ChunkRequester, workspaceId: String, path: String, mimeType: String?, limit: Int
@@ -81,8 +79,6 @@ extension WorkspaceFileImageLoader {
         return pdf
     }
 
-    /// Closed categories only: never persist a workspace, filename, URL or
-    /// foreign error description. One record per fetch, not per cached failure.
     nonisolated private static func recordPDFFailure(_ error: any Error, store: DiagnosticStore) {
         var failure = DiagnosticErrorOwnership.failure(for: error)
         var stage: DiagnosticEvent.Stage = .request

@@ -1,7 +1,5 @@
 import Foundation
 
-/// One shared operation can outlive any caller. Cancelling a waiter resumes
-/// only that caller; it never cancels the registration or another consumer.
 @MainActor
 final class WorkspaceStatusWaiters<Value: Sendable> {
     private var result: Value?

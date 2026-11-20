@@ -1,9 +1,5 @@
 import Foundation
 
-/// Parks reads that need an agent's authoritative workspace while only a route
-/// hint is known. Shared agent detail either resolves the workspace or fails;
-/// a failure refuses later waits and owes the subscriptions a fresh read once
-/// the workspace resolves.
 @MainActor
 final class WorkspaceAuthorityGate {
     private(set) var hasFailed = false
@@ -11,7 +7,6 @@ final class WorkspaceAuthorityGate {
 
     var hasWaiters: Bool { !waiters.isEmpty }
 
-    /// Returns true when the workspace resolves, false on failure, cancellation or reset.
     func wait() async -> Bool {
         guard !Task.isCancelled, !hasFailed else { return false }
         let id = UUID()
@@ -29,7 +24,6 @@ final class WorkspaceAuthorityGate {
         release(ready: false)
     }
 
-    /// Clears a failure without releasing waiters. Returns whether one was cleared.
     func clearFailure() -> Bool {
         defer { hasFailed = false }
         return hasFailed

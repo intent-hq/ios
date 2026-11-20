@@ -1,8 +1,6 @@
 import Foundation
 
 extension WorkspaceStatusStore {
-    /// Duplicate callers await the same ACK and read. Empty success and errors
-    /// are both cached for this activation; errors retry explicitly or on reconnect.
     func load(workspaceId: String, refresh: Bool = false, nextPage: Bool = false) async {
         guard let bucket = loadableBucket(workspaceId: workspaceId) else { return }
         if let completion = bucket.loadCompletion { await completion.wait(cancelledValue: ()); return }
@@ -47,8 +45,6 @@ extension WorkspaceStatusStore {
     }
 
     private func read(_ bucket: Bucket, workspaceId: String, generation: Int) async {
-        // At most one follow-up for incomplete events during a read. Complete
-        // events replay over the seed directly, without an extra list request.
         for attempt in 0..<2 {
             bucket.events = []
             bucket.recoveryIDs = []
@@ -102,8 +98,6 @@ extension WorkspaceStatusStore {
             params["workspaceId"] = workspaceId
             params["replaceGroup"] = "\(replaceGroup)-\(workspaceId)"
         }
-        // Only the request and its connection provenance survive an orphaned
-        // ACK. Never hold the status store alive while waiting for that reply.
         let connection = self.connection
         let lifetime = connectionLifetime
         feed.task = Task { [weak self] in
@@ -168,8 +162,6 @@ extension WorkspaceStatusStore {
             applyPageEvent(type, data: data, bucket: bucket, workspaceId: workspaceId, feedReady: feedReady)
             return
         }
-        // A terminal removal resolves earlier incomplete updates for that row,
-        // including updates queued for reconciliation but not yet read.
         if removalEvents.contains(type), let id = data[eventIDKey] as? String {
             bucket.recoveryIDs.remove(id)
             bucket.events.removeAll { $0.1[eventIDKey] as? String == id }

@@ -18,7 +18,6 @@ import Observation
         self.connection = connection
     }
 
-    /// Only loaded, expanded branches are flattened. Root children have depth zero.
     var rows: [WorkspaceFileTreeRow] {
         var result: [WorkspaceFileTreeRow] = []
         var pending = entriesByPath[".", default: []].reversed().map { WorkspaceFileTreeRow(entry: $0, depth: 0) }
@@ -33,7 +32,6 @@ import Observation
         return result
     }
 
-    /// Reentering the same workspace preserves expansion and cached listings.
     func start(workspaceId: String) async {
         guard !Task.isCancelled else { return }
         if self.workspaceId != workspaceId {
@@ -65,7 +63,6 @@ import Observation
         }
     }
 
-    /// Reloads the root and visible expanded folders, retaining rows if a request fails.
     func refresh() async {
         guard !Task.isCancelled, workspaceId != nil else { return }
         invalidateRequests()
@@ -75,7 +72,6 @@ import Observation
         await loadExpanded(force: true, revision: currentRevision)
     }
 
-    /// Invalidates pending replies synchronously, including replies for a reused workspace ID.
     func reset() {
         invalidateRequests()
         workspaceId = nil

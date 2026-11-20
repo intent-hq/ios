@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// Holds the first message until every video is uploaded. Retained by the draft
-/// across dismissal/failure, including the server's workspace and agent identity.
 @MainActor
 @Observable final class WorkspaceCreationVideoSubmission {
     enum SubmissionError: LocalizedError, Equatable {
@@ -48,7 +46,6 @@ import Observation
         params: [String: Any],
         videos: [PendingFile]
     ) throws {
-        // Preflight the complete prompt/images before any workspace is created.
         try WorkspaceCreationImages.validateRequest(params)
         var params = params
         var initialAgent = params["initialAgent"] as? [String: Any] ?? [:]
@@ -86,8 +83,6 @@ import Observation
     }
 
     private func sendOrCheckAttempt(_ messageId: String) async throws {
-        // Ordinary sends are NOT idempotent. Reuse the composer's recovery owner:
-        // a lost reply may only be checked, never blindly resent (protocol §5.5).
         if needsStatusCheck { await conversation.inspectSendAttempt(messageId) }
         if attempt?.status == .preparing || attempt?.canRetry == true {
             do {
