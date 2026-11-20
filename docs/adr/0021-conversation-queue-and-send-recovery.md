@@ -27,6 +27,7 @@ A conversation has a daemon-side message queue (PROTOCOL §5.5) and sends that c
    6. The top-level `appMessageId` wins over a nested legacy metadata copy. A present correlation is exclusive, including unknown ids; only its absence allows direct or confirmed row identity. A row that names different attempts settles none.
    7. RPC acceptance is terminal for status, not for transcript identity. Only authoritative rows refine an accepted association.
    8. `inspectSendAttempt(_:)` is read-only and user-triggered. It never resends. It can confirm a row but cannot turn an absent row into a safe retry. It reconciles only response rows.
+8. **Send now** (`sendQueuedMessageNow(agentId:messageId:workspaceId:)`, added from test comments). One `agent.sendQueuedMessageNow` call carries only ids; the daemon owns the payload. On success only that entry leaves the local queue. A reply with `queued: true` keeps it: the daemon could not start the turn and put the entry back at the front (slot race, §5.5), or the session is quarantined (monorepo#840); `agent:queue:updated` fixes the order. A definitive not-found refreshes the queue and rethrows. A `-32602` without `data.code == "not-found"` and every other error propagate with no refresh and no local change.
 
 ## Code
 

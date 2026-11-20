@@ -3,13 +3,10 @@ import Foundation
 import Testing
 
 extension ConversationStartupBudgetTests {
-    /// Uses the real session media caches on Apple. The portable session
-    /// harness stubs these collaborators and must not claim this test ran.
     @Test func renderedAttachmentAndAssetCostsIncludeCachedSecondConsumers() async throws {
         let fixture = ConversationBudgetFixture()
         defer { fixture.startup.stop() }
         let connection = fixture.connection
-        // Fixed, valid 1x1 PNG: byte accounting does not depend on an OS encoder.
         let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
         let bytes = try #require(Data(base64Encoded: png))
         connection.responseMap["file.getAttachmentInfo"] = ["path": "images/budget.png", "exists": true]

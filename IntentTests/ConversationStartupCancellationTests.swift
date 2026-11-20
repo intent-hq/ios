@@ -4,8 +4,6 @@ import Testing
 
 @MainActor
 struct ConversationStartupCancellationTests {
-    /// Models a server that has already registered the channel when cancellation
-    /// arrives. The ACK can still arrive, and cleanup has its own held completion.
     private final class LateAckConnection: FakeConnectionManager {
         let ack = TestGate()
         let release = TestGate()

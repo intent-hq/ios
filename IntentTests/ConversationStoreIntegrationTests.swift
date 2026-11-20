@@ -5,7 +5,6 @@ import Testing
 
 @MainActor
 struct ConversationStoreIntegrationTests {
-    /// Bounded poll for work the store spawns as its own task.
     private func waitFor(_ description: String, _ condition: () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }
@@ -14,10 +13,6 @@ struct ConversationStoreIntegrationTests {
         Issue.record("Timed out waiting for \(description)")
     }
 
-    // MARK: - First-open transcript (chat.subscribe seq-0 snapshot only)
-
-    /// The registration acks first; the load stays open until its seq-0
-    /// snapshot lands, which is the whole transcript. No page fetch runs.
     @Test(arguments: [0, 3, 50])
     func firstOpenAwaitsTheSnapshotAndNeverFetchesAPage(messageCount: Int) async throws {
         let fake = FakeConnectionManager()
@@ -52,8 +47,6 @@ struct ConversationStoreIntegrationTests {
         #expect(fake.requestLog.allSatisfy { $0.method.hasPrefix("chat.") }, "the transcript has no other source")
     }
 
-    /// An empty seq-0 snapshot over an empty transcript is the authoritative
-    /// (empty) transcript: the load settles and nothing re-registers.
     @Test func firstOpenEmptySnapshotIsAuthoritative() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -70,9 +63,6 @@ struct ConversationStoreIntegrationTests {
         }
     }
 
-    /// The snapshot never comes after the ack: the wait settles at the
-    /// timeout and the presumed-stale registration is replaced on the retry
-    /// schedule, whose snapshot then lands.
     @Test func missingSnapshotTimesOutAndResubscribesWithBackoff() async throws {
         let fake = FakeConnectionManager()
         fake.connectionState = .connected
@@ -84,8 +74,6 @@ struct ConversationStoreIntegrationTests {
 
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(store.isLoading)
-        // Park the retry's registration so the intermediate state is observed
-        // before its snapshot can land.
         fake.pendingMethods = ["chat.unsubscribe", "chat.subscribe"]
         fake.stubChatSnapshot(subscriptionId: "sub-2", messages: [conversationRow(id: "msg-1", text: "Hello")])
 
@@ -108,8 +96,6 @@ struct ConversationStoreIntegrationTests {
         #expect(!fake.didCallMethod("agent.getConversation"), "the timeout retries the channel, it never fetches")
     }
 
-    /// A rejected registration self-heals on the retry schedule, doubling
-    /// the delay per consecutive failure.
     @Test func rejectedSubscribeRetriesWithBackoff() async throws {
         let fake = FakeConnectionManager()
         fake.connectionState = .connected
@@ -143,8 +129,6 @@ struct ConversationStoreIntegrationTests {
         store.reset()
     }
 
-    /// A delayed empty snapshot over a populated transcript is rejected: the
-    /// transcript is kept and a replacement registration is opened.
     @Test func delayedEmptySnapshotOverPopulatedTranscriptResubscribes() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -229,8 +213,6 @@ extension ConversationStoreIntegrationTests {
         }
     }
 
-    // MARK: - contiguousDeltaAdvancesState
-
     @Test func contiguousDeltaAdvancesState() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -241,7 +223,6 @@ extension ConversationStoreIntegrationTests {
         await store.subscribeLiveChat(agentId: "agent-1")
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
 
-        // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
@@ -253,7 +234,6 @@ extension ConversationStoreIntegrationTests {
         ))
         #expect(store.messages.count == 1)
 
-        // Contiguous block-level delta (PROTOCOL §7.1)
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .delta,
@@ -277,8 +257,6 @@ extension ConversationStoreIntegrationTests {
         #expect(store.messages[1].contentBlocks.first?.resolvedText == "World")
     }
 
-    // MARK: - gapTriggersResnapshot
-
     @Test func gapTriggersResnapshot() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -290,7 +268,6 @@ extension ConversationStoreIntegrationTests {
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
 
-        // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
@@ -305,8 +282,6 @@ extension ConversationStoreIntegrationTests {
         fake.clearRequestLog()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-2", "seq": 5, "snapshot": []]
 
-        // Two gap deltas in quick succession (seq 5/6 instead of 1) must trigger
-        // exactly ONE resnapshot (storm guard)
         for seq in [5, 6] {
             fake.deliverSubscriptionPush(SubscriptionPush(
                 subscriptionId: "sub-1",
@@ -320,8 +295,6 @@ extension ConversationStoreIntegrationTests {
             fake.hasSubscriptionHandler(id: "sub-2")
         }
 
-        // Verify resnapshot: unsubscribe, subscribe — once each; the old
-        // transcript stays until the replacement's snapshot lands.
         #expect(fake.paramsForMethod("chat.unsubscribe").count == 1)
         #expect(fake.paramsForMethod("chat.subscribe").count == 1)
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
@@ -340,13 +313,10 @@ extension ConversationStoreIntegrationTests {
         #expect(store.messages.map(\.id) == ["msg-1", "msg-2"])
     }
 
-    // MARK: - connectionLossClearsLiveThenReconnectResubscribes
-
     @Test func connectionLossClearsLiveThenReconnectResubscribes() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        // Configure all responses needed for onReconnected flow
         fake.stubChatSnapshot()
         fake.responseMap["agent.get"] = ["agent": ["isStreaming": false]]
         fake.responseMap["agent.getQueue"] = ["queue": []]
@@ -356,7 +326,6 @@ extension ConversationStoreIntegrationTests {
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
 
-        // Initial setup - activate this screen's event lifecycle, then connect and subscribe
         store.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
         fake.simulateConnect()
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
@@ -366,7 +335,6 @@ extension ConversationStoreIntegrationTests {
             fake.didCallMethod("agent.getSubscriptions")
         }
 
-        // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
@@ -387,22 +355,16 @@ extension ConversationStoreIntegrationTests {
             fake.hasSubscriptionHandler(id: "sub-2") && fake.didCallMethod("agent.get")
         }
 
-        // Verify the fresh subscribe (from onReconnected) replaced the old
-        // registration; no transcript page is fetched alongside it.
         #expect(fake.didCallMethod("chat.subscribe"))
         #expect(fake.didCallMethod("agent.get"))
         #expect(!fake.didCallMethod("agent.getConversation"))
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
 
-    // MARK: - Agent Subscriptions with Top-Level actorIds
-
     @Test func parsesTopLevelActorIdsFromSubscriptions() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        // Configure agent.getSubscriptions response with PROTOCOL-shaped payload:
-        // subscriptions with top-level actorIds (no filter object)
         fake.responseMap["agent.getSubscriptions"] = [
             "subscriptions": [
                 [
@@ -420,10 +382,8 @@ extension ConversationStoreIntegrationTests {
             "delegationGroups": []
         ]
 
-        // Fetch subscriptions
         await store.fetchSubscriptions(agentId: "agent-parent", workspaceId: "ws-1")
 
-        // Assert that watchedAgentIds contains the child agent from top-level actorIds
         #expect(store.watchedAgentIds.contains("agent-child-1"))
         #expect(store.isWaitingForAgents == true)
     }
@@ -434,7 +394,6 @@ extension ConversationStoreIntegrationTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        // Configure agent.getSubscriptions response with legacy filter.actorIds format
         fake.responseMap["agent.getSubscriptions"] = [
             "subscriptions": [
                 [
@@ -448,10 +407,8 @@ extension ConversationStoreIntegrationTests {
             "delegationGroups": []
         ]
 
-        // Fetch subscriptions
         await store.fetchSubscriptions(agentId: "agent-parent", workspaceId: "ws-1")
 
-        // Assert that watchedAgentIds contains the child agent from filter.actorIds
         #expect(store.watchedAgentIds.contains("agent-child-2"))
         #expect(store.isWaitingForAgents == true)
     }
@@ -460,7 +417,6 @@ extension ConversationStoreIntegrationTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        // Configure agent.getSubscriptions response with both subscriptions and delegation groups
         fake.responseMap["agent.getSubscriptions"] = [
             "subscriptions": [
                 [
@@ -482,22 +438,17 @@ extension ConversationStoreIntegrationTests {
             ]
         ]
 
-        // Fetch subscriptions
         await store.fetchSubscriptions(agentId: "agent-parent", workspaceId: "ws-1")
 
-        // Assert that watchedAgentIds contains agents from both sources
         #expect(store.watchedAgentIds.contains("agent-child-1"))
         #expect(store.watchedAgentIds.contains("agent-child-2"))
         #expect(store.watchedAgentIds.contains("agent-child-3"))
         #expect(store.isWaitingForAgents == true)
 
-        // Verify delegation group status is computed
         #expect(store.delegationGroupStatus != nil)
         #expect(store.delegationGroupStatus?.completed == 0)
         #expect(store.delegationGroupStatus?.total == 2)
     }
-
-    // MARK: - Send queued message now (agent.sendQueuedMessageNow)
 
     @Test func sendQueuedMessageNowMakesSingleRPCAndPreservesRest() async throws {
         let fake = FakeConnectionManager()
@@ -511,7 +462,6 @@ extension ConversationStoreIntegrationTests {
 
         try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
 
-        // Exactly one RPC, carrying only identifiers (the daemon owns the payload)
         let calls = fake.paramsForMethod("agent.sendQueuedMessageNow")
         #expect(calls.count == 1)
         #expect(calls.first?["agentId"] as? String == "agent-1")
@@ -520,13 +470,9 @@ extension ConversationStoreIntegrationTests {
         #expect(calls.first?["content"] == nil)
         #expect(fake.requestLog.count == 1)
 
-        // Only the sent entry is dropped; the rest of the queue is preserved
         #expect(store.queuedMessages.map(\.id) == ["q-2"])
     }
 
-    /// Slot race (§5.5): the daemon could not begin the turn and restored the
-    /// entry at the FRONT of its queue, reporting `queued: true`. The local
-    /// entry must be kept — `agent:queue:updated` reconciles ordering.
     @Test func sendQueuedMessageNowSlotRaceKeepsEntry() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -547,8 +493,6 @@ extension ConversationStoreIntegrationTests {
         #expect(!fake.didCallMethod("agent.getQueue"))
     }
 
-    /// Quarantined session (monorepo#840): the daemon leaves the entry queued
-    /// (`queued: true, quarantined: true`); the local entry must be kept.
     @Test func sendQueuedMessageNowQuarantinedKeepsEntry() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -593,7 +537,6 @@ extension ConversationStoreIntegrationTests {
             try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-stale", workspaceId: "ws-1")
         }
 
-        // The queue was refreshed from the daemon rather than mutated locally
         #expect(fake.didCallMethod("agent.getQueue"))
         #expect(store.queuedMessages.map(\.id) == ["q-server"])
     }
@@ -605,8 +548,6 @@ extension ConversationStoreIntegrationTests {
         store.queuedMessages = [
             QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0)
         ]
-        // -32602 without data.code == "not-found" (invalid-params or a legacy
-        // daemon omitting data) must NOT read as a missing queued message
         fake.errorMap["agent.sendQueuedMessageNow"] = NSError(
             domain: "WebSocket",
             code: -32_602,
@@ -617,7 +558,6 @@ extension ConversationStoreIntegrationTests {
             try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
         }
 
-        // No refresh, no local mutation — the error just propagates
         #expect(!fake.didCallMethod("agent.getQueue"))
         #expect(store.queuedMessages.map(\.id) == ["q-1"])
     }
@@ -639,12 +579,9 @@ extension ConversationStoreIntegrationTests {
             try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
         }
 
-        // No refresh, no local mutation — the error just propagates
         #expect(!fake.didCallMethod("agent.getQueue"))
         #expect(store.queuedMessages.map(\.id) == ["q-1"])
     }
-
-    // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
 
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()
@@ -749,8 +686,6 @@ extension ConversationStoreIntegrationTests {
     }
 }
 
-// MARK: - Recovery ownership and the bounded snapshot wait
-
 extension ConversationStoreIntegrationTests {
     private func emptyDelta(subscriptionId: String, seq: Int) -> SubscriptionPush {
         SubscriptionPush(
@@ -762,9 +697,6 @@ extension ConversationStoreIntegrationTests {
         )
     }
 
-    /// A gap recovery parked in `chat.unsubscribe` owns the channel: the
-    /// snapshot timeout armed for the registration it replaces must not open
-    /// a registration of its own, and exactly one replacement follows.
     @Test func resnapshotPendingInUnsubscribeCancelsTheOldSnapshotTimeout() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -776,8 +708,6 @@ extension ConversationStoreIntegrationTests {
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(store.liveTranscript.snapshotTimeoutTask != nil, "the ack arms the snapshot timeout")
 
-        // A delta ahead of the seq-0 snapshot is a gap: recovery starts and
-        // parks in the release of sub-1.
         fake.deliverSubscriptionPush(emptyDelta(subscriptionId: "sub-1", seq: 3))
         try await fake.waitForPendingRequests("chat.unsubscribe")
         #expect(store.liveTranscript.resnapshotInProgress)
@@ -796,11 +726,6 @@ extension ConversationStoreIntegrationTests {
         }
     }
 
-    /// A rejected first registration does not settle the initial-load wait:
-    /// the snapshot is still owed to the retry, which serves it within the
-    /// bound. Every step is held: the first registration's rejection, the
-    /// retry's ack and the snapshot are each released only once the wait is
-    /// seen still parked.
     @Test func snapshotWaitSurvivesARejectedRegistrationUntilTheRetrySnapshot() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -843,8 +768,6 @@ extension ConversationStoreIntegrationTests {
         #expect(store.liveTranscript.snapshotWaiters.isEmpty)
     }
 
-    /// Consecutive rejections cannot hold the initial load open forever: the
-    /// wait settles at `snapshotTimeout` while the retry schedule goes on.
     @Test func snapshotWaitIsBoundedAcrossRejectedRegistrations() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -863,9 +786,6 @@ extension ConversationStoreIntegrationTests {
         #expect(fake.paramsForMethod("chat.subscribe").count == 1)
     }
 
-    /// A reconnect during the initial snapshot wait re-registers for the same
-    /// binding: the wait keeps parking and the reconnect registration's
-    /// snapshot settles it.
     @Test func snapshotWaitSurvivesAReconnectUntilTheReconnectSnapshot() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)

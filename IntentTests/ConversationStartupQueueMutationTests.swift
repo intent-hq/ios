@@ -143,7 +143,7 @@ struct ConversationStartupQueueMutationTests {
         #expect(fixture.connection.hasSubscriptionHandler(id: registration))
         if acknowledgeAfterClose {
             fixture.connection.resolvePending("agent.queueMessage", with: reply("append"))
-            action.cancel() // The ACK already succeeded; the other owner still needs it.
+            action.cancel()
         }
         await action.value
         fixture.connection.resolvePending("agent.get", with: ["agent": fixture.agent(ConversationStartupFixture.parentId)])
