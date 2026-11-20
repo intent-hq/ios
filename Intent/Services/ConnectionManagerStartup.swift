@@ -2,7 +2,6 @@ import Combine
 import Foundation
 import UIKit
 
-/// Bookkeeping for the one bootstrap admission a connection may run.
 struct StartupAdmissionRun {
     var id = UUID()
     var candidate: RacedConnection?
@@ -18,8 +17,6 @@ extension ConnectionManager {
         let drain: Task<[HostCertMismatch], Never>?
     }
 
-    /// Every initial connection and recovery uses this boundary. Racing only
-    /// opens a transport; normal subscriptions cannot see a bootstrap seat.
     func readyRace(
         token: String,
         fingerprint: String?,
@@ -88,8 +85,6 @@ extension ConnectionManager {
             startupState = .unavailable
             throw DaemonStartupError.reconnect
         }
-        // Replacing the entire snapshot also drops counters/ETA when the
-        // daemon's attempt ID changes or a future schema is unrecognized.
         startupState = state
     }
 
@@ -109,8 +104,6 @@ extension ConnectionManager {
         for waiter in waiters { waiter.resume(throwing: CancellationError()) }
     }
 
-    /// Process lifecycle (not a single iPad window) owns suspension, so one
-    /// background scene cannot stop another window's active backend session.
     func observeStartupLifecycle() {
         startupRun.lifecycleObservers = [
             NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)
@@ -123,7 +116,6 @@ extension ConnectionManager {
     func setStartupSuspended(_ suspended: Bool) {
         startupRun.suspended = suspended
         if suspended {
-            // A failure has no admission left to resume; keep it so Retry stays.
             guard startupState != nil, startupState != .failed else { return }
             startupState = .unavailable
             let candidate = startupRun.candidate

@@ -1,11 +1,9 @@
 import Foundation
 
-/// A snapshot from the admitted socket's hello, never persisted with a saved host or person.
 nonisolated struct ConnectionCapabilities: Equatable, Sendable {
     let protocolVersion: String?
     let scriptMonitorsVersion: Int?
     let scriptActiveListsVersion: Int?
-    /// `collaborationIdentity: 1` (§5.49): the separate `identity.*` sign-in.
     var collaborationIdentityVersion: Int?
     private(set) var scriptMonitorsDisabled = false
 
@@ -13,7 +11,6 @@ nonisolated struct ConnectionCapabilities: Equatable, Sendable {
 
     var supportsCollaborationIdentity: Bool { collaborationIdentityVersion == 1 }
 
-    /// Protocol 10.8 added GitLab identity proofs (`sourceControl.identityProof.*`).
     var supportsIdentitySeam: Bool { Self.protocolVersion(protocolVersion, atLeast: Self.identitySeamVersion) }
 
     private static let identitySeamMajor = 10
@@ -29,9 +26,6 @@ nonisolated struct ConnectionCapabilities: Equatable, Sendable {
         return major > minimum.major || (major == minimum.major && minor >= minimum.minor)
     }
 
-    /// Gated only on the advertised capabilities, never on a protocol-version maximum: the
-    /// protocol major moves for unrelated changes (protocol 15 hid monitors, intent-hq/intent#7206).
-    /// A breaking change to these methods changes the capability values instead.
     var supportsScriptMonitors: Bool {
         !scriptMonitorsDisabled && scriptMonitorsVersion == 2 && scriptActiveListsVersion == 1
     }
@@ -61,7 +55,6 @@ nonisolated extension ConnectionCapabilities {
     }
 }
 
-/// Carries identity and capabilities from the same candidate, before socket adoption.
 nonisolated struct ConnectionHandshake: Equatable, Sendable {
     let principal: ConnectionPrincipal
     let capabilities: ConnectionCapabilities

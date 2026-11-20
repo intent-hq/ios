@@ -22,6 +22,7 @@ The in-app browser reaches dev servers on the daemon host through the `/tunnel` 
    2. On remote close, DATA already received drains before the local socket closes.
    3. After EOF has flushed a write-side FIN, the stream can close, because all earlier `contentProcessed` callbacks completed in order.
 5. **Isolation.** Network callbacks stay off the main actor and pass only `Sendable` values (`BrowserTunnelTCP`).
+6. **Route.** `ConnectionManager.makeBrowserProxy()` uses the winning route, including the existing Tailcat loopback forwarder. The auxiliary tunnel keeps bearer credentials out of browser content. It reads `protocolVersion` from `system.status`, which matches `client.hello` without replacing the live RPC connection's client identity.
 
 ## Consequences
 
@@ -30,3 +31,4 @@ The in-app browser reaches dev servers on the daemon host through the `/tunnel` 
 ## Code
 
 - `BrowserTunnelListener`, `BrowserTunnelTCP`, `BrowserTunnelURL`: `rewrite(_:localPort:)`, `BrowserTunnelFrame`: `init(decoding:)`, `BrowserTunnelFlow`, `BrowserTunnelProxy`: `accept(_:port:)`, `removeStream(_:notifyDaemon:)`, `BrowserTunnelWebSocket`
+- `ConnectionManager`: `makeBrowserProxy()`

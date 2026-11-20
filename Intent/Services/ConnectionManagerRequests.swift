@@ -6,26 +6,12 @@ extension ConnectionManager {
     private static let connectionClosedErrorCode = -3
     private static let notConnectedErrorCode = -4
 
-    /// The error a request gets when no admitted connection can answer it.
     static func notConnectedRequestError() -> NSError {
         localRequestError(code: notConnectedErrorCode, message: "Not connected", classification: .notConnected)
     }
 
-    // MARK: - Public API
-
-    /// Default per-request RPC timeout. Individual calls may pass a longer
-    /// `timeout` to `request(_:params:timeout:)` when the daemon operation is
-    /// known to outlast this bound (e.g. `workspace.create`).
     static let defaultRequestTimeout: TimeInterval = 10
 
-    /// Sends a JSON-RPC request and awaits its response.
-    ///
-    /// - Parameter timeout: Per-call timeout override in seconds (defaults to
-    ///   `defaultRequestTimeout`). Long-running daemon operations must pass a
-    ///   bound above the daemon's own budget so the daemon's structured result
-    ///   (success or error) wins over a client-side transport timeout —
-    ///   mirrors the per-call `timeoutMs` override in cloudlands-fe.
-    /// Preserves the request flow while classifying each local boundary.
     func request(
         _ method: String,
         params: [String: Any] = [:],
@@ -96,17 +82,6 @@ extension ConnectionManager {
         )
     }
 
-    /// Registers a pending continuation for `id`, performs `write`, and races
-    /// the response against `timeout`. Internal for test visibility (lets tests
-    /// exercise the timeout race without a live socket).
-    ///
-    /// The continuation is resumed exactly once by whichever side wins:
-    /// whoever removes the entry from `pendingRequests` (all on MainActor)
-    /// owns the resume — a response via `handleTextMessage`, a disconnect via
-    /// `failAllPending`, or the timeout task below. This guarantees a
-    /// never-responding daemon still produces the timeout error instead of
-    /// suspending forever (a suspended CheckedContinuation does not observe
-    /// task cancellation).
     func awaitResponse(
         id: Int,
         timeout: TimeInterval,
@@ -263,7 +238,6 @@ extension ConnectionManager {
         }
     }
 
-    // Keep each frame metric and the reporting threshold explicit in this pure log formatter.
     // swiftlint:disable:next function_parameter_count
     nonisolated static func slowFrameLogLine(
         label: String,
@@ -293,8 +267,6 @@ extension ConnectionManager {
         return id
     }
 
-    // MARK: - Subscription Push Routing
-
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
         subscriptionRouter.register(id: id, handler: handler)
     }
@@ -319,7 +291,6 @@ extension ConnectionManager {
         subscriptionRouter.bufferedPushCount
     }
 
-    /// Internal entry point for testing message dispatch.
     @MainActor
     func dispatchMessage(_ text: String) {
         handleTextMessage(text)
@@ -351,7 +322,6 @@ extension ConnectionManager {
         connectionGeneration == generation && socket === currentSocket
     }
 
-    // Keep retry ordering unchanged; owner context is scoped to each request.
     // swiftlint:disable:next function_body_length
     private func runGlobalSubscription(
         socket currentSocket: WebSocketConnection,
