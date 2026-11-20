@@ -1,11 +1,6 @@
 #if DEBUG
 import Foundation
 
-/// Debug-only failure seams for the hands-on check of error states:
-/// `--demo-failures=pr-search,pr-load-more,pr-detail,file-preview` (and the
-/// first-read lists `workspace-list,agent-list,note-list`, ios#462) with
-/// `--demo-data`. Each failure fires a fixed number of times per launch (first-read lists: per
-/// workspace, so a workspace the iPad opens at launch does not use up another one's), so Retry recovers.
 enum DemoFailureFixtures {
     private static let argumentPrefix = "--demo-failures="
     private static let nextToken = "demo-failure-page-2"
@@ -16,9 +11,7 @@ enum DemoFailureFixtures {
     private static let garbledFile = "docs/Garbled reply.png"
     private static let webMFile = "docs/Screen recording.webm"
     private static var fired: Set<String> = []
-    /// Reads failed so far per first-read fixture and workspace.
     private static var failedReads: [String: Int] = [:]
-    /// Matches the wording of the live connection's request timeout.
     private static let requestTimedOut = NSError(
         domain: "DemoFailureFixtures", code: 0, userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
     )
@@ -30,7 +23,6 @@ enum DemoFailureFixtures {
         return Set(value.dropFirst(argumentPrefix.count).split(separator: ",").map(String.init))
     }
 
-    /// True the first time `name` is asked for while enabled.
     private static func firesOnce(_ name: String) -> Bool {
         guard enabled.contains(name), !fired.contains(name) else { return false }
         fired.insert(name)
@@ -59,9 +51,6 @@ enum DemoFailureFixtures {
         }
     }
 
-    /// A list fixture and how many reads it fails: the workspace stores read
-    /// once on open and again on seeing the live connection, so both fail and
-    /// only Retry recovers. Agent group and assistant reads are left alone.
     private static func firstReadFailure(for method: String, params: [String: Any]) -> (String, Int)? {
         switch method {
         case "workspace.list": ("workspace-list", 1)

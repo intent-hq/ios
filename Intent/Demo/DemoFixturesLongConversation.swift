@@ -2,38 +2,18 @@
 import Foundation
 
 extension DemoFixtures {
-    /// Sentence that opens the first (user) message of
-    /// `longConversationMessages`; stable anchor for UI tests.
     static let longConversationFirstSentence =
         "Start of the flake investigation: the payment integration suite failed 6 of the last 20 CI runs."
 
-    /// Sentence that closes the last (assistant) message of
-    /// `longConversationMessages`; stable anchor for UI tests.
     static let longConversationLastSentence =
         "End of the flake investigation: 50 consecutive green runs on the payment integration suite."
 
-    /// Suggested prompts carried by the last (assistant) message of
-    /// `longConversationMessages` as a trailing `<!-- suggested-prompts -->`
-    /// block, so the transcript's prompt rows — and the scroll transition
-    /// when one is tapped — can be exercised against `--demo-data`.
     static let longConversationSuggestedPrompts = [
         "Open a [**PR**](https://github.com/intent-hq/ios) for the `deflake` changes",
         "Show me the final evidence table",
         "Schedule the worker scaling follow-up"
     ]
 
-    /// A coordinator-shaped transcript many screens tall on an iPhone, so
-    /// scroll-position UI (the "Go to End" button) and the LazyVStack
-    /// cold-layout paths (intent-hq/ios#304, #305) can be exercised against
-    /// `--demo-data`: 16 handwritten user/assistant exchanges with a
-    /// generated delegation round between each pair — tool-call groups,
-    /// agent-to-agent report rows (`metadata.type == "agent_message"`),
-    /// multi-paragraph markdown, fenced code blocks, tables and thinking
-    /// blocks — for `longConversationMessageCount` messages of widely varying
-    /// heights. The first message begins with `longConversationFirstSentence`
-    /// and the last one's rendered text ends with
-    /// `longConversationLastSentence`, followed only by the stripped
-    /// `longConversationSuggestedPrompts` block.
     private static var longConversationSuggestedPromptsBlock: String {
         (["<!-- suggested-prompts"] + longConversationSuggestedPrompts + ["-->"])
             .joined(separator: "\n")

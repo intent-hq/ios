@@ -6,13 +6,10 @@ extension DemoFixtures {
         .map { DemoDesignFixtures(scenario: $0) }
 }
 
-/// Data scenarios only: appearance, keyboard, expansion and question layout
-/// are still controlled by the real screen and user interactions.
 enum DemoDesignScenario: String, CaseIterable {
     case agentGroups = "agent-groups"
     case agentGroupsLarge = "agent-groups-large"
     case agentGroupsRetry = "agent-groups-retry"
-    /// An agent-to-agent message and a script-monitor wake.
     case automatedMessages = "automated-messages"
     case blocker
     case claudeTools = "claude-tools"
@@ -30,7 +27,6 @@ enum DemoDesignScenario: String, CaseIterable {
     case streaming
     case tables
     case tools
-    /// A usage-limit `turn-failure` notice with a raw JSON-RPC reason.
     case turnFailure = "turn-failure"
     case watcher
 
@@ -42,8 +38,6 @@ enum DemoDesignScenario: String, CaseIterable {
     }
 }
 
-/// An in-memory fixture daemon for the design workspace. State changes return
-/// ordinary RPC payloads and chat snapshots; no view/store state is set here.
 @MainActor
 final class DemoDesignFixtures {
     static let workspaceId = "demo-ws-agent-design"
@@ -215,8 +209,6 @@ final class DemoDesignFixtures {
         }
     }
 
-    /// Called after response mutation and before its acknowledgement is
-    /// returned, exercising the live router's normal early-push buffering.
     func subscriptionPush(for method: String, params: [String: Any]) -> SubscriptionPush? {
         guard params["agentId"] as? String == Self.agentId,
               ["chat.subscribe", "agent.sendMessage", "agent.sendQueuedMessageNow", "agent.stop"].contains(method) else { return nil }
