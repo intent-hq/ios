@@ -1,12 +1,10 @@
 import SwiftUI
 
 extension View {
-    /// Constrain the transcript and composer; navigation stays outside this column.
     func conversationReadableColumn() -> some View {
         modifier(ConversationReadableColumn(fillsWidePanel: true))
     }
 
-    /// Detail children already own their page inset, so count it outside the readable body.
     func iPadDetailColumn(isEnabled: Bool = true) -> some View {
         modifier(ConversationReadableColumn(contentHorizontalInset: WorkspaceDetailStyle.pageInset, isEnabled: isEnabled))
     }
@@ -23,7 +21,6 @@ private struct ConversationReadableColumn: ViewModifier {
 
     private typealias Layout = Constants.Conversation.Design.IPad
 
-    /// The Duo keeps the narrow column: a closed drawer spans the chat across the fold.
     private var readableWidth: CGFloat {
         fillsWidePanel && !usesVerticalBar ? Layout.conversationMaximumWidth : Layout.readableWidth
     }
@@ -41,7 +38,6 @@ private struct ConversationReadableColumn: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        // Keep one structural identity as the window or sidebar changes size.
         content
             .frame(maxWidth: maximumWidth)
             .padding(.horizontal, horizontalInset)

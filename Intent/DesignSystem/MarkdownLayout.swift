@@ -2,7 +2,6 @@ import SwiftUI
 
 extension Constants {
     enum Markdown {
-        /// Default `.body` size used to convert the compact theme's em margins.
         static let baseFontSize: CGFloat = 17
         static let codeFontScale: CGFloat = 0.85
         static let lineSpacingScale: CGFloat = 0.15
@@ -62,7 +61,6 @@ extension Constants.Markdown {
     }
 
     enum TableCell {
-        /// Bound descriptive text without squeezing columns to the viewport.
         static let maximumWidth: CGFloat = 240
         static let horizontalPaddingScale: CGFloat = 0.72
         static let verticalPaddingScale: CGFloat = 0.35

@@ -1,9 +1,6 @@
 import SwiftUI
 
 extension Constants.Conversation {
-    /// Shared iOS workspace-agent and Assistant styling from the approved Figma frames.
-    /// iPad opts in explicitly; standard regular-width and visionOS callers stay unchanged.
-    /// Heights are visual baselines, not text caps; preserve Dynamic Type and platform hit targets.
     enum Design {
         static let horizontalInset: CGFloat = 24
         static let sectionSpacing: CGFloat = 32
@@ -19,7 +16,6 @@ extension Constants.Conversation {
 extension Constants.Conversation.Design {
     enum IPad {
         static let readableWidth: CGFloat = 560
-        /// The chat fills the panel, as in portrait, until lines get too long to scan.
         static let conversationMaximumWidth: CGFloat = 1040
         static let userBubbleMaximumWidth: CGFloat = 270
         static let minimumHorizontalInset: CGFloat = 16
@@ -39,14 +35,11 @@ extension Constants.Conversation.Design {
     }
 
     enum Column {
-        // Reserve a usable transcript band from the native keyboard-safe column.
-        // The remaining space, minus measured footer content, belongs to questions.
         static let transcriptHeightFraction: CGFloat = 0.25
     }
 
     enum Transcript {
         static let bubblePadding: CGFloat = 20
-        // Adaptive implementation policy; accessibility text uses the full available width.
         nonisolated static let bubbleMaximumWidthFraction: CGFloat = 0.75
         static let toolRowSpacing: CGFloat = 12
         static let toolLabelSpacing: CGFloat = 16
@@ -68,13 +61,11 @@ extension Constants.Conversation.Design {
         static let activeTrailingPadding: CGFloat = 8
         static let keyboardHorizontalInset: CGFloat = 8
         static let keyboardBottomSpacing: CGFloat = 8
-        // Duo's 48pt launcher sits 24pt from the screen bottom: 24 + (48 - 56) / 2.
         static let verticalBarBottomSpacing: CGFloat = 20
         static let activeCornerRadius: CGFloat = 24
         static let controlSpacing: CGFloat = 16
         static let actionWidth: CGFloat = 48
         static let actionHeight: CGFloat = 40
-        // Figma's stop control is a rounded rectangle, not the larger bundled StopFill glyph.
         static let stopSide: CGFloat = 18
         static let stopCornerRadius: CGFloat = 4
     }
@@ -115,7 +106,6 @@ extension Constants.Conversation.Design {
         static let topPadding: CGFloat = 24
         static let bottomPadding: CGFloat = 20
         static let contentSpacing: CGFloat = 24
-        // Native line boxes include leading that Figma trims; preserve the visible text gap.
         static let titleSpacing: CGFloat = 8
         static let notificationSpacing: CGFloat = 32
         static let answerPadding: CGFloat = 24
@@ -129,9 +119,6 @@ extension Constants.Conversation.Design {
     }
 
     enum Typography {
-        // Figma tracking is percent of point size: Body S -1%; compact body and XS -2%.
-        // Reuse Constants.Typography.bodyS/bodySEmphasized/bodyXS/bodyXSEmphasized via interFont.
-        // Do not impose Figma's trimmed line-box heights on native text layout.
         static let bodyTracking: CGFloat = -0.16
         static let compactBodyTracking: CGFloat = -0.32
         static let smallTracking: CGFloat = -0.28

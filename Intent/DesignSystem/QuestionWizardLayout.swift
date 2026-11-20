@@ -31,7 +31,6 @@ extension Constants.Conversation.QuestionWizard {
         static let otherFieldSpacing: CGFloat = 8
         static let otherFieldBackgroundOpacity: Double = 0.7
         static let returnHintOpacity: Double = 0.5
-        // Matches UITextView's default line-fragment padding for placeholder alignment.
         static let lineFragmentPadding: CGFloat = 5
     }
 

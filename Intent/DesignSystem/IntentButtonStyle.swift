@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// For controls whose labels own their layout and enabled/disabled colors.
-/// On visionOS it adds the gaze highlight the system styles would draw;
-/// labels shape it with `visionHoverShape(_:)`.
 struct IntentContentButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.visionContainerDrawsHover) private var containerDrawsHover
@@ -44,7 +41,6 @@ struct IntentIconButton: View {
     }
 }
 
-/// Filled actions from the Intent button palette, with explicit interaction states.
 struct IntentButtonStyle: ButtonStyle {
     enum Variant {
         case muted
@@ -53,11 +49,6 @@ struct IntentButtonStyle: ButtonStyle {
     }
 
     var variant: Variant = .primary
-    /// Puts a copy passthrough marker behind the whole pill, so taps on its
-    /// padding reach the Button inside a transcript row's copy overlay (see
-    /// `copyContextMenuPassthrough()`). Set it on every `IntentButtonStyle`
-    /// Button in a transcript row. The marker is rectangular: taps in the
-    /// corners outside the rounded pill reach neither the Button nor Copy.
     var passesThroughCopyMenu = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isEnabled) private var isEnabled

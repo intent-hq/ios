@@ -166,7 +166,6 @@ extension Constants.Conversation.NoticeCard {
     static let increasedContrastBackgroundMultiplier: Double = 1.75
     static let increasedContrastBorderWidthMultiplier: CGFloat = 2
     static let attentionTextSpacing: CGFloat = 2
-    /// Gap between the turn-failure summary, link, and Details sections.
     static let turnFailureSectionSpacing: CGFloat = 6
     static let turnFailureActionSpacing: CGFloat = 4
     static let turnFailureDetailsPadding: CGFloat = 8
@@ -192,8 +191,6 @@ extension Constants.Conversation.AgentWaiting {
 
 extension Constants.Conversation.StatusStrip {
     enum BackgroundHooks {
-        /// Max characters of a hook name shown on a chip (mirrors the FE's
-        /// visual max-width truncation).
         static let nameMaxLength = 24
         static let repeatIconFontSize: CGFloat = 8
         static let chipTopPadding: CGFloat = 4

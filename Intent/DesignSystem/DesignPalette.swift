@@ -1,8 +1,6 @@
 import SwiftUI
 
 extension Constants {
-    /// Exact 8-bit sRGB values from the Figma exports, written as `0xRRGGBB`
-    /// so each constant stays directly comparable with the design file.
     nonisolated enum DesignPalette {
         static let ink: UInt32 = 0x080808
         static let darkCanvas: UInt32 = 0x161616
@@ -19,14 +17,12 @@ extension Constants {
         static let blockerBody: UInt32 = 0x857367
     }
 
-    /// Converts 8-bit design channels to the unit fractions SwiftUI expects.
     nonisolated enum EightBitChannel {
         private static let maximum: Double = 255
         private static let mask: UInt32 = 0xFF
         private static let redShift: UInt32 = 16
         private static let greenShift: UInt32 = 8
 
-        /// `value / 255`, e.g. an exported alpha byte such as `0x26`.
         static func fraction(_ value: UInt32) -> Double {
             Double(value & mask) / maximum
         }
@@ -38,7 +34,6 @@ extension Constants {
 }
 
 extension Color {
-    /// An opaque sRGB color from a `0xRRGGBB` design value.
     nonisolated init(sRGBHex hex: UInt32) {
         self.init(
             .sRGB,
