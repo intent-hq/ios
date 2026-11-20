@@ -5,7 +5,7 @@ import SwiftUI
 import Testing
 
 extension BackendSessionRegistryTests {
-    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .replaceWindow])
+    @Test(arguments: [WindowRetargetRoute.rebindInPlace, .replaceWindow, .openTargetWindow])
     func raisingExistingBackendDoesNotLeaveSelectionForLaterRestoration(route: WindowRetargetRoute) {
         let registry = makeRegistry()
         let stored = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
@@ -181,7 +181,7 @@ extension BackendSessionRegistryTests {
         home.onSwitchConnection(id: backend.connectionID)
         #expect(selected == backend)
         #expect(WindowRetargetRoute.route(
-            currentBackendID: backend, supportsMultipleWindows: true
+            currentBackendID: backend, target: backend, supportsMultipleWindows: true, opensSeparateBackendWindows: true
         ) == .rebindInPlace)
 
         // The root must call rebind for the unchanged scene value, not wait
@@ -296,7 +296,11 @@ extension BackendSessionRegistryTests {
         defer { window.release() }
 
         #expect(WindowRetargetRoute.route(
-            currentBackendID: originalBackend, supportsMultipleWindows: supportsMultipleWindows
+            currentBackendID: originalBackend,
+            target: target,
+            supportsMultipleWindows: supportsMultipleWindows,
+            isShowingSavedMachines: true,
+            opensSeparateBackendWindows: true
         ) == .rebindInPlace)
         window.prepareToRebind()
         window.bind(to: target)
@@ -335,5 +339,27 @@ extension BackendSessionRegistryTests {
         if let staying {
             #expect(staying.currentScreenDescription == "connecting")
         }
+    }
+
+    /// Where backends get separate windows, pairing B opens B's own window
+    /// and this window stays on A, so it re-dials its own hijacked
+    /// connection itself.
+    @Test func pairingAnotherBackendRedialsThisWindowWhenTheTargetOpensItsOwnWindow() throws {
+        let registry = makeRegistry()
+        let own = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))
+        let paired = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 5252))
+        let session = registry.attach(BackendID(own.id))
+        let window = session.makeCoordinator()
+        window.currentScreen = .workspaceList
+        var retargeted: BackendID?
+        window.retargetWindow = { retargeted = $0 }
+        window.retargetRoute = { _ in .openTargetWindow }
+
+        window.onPaired(paired)
+
+        let fake = try #require(session.connection as? FakeConnectionManager)
+        #expect(retargeted == BackendID(paired.id))
+        #expect(fake.disconnectCallCount == 1)
+        #expect(window.currentScreenDescription == "connecting")
     }
 }

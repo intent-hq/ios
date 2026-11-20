@@ -100,14 +100,16 @@ extension NotificationManager {
     }
 
     /// Routes an agent history tap to an open window for the entry's
-    /// backend. With none open, the tap never spawns a window: the selection
-    /// is held, `switchWindow` moves this window to the entry's backend, and
-    /// that backend's window registration delivers it.
+    /// backend. With none open, it opens that backend's window where each
+    /// backend gets its own (`opensSourceWindow`, visionOS); otherwise the
+    /// selection is held, `switchWindow` moves this window to the entry's
+    /// backend, and that backend's window registration delivers it.
     func routeHistorySelection(
         agentId: String,
         workspaceId: String,
         agentName: String,
         connectionId: UUID,
+        opensSourceWindow: Bool = WindowRetargetRoute.platformOpensSeparateBackendWindows,
         switchWindow: (UUID) -> Void
     ) {
         let route = Self.selectionRoute(
@@ -115,7 +117,7 @@ extension NotificationManager {
             registeredBackends: Set(agentSelectionHandlers.keys),
             supportsMultipleWindows: supportsMultipleWindows
         )
-        guard route == .drop || route == .openSourceWindow else {
+        guard route == .drop || (route == .openSourceWindow && !opensSourceWindow) else {
             routeAgentSelection(
                 agentId: agentId,
                 workspaceId: workspaceId,

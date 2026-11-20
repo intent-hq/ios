@@ -45,7 +45,11 @@ extension AppCoordinator {
     }
 
     /// Opens a history entry, switching device when the agent lives on another backend.
-    func onSelectHistoryEntry(_ entry: AgentHistoryEntry, notifications: NotificationManager = .shared) {
+    func onSelectHistoryEntry(
+        _ entry: AgentHistoryEntry,
+        notifications: NotificationManager = .shared,
+        opensSeparateBackendWindows: Bool = WindowRetargetRoute.platformOpensSeparateBackendWindows
+    ) {
         guard !isShowingConversation(of: entry) else { return }
         if entry.connectionId == windowConnectionID {
             onSelectAgent(entry.agentId, workspaceId: entry.workspaceId, agentName: entry.agentName)
@@ -55,7 +59,8 @@ extension AppCoordinator {
             agentId: entry.agentId,
             workspaceId: entry.workspaceId,
             agentName: entry.agentName,
-            connectionId: entry.connectionId
+            connectionId: entry.connectionId,
+            opensSourceWindow: opensSeparateBackendWindows
         ) { onSwitchConnection(id: $0) }
     }
 }

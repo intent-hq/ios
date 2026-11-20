@@ -83,14 +83,18 @@ extension AppCoordinator {
         }
         if let retargetWindow {
             let target = BackendID(connection.id)
+            let route = retargetRoute?(target) ?? .rebindInPlace
             retargetWindow(target)
             // The pairing dialed the new backend over THIS window's live
-            // session connection. The retarget replaces this window's
-            // coordinator, so a window still sharing the old backend's
-            // session must re-dial it, or it keeps showing the newly paired
-            // daemon's data over the hijacked socket.
+            // session connection, so a window still on the old backend must
+            // re-dial it, or it keeps showing the newly paired daemon's data
+            // over the hijacked socket. Opening the target's own window keeps
+            // this window on its backend; otherwise the retarget replaces
+            // this window's coordinator and a sibling window re-dials.
             if let bound = backendID, bound != target {
-                if let repairSharedConnection {
+                if route == .openTargetWindow {
+                    redialWindowBackend()
+                } else if let repairSharedConnection {
                     repairSharedConnection()
                 } else {
                     redialWindowBackend()
@@ -396,9 +400,9 @@ extension AppCoordinator {
     /// Switch this window to another saved connection. Marks the target as
     /// the last-used backend and clears its saved screen state (a switch
     /// lands on the workspace list, as before), then routes to its window
-    /// via the root's retarget hook (rebind in place on single-window
-    /// platforms; open/raise where multiple windows are supported). Without
-    /// a hook (tests, previews) falls back to dialing in place.
+    /// via the root's retarget hook (`WindowRetargetRoute`: in place, or the
+    /// target's own window on visionOS). Without a hook (tests, previews)
+    /// falls back to dialing in place.
     func onSwitchConnection(id: UUID) {
         dependencies.persistence.setActiveConnection(id: id)
         dependencies.persistence.clearLastScreen(for: id)

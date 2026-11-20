@@ -11,6 +11,7 @@ extension AppCoordinatorTests {
         #expect(
             WindowRetargetRoute.route(
                 currentBackendID: nil,
+                target: BackendID(UUID()),
                 supportsMultipleWindows: true
             ) == .replaceWindow,
             "An unbound (pairing) window on a multi-window platform is replaced by the target's own window so the scene value is set at creation and stays raisable by openWindow(value:)"
@@ -21,14 +22,41 @@ extension AppCoordinatorTests {
         #expect(
             WindowRetargetRoute.route(
                 currentBackendID: BackendID(UUID()),
-                supportsMultipleWindows: false
+                target: BackendID(UUID()),
+                supportsMultipleWindows: false,
+                opensSeparateBackendWindows: true
             ) == .rebindInPlace,
             "iPhone (single-window) always rebinds the one window in place"
         )
         #expect(WindowRetargetRoute.route(
             currentBackendID: nil,
+            target: BackendID(UUID()),
             supportsMultipleWindows: false
         ) == .rebindInPlace)
+    }
+
+    /// Regression: on Vision Pro, picking another machine (Intent menu →
+    /// Connections, the connection switcher or a recent agent) replaced the
+    /// current window instead of opening that machine's own window.
+    @Test func retargetRouteOpensTheOtherBackendsWindowWhereBackendsGetSeparateWindows() {
+        let current = BackendID(UUID())
+        let other = BackendID(UUID())
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: other,
+            supportsMultipleWindows: true, opensSeparateBackendWindows: true
+        ) == .openTargetWindow)
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: current,
+            supportsMultipleWindows: true, opensSeparateBackendWindows: true
+        ) == .rebindInPlace, "Reselecting this window's own machine never opens a second window")
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: other,
+            supportsMultipleWindows: true, isShowingSavedMachines: true, opensSeparateBackendWindows: true
+        ) == .rebindInPlace, "A window at Home picks what it shows in place")
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: other,
+            supportsMultipleWindows: true, opensSeparateBackendWindows: false
+        ) == .rebindInPlace, "iPad keeps switching in place (ios#897)")
     }
 
     // MARK: - Deep-link URL routing (intent://)
