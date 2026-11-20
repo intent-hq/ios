@@ -3,14 +3,11 @@ import Network
 
 nonisolated struct NetworkPathSnapshot: Equatable, Sendable {
     let status: NWPath.Status
-    /// Meaningful only for an unsatisfied path; not a diagnosis of Airplane Mode.
     let unsatisfiedReason: NWPath.UnsatisfiedReason?
     let primaryInterface: String?
     let availableInterfaces: [String]
-    /// Physical members in NWPath's preference order, even under a virtual primary.
     let physicalInterfaces: [String]
 
-    /// Preserve the transport's existing satisfied/not-satisfied interpretation.
     var isSatisfied: Bool { status == .satisfied }
 
     var isOnPhysicalInterface: Bool {

@@ -1,7 +1,5 @@
 import AVFoundation
 
-/// The synchronous system calls live behind this boundary so the session owner
-/// can serialize them off MainActor, independently of players and audio engines.
 nonisolated protocol MediaAudioSessionClient: Sendable {
     func setCategory(
         _ category: AVAudioSession.Category,
@@ -13,9 +11,6 @@ nonisolated protocol MediaAudioSessionClient: Sendable {
 
 extension AVAudioSession: MediaAudioSessionClient {}
 
-/// AVAudioSession is process-wide, including across visionOS windows. Leases
-/// prevent a dismissed player's delayed cleanup from disabling a new recording
-/// (or another player). No suspension occurs while changing the system session.
 actor MediaAudioSession {
     static let shared = MediaAudioSession()
 
@@ -42,8 +37,6 @@ actor MediaAudioSession {
             return lease
         } catch {
             leases[lease] = nil
-            // Activation may have partially succeeded. Restore other consumers,
-            // or return audio to other apps if this was the only one.
             try? updateAfterRelease()
             throw error
         }
@@ -67,8 +60,6 @@ actor MediaAudioSession {
         let playing = leases.values.contains(.playback)
         let notifying = leases.values.contains(.notification)
         if recording {
-            // A recording in another window must not silence video or lose
-            // microphone access. Return to dictation's own category afterwards.
             try client.setCategory(
                 playing ? .playAndRecord : .record,
                 mode: .measurement,
@@ -77,11 +68,7 @@ actor MediaAudioSession {
         } else if playing {
             try client.setCategory(.playback, mode: .moviePlayback, options: [])
         } else if notifying {
-            // A short chime mixes with other apps' audio and respects the
-            // silent switch.
             try client.setCategory(.ambient, mode: .default, options: .mixWithOthers)
         }
-        // Callers configure only while at least one lease is held, so one of
-        // the purposes above always applies.
     }
 }

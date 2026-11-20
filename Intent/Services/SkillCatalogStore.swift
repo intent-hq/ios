@@ -10,8 +10,6 @@ import Observation
 
     @ObservationIgnored private var loadIdentity = UUID()
 
-    /// Skills do not change during an app session, so a successful catalog is reused per
-    /// agent and connection. Failures are not cached; the next opening retries.
     private struct CacheKey: Hashable {
         let workspaceId: String
         let agentId: String
@@ -24,8 +22,6 @@ import Observation
 
     private static var cache: [CacheKey: CachedCatalog] = [:]
 
-    /// Offline, the visible catalog is cleared so keyboard acceptance cannot insert a hidden
-    /// suggestion; the session cache survives and repopulates the picker on reconnect.
     func refresh(workspaceId: String, agentId: String, connection: any ConnectionManagerRouting) async {
         guard connection.connectionState == .connected else {
             reset()
@@ -74,7 +70,6 @@ import Observation
         }
     }
 
-    /// Clears suggestions and invalidates replies when the composer leaves its workspace.
     func reset() {
         loadIdentity = UUID()
         skills = []

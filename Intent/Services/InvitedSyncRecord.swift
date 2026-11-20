@@ -1,6 +1,5 @@
 import Foundation
 
-/// Raw fields survive rewrites; a parser rejection freezes the original bytes.
 struct InvitedSyncRecord {
     var object: [String: Any]
     let account: String
@@ -69,7 +68,6 @@ struct InvitedSyncRecord {
     static func validPort(_ port: Double) -> Bool { port >= 1 && port <= Double(UInt16.max) && port.rounded(.down) == port }
     static func nullableString(_ value: Any?) -> Bool { value is NSNull || value is String }
 
-    // nil distinguishes an invalid field from a valid empty alias set.
     static func stringSet(_ value: Any?) -> [String]? { // swiftlint:disable:this discouraged_optional_collection
         guard let values = value as? [String], values.allSatisfy({ !$0.isEmpty }),
               values.map({ Data($0.utf8) }) == InvitedSyncKey.sorted(values).map({ Data($0.utf8) }) else { return nil }

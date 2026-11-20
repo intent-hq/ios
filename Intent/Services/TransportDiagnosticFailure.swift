@@ -1,8 +1,6 @@
 import Foundation
 import Network
 
-/// These are boundary classifiers, not string redactors. Associated hostnames,
-/// fingerprints, foreign descriptions and unknown numeric codes are discarded.
 nonisolated enum TransportDiagnosticFailure {
     static func classify(_ error: any Error) -> DiagnosticFailure {
         if let error = error as? NWError { return network(CertFingerprintProbe.FailureCause(error)) }
@@ -50,7 +48,6 @@ nonisolated enum TransportDiagnosticFailure {
         }
     }
 
-    // RFC 6455's fixed protocol code table, not application-provided numbers.
     // swiftlint:disable no_magic_numbers
     private static func closeCode(_ code: Int) -> DiagnosticFailure.Code {
         switch code {

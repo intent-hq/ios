@@ -1,7 +1,5 @@
 import os
 
-/// Captures connection-queue evidence before adoption without actor-hop ordering races.
-/// A general NWPathMonitor describes default routing, not this endpoint's reachability.
 nonisolated final class SocketPathObservation: Sendable {
     struct Snapshot: Equatable, Sendable {
         var path: NetworkPathSnapshot?
@@ -20,7 +18,6 @@ nonisolated final class SocketPathObservation: Sendable {
 
     var current: Snapshot? { state.withLock { $0.snapshot } }
 
-    /// Called on .ready, replacing setup-time path/viability with established evidence.
     func ready(path: NetworkPathSnapshot?) {
         update { state in
             guard state.snapshot == nil else { return }
@@ -36,8 +33,6 @@ nonisolated final class SocketPathObservation: Sendable {
         update { $0.snapshot?.isViable = isViable }
     }
 
-    /// Atomically install then replay. Notifications read current state, not an older
-    /// captured value that could arrive after a newer update on the main actor.
     func observe(_ onUpdate: @escaping @Sendable () -> Void) {
         let shouldReplay = state.withLock { state in
             guard !state.isStopped else { return false }

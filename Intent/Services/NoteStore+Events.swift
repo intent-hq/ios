@@ -22,7 +22,6 @@ extension NoteStore {
     ]
     nonisolated static let ignoredEventTypes: Set<String> = ["note:presence"]
 
-    // Optional payload presence is part of the shared classification contract.
     // swiftlint:disable:next discouraged_optional_collection
     nonisolated static func classify(type: String, data _: [String: Any]?) -> EventClassification? {
         if refetchEventTypes.contains(type) { return .refetch }
@@ -30,7 +29,6 @@ extension NoteStore {
         return nil
     }
 
-    // Nil rejects a non-object event envelope rather than treating it as an empty event.
     // swiftlint:disable:next discouraged_optional_collection
     nonisolated static func event(from params: Any) -> [String: Any]? {
         guard let dictionary = params as? [String: Any] else { return nil }

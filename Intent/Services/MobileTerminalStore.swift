@@ -9,12 +9,8 @@ final class MobileTerminalStore {
     private(set) var creatingWorkspaces: Set<String> = []
     private(set) var connectionGeneration = 0
     private(set) var isConnected: Bool
-    /// Errors are keyed by workspace so a background refresh of one workspace
-    /// never surfaces on another workspace's screen.
     private(set) var errors: [String: String] = [:]
-    /// Running programs by terminal id; not persisted, refreshed from `terminal.list`.
     private(set) var processes: [String: MobileTerminalProcess] = [:]
-    /// Names the user chose, by terminal id; they win over program names.
     private(set) var customNames: [String: String]
 
     @ObservationIgnored let connection: ConnectionManagerRouting
@@ -57,7 +53,6 @@ final class MobileTerminalStore {
         terminals.contains(terminal) && verifiedIds.contains(terminal.id)
     }
 
-    /// The user's name, else the running program, else the last program, else the terminal's own name.
     func title(for terminal: MobileTerminal) -> String {
         customNames[terminal.id] ?? processes[terminal.id]?.title ?? terminal.name
     }
@@ -66,8 +61,6 @@ final class MobileTerminalStore {
         customNames[terminal.id] == nil && processes[terminal.id]?.hasExited == true
     }
 
-    /// Sets the terminal's name; an empty name returns it to automatic naming.
-    /// Ignored for an ended terminal or a stale handle to a reused id.
     func rename(_ terminal: MobileTerminal, to name: String) {
         guard isActive(terminal) else { return }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -115,8 +108,6 @@ final class MobileTerminalStore {
                 "cols": MobileTerminalConnection.initialColumns,
                 "rows": MobileTerminalConnection.initialRows
             ])
-            // A returned id means the shell is running on the daemon, so record it even
-            // if the connection changed meanwhile; dropping it would orphan the PTY.
             guard let result = response as? [String: Any],
                   let id = result["terminalId"] as? String, !id.isEmpty else {
                 throw MobileTerminalError.invalidResponse
@@ -183,7 +174,6 @@ final class MobileTerminalStore {
         let liveIds = Set(rows.compactMap { $0["id"] as? String })
         for row in rows {
             guard let id = row["id"] as? String, terminals.contains(where: { $0.id == id }) else { continue }
-            // A terminal whose own event arrived during the request is newer than this row.
             if processEventAt[id, default: 0] > processRevision { continue }
             processes[id] = MobileTerminalProcess(row)
         }
