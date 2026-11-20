@@ -12,6 +12,8 @@
 2. **Workspace switch.**
    1. Views call `prepareForWorkspaceChange(to:)` synchronously from `onChange(of: workspaceId)` before the async fetch. The empty state then cannot render with the old workspace's load phase.
    2. The workspace id advances at once, so an in-flight reply for the old workspace fails the stale-response guard in `_fetchAgents(workspaceId:)`.
+   3. A switch to the same workspace is a no-op, so a re-appear does not flash the loading state. A read cancelled by its caller does not publish, and a later read still does (added from `AgentStoreTests` comments).
+   4. A refetch that returns an identical list does not assign `agents`. Otherwise the list rebuilds under the swipe-back pop transition (added from `AgentStoreTests` comments).
 3. **Reconnect.** On (re)connect the store refetches. A fetch that failed before the connection came up ("Not connected") must not wait for an unrelated agent event.
 4. **Debounce cancellation.** The debounce task is unstructured. Cancelling the caller (for example the deferred swipe-back refresh) is forwarded to it. Each debounce task belongs to exactly one caller, so this never cancels a newer fetch.
 5. **Scoped loading.**
@@ -47,6 +49,7 @@
 ## Consequences
 
 - A row's last-message preview can lag mid-turn activity until the turn's persisted row arrives.
+- The same first-read phases (not started, loading, loaded empty or not, failed; Retry after a failure loads the list, ios#462) apply to the note and workspace lists. The workspace list reports a failure only while nothing is shown (from test comments).
 - Adding a new `agent:*` event type fails `EventCatalogCoverageTests` until it is classified.
 
 ## Code

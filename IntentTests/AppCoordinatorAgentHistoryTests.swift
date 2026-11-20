@@ -82,8 +82,6 @@ extension AppCoordinatorTests {
         #expect(delivered == "agent-1")
     }
 
-    /// Regression: on Vision Pro a recent agent on another machine replaced
-    /// this window instead of opening that machine's own window.
     @Test @MainActor func historyEntryOnAnotherDeviceOpensItsWindowWhereBackendsGetSeparateWindows() {
         let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
         var retargeted: BackendID?
@@ -124,9 +122,6 @@ extension AppCoordinatorTests {
         #expect(retargeted == nil)
     }
 
-    /// The real window handler: after an in-place history switch, the same
-    /// (active) window's new coordinator receives the selection, and no
-    /// window is opened or raised.
     @Test @MainActor func inPlaceHistorySwitchDeliversWithoutOpeningOrRaisingAWindow() {
         let manager = makeHistoryNotificationManager()
         manager.supportsMultipleWindows = true

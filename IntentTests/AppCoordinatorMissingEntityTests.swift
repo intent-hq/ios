@@ -22,7 +22,6 @@ extension AppCoordinatorTests {
             ]
         )
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
-        // Seed the store so the reconnect overlay clears immediately.
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
 
         fake.simulateConnect()
@@ -30,7 +29,6 @@ extension AppCoordinatorTests {
         coordinator.onSelectAgent("agent-gone", workspaceId: wsId, agentName: "Worker")
         fake.simulateDisconnect()
         fake.simulateConnect()
-        // Reconnect must re-validate the open conversation's agent.
         try await fake.waitForRequests("agent.get")
         try await waitUntil(".workspaceDetail after reconnect with missing agent") {
             Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
@@ -65,7 +63,6 @@ extension AppCoordinatorTests {
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
-        // Transport-level timeout must not read as deletion
         fake.errorMap["agent.get"] = NSError(
             domain: "WebSocket",
             code: -2,
@@ -92,8 +89,6 @@ extension AppCoordinatorTests {
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
-        // -32602 without data.code == "not-found" (invalid-params or a legacy
-        // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
         fake.errorMap["agent.get"] = NSError(
             domain: "WebSocket",
             code: -32_602,
@@ -135,8 +130,6 @@ extension AppCoordinatorTests {
         }
     }
 
-    // MARK: - Missing agent handling (conversation fallback)
-
     @Test @MainActor func handleMissingAgent_navigatesToWorkspaceDetail() {
         let wsId = "test-coord-missing-agent-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
@@ -154,9 +147,6 @@ extension AppCoordinatorTests {
     }
 
     @Test @MainActor func handleMissingAgent_ignoredWhenNotOnConversationScreen() {
-        // Self-initiated deletion dismisses the conversation first, so by the
-        // time the agent:deleted fallback fires the screen is already
-        // .workspaceDetail — the guard must make it a no-op (no double navigation).
         let wsId = "test-coord-missing-agent-noop-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
@@ -192,8 +182,6 @@ extension AppCoordinatorTests {
 
 extension AppCoordinatorTests {
     @Test @MainActor func handleMissingAgent_ignoredForDifferentAgent() {
-        // A stale validation for agent A must not evict a live conversation
-        // with agent B in the same workspace.
         let wsId = "test-coord-missing-agent-otheragent-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
@@ -209,8 +197,6 @@ extension AppCoordinatorTests {
             Issue.record("handleMissingAgent for another agent must not navigate, got \(coordinator.currentScreen)")
         }
     }
-
-    // MARK: - Missing note handling
 
     @Test @MainActor func handleMissingNote_navigatesToWorkspaceDetail() {
         let wsId = "test-coord-missing-note-\(UUID().uuidString)"
@@ -265,8 +251,6 @@ extension AppCoordinatorTests {
     }
 
     @Test @MainActor func handleMissingNote_ignoredForDifferentNote() {
-        // A stale validation for note A must not evict a live note B screen
-        // in the same workspace (reachable via note-to-note links).
         let wsId = "test-coord-missing-note-othernote-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
@@ -284,8 +268,6 @@ extension AppCoordinatorTests {
         }
     }
 
-    // MARK: - Note validation on cold-start restore
-
     @Test @MainActor func restoreLastScreen_restoredNoteMissing_fallsBackToDetail() async throws {
         let wsId = "test-coord-restore-dead-note-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
@@ -302,12 +284,8 @@ extension AppCoordinatorTests {
             for: Self.windowBackend.connectionID
         )
 
-        // No workspace publish: keep lastUpdated nil so the workspace-existence
-        // validation stays inert and only the note validation path is exercised.
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
-        // note.get answers -32602 with data.code == "not-found" for a
-        // nonexistent note (docs/PROTOCOL.md §3.3/§9)
         fake.errorMap["note.get"] = NSError(
             domain: "WebSocket",
             code: -32_602,
@@ -324,7 +302,6 @@ extension AppCoordinatorTests {
         )
 
         coordinator.onConnectionSuccess()
-        // Restoring a note screen must re-validate the note.
         try await fake.waitForRequests("note.get")
         try await waitUntil(".workspaceDetail after restoring a missing note") {
             Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
@@ -354,7 +331,6 @@ extension AppCoordinatorTests {
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
-        // Transport-level timeout must not read as deletion
         fake.errorMap["note.get"] = NSError(
             domain: "WebSocket",
             code: -2,

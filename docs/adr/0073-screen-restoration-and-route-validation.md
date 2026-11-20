@@ -21,6 +21,8 @@ The app saves the last screen per backend and restores it on launch. Several win
    1. Only a definitive not-found reads as deletion: JSON-RPC `-32602` with `data.code == "not-found"` (PROTOCOL §3.3, §9). Transient and transport errors leave the screen in place.
    2. A missing agent or note falls back to the workspace detail only when the window still shows that same agent or note. A stale validation never evicts a different screen in the same workspace.
    3. After a reconnect, the open agent is revalidated. Workspace validation follows from the reconnect's workspace fetch.
+   4. Workspace validation runs on the first fetch after launch, also when that fetch is empty: the fetch marker (`WorkspaceStore.lastUpdated`) changes, not only the array. A publish before any successful fetch (`lastUpdated` still nil) is ignored (added from `AppCoordinatorWorkspaceValidationTests` comments).
+   5. The compact deferred re-push (`RootCompactNavigationView.shouldRepushConversation`) checks that the coordinator still shows that conversation, not only that the agent ids agree. Otherwise a back tap leaves the conversation visible with a dead back button (added from `AppCoordinatorWorkspaceValidationTests` comments).
 4. **Retained pages.** Leaving the remote UI (Home, Log Off, switching Mac) drops the retained workspace pages (`workspaceDetailStores`).
 5. **Change viewer.** A transient change viewer route captures its repository (`WorkspaceChangeDestination`), so sidebar changes cannot retarget its diffs.
 

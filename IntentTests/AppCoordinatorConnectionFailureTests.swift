@@ -22,9 +22,9 @@ extension AppCoordinatorTests {
             coordinator.onSwitchConnection(id: stored.id)
         case "pairing":
             coordinator.onConnectionFailed(error: "timeout")
-            coordinator.onPaired(stored) // Shared completion for QR and manual pairing.
+            coordinator.onPaired(stored)
         default:
-            coordinator.onDeepLinkPaired(stored) // Replaces launch while still connecting.
+            coordinator.onDeepLinkPaired(stored)
         }
 
         #expect(coordinator.currentScreenDescription == "connecting")
@@ -52,7 +52,6 @@ extension AppCoordinatorTests {
             home.onSwitchConnection(id: stored.id)
         }
 
-        // Restoring another backend must not consume this selection's token.
         let otherWindow = makeLaunchCoordinator(for: other, registry: registry)
         #expect(otherWindow.connectingStartedByLaunch)
         otherWindow.onLoadComplete()
@@ -63,12 +62,10 @@ extension AppCoordinatorTests {
         #expect(selected.currentScreenDescription == "connecting")
         #expect(!selected.connectingStartedByLaunch)
 
-        // The token is spent: a later automatic restoration is not a selection.
         let restored = makeLaunchCoordinator(for: stored, registry: registry)
         #expect(restored.connectingStartedByLaunch)
         restored.onLoadComplete()
         #expect(restored.connectingStartedByLaunch)
-        // A new process also starts with no selection, even for the same saved record.
         let coldLaunch = makeLaunchCoordinator(for: stored, registry: BackendSessionRegistry())
         coldLaunch.onLoadComplete()
         #expect(coldLaunch.connectingStartedByLaunch)
@@ -87,8 +84,6 @@ extension AppCoordinatorTests {
         )
     }
 
-    /// A legacy saved record without a certificate pin must be kept for
-    /// repair, while transport admission refuses it before opening a socket.
     @Test @MainActor func legacyPinlessRecordRoutesToRepairAndIsKept() throws {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -217,9 +212,6 @@ extension AppCoordinatorTests {
         )
     }
 
-    /// A failed Log Off stays disconnected. Its manual retry policy prevents
-    /// the failure screen from dialing the saved record, while Retry Log Off
-    /// retries forgetting it.
     @Test @MainActor func failedLogOffDisconnectsButKeepsSavedStateAndShowsFailure() async {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -262,8 +254,6 @@ extension AppCoordinatorTests {
         #expect(context.fake.connectLog.isEmpty)
     }
 
-    /// Positive control: an ordinary connection failure still auto-dials the
-    /// bound window's saved record.
     @Test @MainActor func ordinaryConnectionFailureStillAutoRetries() async {
         resetConnectionState()
         defer { resetConnectionState() }

@@ -19,6 +19,7 @@ Saved connections sync between a person's devices through an iCloud registry. Ow
    3. Nothing shared changes until the intent and the credentials are saved together in the local registry.
    4. Publication runs once per pending backend per pairing or foreground opportunity (`publishPendingBackends()`).
    5. A failed acknowledgement save is safe: the same pending clock survives, and an equal shared clock needs no second write.
+   6. Owner records publish only for an owner that the connection verified. The legacy `savePairing(server:token:)` path stores no principal, so it has no publication authority. A verified pairing publishes even when its first route refresh learns no route (added from `BackendSyncTestSupport` and `BackendRoutePublicationTests` comments).
 3. **Route publication.**
    1. A route observation (`PendingBackendRoutePublication`) may patch an existing live shared row. It never recreates a row or replaces its credentials. Its baseline detects competing rotations.
    2. `queueRoutePublication` saves the route intent atomically with the observed route. Unlike a deliberate re-pair, it does not authorize recreation after a removal.
@@ -55,6 +56,9 @@ Saved connections sync between a person's devices through an iCloud registry. Ow
 - A removed connection stays removed on every device until the person deliberately pairs it again.
 - Local saves come first, so a Keychain failure delays sync but never loses a removal.
 - Tests cannot publish to the real registry by accident.
+- A frozen v1 writer can overwrite the shared alias after migration completes. Neither its newer clock nor another claimed person reopens the migration (from test comments).
+- Durable local removal evidence beats both v1 and v2 records, also when a later cloud snapshot loses the removal and brings back a still-valid old credential (from test comments).
+- Guests never request the owner-only `host.status` method during an invited route refresh (from test comments).
 
 ## Code
 

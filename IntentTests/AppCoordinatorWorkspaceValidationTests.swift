@@ -7,8 +7,6 @@ import Testing
 import UIKit
 
 extension AppCoordinatorTests {
-    // MARK: - Missing workspace handling
-
     @Test @MainActor func archivedWorkspaceStaysOpenUntilArchivesAreHidden() async throws {
         let workspaceId = "archived-workspace"
         let store = WorkspaceStore(forTesting: true)
@@ -33,19 +31,15 @@ extension AppCoordinatorTests {
         defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
-        // Simulate being on a workspace detail screen
         coordinator.onSelectWorkspace(wsId)
         if case .workspaceDetail = coordinator.currentScreen {
-            // good
         } else {
             Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
         }
 
-        // Now handle the missing workspace
         coordinator.handleMissingWorkspace()
 
         if case .workspaceList = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .workspaceList after handleMissingWorkspace, got \(coordinator.currentScreen)")
         }
@@ -85,7 +79,6 @@ extension AppCoordinatorTests {
         coordinator.onSelectAgent("agent-x", workspaceId: wsId, agentName: "Tester")
 
         if case .agentConversation = coordinator.currentScreen {
-            // good
         } else {
             Issue.record("Expected .agentConversation, got \(coordinator.currentScreen)")
         }
@@ -93,13 +86,10 @@ extension AppCoordinatorTests {
         coordinator.handleMissingWorkspace()
 
         if case .workspaceList = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .workspaceList after handleMissingWorkspace from conversation, got \(coordinator.currentScreen)")
         }
     }
-
-    // MARK: - iPhone note navigation regression tests
 
     @Test @MainActor func testNoteNavigationFromWorkspace_staysInWorkspace() {
         let wsId = "test-coord-note-nav-\(UUID().uuidString)"
@@ -133,7 +123,6 @@ extension AppCoordinatorTests {
         } else {
             Issue.record("Expected .workspaceDetail after onBackFromNote, got \(coordinator.currentScreen)")
         }
-        // Ensure we did NOT end up at workspaceList
         if case .workspaceList = coordinator.currentScreen {
             Issue.record("onBackFromNote should go to .workspaceDetail, NOT .workspaceList")
         }
@@ -151,13 +140,7 @@ extension AppCoordinatorTests {
         #expect(coordinator.selectedWorkspaceId == wsId, "selectedWorkspaceId must not become nil after onSelectNote (regression: SwiftUI popped the stack)")
     }
 
-    // MARK: - iPad back button after agent auto-restore regression tests
-
     @Test @MainActor func shouldRepushConversation_falseWhenUserNavigatedBack() {
-        // Regression: the deferred iPad re-push used to check only the agent id,
-        // so it re-pushed the conversation even after the coordinator had already
-        // navigated back to .workspaceDetail — leaving the conversation visible
-        // with a dead "< Agents" button.
         let repush = RootView.shouldRepushConversation(
             currentScreen: .workspaceDetail(workspaceId: "ws-1"),
             pendingAgentId: "agent-1",
@@ -185,9 +168,6 @@ extension AppCoordinatorTests {
     }
 
     @Test @MainActor func shouldRepushConversation_falseWhenCoordinatorMovedToAnotherAgent() {
-        // Coordinator moved on to a different agent before the view state re-synced:
-        // the screen match must reject the stale re-push even though the pending
-        // and view-state agent ids still agree.
         let repush = RootView.shouldRepushConversation(
             currentScreen: .agentConversation(agentId: "agent-2", workspaceId: "ws-1", agentName: "Other"),
             pendingAgentId: "agent-1",
@@ -220,7 +200,6 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
         coordinator.onBackToWorkspaceDetail()
-        // A second back tap while already on .workspaceDetail must stay on detail.
         coordinator.onBackToWorkspaceDetail()
 
         if case let .workspaceDetail(wId) = coordinator.currentScreen {
@@ -229,8 +208,6 @@ extension AppCoordinatorTests {
             Issue.record("Expected .workspaceDetail after repeated onBackToWorkspaceDetail, got \(coordinator.currentScreen)")
         }
     }
-
-    // MARK: - Fetch-driven workspace validation (lastUpdated race)
 
     static func makeWorkspace(
         id: String,
@@ -260,11 +237,6 @@ extension AppCoordinatorTests {
         )
     }
 
-    // MARK: - Screen predicates for bounded waits
-
-    /// `waitUntil` / `expectNever` conditions need a `Bool`; these name the
-    /// screen a main-queue-hopping sink or spawned validation task lands on
-    /// (or must not leave) instead of sleeping a guessed drain delay.
     static func isWorkspaceList(_ screen: AppScreen) -> Bool {
         if case .workspaceList = screen { return true }
         return false
@@ -284,8 +256,6 @@ extension AppCoordinatorTests {
         if case let .noteDetail(nId, wId, _) = screen { return nId == noteId && wId == workspaceId }
         return false
     }
-
-    // MARK: - workspace.markSeen on open
 
     @Test @MainActor func onSelectWorkspace_callsMarkSeenAndClearsUnreadLocally() async throws {
         let wsId = "test-coord-markseen-\(UUID().uuidString)"
@@ -311,8 +281,6 @@ extension AppCoordinatorTests {
         let wsId = "test-coord-restore-markseen-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
-        // Cold-start restore into a workspace counts as viewing it (mirrors
-        // the FE, which marks seen whenever the workspace surface activates).
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceDetail",
@@ -358,7 +326,6 @@ extension AppCoordinatorTests {
         let store = WorkspaceStore(forTesting: true)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, attention: "unread")])
         let fake = FakeConnectionManager()
-        // Older daemon without the method — must not disturb navigation
         fake.errorMap["workspace.markSeen"] = NSError(
             domain: "WebSocket",
             code: -32_601,
@@ -387,10 +354,6 @@ extension AppCoordinatorTests {
         )
         coordinator.onSelectWorkspace(wsId)
 
-        // Regression: the very first post-launch fetch must trigger validation
-        // (lastUpdated used to be assigned after workspaces, so the first publish was skipped).
-        // An empty first response must still invalidate Observation through the
-        // fetch marker even though the workspace array remains empty.
         store.publishFetchedWorkspaces([])
         try await waitUntil(".workspaceList after first fetch without the workspace") {
             Self.isWorkspaceList(coordinator.currentScreen)
@@ -412,7 +375,6 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
-        // A publish before any successful fetch (lastUpdated still nil) must be ignored.
         store.workspaces = []
         try await expectNever("navigation away on an empty pre-fetch publish") {
             !Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)

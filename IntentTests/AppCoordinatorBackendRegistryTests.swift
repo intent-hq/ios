@@ -21,13 +21,10 @@ extension AppCoordinatorTests {
             "No saved connections must leave the pairing surface in first-run mode"
         )
         if case .pairing = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
     }
-
-    // MARK: - Connection-failure saved-connection alternatives
 
     @Test func alternativeConnections_excludesActiveConnection() {
         let active = Self.makeConnection(port: 1)
@@ -101,7 +98,6 @@ extension AppCoordinatorTests {
             "selectedWorkspaceId must be reset on switch"
         )
         if case .connecting = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
         }
@@ -193,7 +189,6 @@ extension AppCoordinatorTests {
         #expect(persistence.loadConnections().map(\.id) == [active.id])
         #expect(persistence.activeConnection()?.id == active.id)
         if case .workspaceList = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .workspaceList to be untouched, got \(coordinator.currentScreen)")
         }
@@ -217,7 +212,6 @@ extension AppCoordinatorTests {
             "Pairing surface should offer the remaining saved connections"
         )
         if case .pairing = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -236,7 +230,6 @@ extension AppCoordinatorTests {
         #expect(persistence.loadConnections().isEmpty)
         #expect(!coordinator.pairingShowsSavedConnections)
         if case .pairing = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -248,7 +241,6 @@ extension AppCoordinatorTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        // Post-Log Off state: no active pointer, one saved connection remaining.
         let remaining = persistence.upsertConnection(Self.makeConnection(port: 1))
 
         let coordinator = AppCoordinator(persistence: persistence)
@@ -263,10 +255,6 @@ extension AppCoordinatorTests {
         )
     }
 
-    // MARK: - Backend removal marks pinned windows for auto-close (spec decision 2)
-
-    /// Registry whose session factory must never run: these tests only assert
-    /// removal marks, which never create or tear down sessions.
     @MainActor static func markOnlySessionRegistry() -> BackendSessionRegistry {
         BackendSessionRegistry { kind in
             fatalError("Removal marks must not build sessions (got \(String(describing: kind)))")

@@ -54,8 +54,6 @@ extension AppCoordinatorTests {
         #expect(fixture.clock.cancelledSleeps == 1)
     }
 
-    /// A recovery that first waits for workspace data (`.recovering` → `.none`)
-    /// must still retire the background grace, like an immediate recovery.
     @Test @MainActor func recoveryAfterWorkspaceReloadRetiresBackgroundGrace() async {
         let fixture = await backgroundRecoveryFixture()
         let coordinator = fixture.coordinator
@@ -66,7 +64,7 @@ extension AppCoordinatorTests {
         await Self.drainBackgroundEvents()
         #expect(coordinator.connectionLossPresentation.isDeferred)
 
-        fixture.store.setLastUpdated(nil) // Recovery must wait for a fresh snapshot.
+        fixture.store.setLastUpdated(nil)
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
         guard case .recovering = coordinator.connectionLoss else {
@@ -99,7 +97,7 @@ extension AppCoordinatorTests {
         #expect(fixture.clock.deadlines == [returnTime + .seconds(1)])
         fixture.clock.advance(by: .milliseconds(999))
         fixture.connection.connectionState = .reconnecting(attempt: 2)
-        coordinator.onScenePhaseActive() // Duplicate active must not extend the deadline.
+        coordinator.onScenePhaseActive()
         await Self.drainBackgroundEvents()
         #expect(!coordinator.showsReadOnlyBanner)
         #expect(coordinator.isRemoteReadOnly, "Change controls stay off during the grace")
@@ -166,7 +164,6 @@ extension AppCoordinatorTests {
         fixture.coordinator.onScenePhaseActive()
         fixture.clock.advance(by: .seconds(1))
         await Self.drainBackgroundEvents()
-        // Both deliveries are queued; the loss is obsolete before it is read.
         fixture.connection.simulateStoppedReconnection()
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
@@ -226,8 +223,6 @@ extension AppCoordinatorTests {
         fixture.store.setLoading(true)
         fixture.connection.simulateConnect()
         await Self.drainBackgroundEvents()
-        // Queue data completion ahead of a new loss delivery. The current
-        // transport state must win even when the old observation runs first.
         fixture.store.setLoading(false)
         fixture.connection.simulateStoppedReconnection()
         await Self.drainBackgroundEvents()
@@ -357,8 +352,6 @@ extension AppCoordinatorTests {
     }
 }
 
-/// Deliberately resumes even cancelled sleeps: tests exercise generation and
-/// cancellation guards, not a fake that silently discards stale callbacks.
 @MainActor private final class BackgroundPresentationClock {
     var now = ContinuousClock.now
     var deadlines: [ContinuousClock.Instant] = []
