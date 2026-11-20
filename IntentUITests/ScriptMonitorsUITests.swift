@@ -1,8 +1,6 @@
 import UIKit
 import XCTest
 
-/// Run this same suite on iPhone and iPad. All data is synthetic; events enter
-/// the normal connection/store path while the app remains running.
 nonisolated final class ScriptMonitorsUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let rowID = "script-monitor-demo-script-watch-owned"
@@ -153,7 +151,6 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         XCTAssertTrue(pill.label.contains("Watching 3 scripts"), pill.label)
         XCTAssertFalse(app.buttons[Self.rowID].exists, "Several watches must not render one pill each")
         capture(app, "script-monitors-multiple")
-        // Native Menu wrappers can report non-hittable while physical touch opens them.
         pill.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let item = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", Self.originalName)).firstMatch
         XCTAssertTrue(item.waitForExistence(timeout: Self.timeout))
@@ -217,8 +214,6 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
             var clippedText: Set<String> = []
             for text in details.staticTexts.allElementsBoundByIndex {
                 let frame = text.frame
-                // The full pattern is taller than the sheet at AX XXXL. Its
-                // beginning and end must each be reachable, not visible at once.
                 if text.label.hasPrefix(patternStart), text.label.hasSuffix(patternEnd) {
                     if viewport.contains(CGPoint(x: frame.midX, y: frame.minY)) { unseen.remove(patternStart) }
                     if viewport.contains(CGPoint(x: frame.midX, y: frame.maxY)) { unseen.remove(patternEnd) }
@@ -233,10 +228,6 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
             capture(app, "script-monitors-question-details")
             try app.performAccessibilityAudit(for: [.contrast, .sufficientElementDescription, .trait]) { issue in
                 guard let element = issue.element else { return false }
-                // XCTest reports contrast for clipped ScrollView descendants against
-                // the pixels behind the sheet. Audit them after scrolling into view.
-                // Overlapping scroll steps and the required labels above prevent
-                // treating inaccessible or never-visible metadata as a passing audit.
                 if issue.auditType == .contrast, element.elementType == .staticText,
                    deferredText.contains(element.label + String(describing: element.frame)) {
                     print("Deferred clipped contrast audit: " + element.debugDescription)
@@ -278,9 +269,6 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
         let agent = app.staticTexts["Continue Spec Writer"].firstMatch
-        // iPad restores the workspace detail with its sidebar hidden; that hidden
-        // sidebar row is intentionally not hittable, so only open the workspace
-        // when its agent list is not already on screen.
         if !(agent.exists && agent.isHittable) { workspace.tap() }
         XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
         agent.tap()

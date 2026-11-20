@@ -1,7 +1,5 @@
 import XCTest
 
-/// Taps transcript links the app can't open and checks that each tap shows
-/// the Can't Open Link message with the link target and a Copy Link action.
 nonisolated final class UnopenableLinkUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
@@ -65,7 +63,6 @@ nonisolated final class UnopenableLinkUITests: XCTestCase {
         return transcript
     }
 
-    /// Taps the named link and returns the message it presents.
     @MainActor
     private func tapLink(_ label: String, in app: XCUIApplication, transcript: XCUIElement) -> XCUIElement {
         let link = app.links[label].firstMatch

@@ -33,7 +33,6 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         }
         for (left, right) in zip(controls, controls.dropFirst()) {
             let overlap = left.frame.intersection(right.frame)
-            // iOS segments share edges; tolerate subpixel accessibility frame rounding.
             XCTAssertFalse(overlap.width > 0.001 && overlap.height > 0.001, "Each control must own a separate target")
         }
         for mode in ["Repo", "Status", "Recent"] {
@@ -236,10 +235,8 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         expanded.lifetime = .keepAlways
         add(expanded)
         let menu = app.buttons["workspaces.menu"]
-        // Figma: the menu is centered on the 29pt cap-trimmed title, then 64pt to the filters.
         XCTAssertEqual(search.frame.minY - menu.frame.midY, 78.5, accuracy: 2)
         XCTAssertTrue(menu.isHittable)
-        // Accessibility frame conversion can round a 44pt target just below 44.
         XCTAssertGreaterThanOrEqual(menu.frame.width, 44 - 0.001)
         XCTAssertGreaterThanOrEqual(menu.frame.height, 44 - 0.001)
         for _ in 0 ..< Fixture.scrollAttempts where title.isHittable {
@@ -278,12 +275,9 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         frames.lifetime = .keepAlways
         add(frames)
         XCTAssertEqual(title.frame.minX - app.frame.minX, leadingInset, accuracy: 1)
-        // The row's hit target includes padding; its text follows a 16pt status dot and 20pt gap.
         XCTAssertTrue(row.isHittable)
         XCTAssertEqual(rowTitle.frame.minX - 36, title.frame.minX, accuracy: 1)
-        // The filter surface starts 4pt before its first segment.
         XCTAssertEqual(recent.frame.minX - 4, title.frame.minX, accuracy: 1)
-        // Duo's scroll view spans the 84pt vertical rail as well as the existing 24pt trailing inset.
         XCTAssertEqual(list.frame.maxX - search.frame.maxX, expectsVerticalBar ? 108 : 24, accuracy: 1)
         if expectsVerticalBar {
             XCTAssertGreaterThan(app.buttons["intent.menu.open"].frame.minX, search.frame.maxX)
@@ -340,8 +334,6 @@ extension WorkspaceSearchUITests {
 
     @MainActor
     private func verifyBlockedSearchBackground(in app: XCUIApplication, controls: SearchBackgroundControls, panel: CGRect, keyboardVisible: Bool) throws {
-        // Native calibration found retained controls in XCTest even when their real
-        // touch actions were blocked. VoiceOver traversal needs separate verification.
         for control in [controls.connections, controls.actions] {
             try control.assertBlocked(in: app, focusedPane: panel) {
                 let field = app.textFields["workspaces.search.field"]

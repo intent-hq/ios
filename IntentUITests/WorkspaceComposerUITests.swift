@@ -1,8 +1,6 @@
 import UIKit
 import XCTest
 
-/// Exercises the real composer and monitor actions through the deterministic
-/// design demo's transport, not a separate screenshot-only screen.
 nonisolated final class WorkspaceComposerUITests: XCTestCase {
     private enum Fixture {
         static let timeout: TimeInterval = 15
@@ -10,7 +8,6 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         static let workspace = "Workspace agent design"
         static let agent = "Continue Spec Writer"
         static let monitor = "monitoredPr.demo-design-pr-56"
-        /// Mirrors Constants.Conversation.Composer.maximumImageSelectionCount.
         static let imageLimit = 10
     }
 
@@ -55,7 +52,6 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Fixture.timeout))
         let message = "Make the logo bigger\nand keep its proportions"
         enterMultilineMessage(message, into: composer, in: app)
-        // Input delivery and the accessibility value can settle after input returns.
         let typedMessage = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", message), object: composer
         )
@@ -91,13 +87,10 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     @MainActor
     private func enterMultilineMessage(_ message: String, into composer: XCUIElement, in app: XCUIApplication) {
         if UIDevice.current.userInterfaceIdiom == .pad {
-            // iPad Return submits. Native paste inserts a multiline draft without
-            // changing that keyboard policy or sending the first line early.
             UIPasteboard.general.string = message
             defer { UIPasteboard.general.items = [] }
             pasteClipboard(into: composer, in: app)
         } else {
-            // Keep exercising the iPhone software Return newline behavior.
             composer.typeText(message)
         }
     }
@@ -142,8 +135,6 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, "Keep this draft")
     }
 
-    /// #861: pending images keep their slots, but library videos import as
-    /// files. At the image limit Photos stays available for videos only.
     @MainActor
     func testPhotosOffersOnlyVideosAtTheImageLimit() {
         let app = launch(scenario: "composer")
@@ -209,8 +200,6 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertEqual(app.buttons.matching(identifier: Fixture.monitor).count, 1)
         XCTAssertEqual(monitor.label, "Monitoring PR #56")
         assertTapTargetGeometry(monitor, in: app)
-        // iOS 18 reports this native Menu wrapper as non-hittable even though
-        // physical touch opens it. Prove routing and actions, not that AX hint.
         monitor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.buttons["Check and flush"].waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["Open PR"].exists)
@@ -297,8 +286,6 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
 
     @MainActor
     private func assertTapTargetGeometry(_ control: XCUIElement, in app: XCUIApplication) {
-        // Endpoint addition can differ by one representable value for the same
-        // 44pt frame. Admit only that single ULP, not a geometric tolerance.
         let frame = control.frame
         XCTAssertGreaterThanOrEqual(frame.maxX.nextUp, frame.minX + Fixture.minimumTapTarget)
         XCTAssertGreaterThanOrEqual(frame.maxY.nextUp, frame.minY + Fixture.minimumTapTarget)

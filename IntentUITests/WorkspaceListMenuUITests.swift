@@ -61,7 +61,6 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
     @MainActor
     func testPullRequestsListSwitchesFromMenuInBothThemes() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "The iPad sidebar has no pull requests mode yet")
-        // The list choice persists; never leave later tests on pull requests.
         addTeardownBlock { @MainActor [self] () async in
             let app = launchWorkspaces()
             if app.staticTexts["workspaces.title"].label == "Pull requests" {
@@ -85,7 +84,6 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             XCTAssertTrue(reviewOnly.exists)
             capture(app, named: "pull-requests-review-\(appearance)")
 
-            // "New workspace" is a wide pill; the swipe must travel past it.
             let start = reviewOnly.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
             start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 320, dy: 0)))
             let source = app.buttons["creation.sourceCard"]
@@ -182,7 +180,6 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         }
     }
 
-    /// The Intent menu switches between the Workspaces and Pull requests lists.
     @MainActor
     private func switchList(in app: XCUIApplication, to list: String) {
         app.openHomeAction(list)
@@ -262,7 +259,6 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
         app.buttons["Recent connections"].tap()
         travel.tap()
         XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
-        // iPad switches this same window to the selected connection.
         let window = app.windows.firstMatch
         let menu = window.buttons["workspaces.menu"]
         if UIDevice.current.userInterfaceIdiom == .pad, !menu.isHittable {

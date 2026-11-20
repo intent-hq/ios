@@ -4,8 +4,6 @@ import os
 import Security
 import XCTest
 
-/// A pinned TLS peer in the UI runner, separate from the application under test.
-/// Requests go through real host racing, hello admission, polling and reconnect.
 nonisolated final class StartupWebSocketFixture: @unchecked Sendable {
     private struct State {
         var connections: [NWConnection] = []
@@ -158,7 +156,6 @@ nonisolated extension StartupWebSocketFixture {
         let dicts = try XCTUnwrap(items as? [[String: Any]])
         let first = try XCTUnwrap(dicts.first)
         let identity = try XCTUnwrap(first[kSecImportItemIdentity as String])
-        // CoreFoundation identities cannot be conditionally cast under Swift 6.4.
         // swiftlint:disable:next force_cast
         return identity as! SecIdentity
     }

@@ -1,7 +1,5 @@
 import XCTest
 
-/// Exercises the real Connect buttons with the existing ephemeral demo store.
-/// Never enters credentials, scans a code, or attempts a live connection.
 nonisolated final class PairingDesignUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let scannerUnavailable = "Camera scanning isn't available — use manual token entry instead"
@@ -104,7 +102,6 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(saved.waitForExistence(timeout: Self.timeout))
 
-        // Remove only this test's in-memory fixture through the real saved sheet.
         saved.tap()
         verifySavedConnectionDeletion(machine, in: app)
         app.buttons["connection-sheet.close"].tap()
@@ -122,8 +119,6 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         let sheet = app.scrollViews.containing(.button, identifier: machine.identifier).firstMatch
         XCTAssertTrue(sheet.waitForExistence(timeout: Self.timeout))
         let sheetFrame = sheet.frame
-        // iOS 26 floating sheets stay scaled after presentation. Recover layout
-        // coordinates from the scroll container, never from the card under test.
         let scale = sheetFrame.width / appWidth
         XCTAssertGreaterThanOrEqual(scale, 0.9)
         XCTAssertLessThanOrEqual(scale, 1)
@@ -176,8 +171,6 @@ nonisolated final class PairingDesignUITests: XCTestCase {
         app.openHomeAction("connections")
         let machine = option("Demo Mac", in: app)
         XCTAssertTrue(machine.waitForExistence(timeout: Self.timeout))
-        // Select the fixture through the real row before asserting window ownership.
-        // A restored demo scene may initially be unbound (ios#515).
         machine.tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
         app.openHomeAction("connections")
@@ -222,7 +215,6 @@ nonisolated final class PairingDesignUITests: XCTestCase {
 
     @MainActor
     private func closePresentedSheet(in app: XCUIApplication, identifier: String = "connection-sheet.close") throws {
-        // Nested native sheets both expose Close; only the top sheet is interactive (ios#482).
         let close = try XCTUnwrap(app.buttons.matching(identifier: identifier)
             .allElementsBoundByIndex.first { $0.isHittable })
         close.tap()
@@ -248,7 +240,6 @@ nonisolated final class PairingDesignUITests: XCTestCase {
     @MainActor
     private func launchAtHome() throws -> XCUIApplication {
         let directory = try makeDemoDirectory()
-        // A stopped reconnection is the remaining blocking route to Home.
         let app = try launchConnected(arguments: ["--demo-connection-loss-stopped"], directory: directory)
         try Data().write(to: directory.appendingPathComponent("loss"))
         let home = app.buttons["connection-loss.home"]

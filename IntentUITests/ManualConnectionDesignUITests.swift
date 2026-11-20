@@ -1,6 +1,5 @@
 import XCTest
 
-/// Real native-sheet/editor boundaries; synthetic draft only, no live pairing.
 nonisolated final class ManualConnectionDesignUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
@@ -18,8 +17,6 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         backgroundPoint.tap()
         XCTAssertFalse(app.textFields["workspaces.search.field"].exists, "The native modal shield must block search")
         capture(app, named: "saved-background-blocked")
-        // The system may dismiss a short detent on a dimmer tap. It must not
-        // deliver that same tap to search underneath, whether it dismisses or not.
         if !app.staticTexts["saved-connections.title"].exists { openSaved(in: app) }
 
         app.buttons["connection-sheet.close"].tap()
@@ -29,7 +26,6 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         let close = app.buttons["connection-sheet.close"].frame
         let origin = app.coordinate(withNormalizedOffset: .zero)
         let start = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY))
-        // A short, slow pull cancels rather than finishing interactive dismissal.
         let shortPull = origin.withOffset(CGVector(dx: app.frame.midX, dy: close.minY + 20))
         start.press(forDuration: 0.1, thenDragTo: shortPull, withVelocity: .slow, thenHoldForDuration: 0.5)
         XCTAssertTrue(app.staticTexts["saved-connections.title"].exists)
@@ -122,7 +118,6 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
     }
 
-    /// ios#731: VoiceOver names each field by its visible label, never by its example placeholder.
     @MainActor
     func testFieldsUseVisibleLabelsAsAccessibilityNames() throws {
         let app = try launchManual()
@@ -145,7 +140,6 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         app.secureTextFields["manual.token"].typeText("SYNTHETIC-NOT-A-CREDENTIAL")
         app.buttons["Done"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
-        // Existing semantics only gate host/token; malformed port is a submit error.
         XCTAssertTrue(app.buttons["manual.connect"].isEnabled)
         app.buttons["manual.connect"].tap()
         let error = app.staticTexts["manual.error"]
@@ -188,9 +182,6 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
     private func scrollTo(_ element: XCUIElement, in app: XCUIApplication) {
         for _ in 0..<5 {
             if element.isHittable { break }
-            // XCUITest's default swipe uses the full scroll frame, which extends
-            // behind the keyboard. Drag the visible gutter, not the keyboard
-            // or a focused text field's selection gesture.
             let scroll = app.scrollViews.firstMatch.frame.intersection(app.frame)
             let keyboardTop = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY : app.frame.maxY
             let top = max(scroll.minY, app.buttons["connection-sheet.close"].frame.maxY)
@@ -213,8 +204,6 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(scale, 0.9)
         XCTAssertLessThanOrEqual(scale, 1)
         XCTAssertTrue(appFrame.contains(scrollFrame))
-        // Undo the native floating-sheet transform using its scroll container.
-        // The reference sheet is unscaled and anchored to the screen bottom.
         func referenceFrame(_ element: XCUIElement) -> CGRect {
             let frame = element.frame
             return CGRect(
@@ -224,8 +213,6 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
                 height: frame.height / scale
             )
         }
-        // Independent Figma coordinates, not production layout constants. Native
-        // line boxes extend past cap edges, so compare centers for text/editors.
         let close = referenceFrame(app.buttons["connection-sheet.close"])
         XCTAssertEqual(close.minY, 231, accuracy: 1.5)
         XCTAssertEqual(close.minX, 24, accuracy: 0.5)
@@ -253,7 +240,6 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock { try FileManager.default.removeItem(at: directory) }
         let app = XCUIApplication()
-        // A stopped reconnection is the remaining blocking route to Home.
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path, "--demo-connection-loss-stopped"]
             + arguments
         app.launch()

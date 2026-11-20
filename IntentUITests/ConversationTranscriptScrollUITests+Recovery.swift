@@ -1,11 +1,8 @@
 import XCTest
 
-// Staged regression narratives keep observed timeout values inline to identify the failing viewport phase.
 // swiftlint:disable function_body_length no_magic_numbers
 
 extension ConversationTranscriptScrollUITests {
-    /// Reproduces #338 by releasing the hooks row immediately after each
-    /// cold entry reports settled.
     @MainActor
     func testHooksRowLandingRightAfterColdEntryKeepsLastMessageOnScreen() throws {
         try XCTSkipUnless(
@@ -13,8 +10,6 @@ extension ConversationTranscriptScrollUITests {
             "Temporary quarantine for an unclassified full-gate failure; related investigation (cause unproven): "
                 + "https://github.com/intent-hq/ios/issues/427; opt in with TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1."
         )
-        // Launches that reached the settle assertion: the denominator the
-        // evidence attachments carry for this organic scenario.
         var settledLaunches = 0
         for cycle in 1 ... Fixture.entryCycles {
             let context = "cold entry \(cycle)/\(Fixture.entryCycles) with the hooks row released on settle"
@@ -93,19 +88,6 @@ extension ConversationTranscriptScrollUITests {
         }
     }
 
-    /// The controlled counterpart of the hooks-row scenario: the transcript
-    /// has settled at the end with no recovery episode in flight, then the
-    /// fixture withdraws the `scroll-bottom` marker on the trigger file
-    /// (`release` mode, see `Fixture.endDerealizationTriggerArgumentPrefix`),
-    /// so the real unrealized-end recovery arms through the marker's own
-    /// `onDisappear` exactly as it does over a dropped end row. The recovery
-    /// must then run to its recovered outcome on its own — settle, page the
-    /// live scroll view up, follow back, re-verify through the marker's real
-    /// `onAppear` once the fixture has put it back — spending at least one
-    /// correction, with the end row realized and at rest at the end and Go
-    /// to End absent. The baseline is read once the entry has settled and
-    /// its own report is terminal, so the episode counter proves the
-    /// controlled episode, not an entry-time one, is the one that resolved.
     @MainActor
     func testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath() throws {
         try assertControlledEndRecovery(mode: .release, minimumCorrections: 1)
@@ -131,7 +113,6 @@ extension ConversationTranscriptScrollUITests {
         )
         let lastMessage = opened.lastMessage
 
-        // 1. Settled at the end with a terminal report: the baseline.
         guard let baseline = settledRecoveryBaseline(
             lastRow: lastMessage,
             endRow: endRow,
@@ -139,7 +120,6 @@ extension ConversationTranscriptScrollUITests {
             context: context
         ) else { return }
 
-        // 2. Withdraw the marker; the recovery arms and runs out on its own.
         try Data().write(to: endDerealizationTriggerFile)
         let recovered = "\(context), after the recovery resolved"
         guard let terminal = waitForTerminalRecovery(
@@ -150,9 +130,6 @@ extension ConversationTranscriptScrollUITests {
         ) else { return }
         attachRecoveryEvidence(context: recovered)
 
-        // 3. Recovered by the real path: a correction spent, the end row
-        //    realized, and the viewport back at rest at the end with Go to
-        //    End absent over the quiet window.
         XCTAssertEqual(
             terminal.reason,
             Fixture.recoveredReason,
@@ -199,11 +176,6 @@ extension ConversationTranscriptScrollUITests {
         add(screenshot)
     }
 
-    /// The same controlled derealization in `hold` mode: the fixture never
-    /// puts the marker back, so the recovery's follow back finds no end row
-    /// and its landing budget runs out. It must give up — never report
-    /// `recovered` — with the end row still unrealized and Go to End shown,
-    /// the honest outcome over an end the transcript cannot reach.
     @MainActor
     func testControlledHeldEndDerealizationGivesUpAndShowsGoToEnd() throws {
         try XCTSkipUnless(
@@ -224,7 +196,6 @@ extension ConversationTranscriptScrollUITests {
         )
         let lastMessage = opened.lastMessage
 
-        // 1. Settled at the end with a terminal report: the baseline.
         guard let baseline = settledRecoveryBaseline(
             lastRow: lastMessage,
             endRow: endRow,
@@ -232,8 +203,6 @@ extension ConversationTranscriptScrollUITests {
             context: context
         ) else { return }
 
-        // 2. Withdraw the marker for good; the recovery arms and exhausts
-        //    its budget.
         try Data().write(to: endDerealizationTriggerFile)
         let gaveUp = "\(context), after the recovery resolved"
         guard let terminal = waitForTerminalRecovery(
@@ -244,8 +213,6 @@ extension ConversationTranscriptScrollUITests {
         ) else { return }
         attachRecoveryEvidence(context: gaveUp)
 
-        // 3. Gave up honestly: not recovered, the end row unrealized, Go to
-        //    End offered.
         XCTAssertNotEqual(
             terminal.reason,
             Fixture.recoveredReason,
@@ -267,8 +234,6 @@ extension ConversationTranscriptScrollUITests {
         )
     }
 
-    /// Exercises late hydration and physical header taps in both real message
-    /// shapes. The existing opt-in remains; integration runs must enable it.
     @MainActor
     func testLateBlockHydrationNearEndAfterEntryKeepsLastMessageOnScreen() throws {
         try XCTSkipUnless(
@@ -407,9 +372,6 @@ extension ConversationTranscriptScrollUITests {
 
     @MainActor
     private func revealToolHeader(_ header: XCUIElement, in transcript: XCUIElement, app: XCUIApplication, context: String) {
-        // The inverted scroll view's AX frame extends behind the app header.
-        // Keep the whole target below its measured controls, with breathing
-        // room for the header's padding/fade rather than fixed screen offsets.
         let back = app.buttons["conversation.back"]
         let navigation = back.exists ? back.frame : app.navigationBars.firstMatch.frame
         let top = max(transcript.frame.minY, navigation.maxY + navigation.height / 2)
@@ -422,8 +384,6 @@ extension ConversationTranscriptScrollUITests {
         for _ in 0 ..< 12 {
             let bounds = frame(of: header)
             if let bounds, viewport.contains(bounds), header.isHittable { return }
-            // Lazy-row remeasurement can move the header past the viewport.
-            // Follow its current position instead of repeatedly overshooting it.
             let direction: CGFloat = (bounds?.midY ?? -.infinity) < viewport.midY ? 1 : -1
             let origin = app.coordinate(withNormalizedOffset: .zero)
             origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY))
@@ -435,17 +395,7 @@ extension ConversationTranscriptScrollUITests {
     }
 }
 
-// MARK: - Per-launch recovery evidence
-
-// The evidence helpers are shared with the cold-entry test in the main file
-// and its teardown.
 extension ConversationTranscriptScrollUITests {
-    /// The arming `enterLongConversation` performs before its first
-    /// assertion: the record it builds lands in `pendingRecoveryEvidence`.
-    /// `attachRecoveryEvidence` takes the record on the ordinary path, and
-    /// `tearDownWithError` takes it when a failing assertion halted the
-    /// test first, so every launch leaves one whether it passed, failed,
-    /// never settled or never showed its transcript.
     @MainActor
     func recoveryEvidence(cycle: Int, endRow: EndRow, settledLaunches: Int? = nil) -> RecoveryEvidenceArming {
         RecoveryEvidenceArming(cycle: cycle, endRow: endRow, settledLaunches: settledLaunches) { pending in
@@ -453,8 +403,6 @@ extension ConversationTranscriptScrollUITests {
         }
     }
 
-    /// Attaches the armed launch's record now, under `context` when given
-    /// (the phase the record describes); fails when no launch is armed.
     @MainActor
     func attachRecoveryEvidence(context: String? = nil) {
         guard pendingRecoveryEvidence != nil else {
@@ -467,9 +415,6 @@ extension ConversationTranscriptScrollUITests {
         attachPendingRecoveryEvidence()
     }
 
-    /// Attaches the armed launch's content-free evidence record as JSON
-    /// (`Fixture.evidenceAttachmentPrefix`, kept always; see
-    /// `recoveryEvidenceRecord`), if one is armed, and disarms the launch.
     @MainActor
     func attachPendingRecoveryEvidence() {
         guard let pending = pendingRecoveryEvidence else { return }
@@ -486,7 +431,6 @@ extension ConversationTranscriptScrollUITests {
         add(attachment)
     }
 
-    /// The bare test method name out of `name` (`-[Class testMethod]`).
     private var testMethodName: String {
         let tail = name.split(separator: " ").last.map { String($0) } ?? name
         return tail.trimmingCharacters(in: CharacterSet(charactersIn: "]"))

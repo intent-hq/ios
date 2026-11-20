@@ -1,7 +1,5 @@
 import XCTest
 
-/// Picking another connection on iPad reuses the current window; a second
-/// window opens only from the row's long-press "Open in New Window" action.
 nonisolated final class IPadConnectionWindowUITests: XCTestCase {
     private static let timeout: TimeInterval = 30
 
@@ -32,7 +30,6 @@ nonisolated final class IPadConnectionWindowUITests: XCTestCase {
         capture(name: "IPad-Connections-Before-Switch")
         travel.tap()
 
-        // The switch lands this same window on the Travel Mac workspace list.
         XCTAssertTrue(app.buttons["workspaces.menu"].waitForExistence(timeout: Self.timeout))
         XCTAssertEqual(app.windows.count, initialWindows, app.debugDescription)
         openConnections(app)
@@ -47,7 +44,6 @@ nonisolated final class IPadConnectionWindowUITests: XCTestCase {
         capture(name: "IPad-Connection-Long-Press-Menu")
         newWindow.tap()
         XCTAssertTrue(newWindow.waitForNonExistence(timeout: Self.timeout))
-        // Studio Mac gets its own window; the original window stays on Travel Mac.
         XCTAssertTrue(app.windows.firstMatch.buttons["ipad.rail.workspaces"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertGreaterThan(app.windows.count, initialWindows, app.debugDescription)
         XCTAssertTrue(card(app, named: "Travel Mac, Connected").exists, app.debugDescription)

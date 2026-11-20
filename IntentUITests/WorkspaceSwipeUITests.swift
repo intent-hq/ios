@@ -306,8 +306,6 @@ private extension WorkspaceSwipeUITests {
         }
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         if UIDevice.current.userInterfaceIdiom == .pad {
-            // An iPad can restore a conversation beside the list. Establish an
-            // overview before testing that cancelled swipes do not open one.
             XCTAssertTrue(row.isHittable)
             row.tap()
             XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))

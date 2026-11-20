@@ -32,7 +32,6 @@ nonisolated final class WatcherMessageUITests: XCTestCase {
         XCTAssertFalse(rawDetails.exists, "The report must start collapsed")
         attachScreenshot(app, name: "Watcher summary")
 
-        // The transcript re-anchors while the card grows; tap once it settles.
         XCTAssertTrue(show.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         show.tap()
         let hide = app.buttons["Hide details"]

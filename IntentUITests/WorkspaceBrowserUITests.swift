@@ -29,7 +29,6 @@ nonisolated final class WorkspaceBrowserUITests: XCTestCase {
         XCTAssertTrue(waitUntilVisible(link, in: transcript, timeout: Self.timeout))
         XCTAssertTrue(app.frame.contains(link.frame))
         XCTAssertLessThan(link.frame.maxY, app.textViews["composer.textView"].frame.minY)
-        // Textual's selectable text overlays the semantic link in accessibility hit-testing.
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(done.waitForExistence(timeout: Self.timeout))
         let address = app.textFields["Browser URL"]

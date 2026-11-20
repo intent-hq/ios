@@ -1,6 +1,5 @@
 import XCTest
 
-/// Exercises the real Settings routes with ephemeral saved machines and no daemon.
 nonisolated final class SettingsUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let maximumSwipes = 12
@@ -44,8 +43,6 @@ nonisolated final class SettingsUITests: XCTestCase {
         openConnections(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
 
-        // Resuming this process must keep the user's selection. Backgrounding
-        // also gives the native scene its real restoration lifecycle.
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: Self.timeout))
         app.activate()

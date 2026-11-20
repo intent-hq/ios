@@ -74,7 +74,6 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         }
     }
 
-    /// #908: with no workspace to select, the detail pane shows a placeholder instead of a blank panel.
     @MainActor
     func testDetailPaneShowsPlaceholderWithoutSelectedWorkspaceInBothThemes() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent sidebar")
@@ -112,7 +111,6 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         workspace.tap()
         let title = app.descendants(matching: .any)["conversation.header.title"]
 
-        // Sections opened in the overview stay open in the sidebar, which then names the agent.
         let backgroundSection = app.buttons["workspace.agents.background"]
         XCTAssertTrue(backgroundSection.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         backgroundSection.tap()
@@ -123,7 +121,6 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
         capture("ipad-sidebar-background-agent")
 
-        // Another tab hides the row, so the conversation names the agent itself.
         app.buttons["Context"].firstMatch.tap()
         XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), "The title returns while the sidebar shows Context")
         capture("ipad-sidebar-context-beside-agent")
@@ -150,8 +147,6 @@ nonisolated final class IPadWorkspaceSidebarUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = XCUIApplication()
-        // A toast opens the agent before its workspace's agents were ever read, so the sidebar's read
-        // is the first one and fails. The overview shares the store and reads first otherwise (ios#1008).
         app.launchArguments = ["--demo-data", "--demo-toast", "--demo-failures=agent-list", "-appThemePreference", "light"]
         app.launch()
         defer { app.terminate() }

@@ -1,6 +1,5 @@
 import XCTest
 
-/// Opt-in failure evidence contract; the outer verifier requires the assertion to stay failed.
 nonisolated final class FixtureCaptureLifecycleUITests: XCTestCase {
     @MainActor
     func testAssertionAbortRetainsFinalCapture() throws {

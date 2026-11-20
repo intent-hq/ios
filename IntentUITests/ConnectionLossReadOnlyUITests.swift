@@ -2,16 +2,12 @@ import XCTest
 
 private typealias LossFixture = ConnectionLossUITestFixture
 
-/// Read-only behavior during an ordinary drop: every screen stays readable
-/// under the banner, recent items reopen from memory, and only controls that
-/// would change something on the Mac are turned off.
 extension ConnectionLossUITests {
     @MainActor
     func testBannerKeepsRecentScreensReadableWhileReconnecting() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Walks the phone navigation stack")
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: ["--demo-connection-loss-reconnecting"])
-        // Visit everything once while connected so it is retained in memory.
         openConversation(in: app)
         XCTAssertTrue(app.scrollViews["transcript.scrollView"].firstMatch.waitForExistence(timeout: LossFixture.timeout))
         tap(app.buttons["conversation.back"], in: app)
@@ -84,8 +80,6 @@ extension ConnectionLossUITests {
         XCTAssertFalse(banner.exists, "Home leaves the remote UI and its banner")
     }
 
-    /// R1.10: a conversation never loaded before the drop says so instead of
-    /// spinning or erroring, and fills in by itself once the connection is back.
     @MainActor
     func testNeverViewedConversationShowsPlaceholderAndLoadsAfterRecovery() throws {
         let directory = try makeTriggerDirectory()
@@ -111,8 +105,6 @@ extension ConnectionLossUITests {
         XCTAssertFalse(app.descendants(matching: .any)["read-only.unavailable"].exists)
     }
 
-    /// R1.9: items viewed before the drop reopen with their content, never the placeholder.
-    /// The same placeholder covers a workspace tab never loaded before the drop.
     @MainActor
     func testNeverLoadedNotesTabShowsPlaceholderAndLoadsAfterRecovery() throws {
         let directory = try makeTriggerDirectory()
@@ -171,8 +163,6 @@ extension ConnectionLossUITests {
         assertBannerTitle("Reconnecting( to Demo Mac)?… · Read-only", in: app)
     }
 
-    /// R1.12 controls are off and R1.13 controls stay on, across the list,
-    /// workspace page and conversation.
     @MainActor
     func testControlInventoryDuringDrop() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Phone navigation; iPad shares the same controls")
@@ -269,9 +259,6 @@ extension ConnectionLossUITests {
         capture(app, named: "read-only-questions")
     }
 
-    // MARK: - Helpers
-
-    /// The non-blocking banner of an ordinary drop: never the blocking screen.
     @MainActor @discardableResult
     func assertBanner(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
         let banner = app.buttons[LossFixture.bannerIdentifier]
@@ -292,8 +279,6 @@ extension ConnectionLossUITests {
 
     @MainActor
     func assertBannerTitle(_ title: String, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-        // Demo windows restored without a scene value have no saved-machine
-        // name, so titles are patterns that allow the unnamed form.
         let banner = app.buttons.matching(NSPredicate(
             format: "identifier == %@ AND label MATCHES %@", LossFixture.bannerIdentifier, title
         )).firstMatch
@@ -325,7 +310,6 @@ extension ConnectionLossUITests {
         XCTAssertTrue(search.waitForExistence(timeout: LossFixture.timeout), "The workspace list never appeared")
     }
 
-    /// The phone Assistant is a sheet; drag it down by its header.
     @MainActor
     private func closeAssistant(in app: XCUIApplication) {
         let header = app.otherElements["assistant.header"].firstMatch
