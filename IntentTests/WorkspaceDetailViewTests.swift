@@ -57,10 +57,6 @@ struct WorkspaceDetailViewTests {
         #expect(AgentGroupSummary.delegatedTitle(count: 34) == "34 delegated agents")
     }
 
-    // MARK: - Session store routing (multi-window state split)
-
-    /// A backend-bound session composed over a fake backend connection; the
-    /// coordinator factory is never invoked by these tests.
     @MainActor
     func makePinnedSession(connection: FakeConnectionManager) -> BackendSession {
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
@@ -82,8 +78,6 @@ struct WorkspaceDetailViewTests {
         )
     }
 
-    /// A pinned window's workspace detail must fetch/observe agents and
-    /// notes over its own session's backend, never the default one.
     @MainActor
     @Test func workspaceDetailStoresRouteOverTheSessionConnection() {
         let fake = FakeConnectionManager()
@@ -101,8 +95,6 @@ struct WorkspaceDetailViewTests {
         #expect(view.changesStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
     }
 
-    /// Same contract for the note detail: its note/agent stores are bound
-    /// to the session that opened the note.
     @MainActor
     @Test func noteDetailStoresRouteOverTheSessionConnection() {
         let fake = FakeConnectionManager()
@@ -209,7 +201,6 @@ extension WorkspaceDetailViewTests {
     }
 }
 
-/// Inspect rendered cap boxes rather than asserting which layout helpers the views use.
 private struct WorkspaceSpacingImage {
     private static let bytesPerPixel = 4
     private static let bitsPerChannel = 8
@@ -233,7 +224,6 @@ private struct WorkspaceSpacingImage {
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             ))
             let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
-            // Fractional view heights can leave a transparent edge in the rounded bitmap.
             context.setFillColor(CGColor(gray: 1, alpha: 1))
             context.fill(bounds)
             context.draw(image, in: bounds)

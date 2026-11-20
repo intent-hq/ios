@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Which tapped links iOS can't open, so the transcript shows a message
-/// instead of silently dropping the tap.
 struct UnopenableLinkTests {
     @Test(arguments: [
         "report.html",

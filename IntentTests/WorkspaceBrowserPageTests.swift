@@ -112,9 +112,6 @@ struct WorkspaceBrowserPageTests {
         #expect(!page.isLoading)
     }
 
-    // MARK: - LoadPhase
-
-    /// Opens a page whose web view exists but is not loading, so the test drives every navigation callback.
     private func openedPage() async throws -> (WorkspaceBrowserPage, WKWebView) {
         let page = WorkspaceBrowserPage()
         let proxy = BrowserPageTestProxy()
@@ -160,8 +157,6 @@ struct WorkspaceBrowserPageTests {
         #expect(page.loadPhase == .idle)
     }
 
-    /// Kept on purpose: a cross-origin subframe reported while the main frame
-    /// loads shows its message and keeps the spinner until that frame finishes.
     @Test func aSubframeFailureDuringALoadKeepsLoadingUntilTheFinish() async throws {
         let (page, webView) = try await openedPage()
         page.webView(webView, didStartProvisionalNavigation: nil)

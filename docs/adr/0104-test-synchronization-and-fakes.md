@@ -26,6 +26,7 @@ Store tests spawn async work and race fakes against each other. Fixed `Task.slee
 - Test servers listen on 127.0.0.1 only (`loopback(using:)`, ios#981). A listener on `.any` is dual-stack, and macOS then lets another process bind 127.0.0.1 on the same port with `SO_REUSEADDR` and answer the test's requests (for example with HTTP 401).
 - A loopback test listener retains its accepted `NWConnection`s for its lifetime. An unreferenced connection can deallocate and cancel the handshake before the probe reads the certificate.
 - Hosted accessibility lookups observe the run loop with a deadline until SwiftUI publishes the element; they never sleep.
+- The Debug plaintext loopback override is process-global, so suites that use it (for example `WebSocketCompressionTests`) are nested in the serialized `ConnectionManagerTests`.
 - `RPCRecordingConnection` is an opt-in recorder on the production `ConnectionManagerRouting` surface. Snapshots pass through the real predecoder. `RPCFixtureJSON` records compact UTF-8 JSON at the injectable connection boundary, not a socket capture: payload fields are kept, only the transport-assigned RPC id is normalized to 0, keys are sorted, and WebSocket and TLS framing is not counted. A local failure has no received frame; never invent response bytes from an error's description.
 
 ## Code

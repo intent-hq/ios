@@ -3,9 +3,6 @@ import Foundation
 import Testing
 
 extension ConnectionManagerTests {
-    /// End-to-end RFC 7692 coverage over real loopback sockets. Nested in the
-    /// serialized `ConnectionManagerTests` because the plaintext loopback
-    /// override is process-global.
     @Suite struct WebSocketCompressionTests {
         private static let payload = String(repeating: "intentd permessage-deflate ", count: 5000)
         private static let offerHeader = "Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits"
@@ -63,7 +60,6 @@ extension ConnectionManagerTests {
 
             #expect(compressing.clientFrameCompression == [true])
             #expect(plain.clientFrameCompression == [false])
-            // Same bar as intentd's wss_deflate_negotiation_compresses_on_the_wire.
             #expect(
                 compressing.bytesRead < plain.bytesRead / 2,
                 "client→server: deflate=\(compressing.bytesRead)B plain=\(plain.bytesRead)B"

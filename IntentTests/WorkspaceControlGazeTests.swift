@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// Source coverage for gaze wiring, which an iOS simulator cannot exercise.
-/// Look-and-pinch accuracy still requires a Vision Pro check.
 struct WorkspaceControlGazeTests {
     private func source(_ path: String) throws -> String {
         try String(contentsOf: TestSourceInputs.url(for: path), encoding: .utf8)
@@ -58,8 +56,6 @@ struct WorkspaceControlGazeTests {
         let content = try #require(style.components(separatedBy: "struct IntentContentButtonStyle: ButtonStyle {").dropFirst().first)
             .components(separatedBy: "struct IntentIconButton:")[0]
         #expect(content.contains(".visionButtonHover(isEnabled: isEnabled && !containerDrawsHover)"))
-        // Rows and shaped labels that draw their own highlight opt out, so
-        // a control never stacks two highlights.
         let helpers = try source("Intent/DesignSystem/VisionHitTarget.swift")
         for helper in ["func visionListRowHitTarget()", "func visionCardRowButton("] {
             let body = try #require(helpers.components(separatedBy: helper).dropFirst().first)
@@ -89,7 +85,6 @@ struct WorkspaceControlGazeTests {
         let chevron = try #require(header.components(separatedBy: "Image(.chevronRight)").dropFirst().first)
             .components(separatedBy: ".padding(insets)")[0]
         #expect(chevron.contains(".visionGroupedHoverHint(padding: Constants.Accessibility.visionChevronHoverPadding)"))
-        // The whole heading activates the hint but draws no row-wide highlight.
         #expect(header.contains(".visionHoverGroup()"))
         #expect(header.contains(".buttonStyle(IntentContentButtonStyle())\n        .visionContainerDrawsHover()"))
     }

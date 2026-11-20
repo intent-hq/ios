@@ -3,23 +3,13 @@ import Foundation
 import Network
 import os
 
-/// Loopback plain-WS server that speaks the upgrade and framing with the
-/// app's own codecs (server role) and can accept permessage-deflate like
-/// intentd does. It echoes every text/binary message, counts raw socket
-/// bytes in each direction, and records the RSV1 bit of client frames.
 nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
     enum Mode: Sendable {
-        /// Accept a permessage-deflate offer with default parameters.
         case acceptDeflate
-        /// Never send `Sec-WebSocket-Extensions` (plain RFC 6455).
         case decline
-        /// Answer with this raw extension header regardless of the offer.
         case respondWith(String)
-        /// Decline, then send one RSV1 frame anyway.
         case compressedFrameWithoutNegotiation
-        /// Accept, then send one compressed message inflating past `bytes`.
         case inflationBomb(bytes: Int)
-        /// Read the upgrade request and never answer it.
         case neverUpgrade
     }
 
@@ -66,7 +56,6 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
         for connection in state.withLock({ $0.connections }) { connection.cancel() }
     }
 
-    /// Sends a ping to every connected client.
     func ping(_ payload: Data) {
         let frame = WebSocketFrameEncoder.encode(WebSocketFrame(opcode: .ping, payload: payload), maskingKey: nil)
         for connection in state.withLock({ $0.connections }) { write(frame, on: connection) }
@@ -95,7 +84,6 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
         }
     }
 
-    /// The server-side codec, confined to the server queue.
     private final class Codec: @unchecked Sendable {
         let deflate: PerMessageDeflate?
 
@@ -165,8 +153,6 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
         response += "Sec-WebSocket-Accept: \(WebSocketHandshake.acceptValue(forKey: value("Sec-WebSocket-Key") ?? ""))\r\n"
         if let extensionHeader { response += "Sec-WebSocket-Extensions: \(extensionHeader)\r\n" }
         write(Data((response + "\r\n").utf8), on: connection)
-        // Server-side codec: the server deflates with the client's
-        // inbound parameters and inflates with its own.
         let codec = Codec(extensionHeader == "permessage-deflate" ? try? PerMessageDeflate(parameters: PerMessageDeflateParameters()) : nil)
         afterUpgrade(connection, deflate: codec.deflate)
         var decoder = WebSocketFrameDecoder(
@@ -181,8 +167,6 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
     private func afterUpgrade(_ connection: NWConnection, deflate: PerMessageDeflate?) {
         switch mode {
         case .compressedFrameWithoutNegotiation:
-            // A valid compressed "Hello" from a fresh context, sent although
-            // compression was not negotiated.
             guard let payload = try? PerMessageDeflate(parameters: PerMessageDeflateParameters()).compress(Data("Hello".utf8)) else { return }
             let frame = WebSocketFrame(opcode: .text, payload: payload, isCompressed: true)
             write(WebSocketFrameEncoder.encode(frame, maskingKey: nil), on: connection)
@@ -212,8 +196,6 @@ nonisolated final class CompressionWebSocketServer: @unchecked Sendable {
                 case .pong:
                     state.withLock { $0.pongs.append(frame.payload) }
                 case .close:
-                    // Keep reading so data frames sent after the close frame
-                    // (an RFC 6455 §5.5.1 violation) are observable.
                     write(WebSocketFrameEncoder.encode(WebSocketFrame(opcode: .close, payload: frame.payload), maskingKey: nil), on: connection)
                     state.withLock { $0.closeReceived = true }
                 case .text, .binary:

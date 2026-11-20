@@ -41,7 +41,6 @@ struct WorkspaceCreationVideosTests {
         #expect(draft.messageText == "Keep the prompt")
         #expect(draft.images.errorMessage?.contains("max 200 MB") == true)
         #expect(!draft.images.isImporting)
-        // Fill the remaining slots with a mix; videos count against the same limit.
         let limit = Constants.Conversation.Composer.maximumImageSelectionCount
         let fill: [WorkspaceCreationImages.MediaLoader] = [{ .video(video) }, { .video(video) }]
             + (0..<(limit - 4)).map { _ in { .image(imageData) } as WorkspaceCreationImages.MediaLoader }
