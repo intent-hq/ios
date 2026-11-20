@@ -2,15 +2,11 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Page walks for bounded daemon reads (PROTOCOL §5.2 "Bounded note and
-/// comment reads", §6.9 "Paged snapshots", workspace "Paged workspace lists").
 @MainActor
 struct PagedReadsTests {
     private struct PageError: Error {}
 
     private static let noSleep: PagedReads.Sleep = { _ in }
-
-    // MARK: - requestAllPages
 
     @Test func requestAllPagesFollowsTokensAcrossPages() async throws {
         var sent: [[String: Any]] = []
@@ -112,8 +108,6 @@ struct PagedReadsTests {
             }
         }
     }
-
-    // MARK: - fillSnapshot
 
     private static func source(_ requestPage: @escaping @MainActor (String) async throws -> Any) -> PagedReads.PageSource {
         PagedReads.PageSource(field: "notes", requestPage: requestPage)

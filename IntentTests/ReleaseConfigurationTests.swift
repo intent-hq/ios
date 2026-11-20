@@ -2,8 +2,6 @@
 @testable import Intent
 import Testing
 
-/// Selected explicitly by the wrapper's Release smoke command (#468).
-/// Absent from Debug so a Debug test bundle cannot satisfy that command.
 struct ReleaseConfigurationTests {
     @Test func lowerSeverityLogsDoNotEvaluateMessages() {
         var evaluations = 0
@@ -40,7 +38,6 @@ struct ReleaseConfigurationTests {
         let arguments = ["--demo-data", "--pretend-paired", "--demo-script-monitors=active"]
         #expect(ConnectionManager.makeInProcessTransport(serveFixtures: true, arguments: arguments) == nil)
         #expect(ConnectionManager.makeInProcessTransport(serveFixtures: false, arguments: arguments) == nil)
-        // `connectDemo` is Debug-only, so Release code cannot call it at all.
         let connection = ConnectionManager(persistence: .ephemeral())
         defer { connection.disconnect() }
         #expect(connection.requestTransport == nil)

@@ -3,13 +3,6 @@ import Foundation
 import Security
 import Testing
 
-/// Pins the credential backup / accessibility policy documented on
-/// `SecItemKeychainStorage` (ios#263): every LOCAL credential class is
-/// `AfterFirstUnlock`, non-synchronizable and app-private; SYNCED backend
-/// records are read as synchronizable shared-group items with no
-/// accessibility constraint of their own. Any drift in these attributes —
-/// including a move to a `ThisDeviceOnly` class — must fail here and come
-/// with an explicit policy decision plus a migration.
 @Suite("Keychain credential backup policy")
 struct KeychainAccessibilityPolicyTests {
     private func makePersistence(

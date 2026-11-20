@@ -16,8 +16,6 @@ private func questionBlock(text: String, mimeType: String = kQuestionMime) -> Co
     ContentBlock(type: .resource, resource: ResourceContents(uri: "intent-question://q", mimeType: mimeType, text: text))
 }
 
-// MARK: - Pending derivation (FE `derivePendingQuestions` parity)
-
 struct PendingQuestionDerivationTests {
     private func assistant(
         blocks: [ContentBlock],
@@ -37,8 +35,6 @@ struct PendingQuestionDerivationTests {
         ConversationMessage(id: id, role: .user, contentBlocks: [ContentBlock(type: .text, text: "hi")])
     }
 
-    /// A user row carrying the wizard's answer tag on the row `metadata`
-    /// (the shape the optimistic send row and the persisted row share).
     private func answerRow(answering messageId: String, id: String = "u-ans") -> ConversationMessage {
         ConversationMessage(
             id: id,
@@ -156,8 +152,6 @@ struct PendingQuestionDerivationTests {
 }
 
 extension PendingQuestionDerivationTests {
-    // MARK: - Dismissal marker (FE `wizard-gate.ts` parity)
-
     @Test func nilWhenDismissalMarkerMatches() {
         let messages = [assistant(blocks: [questionBlock(text: questionJSON())], id: "a1")]
         #expect(PendingQuestionSet.derive(
@@ -186,8 +180,6 @@ extension PendingQuestionDerivationTests {
         ))
         #expect(set.messageId == "a1")
     }
-
-    // MARK: - Pending marker (FE `classifyPendingQuestionMarker` / marker authority parity)
 
     @Test func markerSetPendsWhileTurnActive() throws {
         let messages = [user(), questionAssistant(id: "a1")]
@@ -299,8 +291,6 @@ extension PendingQuestionDerivationTests {
     }
 
     @Test func markerSetNilWhenQueuedAnswerNamesIt() {
-        // The daemon auto-queued the tagged answer mid-turn: the optimistic
-        // row is gone and the only local tag lives on the queue entry.
         let messages = [questionAssistant(id: "a1")]
         #expect(PendingQuestionSet.derive(
             messages: messages,

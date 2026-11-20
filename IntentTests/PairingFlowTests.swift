@@ -2,10 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// The QR-scan and intent://pair deep-link paths share PairingFlow: a payload
-/// fingerprint is pinned directly, a fingerprint-less payload goes through
-/// the cert probe + user trust confirmation, and a failed probe aborts —
-/// pairing never falls back to plain ws://.
 struct PairingFlowTests {
     private func makePersistence(
         storage: InMemoryKeychainStorage
@@ -60,8 +56,6 @@ struct PairingFlowTests {
         ))
     }
 
-    /// The probe's failure stage (unreachable / timeout / TLS) reaches the
-    /// QR and deep-link error surface instead of a generic message (ios#233).
     @Test @MainActor func failedProbeSurfacesTheFailureStage() async {
         let refused = CertFingerprintProbe.ProbeResult.unreachable(
             cause: .init(domain: .posix, code: POSIXErrorCode.ECONNREFUSED.rawValue)

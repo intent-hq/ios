@@ -90,7 +90,6 @@ struct RelayLinkStateTests {
 
     @Test func dropsSavedLinksToOtherRelays() throws {
         let defaults = try #require(UserDefaults(suiteName: "RelayLinkStateTests-\(UUID().uuidString)"))
-        // The untrusted link comes first, so it would otherwise pick the relay.
         var state = RelayLinkState()
         state.links.append(RelayLink(connectionId: other, daemonId: "d2", relayURL: try #require(URL(string: "https://relay.example.com"))))
         state.record(RelayLink(connectionId: machine, daemonId: "d1", relayURL: relay))
