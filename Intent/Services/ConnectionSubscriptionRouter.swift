@@ -1,6 +1,5 @@
 import Foundation
 
-/// MainActor-owned routing and bounded replay state for subscription.push notifications.
 @MainActor
 final class ConnectionSubscriptionRouter {
     static let defaultBufferLimit = 64
@@ -47,7 +46,6 @@ final class ConnectionSubscriptionRouter {
         AppLog.connection.debug("[ConnectionManager] Unregistered subscription handler for id=\(id)")
     }
 
-    /// Returns true when the notification is subscription.push, including malformed pushes.
     func route(method: String, params: Any) -> Bool {
         guard method == "subscription.push" else { return false }
         guard let push = SubscriptionPush.parse(method: method, params: params) else {
@@ -70,7 +68,6 @@ final class ConnectionSubscriptionRouter {
         return true
     }
 
-    /// Routes an already-parsed push (the live pump parses off MainActor).
     func route(_ push: SubscriptionPush) {
         if let handler = handlers[push.subscriptionId] {
             handler(push)

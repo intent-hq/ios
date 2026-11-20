@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// One selection shared by every step, separate from the conversation composer.
 struct QuestionAttachmentTray: View {
     let attachments: ConversationAttachmentPipeline
     @Environment(\.colorScheme) private var colorScheme

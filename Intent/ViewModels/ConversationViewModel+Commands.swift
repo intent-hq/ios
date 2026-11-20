@@ -4,10 +4,6 @@ extension ConversationViewModel {
     var messages: [ConversationMessage] { store.messages }
 
     /// All transcript messages — nothing is display-filtered anymore.
-    /// Event-notification wakes render as a compact event-wake banner and
-    /// agent-to-agent sends (`metadata.type == "agent_message"`) render with
-    /// a sender attribution header (FE parity: ChatPanel.svelte /
-    /// ChatMessage.svelte), so MessageView owns all automated-row rendering.
     var filteredMessages: [ConversationMessage] {
         store.messages
     }
@@ -23,16 +19,10 @@ extension ConversationViewModel {
         await store.retryNow()
     }
 
-    /// Display-only filter: show only user-authored entries in the
-    /// queued-messages section — daemon-originated wakes (hook, PR-monitor,
-    /// event-notification) and agent-to-agent sends are hidden. The store
-    /// keeps the full queue and flush behavior is unchanged.
     var queuedMessages: [QueuedMessage] {
         store.queuedMessages.filter { $0.isUserMessage }
     }
 
-    /// Synchronously invalidates this screen activation and detaches every
-    /// local event handler before captured remote ids are released.
     func teardownLiveStores() {
         optionsStore.releaseCatalogs(consumer: conversationConsumer)
         liveStoreActivationGeneration &+= 1
@@ -63,10 +53,6 @@ extension ConversationViewModel {
         )
     }
 
-    /// Send a suggested prompt as-is: prompt text only. Unlike `sendMessage`,
-    /// this never attaches `pendingImages` and never clears the persisted
-    /// composer draft — the in-progress draft (text + attachments) stays
-    /// intact for the user's own message.
     func sendSuggestedPrompt(_ prompt: String) async {
         do {
             try await store.sendMessage(agentId: agentId, content: prompt, workspaceId: workspaceId)
@@ -164,8 +150,6 @@ extension ConversationViewModel {
         let activation = liveStoreActivationGeneration
         let generation = optionsStore.loadGeneration
         if modelMetadataGeneration != generation, modelMetadataGeneration != nil || currentProviderId == nil {
-            // Reconnect already expires shared detail. A delayed catalog task
-            // must reuse that bootstrap even after its reply has settled.
             await fetchCurrentModel(refresh: modelMetadataEpoch == agentDetails.connectionEpoch)
             guard generation == optionsStore.loadGeneration, activation == liveStoreActivationGeneration,
                   !Task.isCancelled else { return }

@@ -1,8 +1,6 @@
 import Foundation
 import OSLog
 
-/// Structured logging with debug-only lower levels. Release builds compile out
-/// debug through warning, while error and fault remain active with private messages.
 nonisolated enum AppLog {
     nonisolated struct Category: Sendable {
         private let logger: Logger

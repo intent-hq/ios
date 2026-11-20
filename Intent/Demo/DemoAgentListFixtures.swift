@@ -1,8 +1,6 @@
 #if DEBUG
 import Foundation
 
-/// A scope-aware in-memory agent.list endpoint shared by ordinary demos and
-/// the grouping scenario. Counts always describe the whole workspace.
 enum DemoAgentListFixtures {
     static func response(rows: [[String: Any]], params: [String: Any]) -> [String: Any] {
         let canonical = rows.map { wire -> [String: Any] in

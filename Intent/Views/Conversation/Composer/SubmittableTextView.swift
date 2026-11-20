@@ -2,14 +2,6 @@ import GameController
 import SwiftUI
 import UIKit
 
-/// Decides whether bare Return submits the composer message (Shift+Return
-/// always inserts a newline).
-///
-/// - visionOS: dictation-first — Return submits only while a hardware
-///   keyboard is connected (`GCKeyboard.coalesced`); the virtual keyboard's
-///   Return inserts a newline so the composer sends via the button.
-/// - iPad: Return always submits.
-/// - iPhone: Return always inserts a newline (send via button only).
 enum ComposerSubmitPolicy {
     static func returnSubmits(
         isVisionOS: Bool,
@@ -20,8 +12,6 @@ enum ComposerSubmitPolicy {
     }
 }
 
-/// A UITextView subclass that intercepts hardware keyboard Return to submit,
-/// while letting Shift+Return insert a newline.
 class KeyCommandTextView: UITextView {
     var onSubmit: (() -> Void)?
     var onLayoutChange: (() -> Void)?
@@ -32,7 +22,6 @@ class KeyCommandTextView: UITextView {
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(paste(_:)), imagePasteboard.hasImages() {
-            // Metadata only: never read clipboard contents on focus or render.
             return isEditable && allowsImagePaste && onPasteImages != nil
         }
         return super.canPerformAction(action, withSender: sender)
@@ -44,7 +33,6 @@ class KeyCommandTextView: UITextView {
             pasteStandardContent(sender)
             return
         }
-        // Edit-menu Paste and Command-V share this explicit user action.
         guard allowsImagePaste, let onPasteImages else { return }
         onPasteImages()
     }
@@ -53,9 +41,6 @@ class KeyCommandTextView: UITextView {
         super.paste(sender)
     }
 
-    /// Tracks whether Shift is currently held on a hardware keyboard.
-    /// Used by the delegate to distinguish Shift+Return (newline) from
-    /// software keyboard Return (submit).
     var isShiftHeld: Bool = false
 
     override init(frame: CGRect, textContainer: NSTextContainer?) {
@@ -69,8 +54,6 @@ class KeyCommandTextView: UITextView {
     }
 
     private func configureTypography() {
-        // The token already applies UIFontMetrics. Resolve from current traits
-        // rather than asking UITextView to scale the scaled font again.
         adjustsFontForContentSizeCategory = false
         updateTypography()
         registerForTraitChanges([
@@ -93,9 +76,6 @@ class KeyCommandTextView: UITextView {
         onLayoutChange?()
     }
 
-    /// Content height measured with the base container inset, independent of
-    /// any live vertical-centering inset, so the SwiftUI height clamp sees
-    /// a stable value.
     var naturalHeight: CGFloat {
         let fitting = sizeThatFits(
             CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
@@ -104,7 +84,6 @@ class KeyCommandTextView: UITextView {
         return fitting - textContainerInset.top - textContainerInset.bottom + base * 2
     }
 
-    /// Centers short content within the minimum field height.
     private func centerShortContent() {
         let base = Constants.Conversation.Composer.textContainerInset
         let contentHeight = naturalHeight - base * 2
@@ -121,8 +100,6 @@ class KeyCommandTextView: UITextView {
     private static let isVisionOS = false
     #endif
 
-    /// Live submit rule for the current platform, idiom, and hardware
-    /// keyboard state.
     static var returnSubmitsNow: Bool {
         ComposerSubmitPolicy.returnSubmits(
             isVisionOS: isVisionOS,
@@ -131,11 +108,8 @@ class KeyCommandTextView: UITextView {
         )
     }
 
-    // UIKit requires this override to remain optional; nil means no commands.
     // swiftlint:disable:next discouraged_optional_collection
     override var keyCommands: [UIKeyCommand]? {
-        // Don't intercept Return where it should insert a newline (iPhone
-        // always; visionOS without a hardware keyboard)
         var commands: [UIKeyCommand] = []
         if skillCompletion?.context != nil {
             commands = [UIKeyCommand.inputUpArrow, UIKeyCommand.inputDownArrow, "\t", UIKeyCommand.inputEscape].map { input in
@@ -145,7 +119,6 @@ class KeyCommandTextView: UITextView {
             }
         }
         guard Self.returnSubmitsNow else { return commands }
-        // Intercept bare Return (no modifiers) — calls handleReturn
         let returnCommand = UIKeyCommand(
             input: "\r",
             modifierFlags: [],
@@ -197,28 +170,15 @@ class KeyCommandTextView: UITextView {
     }
 }
 
-/// A SwiftUI wrapper around UITextView that supports:
-/// - Two-way text binding
-/// - Hardware keyboard Enter → onSubmit, Shift+Enter → newline
-/// - Software keyboard Return → onSubmit (matches iMessage behavior)
-/// - Focus state via isFocused binding
 struct SubmittableTextView: UIViewRepresentable {
     @Binding var text: String
     @Binding var isFocused: Bool
     var onSubmit: () -> Void
     var onPasteImages: (() -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
-    /// Reports the caret's UTF-16 offset (end of selection) on every
-    /// selection change; used by visionOS dictation to insert at the caret.
     var onCaretChange: ((Int) -> Void)?
-    /// Corner radius of the visionOS hover/highlight shape; defaults to the
-    /// composer field's corners.
     var hoverCornerRadius: CGFloat = Constants.Conversation.Composer.fieldCornerRadius
-    /// VoiceOver label for the text view (UITextView has no placeholder to
-    /// announce, so a SwiftUI placeholder overlay does not label it).
     var accessibilityLabel: String?
-    /// Opt-in foreground for a scoped composer design. Nil preserves UIKit's
-    /// existing color without rewriting attributed text or changing editing policy.
     var textColor: UIColor?
     var skillCompletion: ComposerSkillCompletion?
     @Environment(\.isEnabled) private var isEnabled
@@ -234,10 +194,6 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.accessibilityIdentifier = "composer.textView"
         textView.backgroundColor = .clear
         #if os(visionOS)
-        // Shape the system text-input hover/highlight effect to the composer
-        // field's rounded corners; its default rect shape draws a rectangle
-        // inside the rounded field (the outer RoundedRectangle clip in
-        // MessageInputView does not affect it).
         textView.hoverStyle = UIHoverStyle(
             shape: .rect(cornerRadius: hoverCornerRadius)
         )
@@ -252,7 +208,6 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.text = text
         if let textColor { textView.textColor = textColor }
 
-        // Report height whenever layout changes (e.g. initial layout, rotation)
         textView.onLayoutChange = { [weak textView] in
             guard let textView else { return }
             onHeightChange?(textView.naturalHeight)
@@ -268,11 +223,8 @@ struct SubmittableTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: KeyCommandTextView, context: Context) {
-        // Keep the coordinator's parent current so its closures (e.g.
-        // onCaretChange) capture the latest state
         context.coordinator.parent = self
 
-        // Update onSubmit closure so it always captures current state
         textView.onSubmit = onSubmit
         textView.onPasteImages = onPasteImages
         textView.skillCompletion = skillCompletion
@@ -300,10 +252,6 @@ struct SubmittableTextView: UIViewRepresentable {
         }
 
         func synchronizeFocus(in textView: KeyCommandTextView) {
-            // Native editing callbacks defer their binding writes. Read the latest
-            // focus after those writes, not the render snapshot that preceded them.
-            // If UIKit changes focus before this block runs, that newer transition
-            // wins even when its binding write is still queued behind us (ios#799).
             let revision = nativeFocusRevision
             DispatchQueue.main.async { [weak self, weak textView] in
                 guard let self, let textView, nativeFocusRevision == revision else { return }
@@ -316,9 +264,6 @@ struct SubmittableTextView: UIViewRepresentable {
         }
 
         func synchronizeText(in textView: KeyCommandTextView) {
-            // A Binding read during updateUIView can be an older render snapshot.
-            // Read it after that pass, through the current parent, so an edit
-            // received meanwhile cannot be replaced by that snapshot (ios#575).
             DispatchQueue.main.async { [weak self, weak textView] in
                 guard let self, let textView else { return }
                 let latestText = parent.text
@@ -333,14 +278,12 @@ struct SubmittableTextView: UIViewRepresentable {
             parent.text = textView.text
             parent.skillCompletion?.update(from: textView)
 
-            // Report ideal content height to SwiftUI
             let idealHeight = (textView as? KeyCommandTextView)?.naturalHeight
                 ?? textView.sizeThatFits(
                     CGSize(width: textView.bounds.width, height: CGFloat.greatestFiniteMagnitude)
                 ).height
             parent.onHeightChange?(idealHeight)
 
-            // Scroll to keep cursor visible
             if let selectedRange = textView.selectedTextRange {
                 DispatchQueue.main.async {
                     let caretRect = textView.caretRect(for: selectedRange.end)
@@ -371,25 +314,17 @@ struct SubmittableTextView: UIViewRepresentable {
             }
         }
 
-        /// Intercepts Return from the software keyboard to submit.
-        /// Hardware bare-Return is handled by UIKeyCommand (never reaches here).
-        /// Hardware Shift+Return bypasses UIKeyCommand and arrives here — we
-        /// detect the held Shift key and allow the newline insertion.
         func textView(
             _ textView: UITextView,
             shouldChangeTextIn _: NSRange,
             replacementText text: String
         ) -> Bool {
             if text == "\n" {
-                // Shift+Return on hardware keyboard → insert newline
                 if let kbTextView = textView as? KeyCommandTextView, kbTextView.isShiftHeld {
                     return true
                 }
-                // Return inserts a newline where the submit rule is off
-                // (iPhone always; visionOS without a hardware keyboard)
                 guard KeyCommandTextView.returnSubmitsNow else { return true }
                 if parent.skillCompletion?.acceptSelection() == true { return false }
-                // Software keyboard Return (or bare Return fallback) → submit
                 parent.onSubmit()
                 return false
             }

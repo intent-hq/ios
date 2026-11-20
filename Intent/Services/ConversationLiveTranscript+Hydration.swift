@@ -47,8 +47,6 @@ extension ConversationLiveTranscript {
                 )
                 return
             }
-            // A text read begun before a live update cannot erase fragments
-            // or an authoritative replacement that arrived while it waited.
             if block.type == .text || block.type == .thinking, stateVersion != liveStateVersion {
                 traceEvent("MessageBlockRejected", "reason=live_state_changed requestVersion=\(stateVersion)")
                 return
@@ -74,8 +72,6 @@ extension ConversationLiveTranscript {
         }
     }
 
-    /// Hydration may expand a partial text body, but a later live update or
-    /// snapshot owns that text. Tool/image previews still keep their full body.
     func discardHydratedText(_ block: ContentBlock, messageId: String) {
         guard block.type == .text || block.type == .thinking else { return }
         let key = Self.hydratedBlockKey(messageId: messageId, blockId: block.id)

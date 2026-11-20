@@ -13,7 +13,6 @@ enum WorkspaceDetailStyle {
     static let sectionSpacing: CGFloat = 48
     static let sectionHeadingSpacing: CGFloat = 24
     static let titleTracking: CGFloat = -0.56
-    /// The iPad main pane's 40 pt title keeps the sidebar title's -3% tracking.
     static let largeTitleTracking: CGFloat = -1.2
     static let rowTitleTracking: CGFloat = -0.36
     static let bodyTracking: CGFloat = -0.16
@@ -48,7 +47,6 @@ enum WorkspaceDetailStyle {
     static let accent = Constants.Pairing.accent
     static let onAccent = Constants.Pairing.onAccent
 
-    // Exact 8-bit palette channels preserve Figma Grey400 for repository text and neutral avatar tiles.
     static let neutral = Color(sRGBHex: Constants.DesignPalette.darkGrey)
 
     static func avatarSurface(for scheme: ColorScheme) -> Color {
@@ -119,7 +117,6 @@ struct IntentContentSwitcher<Value: Hashable>: View {
     let options: [Option]
     let accessibilityLabel: String
     let identifierPrefix: String
-    /// Matches the sidebar filter: no track, so the selected pill lines up with the column text.
     var isSidebar = false
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

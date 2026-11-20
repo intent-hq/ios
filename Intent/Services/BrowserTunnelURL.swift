@@ -1,7 +1,5 @@
 import Foundation
 
-/// Only explicit daemon-loopback names are forwarded; arbitrary DNS names never
-/// gain access to the tunnel. No daemon bearer token appears in the browser URL.
 nonisolated enum BrowserTunnelURL {
     private static let daemonHosts: Set<String> = [
         "daemon.localhost", "localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"
@@ -19,8 +17,6 @@ nonisolated enum BrowserTunnelURL {
         guard daemonHosts.contains(host) else { return nil }
         let port = components.port ?? (scheme == "https" ? httpsPort : httpPort)
         guard let port = UInt16(exactly: port), port != 0 else { throw BrowserTunnelError.invalidURL }
-        // Only the exact address emitted by rewrite is our own listener. A
-        // daemon.localhost URL on the same numeric port still names the daemon.
         if host == "127.0.0.1", localPorts.contains(port) { return nil }
         return port
     }

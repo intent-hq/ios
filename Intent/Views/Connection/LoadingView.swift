@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// Loading phase overlay: the splash artwork is rendered by RootView in a
-/// position shared with the connecting phase (so playback doesn't reset on the
-/// loading → connecting transition). This view only owns the launch timer
-/// that advances the coordinator independently of animation completion.
 struct LoadingView: View {
     @Environment(AppCoordinator.self) var coordinator
 
@@ -11,16 +7,9 @@ struct LoadingView: View {
         Color.clear
             .allowsHitTesting(false)
             .task {
-                // Advance to connecting after a beat. RootView keeps the
-                // shared SplashArtView mounted across loading → connecting,
-                // so playback continues uninterrupted. Don't lengthen the
-                // 1.2-second phase to wait for the twist intro to finish.
                 do {
                     try await LaunchPhaseTimeline.delay(for: Constants.Loading.phaseDuration)
                 } catch {
-                    // Cancelled: the view went away before the beat ended, so
-                    // its timeline must not advance the coordinator behind
-                    // whatever replaced it (ios#230).
                     return
                 }
                 coordinator.onLoadComplete()
@@ -30,14 +19,12 @@ struct LoadingView: View {
 
 // MARK: - Intent Logo Shape
 
-/// The Intent burst mark, matching cloudlands-fe's Logo.svelte vector.
 nonisolated struct IntentLogo: Shape {
     private typealias Metrics = Constants.IntentLogo
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
 
-        // Original viewBox: 0 0 24 24
         let scaleX = rect.width / Metrics.viewBoxSize
         let scaleY = rect.height / Metrics.viewBoxSize
         let transform = CGAffineTransform(scaleX: scaleX, y: scaleY)

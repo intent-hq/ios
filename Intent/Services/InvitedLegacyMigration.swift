@@ -1,9 +1,6 @@
 import CryptoKit
 import Foundation
 
-/// Local, token-free provenance for a row seen before its alias retired.
-/// The digest permits only these exact bytes in this exact access group;
-/// a bound person must still be authenticated on every retry.
 struct InvitedLegacyMigrationReceipt: Codable, Equatable {
     private static let formatVersion = 1
     private static let digestBytes = 32

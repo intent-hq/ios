@@ -1,43 +1,18 @@
 import CoreGraphics
 
-/// Bounded unrealized-end recovery and its demo report. Geometry-confirmed
-/// follow landing is in ConversationTranscriptScrollPolicy+Landing.swift (#350).
 extension ConversationTranscriptScrollPolicy {
-    // Outcome order follows the recovery state machine rather than spelling.
-    // Pinned SwiftLint 0.65.1's sorted_enum_cases does not traverse extensions.
-    // Restoring its directives fails strict lint with superfluous_disable_command,
-    // so they remain absent.
-    /// An intermediate step of the unrealized-end recovery loop: the loop
-    /// polls again after it.
     enum UnrealizedEndRecoveryContinuation: Equatable {
-        /// No scroll view yet, a follow or gesture in flight, the geometry
-        /// moved since the last poll, or a geometry another path corrects.
         case settling
-        /// At rest short of the bottom: try the end target once before searching.
         case followToEnd
-        /// At rest at the bottom by geometry with no end row realized, or a
-        /// follow that changed nothing: page the offset up to `pageOffsetY`
-        /// so the lazy stack realizes rows again, then follow back to the end.
         case recover(pageOffsetY: CGFloat)
     }
 
-    /// How the unrealized-end recovery ends, consumed by its lifecycle and
-    /// report (see `unrealizedEndRecoveryReport`).
     enum UnrealizedEndRecoveryTerminal: Equatable {
-        /// The end row is realized, the viewport is not following, or the
-        /// content is shorter than the container.
         case notNeeded
-        /// Timed out, or the bounded corrections are spent, with the end row
-        /// still unrealized. The lifecycle surfaces Go to End or transfers
-        /// the give-up to a follow that owns the viewport.
         case giveUp
-        /// A gesture, a rest away or a follow requested meanwhile claimed
-        /// the viewport while a correction had it paged up: it is theirs.
         case yieldToUser
     }
 
-    /// One poll of the recovery loop: either a step the loop continues from
-    /// or the terminal that ends it.
     enum UnrealizedEndRecoveryStep: Equatable {
         case `continue`(UnrealizedEndRecoveryContinuation)
         case finish(UnrealizedEndRecoveryTerminal)
@@ -45,12 +20,6 @@ extension ConversationTranscriptScrollPolicy {
 
     // Keep recovery inputs explicit and the optional correction history beside the required correction budget.
     // swiftlint:disable function_parameter_count function_default_parameter_at_end
-    /// A lazy stack can report the estimated bottom without realizing its end
-    /// row (#338). Search farther upward after each unsuccessful end jump;
-    /// the final bounded attempt realizes the top before following back.
-    /// A failed jump may leave the viewport short of the end. Recovery must
-    /// continue there because it owns the viewport and suppresses other re-pins.
-    /// User gestures, explicit reading position, and past-end clamping still win.
     static func unrealizedEndRecoveryStep(
         geometry: ViewportGeometry?,
         previous: ViewportGeometry?,
@@ -92,8 +61,6 @@ extension ConversationTranscriptScrollPolicy {
             return .continue(.followToEnd)
         }
         let top = -geometry.topInset
-        // A missing end target can leave the follow at the paged-up offset.
-        // Keep searching there; the recovery owns and suppresses other re-pins.
         let estimatedEnd = geometry.contentOffsetY + distance
         let searchFrom = min(geometry.contentOffsetY, previousPageOffsetY ?? geometry.contentOffsetY, estimatedEnd)
         let pageOffsetY = correctionsLeft == 1 ? top : max(top, searchFrom - geometry.containerHeight)
@@ -101,12 +68,6 @@ extension ConversationTranscriptScrollPolicy {
     }
     // swiftlint:enable function_parameter_count function_default_parameter_at_end
 
-    /// A correction that paged the viewport up follows back to the end only
-    /// if nothing claimed the viewport while the rows realized: a gesture
-    /// (the finger, or the deceleration after it), a rest the gesture left
-    /// away, or a follow requested meanwhile (the user's message, Go to End,
-    /// content) each own it from here and would be scrolled over by the
-    /// follow back; the correction yields instead.
     static func unrealizedEndRecoveryMayFollowBack(
         isInteracting: Bool,
         userIsScrolledAway: Bool,
@@ -115,64 +76,28 @@ extension ConversationTranscriptScrollPolicy {
         !isInteracting && !userIsScrolledAway && !isFollowing
     }
 
-    /// How the last unrealized-end recovery episode resolved
-    /// (`UnrealizedEndRecoveryReport.reason`).
     enum UnrealizedEndRecoveryReason: String, Equatable {
-        /// The episode's task was cancelled (a takeover or the view
-        /// disappearing) before it resolved.
         case cancelled
-        /// The budget was spent or the timeout hit over an unrealized
-        /// end row; Go to End is shown.
         case gaveUp
-        /// The last episode resolved without spending a correction.
         case noCorrectionNeeded
-        /// No episode was ever armed on this transcript.
         case notAttempted
-        /// The last episode corrected the viewport at least once and the
-        /// end row was realized when it resolved.
         case recovered
-        /// An episode is armed and has not resolved.
         case recovering
-        /// The last episode corrected the viewport and resolved as
-        /// nothing left to do (not following, content short of the
-        /// container) with the end row still unrealized: not recovered,
-        /// and not a give-up either — the budget was not spent and Go
-        /// to End is not shown.
         case unverified
-        /// A gesture, a rest away or a follow claimed the viewport.
         case yieldedToUser
     }
 
-    /// The unrealized-end recovery's demo-only report: how the last episode
-    /// resolved, with the evidence the label rests on. Reported by
-    /// `unrealizedEndRecoveryReport`, which alone decides the reason, so a
-    /// reader cannot be told `recovered` by a resolution that never
-    /// realized the end row.
     struct UnrealizedEndRecoveryReport: Equatable {
         let reason: UnrealizedEndRecoveryReason
-        /// Corrections the last episode spent.
         let corrections: Int
-        /// Episodes armed on this transcript so far.
         let episodes: Int
-        /// Whether the end row was realized when the last episode resolved.
         let endRealized: Bool
 
-        /// `endRecovery=<reason> corrections=N episodes=N endRealized=<true|false>`.
         var summary: String {
             "endRecovery=\(reason.rawValue) corrections=\(corrections) episodes=\(episodes) endRealized=\(endRealized)"
         }
     }
 
-    /// Classifies the last recovery episode. `outcome` is the terminal the
-    /// episode resolved on, nil while it is still running (or, with no
-    /// episode armed, before the first); `cancelled` names an episode whose
-    /// task was cancelled and overrides whatever terminal it reached. No
-    /// episode is `notAttempted`. A cancelled, yielded or given-up episode
-    /// is never `recovered`, nor is a `.notNeeded` resolution that spent no
-    /// correction (`noCorrectionNeeded`) or left the end row unrealized
-    /// (`unverified`): `recovered` needs a correction and the end row
-    /// realized at the finish, both. An episode still on an intermediate
-    /// step has no terminal yet, so it is `recovering`.
     static func unrealizedEndRecoveryReport(
         outcome: UnrealizedEndRecoveryTerminal?,
         corrections: Int,

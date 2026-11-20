@@ -216,30 +216,19 @@ struct FloatingComposerPolicyTests {
         #expect(top == nil)
     }
 
-    @Test func floatingHostReservesTranscriptRoomForTheLauncher() {
-        // Regression: the bottom-right launcher covered the last transcript
-        // line once the composer left the window.
-        let clearance = AssistantLaunchButton.scrollClearance
-        #expect(FloatingComposerPolicy.transcriptBottomClearance(host: .floatingOrnament, launcherClearance: clearance) == clearance)
-    }
-
-    @Test func transcriptClearanceOnlyWhereALauncherFloatsOverAFloatingHost() {
-        // No launcher above this chat (Assistant sheet, search open): no gap.
-        #expect(FloatingComposerPolicy.transcriptBottomClearance(host: .floatingOrnament, launcherClearance: 0) == 0)
-        // iPhone/iPad keep the transcript unchanged.
-        #expect(FloatingComposerPolicy.transcriptBottomClearance(host: .inline, launcherClearance: AssistantLaunchButton.scrollClearance) == 0)
-    }
-
-    @Test func launcherClearanceReachesTheTranscript() throws {
+    @Test func transcriptKeepsNoLauncherPaddingUnderTheLastRow() throws {
+        // Regression: every visionOS chat ended with a launcher-tall gap
+        // that pushed the transcript up; the launcher floats over it instead.
         let launcher = try Self.source("Intent/Views/Workspaces/WorkspaceActionLauncher.swift")
         let column = try Self.source("Intent/Views/Conversation/Transcript/ConversationColumnView.swift")
         let transcript = try Self.source("Intent/Views/Conversation/Transcript/ConversationTranscriptView+Presentation.swift")
-        #expect(launcher.contains(".environment(\\.workspaceActionLauncherClearance, isSearching ? 0 : AssistantLaunchButton.scrollClearance)"))
-        #expect(column.contains("@Environment(\\.workspaceActionLauncherClearance) private var launcherClearance"))
-        #expect(column.contains("bottomClearance: FloatingComposerPolicy.transcriptBottomClearance(host: composerHost, launcherClearance: launcherClearance)"))
+        #expect(!launcher.contains("LauncherClearance"))
+        #expect(!column.contains("launcherClearance"))
+        #expect(!column.contains("bottomClearance"))
         #expect(column.contains("accessoryRowsTop: accessoryRowsLauncherTop"))
         // On the end marker, so follow landings still reach the true end.
-        #expect(transcript.components(separatedBy: ".padding(.bottom, Layout.bottomAnchorPadding + bottomClearance)").count - 1 == 2)
+        #expect(transcript.components(separatedBy: ".padding(.bottom, Layout.bottomAnchorPadding)").count - 1 == 2)
+        #expect(!transcript.contains("bottomClearance"))
     }
 
     // MARK: - Source wiring (visionOS branches cannot run in the iOS test host)

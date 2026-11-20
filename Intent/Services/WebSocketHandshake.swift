@@ -1,7 +1,6 @@
 import CryptoKit
 import Foundation
 
-/// A server's opening handshake failed RFC 6455 §4.2.2 / RFC 7692 checks.
 nonisolated enum WebSocketHandshakeError: Error, Equatable, Sendable {
     case invalidAccept
     case invalidExtensions
@@ -11,26 +10,20 @@ nonisolated enum WebSocketHandshakeError: Error, Equatable, Sendable {
     case unexpectedStatus(Int)
 }
 
-/// The HTTP/1.1 upgrade (RFC 6455 §4.1) the client performs over the raw
-/// TLS byte stream, including the permessage-deflate offer and the
-/// validation of the server's answer. Pure; the connection supplies bytes.
 nonisolated enum WebSocketHandshake {
     typealias Header = (name: String, value: String)
     typealias ExtensionParameter = (name: String, value: String?)
 
-    /// The 101 response headers must fit in this many bytes.
     static let maximumResponseHeaderSize = 16_384
     private static let acceptGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
     private static let keyByteCount = 16
     private static let switchingProtocolsStatus = 101
     private static let headerTerminator = Data("\r\n\r\n".utf8)
 
-    /// A parsed HTTP response head.
     struct Response: Sendable {
         let statusCode: Int
         let headers: [Header]
 
-        /// All values of a header, in order, with case-insensitive names.
         func values(_ name: String) -> [String] {
             headers.filter { $0.name.caseInsensitiveCompare(name) == .orderedSame }.map(\.value)
         }
@@ -42,14 +35,10 @@ nonisolated enum WebSocketHandshake {
         return Data(bytes).base64EncodedString()
     }
 
-    /// `Sec-WebSocket-Accept` for a key (§4.2.2 step 5.4).
     static func acceptValue(forKey key: String) -> String {
         Data(Insecure.SHA1.hash(data: Data((key + acceptGUID).utf8))).base64EncodedString()
     }
 
-    /// The `Host` header for a ws/wss URL: the authority, with IPv6
-    /// literals bracketed and the port always explicit. The host stays
-    /// percent-encoded so an IPv6 zone ID is sent as `%25` (RFC 6874).
     static func hostHeaderValue(for url: URL) -> String {
         let host = url.host(percentEncoded: true) ?? ""
         let bracketed = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
@@ -72,9 +61,6 @@ nonisolated enum WebSocketHandshake {
         return Data((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8)
     }
 
-    /// Parses the response head once it is fully buffered. Returns nil while
-    /// more bytes are needed; `headerSize` counts the bytes consumed, so any
-    /// remainder is the first WebSocket frame data.
     static func parseResponse(_ buffer: Data) throws -> (response: Response, headerSize: Int)? {
         guard let terminator = buffer.range(of: headerTerminator) else {
             guard buffer.count <= maximumResponseHeaderSize else { throw WebSocketHandshakeError.responseTooLarge }
@@ -100,9 +86,6 @@ nonisolated enum WebSocketHandshake {
         return (Response(statusCode: status, headers: headers), headerSize)
     }
 
-    /// Checks the 101 response (§4.2.2 / §4.1 client requirements) and
-    /// returns the agreed permessage-deflate parameters, or nil when the
-    /// server did not accept compression.
     static func validate(_ response: Response, key: String, offeredDeflate: Bool) throws -> PerMessageDeflateParameters? {
         guard response.statusCode == switchingProtocolsStatus else {
             throw WebSocketHandshakeError.unexpectedStatus(response.statusCode)
@@ -118,8 +101,6 @@ nonisolated enum WebSocketHandshake {
         }
         let extensions = try parseExtensions(response.values("Sec-WebSocket-Extensions"))
         guard let accepted = extensions.first else { return nil }
-        // Only one extension was offered, so anything else, or more than one
-        // answer, is a server the client must fail (§9.1).
         guard offeredDeflate, extensions.count == 1,
               accepted.name.caseInsensitiveCompare(PerMessageDeflateParameters.extensionName) == .orderedSame else {
             throw WebSocketHandshakeError.invalidExtensions
@@ -131,9 +112,6 @@ nonisolated enum WebSocketHandshake {
         }
     }
 
-    /// Splits `Sec-WebSocket-Extensions` values (RFC 7692 §5 grammar):
-    /// comma-separated extensions, each `name; param[=value]; ...`, values
-    /// optionally quoted.
     static func parseExtensions(_ values: [String]) throws -> [(name: String, parameters: [ExtensionParameter])] {
         try values
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }

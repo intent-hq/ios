@@ -1,10 +1,6 @@
 import SwiftUI
 import Textual
 
-/// A chat line that is only one link, drawn as a full-width row at least
-/// 44 pt tall so a tap anywhere on it opens the link, not just on the glyphs.
-/// Opens through the environment's `openURL`, the same route as inline links.
-/// Title and icons inherit the surrounding text color, like inline links (#904).
 struct StandaloneLinkRowView: View {
     let row: StandaloneLinkRow
     @Environment(\.openURL) private var openURL
@@ -15,9 +11,6 @@ struct StandaloneLinkRowView: View {
         static let minimumHeight: CGFloat = 44
         static let spacing: CGFloat = 8
         static let verticalPadding: CGFloat = 6
-        /// Spacing collapses to the larger neighbor value: rows stay close
-        /// together, and the row's own padding plus this matches the gap
-        /// before a following paragraph to the paragraph spacing.
         static let bottomBlockSpacing: CGFloat = 6
         static let iconOpacity = 0.75
         static let pressedOpacity = 0.08
@@ -26,8 +19,6 @@ struct StandaloneLinkRowView: View {
     }
 
     var body: some View {
-        // Overflow excludes the row from Textual's selection overlay, which
-        // would otherwise take every tap and open only the glyph run.
         Overflow { overflow in
             button
                 .frame(width: overflow.containerWidth)

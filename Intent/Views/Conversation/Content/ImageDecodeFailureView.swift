@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Decode-failure fallback shared by inline images and attachment thumbnails.
 struct ImageDecodeFailureView: View {
     @Environment(\.colorScheme) var colorScheme
     @ScaledMetric(relativeTo: .caption) private var iconSide: CGFloat = 12

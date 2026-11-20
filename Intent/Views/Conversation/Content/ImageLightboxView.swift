@@ -1,14 +1,7 @@
 import SwiftUI
 
-/// Fullscreen image viewer with pinch-to-zoom, drag-to-pan while zoomed,
-/// double-tap zoom toggle, and dismissal via the close button, a backdrop
-/// tap, or a swipe-down while unzoomed (FE parity: ImageLightbox.svelte).
-/// An ellipsis menu next to the close button offers Save/Copy plus the
-/// image's dimensions and file size.
 struct ImageLightboxView: View {
     let image: UIImage
-    /// Original encoded bytes when known (base64 image blocks) so the
-    /// info rows show the real file size.
     var data: Data?
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .body) private var actionIconSide: CGFloat = 17
@@ -197,7 +190,6 @@ struct ImageLightboxView: View {
                 if scale > Self.minScale {
                     dragTranslation = value.translation
                 } else {
-                    // Unzoomed: vertical pull tracks the finger as dismissal feedback.
                     dragTranslation = CGSize(width: 0, height: max(0, value.translation.height))
                 }
             }
@@ -221,8 +213,6 @@ struct ImageLightboxView: View {
             }
     }
 
-    /// Keep the zoomed image edge-locked to the viewport: no panning past the
-    /// fitted image's scaled bounds, and no panning at all while unzoomed.
     private func clampedOffset(_ proposed: CGSize, in container: CGSize) -> CGSize {
         guard scale > Self.minScale, image.size.width > 0, image.size.height > 0,
               container.width > 0, container.height > 0 else { return .zero }

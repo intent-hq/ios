@@ -2,9 +2,6 @@ import Combine
 import Foundation
 
 extension CreationOptionsStore {
-    /// These local leases never register a daemon feed. The single session
-    /// listener also invalidates idle caches, so a later view can reuse only
-    /// data that has not changed while it was away.
     func retainSpecialists(consumer: UUID) {
         guard isActive else { return }
         observeSession()
@@ -79,11 +76,6 @@ extension CreationOptionsStore {
             guard ready != observedFeedReady else { return }
             observedFeedReady = ready
             guard ready else { return }
-            // Reads before this ACK cannot cover changes missed while the
-            // feed was unavailable. Bump catalog revisions so even a late
-            // pre-ACK response must reconcile before becoming fresh again.
-            // Idle caches only expire; the initial already-ready replay and
-            // repeated readiness never add reads or provider discovery.
             let refresh = connectionManager.connectionState == .connected
             specialistCatalog.invalidate(refresh: refresh)
             defaultModelProviderCatalog.invalidate(refresh: refresh)
@@ -108,8 +100,6 @@ extension CreationOptionsStore {
         let canRefresh = connectionManager.connectionState == .connected
         switch event["type"] as? String {
         case "specialists:changed":
-            // specialist.list currently has no workspace parameter. Any
-            // workspace's specialist change expires this backend's roster.
             specialistCatalog.invalidate(refresh: canRefresh)
         case "settings:changed":
             guard let data = event["data"] as? [String: Any],

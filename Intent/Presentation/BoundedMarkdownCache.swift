@@ -6,12 +6,8 @@ private enum MarkdownCacheLimits {
     static let traceSampleStride = 64
 }
 
-/// A synchronous LRU with hard entry and accounted-cost limits, including source keys.
-/// Oversized values are returned without displacing the reusable working set.
 @MainActor
 final class BoundedMarkdownCache<Value> {
-    // String equality folds canonically equivalent Unicode. Markdown code and URLs
-    // must retain their exact spelling, so equality and hashing use all UTF-8 bytes.
     nonisolated private struct CacheKey: Hashable {
         let source: Data
         let version: Int
@@ -77,7 +73,6 @@ final class BoundedMarkdownCache<Value> {
             return entry.value
         }
 
-        // Failures propagate and are never retained as empty successful parses.
         let value = try createValue(create, tracing: tracing, sampled: sampled, sourceBytes: key.source.count)
         let valueCost = cost(value)
         outcome = .bypassed

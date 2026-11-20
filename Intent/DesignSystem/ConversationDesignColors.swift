@@ -1,8 +1,6 @@
 import SwiftUI
 
 extension Constants.Conversation.Design {
-    /// Conversation-only palette. Reuses the already-shipping neutral/yellow Figma colors
-    /// from Pairing and Theme's white surface without changing either existing palette.
     enum Palette {
         private static let secondaryOpacity: Double = 0.6
         private static let subtitleOpacity: Double = 0.5
@@ -10,9 +8,6 @@ extension Constants.Conversation.Design {
         private static let increasedForegroundOpacity: Double = 0.9
         private static let increasedBorderOpacity: Double = 0.55
 
-        // Exact sRGB values from full-frame modes 3020:36994 / 3016:35726,
-        // answer cards 3223:18416 / 3223:19376 and blockers 3198:12684 / 3198:11702.
-        // Exact 8-bit palette channels and alpha retain direct comparison with those design exports.
         private static let lightSecondary = Color(sRGBHex: Constants.DesignPalette.darkGrey)
         private static let darkRaisedSurface = Color(sRGBHex: Constants.DesignPalette.charcoalGrey)
         private static let blocker = Color(sRGBHex: Constants.DesignPalette.blockerOrange)
@@ -27,12 +22,10 @@ extension Constants.Conversation.Design {
             scheme == .dark ? Constants.Pairing.background(for: scheme) : Theme.background(for: scheme)
         }
 
-        /// User bubbles, composer, monitoring strip and question shell.
         static func surface(for scheme: ColorScheme) -> Color {
             scheme == .dark ? Constants.Pairing.surface(for: scheme) : Constants.Pairing.background(for: scheme)
         }
 
-        /// Selected answers and secondary question actions sit above the shell.
         static func raisedSurface(for scheme: ColorScheme) -> Color {
             scheme == .dark ? darkRaisedSurface : Theme.card(for: scheme)
         }

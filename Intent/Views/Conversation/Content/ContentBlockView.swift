@@ -1,24 +1,12 @@
 import SwiftUI
 
-/// One rendered block of an assistant message. A thin shell over
-/// `ContentBlockBody`: the message hands every block fresh closures on each
-/// evaluation, so the block body is gated by `.equatable()` and only
-/// re-renders when its own block, paired tool result, workspace, or
-/// hydration flag changed — not when a streaming delta lands on a sibling.
 struct ContentBlockView: View {
     let block: ContentBlock
-    /// The `tool_result` paired with a `tool_use` block, pre-paired once per
-    /// message by `AssistantMessageView`; nil for every other block type.
     var toolResult: ContentBlock?
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
-    /// True while this block (or its paired result) has an
-    /// agent.getMessageBlock hydration fetch in flight (slim projection,
-    /// PROTOCOL §5.5).
     var isHydrating = false
     var onLayoutChange: (() -> Void)?
-    /// Fetch the full body of a slim-truncated block by id; absent → no
-    /// hydration (bounded previews stay).
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
     var body: some View {
@@ -34,42 +22,29 @@ struct ContentBlockView: View {
         .equatable()
     }
 
-    /// Decode an image block's base64 payload bytes; nil when absent or
-    /// not valid base64.
     static func decodeImageData(_ block: ContentBlock) -> Data? {
         block.data.flatMap { Data(base64Encoded: $0) }
     }
 
-    /// Decode an image block's base64 payload; nil on any decode failure.
     static func decodeImage(_ block: ContentBlock) -> UIImage? {
         decodeImageData(block).flatMap { UIImage(data: $0) }
     }
 
-    /// Also shared by MessageView's whole-message copy so the copied text
-    /// matches the rendered text (suggested-prompts blocks, HTML comments,
-    /// `<agent_digest>` and supervisor tags all removed).
     static func stripSuggestedPrompts(_ text: String) -> String {
-        // Only well-formed suggested-prompts blocks are removed; body text
-        // that merely looks like one is left intact (see `SuggestedPrompts`).
         var result = SuggestedPrompts.stripBlocks(from: text)
 
-        // Strip all other HTML comments. Suggested-prompts openers (which end
-        // their line) are excluded so a malformed one cannot lazily capture body
-        // text up to an embedded `-->` (e.g. a Mermaid edge).
         result = result.replacingOccurrences(
             of: "<!--(?![ \\t]*suggested-prompts[ \\t]*(\\r?\\n|$))[\\s\\S]*?-->",
             with: "",
             options: .regularExpression
         )
 
-        // Strip agent_digest tags
         result = result.replacingOccurrences(
             of: "<agent_digest>[\\s\\S]*?</agent_digest>",
             with: "",
             options: .regularExpression
         )
 
-        // Strip supervisor tags
         result = result.replacingOccurrences(
             of: "<supervisor>[\\s\\S]*?</supervisor>",
             with: "",
@@ -80,7 +55,6 @@ struct ContentBlockView: View {
     }
 }
 
-/// The value-compared block body behind `ContentBlockView`.
 struct ContentBlockBody: View, Equatable {
     let block: ContentBlock
     let toolResult: ContentBlock?
@@ -105,12 +79,8 @@ struct ContentBlockBody: View, Equatable {
     @State private var textLink: TextLinkPreviewView.Link?
     @State private var htmlLink: HTMLLinkPreviewView.Link?
     @State private var unopenableLink: UnopenableLink?
-    /// Set when a thumbnail tap started hydration: the lightbox then opens
-    /// automatically once the full block merges in (dataTruncated clears).
     @State private var lightboxPendingHydration = false
 
-    /// Manual `==`: closures are excluded on purpose — the message builds
-    /// new ones per evaluation, and they only capture stable identifiers.
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.block == rhs.block
             && lhs.toolResult == rhs.toolResult
@@ -160,8 +130,6 @@ struct ContentBlockBody: View, Equatable {
                 onLayoutChange: onLayoutChange,
                 onHydrate: onHydrateBlock.map { hydrate in
                     {
-                        // Hydrate whichever side of the row was truncated
-                        // (input and output are separate persisted blocks).
                         if block.inputTruncation.isTruncated { hydrate(block.id) }
                         if let toolResult, toolResult.outputTruncation.isTruncated { hydrate(toolResult.id) }
                     }
@@ -169,7 +137,6 @@ struct ContentBlockBody: View, Equatable {
             )
 
         case .toolResult:
-            // Rendered as part of ToolCallView via pairing; skip standalone
             EmptyView()
 
         case .thinking:
@@ -182,7 +149,6 @@ struct ContentBlockBody: View, Equatable {
             fileView
 
         case .resource:
-            // Action proposals render inline; question resources remain wizard-only.
             if let proposal = ActionProposal.parse(block) {
                 ProposalCardView(proposal: proposal)
             }
@@ -230,7 +196,6 @@ struct ContentBlockBody: View, Equatable {
         case .unopenable(let reason):
             unopenableLink = UnopenableLink(url: url, reason: reason)
         case .system:
-            // Defer to the inherited handler, which opens tracked pull requests in the app.
             openURL(url)
         }
         return .handled
@@ -278,9 +243,6 @@ struct ContentBlockBody: View, Equatable {
         )
     }
 
-    /// A slim-truncated image asks for the original on tap (PROTOCOL §5.5);
-    /// the lightbox opens once hydration swaps the full block in (the
-    /// truncation flag then disappears from the merged block).
     private var imageNeedsHydration: Bool {
         block.dataTruncation.isTruncated && onHydrateBlock != nil
     }
@@ -288,16 +250,12 @@ struct ContentBlockBody: View, Equatable {
     @ViewBuilder
     private var imageView: some View {
         if block.data == nil, !block.dataTruncation.isTruncated, let attachmentId = block.attachmentId {
-            // Attachment-reference block (PROTOCOL §5.5): no inline bytes —
-            // resolve the registry row and fetch via file.readChunk.
             AttachmentReferenceImageView(
                 workspaceId: workspaceId,
                 attachmentId: attachmentId,
                 style: .inline
             )
         } else if let uiImage = ContentBlockView.decodeImage(block) {
-            // Full image, or the write-time thumbnail served by the slim
-            // projection (dataIsThumbnail) — tapping a thumbnail hydrates.
             let imageData = ContentBlockView.decodeImageData(block)
             Button {
                 if imageNeedsHydration {
@@ -317,11 +275,6 @@ struct ContentBlockBody: View, Equatable {
             .buttonStyle(IntentContentButtonStyle())
             .accessibilityLabel(imageNeedsHydration ? "Load attached image" : "Attached image")
             .contextMenu {
-                // A slim-truncated block only carries the low-res preview
-                // thumbnail — Save/Copy here would export it as if it were
-                // the full image (and the info rows would describe the
-                // preview). Suppress the menu; tapping hydrates the full
-                // block, whose lightbox ellipsis menu offers the actions.
                 if !block.dataTruncation.isTruncated {
                     ImageActionMenuItems(image: uiImage, originalData: imageData)
                 }
@@ -332,8 +285,6 @@ struct ContentBlockBody: View, Equatable {
                     .coversConversationComposers()
             }
             .onChange(of: block.dataTruncation) { _, truncation in
-                // Hydration merged the full block in (the truncation flag
-                // cleared): open the lightbox the tap asked for.
                 if !truncation.isTruncated, lightboxPendingHydration {
                     lightboxPendingHydration = false
                     composerFocus?.wrappedValue = false
@@ -341,15 +292,11 @@ struct ContentBlockBody: View, Equatable {
                 }
             }
             .onChange(of: isHydrating) { _, hydrating in
-                // Fetch settled without clearing the flag (failure): drop the
-                // pending open so a later unrelated merge can't surprise-open.
                 if !hydrating, block.dataTruncation.isTruncated {
                     lightboxPendingHydration = false
                 }
             }
         } else if block.dataTruncation.isTruncated {
-            // Slim row with no persisted thumbnail (legacy rows, failed
-            // generation): placeholder chip with the same on-demand fetch.
             Button {
                 onHydrateBlock?(block.id)
             } label: {
@@ -405,14 +352,10 @@ extension ContentBlockBody {
         case text(TextLinkPreviewView.Link)
         case html(HTMLLinkPreviewView.Link)
         case note(id: String, workspaceId: String)
-        /// iOS can't open the link; the row explains why instead of ignoring the tap.
         case unopenable(UnopenableLink.Reason)
         case system
     }
 
-    /// Shared by ordinary transcript markdown and the chief workspace's linked text.
-    /// Workspace file links open in the matching viewer whether they are written as
-    /// `intent://local/file/…` links or as paths (`report.html`, `/…/report.html`, `file://…`).
     static func textURLRoute(for url: URL, workspaceId: String) -> TextURLRoute {
         if let link = IntentFileLink.parse(url) ?? IntentFileLink.parsePath(url) {
             let target = link.workspaceId ?? workspaceId

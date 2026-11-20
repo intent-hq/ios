@@ -5,7 +5,6 @@ private enum WorkspaceComposerMetrics {
     static let disabledOpacity: Double = 0.4
 }
 
-/// Workspace-only presentation; the owner retains draft, attachment and send behavior.
 struct WorkspaceComposerRow: View {
     @Binding var text: String
     @Binding var isFocused: Bool
@@ -48,15 +47,12 @@ struct WorkspaceComposerRow: View {
         .background(WorkspaceComposerSurface(text: text, hasAttachments: hasAttachments, isStreaming: isStreaming))
     }
 
-    // UITextView's existing container inset and default line-fragment padding
-    // already contribute to the reference's 20pt text inset.
     private var editorInset: CGFloat {
         Constants.Conversation.Composer.textContainerInset + WorkspaceComposerMetrics.lineFragmentPadding
     }
     private var controlInset: CGFloat { (Design.minimumTapTarget - Design.iconSize) / 2 }
 }
 
-/// Shared shape for the composer row and any pending attachment rows above it.
 struct WorkspaceComposerSurface: View {
     let text: String
     let hasAttachments: Bool

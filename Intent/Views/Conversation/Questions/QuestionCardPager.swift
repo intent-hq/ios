@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Only the selected card stays mounted. SwiftUI retains the departing card for
-/// its transition, then removes its controls from the accessibility tree.
 struct QuestionCardPager<Page: View>: View {
     let count: Int
     let index: Int
@@ -50,9 +48,6 @@ private struct QuestionCardIndex: LayoutValueKey {
     nonisolated static let defaultValue = 0
 }
 
-/// Each page gets the full width and its own natural height. Only the selected
-/// page determines the container height; SwiftUI interpolates both the height and
-/// placements together, rather than holding a departing ZStack's taller height.
 private struct QuestionCardLayout: Layout {
     let index: Int
 

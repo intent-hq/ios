@@ -54,7 +54,6 @@ struct WorkspaceDiffLoader {
         if let file = files.first(where: { $0.file == path }) {
             return (file.oldContent, file.newContent)
         }
-        // A root commit has no parent; its files are additions against the empty tree.
         return ("", try await content(path: path, ref: hash))
     }
 

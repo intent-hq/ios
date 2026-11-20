@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Keep the same editor and first responder when showing or hiding the token.
 struct ManualTokenTextField: UIViewRepresentable {
     @Binding var text: String
     let isSecure: Bool
@@ -48,8 +47,6 @@ struct ManualTokenTextField: UIViewRepresentable {
         field.isEnabled = isEnabled
         if field.isSecureTextEntry != isSecure { updateSecureEntry(field) }
         if field.text != text { field.text = text }
-        // UIKit owns tap focus. A SwiftUI FocusState with no registered token
-        // target can reset to nil and immediately undo becomeFirstResponder.
         if !isEnabled, field.isFirstResponder {
             field.resignFirstResponder()
         }
@@ -69,8 +66,6 @@ struct ManualTokenTextField: UIViewRepresentable {
         let draft = field.text ?? ""
         field.isSecureTextEntry = isSecure
         if field.isFirstResponder {
-            // Refresh secure-entry storage so the next keystroke appends instead
-            // of replacing the existing draft. Keep the keyboard and selection.
             field.text = ""
             field.insertText(draft)
         } else {

@@ -29,7 +29,6 @@ final class WorkspaceTitleEditor {
         draft = ""
     }
 
-    /// While the Mac connection is read-only the draft is kept and nothing is sent.
     func save(connection: ConnectionManagerRouting, store: WorkspaceStore, isReadOnly: Bool = false) async {
         guard let workspaceId, !isSaving, !isReadOnly else { return }
         let title = draft.trimmingCharacters(in: .whitespacesAndNewlines)

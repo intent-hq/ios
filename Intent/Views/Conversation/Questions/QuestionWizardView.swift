@@ -1,13 +1,9 @@
 import SwiftUI
 
-/// Sequential Agent Q&A wizard rendered in the composer slot or floating panel. The host
-/// remounts it whenever a different question set pends.
 struct QuestionWizardView: View {
     let questions: [Question]
     @Binding var collapsed: Bool
     let containerHeight: CGFloat
-    /// Opt in only for the floating workspace panel. Supply its keyboard-safe
-    /// available height; nil keeps the shared composer-slot behavior.
     let workspaceAvailableHeight: CGFloat?
     let attachments: ConversationAttachmentPipeline
     let workspaceId: String
@@ -78,10 +74,6 @@ struct QuestionWizardView: View {
         (workspaceAvailableHeight != nil || isMulti || isLast) && drafts[idx].sel.isEmpty && !hasFreeText
     }
 
-    /// Whether the footer Next/Send button is visible. Free text on a
-    /// single-select step has no advancing option tap, and Return inserts a
-    /// newline where ComposerSubmitPolicy says so (iPhone), so the button is
-    /// the submit path there.
     static func showsNext(isMulti: Bool, isLast: Bool, hasFreeText: Bool) -> Bool {
         isMulti || isLast || hasFreeText
     }
@@ -276,7 +268,6 @@ struct QuestionWizardView: View {
 
     private func advance() {
         if idx >= questions.count - 1 {
-            // Answers wait in the drafts until the Mac is back.
             guard !submitted, !wizardPresentation.isDismissed, !isRemoteReadOnly else { return }
             onComplete(buildAnswers())
             return

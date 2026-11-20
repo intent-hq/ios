@@ -1,8 +1,5 @@
 import UIKit
 
-/// Demo-only accessibility diagnostics, sampled when XCTest queries the value.
-/// UIKit interaction flags are not Observation dependencies: caching them in a
-/// SwiftUI body can leave an active report after deceleration has ended.
 final class TranscriptGestureAccessibilityView: UIView {
     weak var scrollState: ConversationTranscriptScrollState?
 

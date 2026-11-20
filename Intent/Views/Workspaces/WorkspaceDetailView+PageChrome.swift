@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// The standalone page's navigation chrome and the actions menu it shares with the sidebar copy.
 extension WorkspaceDetailView {
     var pageContent: some View {
         presentedContent
@@ -14,8 +13,6 @@ extension WorkspaceDetailView {
         .toolbarBackground(WorkspaceDetailStyle.background(for: colorScheme), for: .navigationBar)
         #endif
         .toolbar {
-            // In the Duo shell the rail carries these actions, as for conversations; a system
-            // vertical toolbar would add an opaque navigation bar over the top of the pane.
             if usesVerticalBar, !coordinator.usesIPadShell {
                 WorkspaceVerticalNavigationToolbar(
                     isEnabled: true,
@@ -26,7 +23,6 @@ extension WorkspaceDetailView {
                 ) { workspaceActions }
             } else if !usesVerticalBar {
                 #if os(visionOS)
-                // The workspace picker lives in the top toolbar on visionOS.
                 ToolbarItem(placement: .topBarTrailing) { WorkspaceDetailToolbarPicker(selection: tabSelection) }
                 #else
                 if showsBackButton {
@@ -63,8 +59,6 @@ extension WorkspaceDetailView {
         }
     }
 
-    /// Owners (and host members, who manage every workspace) can share while
-    /// connected; the host still refuses anyone it doesn't allow.
     private var canShare: Bool {
         session.connection.connectionState == .connected
             && session.connection.currentPrincipal?.canManageWorkspaces == true

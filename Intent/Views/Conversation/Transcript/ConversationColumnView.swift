@@ -10,14 +10,11 @@ struct ConversationColumnView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationPresentation) private var presentation
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
-    /// Room a floating Intent launcher needs over this chat (0 when none).
-    @Environment(\.workspaceActionLauncherClearance) private var launcherClearance
     @State private var questionWizardCollapsed = false
     @State private var submittingQuestions: PendingQuestionSet?
     @State private var conversationHeight: CGFloat = 0
     @State private var questionInputTop: CGFloat?
     @State private var composerInputTop: CGFloat?
-    /// Top of the status rows below the transcript; measured on visionOS only.
     @State private var accessoryRowsTop: CGFloat?
     @State private var composerFocused = false
     @State private var keyboardVisible = false
@@ -27,8 +24,6 @@ struct ConversationColumnView: View {
     private typealias Design = Constants.Conversation.Design
 
     #if os(visionOS)
-    // visionOS presents structured questions as a deliberate sheet instead
-    // of the inline composer-slot wizard; the inline slot shows an opener.
     @State private var questionSheetPresented = false
     #endif
 
@@ -38,7 +33,6 @@ struct ConversationColumnView: View {
         .environment(\.conversationComposerFocus, $composerFocused)
         .modifier(QuestionAttachmentLifecycle(viewModel: viewModel))
         .modifier(IPadTypingFocus(isFocused: $composerFocused, composerVisible: composerVisible))
-        // Measure inside keyboard avoidance so the cap uses the remaining visible height.
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { conversationHeight = $0 }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             keyboardVisible = true
@@ -50,8 +44,6 @@ struct ConversationColumnView: View {
             AppLog.userInterface.debug("[SCROLL][QUESTION] pending changed present=\(newId != nil) keyboardVisible=\(keyboardVisible) columnHeight=\(conversationHeight)")
             questionWizardCollapsed = false
             #if os(visionOS)
-            // Auto-present on a new question set; close when the set clears
-            // (answered/dismissed elsewhere, or superseded).
             if submittingQuestions == nil { questionSheetPresented = newId != nil }
             #endif
         }
@@ -64,7 +56,6 @@ struct ConversationColumnView: View {
         .onAppear {
             questionSheetPresented = viewModel.pendingQuestions != nil
         }
-        // The one composer for this chat floats below the window.
         .modifier(FloatingComposerOrnament(
             showsLoadingState: viewModel.showsLoadingState,
             composerVisible: composerVisible,
@@ -125,16 +116,18 @@ struct ConversationColumnView: View {
                     viewModel: viewModel,
                     scrollState: transcriptScrollState,
                     onNavigateToNote: onNavigateToNote,
-                    onNavigateToAgent: onNavigateToAgent,
-                    bottomClearance: FloatingComposerPolicy.transcriptBottomClearance(host: composerHost, launcherClearance: launcherClearance)
+                    onNavigateToAgent: onNavigateToAgent
                 )
                 .environment(\.workspaceTranscriptDesign, usesWorkspaceDesign)
                 .overlay(alignment: .top) {
+                    #if os(visionOS)
+                    ConversationHeaderBackdrop()
+                    #else
                     if usesWorkspaceDesign { WorkspaceHeaderFade() }
+                    #endif
                 }
             }
         }
-        // The conditional views use SwiftUI's default opacity transition.
         .animation(.easeInOut(duration: Layout.Loading.fadeDuration), value: viewModel.showsLoadingState)
         measuredAccessoryRows
 
@@ -152,7 +145,6 @@ struct ConversationColumnView: View {
                 )
             )
             .layoutPriority(usesPhoneQuestionPresentation ? 1 : 0)
-        // A floating host presents the composer from an ornament instead.
         if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
                 if usesWorkspaceDesign, viewModel.showsWorkspaceStatusPills {
@@ -187,8 +179,6 @@ struct ConversationColumnView: View {
     private var questionRegion: some View {
         if let pendingSet = viewModel.pendingQuestions ?? submittingQuestions {
             #if os(visionOS)
-            // Deliberate sheet presentation on visionOS: the inline slot is
-            // only the opener banner; the wizard itself lives in the sheet.
             QuestionWizardCollapsedBanner(
                 questionCount: pendingSet.questions.count,
                 showsDismiss: false,
@@ -241,23 +231,11 @@ struct ConversationColumnView: View {
             #endif
         }
 
-        // Fail closed while the marked question row is being recovered from
-        // outside the loaded page: no composer until the wizard can render
-        // or the daemon clears/replaces the marker (FE parity: ChatPanel's
-        // `pendingQuestionRecoveryLoading`). Collapse still reveals the
-        // composer, as with a rendered wizard.
         if viewModel.isPendingQuestionRecoveryLoading, !questionWizardCollapsed {
             PendingQuestionRecoveryPlaceholder()
         }
     }
 
-    /// On visionOS the wizard is a sheet, so the composer stays available
-    /// under the opener banner and hides only during marker recovery. A
-    /// `pendingQuestions != nil` check would be redundant: a derived set means
-    /// the marked row is resident or recovered, so it implies
-    /// `isPendingQuestionRecoveryLoading` is false (invariant pinned by
-    /// PendingQuestionRecoveryExclusivityTests). Elsewhere pending questions
-    /// occupy the composer slot until collapsed.
     private var composerVisible: Bool {
         #if os(visionOS)
         return !viewModel.isPendingQuestionRecoveryLoading || questionWizardCollapsed
@@ -354,7 +332,6 @@ extension ConversationColumnView {
         hasAccessoryRows ? accessoryRowsTop : nil
     }
 
-    /// The status rows; on visionOS their top keeps the launcher above them.
     private var measuredAccessoryRows: some View {
         VStack(spacing: 0) {
             accessoryRows
@@ -369,7 +346,6 @@ extension ConversationColumnView {
     private var accessoryRows: some View {
         if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
 
-        // Keep watch details mounted outside the composer and question slot.
         MonitoredScriptsRow(viewModel: viewModel, showsRow: !usesWorkspaceDesign)
         if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
@@ -411,8 +387,6 @@ extension ConversationColumnView {
             Divider()
         }
 
-        // The inline iPad wizard occupies the composer slot. Keep monitoring and
-        // queued-message actions reachable while that slot is answering questions.
         if presentation == .iPad, !composerVisible, !viewModel.showsLoadingState {
             if viewModel.showsWorkspaceStatusPills {
                 WorkspaceStatusPillsRow(viewModel: viewModel)
@@ -463,7 +437,6 @@ private struct ConversationConnectionLoadingView: View {
     }
 }
 
-/// Owned by the screen outside its top safe-area inset, not by the transcript slot.
 struct ConversationBackground: View {
     let isLoading: Bool
     let usesWorkspaceDesign: Bool
@@ -475,6 +448,36 @@ struct ConversationBackground: View {
             .ignoresSafeArea()
     }
 }
+
+#if os(visionOS)
+private struct ConversationHeaderBackdrop: View {
+    private static let fadeHeight: CGFloat = 24
+    @State private var barHeight: CGFloat = 0
+
+    var body: some View {
+        let height = barHeight + Self.fadeHeight
+        Rectangle()
+            .fill(.regularMaterial)
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: barHeight / height),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .frame(height: height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { barHeight = $0 }
+            .ignoresSafeArea(.container, edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}
+#endif
 
 private struct PendingQuestionRecoveryPlaceholder: View {
     @Environment(\.colorScheme) private var colorScheme

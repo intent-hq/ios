@@ -3,13 +3,9 @@ import Foundation
 import Observation
 import Synchronization
 
-/// Only an agent.get response creates detail knowledge. Summary/list rows must
-/// not seed this store: they omit fields such as pending proposal receipts.
 @MainActor
 final class AgentDetail {
     let values: [String: Any]
-    /// Start order of the successful shared RPC that last supplied each marker.
-    /// Patches preserve this provenance; joining callers must not replace it.
     let markerReadSequences: [String: Int]
     var metadata: [String: Any] { values["metadata"] as? [String: Any] ?? [:] }
 
@@ -19,7 +15,6 @@ final class AgentDetail {
     }
 
     func validate(agentId: String, workspaceId: String?) throws {
-        // Validate supplied identity before publishing or reusing a detail.
         if let id = values["id"] as? String, id != agentId { throw AgentDetailError.identityMismatch }
         if let workspaceId, let returned = values["workspaceId"] as? String, returned != workspaceId {
             throw AgentDetailError.identityMismatch
@@ -34,17 +29,11 @@ enum AgentDetailError: LocalizedError {
     var errorDescription: String? { "The server returned an incomplete agent response. Please retry." }
 }
 
-/// One instance belongs to one BackendSession/connection. Loads coalesce and
-/// remain reusable after completion, including route validation and late cards.
-/// Consumers retain for an activation; the last release expires its freshness.
-/// Explicit refreshes bypass a completed cache and revalidate an older flight
-/// through its coalesced trailing read (proposal mutations use this path).
 @MainActor @Observable
 final class AgentDetailStore {
     let summaries = AgentSummaryStore()
     @ObservationIgnored private let requestLimiter = AgentDetailRequestLimiter()
-    /// Cancellation can arrive off-actor while the shared request is suspended.
-    /// Record it synchronously so a late reply cannot start work for a dead caller.
+
     nonisolated private final class LoadInterest: Sendable {
         let activation: Int?
         private let cancelled = Mutex(false)
@@ -109,8 +98,6 @@ final class AgentDetailStore {
     private(set) var connectionEpoch = 0
     @ObservationIgnored private var stateSequence = 0
 
-    /// One backend-local order for actual read starts and notification receipt.
-    /// It survives resets so an old reply can never acquire a newer boundary.
     func nextStateSequence() -> Int {
         stateSequence &+= 1
         return stateSequence
@@ -197,9 +184,6 @@ final class AgentDetailStore {
         return detail
     }
 
-    /// Repeated invalidations during a read request at most one trailing read.
-    /// More changes during that trailing read leave the entry stale for the next
-    /// consumer, instead of keeping an unbounded reconciliation loop alive.
     func invalidate(agentId: String) {
         guard let entry = entries[agentId] else { return }
         entry.fresh = false
@@ -250,9 +234,6 @@ final class AgentDetailStore {
                 let revision = entry.revision
                 let sequence = nextStateSequence()
                 let summaryBoundary = summaries.beginRead()
-                // Once sent, caller cancellation retires this generation without
-                // cancelling the transport callback. Its slot lasts until the
-                // reply, timeout or disconnect, even if no caller remains.
                 entry.sentRequestID = requestID
                 let response = try await connection.request("agent.get", params: ["agentId": agentId])
                 try Task.checkCancellation()
@@ -282,8 +263,6 @@ final class AgentDetailStore {
         }
     }
 
-    /// A queued read is cancellable; a sent one owns a real transport operation.
-    /// Retiring either detaches its generation so an obsolete reply cannot publish.
     private func retireRead(in entry: Entry) {
         if entry.sentRequestID != entry.requestID { entry.task?.cancel() }
         entry.task = nil
@@ -294,8 +273,6 @@ final class AgentDetailStore {
 
     private func hasInterest(in entry: Entry) -> Bool {
         if !entry.consumers.isEmpty { return true }
-        // Public loads (route validation, explicit refresh) do not need a lease.
-        // Event reconciliation belongs only to the activation that requested it.
         return entry.interests.values.contains { !$0.isCancelled && $0.activation == nil }
     }
 }
@@ -311,7 +288,6 @@ extension AgentDetailStore {
             if metadata[field] is String {
                 if workspace?.isEmpty == false { boundaries[field] = sequence }
             } else {
-                // Omission/null cannot erase a known marker. Explicit "" can.
                 metadata[field] = previous?.metadata[field] as? String
             }
         }

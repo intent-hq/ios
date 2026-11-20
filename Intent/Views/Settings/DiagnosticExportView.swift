@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// No backend/session environment dependency: every entry point works offline.
 struct DiagnosticExportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase

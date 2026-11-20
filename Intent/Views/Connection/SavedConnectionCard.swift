@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Shared card label; selection and management remain owned by each presenting screen.
 struct SavedConnectionCard: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
@@ -32,7 +31,6 @@ struct SavedConnectionCard: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Constants.Connections.infoSpacing))
             : AnyLayout(HStackLayout(alignment: .top, spacing: Constants.ConnectionSheet.inset))
         layout {
-            // The laptop icon matches Figma for all saved connections.
             Image(.connectionLaptop)
                 .renderingMode(.template)
                 .resizable()

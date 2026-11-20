@@ -1,8 +1,6 @@
 import SwiftUI
 
 extension Constants.Connections {
-    // Saved frame 3051:54118. The shared sheet replaces this two-card estimate
-    // with measured content; neither the row count nor text height is capped.
     static let initialSheetHeight: CGFloat = 394
     static let headingToCardsSpacing: CGFloat = 56
     static let cardsToPairingSpacing: CGFloat = 24
@@ -14,14 +12,12 @@ extension Constants.Connections {
     static let connectedSpacing: CGFloat = 8
     static let dividerWidth: CGFloat = 1
     static let dividerHeight: CGFloat = 12
-    // Keep Figma's exported 0x26 alpha as an exact 8-bit fraction, not a rounded percentage.
     private static let dividerAlpha: UInt32 = 0x26
     static let dividerOpacity = Constants.EightBitChannel.fraction(dividerAlpha)
     static let headingTracking: CGFloat = -0.56
     static let nameTracking: CGFloat = -0.32
     static let infoTracking: CGFloat = -0.12
 
-    // Exact 8-bit palette channels keep the approved Saved palette directly comparable with the design export.
     private static let lightBackground = Color(sRGBHex: Constants.DesignPalette.paper)
     private static let lightForeground = Color(sRGBHex: Constants.DesignPalette.ink)
     private static let lightMutedForeground = Color(sRGBHex: Constants.DesignPalette.mutedGrey)

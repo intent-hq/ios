@@ -1,26 +1,17 @@
 import Foundation
 import Observation
 
-/// The Share sheet's state for one workspace: create an invite link
-/// (`workspace.invite.create`, protocol §5.48) that anyone can use, or that
-/// one GitHub account can use once, and hand it to the system share sheet.
-/// People only join by opening a link; members and open links are managed
-/// on the Mac.
-/// Invite links are capabilities: shown and shared on request, never logged.
 @MainActor
 @Observable
 final class WorkspaceSharingModel {
     typealias Request = @MainActor (String, [String: Any]) async throws -> Any
 
-    /// A link the host just created.
     struct InviteLink: Equatable {
         let url: URL
         let expiresAt: Date?
-        /// The one account that can use it; nil when anyone can.
         let pinLogin: String?
     }
 
-    /// Who can use the next link.
     enum Audience: Equatable {
         case anyone
         case person
@@ -34,8 +25,6 @@ final class WorkspaceSharingModel {
     }
 
     let workspaceId: String
-    /// Protocol 10.8+ hosts take `pinProvider`; without it a host resolves
-    /// the login on its own identity's forge, which may be GitLab.
     let namesPinProvider: Bool
     private(set) var phase: Phase = .idle
     var audience: Audience = .anyone
@@ -52,8 +41,6 @@ final class WorkspaceSharingModel {
     nonisolated private static let identitySeamMajor = 10
     nonisolated private static let identitySeamMinor = 8
 
-    /// Whether this host takes `pinProvider` / `pinHost` (protocol 10.8+).
-    /// Older hosts only resolve pins on GitHub, so omitting it is the same.
     nonisolated static func namesPinProvider(protocolVersion version: String?) -> Bool {
         let parts = (version ?? "").split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 2, let major = Int(parts[0]), let minor = Int(parts[1]) else { return false }
@@ -70,7 +57,6 @@ final class WorkspaceSharingModel {
         var params: [String: Any] = ["workspaceId": workspaceId]
         if audience == .person {
             params["pinLogin"] = login
-            // The form names a GitHub account; never let the host pick its own forge.
             if namesPinProvider { params["pinProvider"] = "github" }
         }
         phase = .creating
@@ -86,13 +72,11 @@ final class WorkspaceSharingModel {
         }
     }
 
-    /// Trims and drops a leading `@`, so `@octo` and `octo` are one account.
     nonisolated static func normalized(_ login: String) -> String {
         let trimmed = login.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
     }
 
-    /// `{ invite: { expiresAt, pinLogin? }, url }`; only an `intent://` link is shared.
     nonisolated static func inviteLink(from result: [String: Any]) -> InviteLink? {
         guard let text = result["url"] as? String,
               let url = URL(string: text), url.scheme?.lowercased() == "intent" else { return nil }
@@ -103,8 +87,6 @@ final class WorkspaceSharingModel {
 
     nonisolated private static let secondsPerDay: TimeInterval = 86_400
 
-    /// "Expires in 7 days." A link minted a moment ago for a week still reads
-    /// as 7 days, so partial days round up; under a day reads as today.
     nonisolated static func expiryText(_ expiresAt: Date, now: Date = .now) -> String {
         let remaining = expiresAt.timeIntervalSince(now)
         guard remaining > 0 else { return "Expired." }
@@ -120,7 +102,6 @@ final class WorkspaceSharingModel {
     }
 }
 
-/// Plain-language messages for invite failures (documented `error.data.code`s).
 nonisolated enum SharingFailure {
     static let forbiddenCode = -32_003
     static let genericMessage = "Something went wrong. Try again."

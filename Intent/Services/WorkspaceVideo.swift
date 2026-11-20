@@ -2,13 +2,10 @@ import AVFoundation
 import UIKit
 import UniformTypeIdentifiers
 
-/// Immutable, shared ownership keeps the temporary file alive through cache eviction
-/// and full-screen playback. No player is created until the user taps the poster.
 nonisolated final class WorkspaceVideo: Sendable, Hashable {
     let url: URL
     let poster: UIImage
     let byteCount: Int
-    /// A fixed 3× cap covers high-density transcript thumbnails without a screen lookup.
     private static let posterScale: CGFloat = 3
     private static let posterTimescale: CMTimeScale = 600
     private static let posterToleranceSeconds = 0.1
@@ -22,8 +19,6 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
     }
 
     deinit {
-        // Last release may be on MainActor. Independent utility cleanup must
-        // neither inherit the UI executor nor retain the deinitializing owner.
         Task.detached(priority: .utility) { [url] in
             try? FileManager.default.removeItem(at: url)
         }
@@ -36,8 +31,6 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
     static func isVideo(path: String, mimeType: String? = nil) -> Bool {
         if mimeType?.lowercased().hasPrefix("video/") == true { return true }
         let ext = URL(fileURLWithPath: path).pathExtension.lowercased()
-        // UTType maps these to MPEG transport streams; in a workspace they are
-        // TypeScript sources unless the server explicitly reports video (#883).
         if typeScriptExtensions.contains(ext) { return false }
         return ext == "webm" || UTType(filenameExtension: ext)?.conforms(to: .movie) == true
     }
@@ -74,8 +67,6 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
         return try await prepare(fileURL: url, byteCount: data.count)
     }
 
-    /// Takes ownership of a completed temporary download, removing it on failure
-    /// or when the last cache/thumbnail/player owner releases the prepared video.
     @concurrent
     static func prepare(fileURL: URL, byteCount: Int) async throws -> WorkspaceVideo {
         var retained = false
@@ -117,7 +108,6 @@ nonisolated enum WorkspaceFileMedia: Sendable {
     }
 }
 
-/// NSCache's value must be a reference type.
 nonisolated final class WorkspaceFileMediaBox {
     let media: WorkspaceFileMedia
 

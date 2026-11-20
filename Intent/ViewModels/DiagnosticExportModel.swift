@@ -53,8 +53,6 @@ final class DiagnosticExportModel {
         }
     }
 
-    /// Only the confirmed destructive action calls this; it never touches
-    /// saved connections, conversations, or copies already shared elsewhere.
     func clearHistory() {
         guard !isWorking, share == nil else { return }
         start { model in
@@ -83,8 +81,6 @@ final class DiagnosticExportModel {
         if !hasCurrentPreview { refresh() }
     }
 
-    /// SwiftUI owns/cancels this wait. Expiry also gets rechecked by the writer
-    /// at Share time (including expiry during ZIP preparation).
     func refreshWhenExpired() async {
         guard let deadline = preview?.snapshot.expiresAt else { return }
         let delay = max(0, deadline.timeIntervalSince(now()))
@@ -92,7 +88,7 @@ final class DiagnosticExportModel {
             try await Task.sleep(for: .seconds(delay))
             try Task.checkCancellation()
             refreshIfNeeded()
-        } catch { /* View disappeared or a newer preview replaced this one. */ }
+        } catch {}
     }
 
     func waitForWork() async { await work?.value }
@@ -114,7 +110,6 @@ final class DiagnosticExportModel {
                 try Task.checkCancellation()
                 try await operation(self)
             } catch is CancellationError {
-                // Dismissal never opens a late share sheet or shows a failure.
             } catch {
                 notice = "Could not prepare the log preview. Try Refresh."
             }

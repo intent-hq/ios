@@ -3,11 +3,6 @@ import SwiftUI
 import UIKit
 
 #if DEBUG
-/// Laid out by the pane itself so tests do not mistake a virtual accessibility
-/// container's window-sized frame for the visible panel. Enabled only by a
-/// dedicated demo launch argument; it never participates in hit testing.
-/// Only a one-point marker enters the accessibility tree: a pane-sized element
-/// changes XCTest's hit testing of the controls that the test needs to exercise.
 struct DemoIPadPaneGeometry: UIViewRepresentable {
     let identifier: String
 
@@ -51,7 +46,6 @@ struct DemoIPadPaneGeometry: UIViewRepresentable {
         }
     }
 
-    /// Passive diagnostics only: no forced layout, responder changes, or visibility writes.
     private enum NativeReport {
         static func capture(in window: UIWindow, pane: UIView) -> String? {
             let markers = markers(in: window.rootViewController)
@@ -194,7 +188,6 @@ private struct DemoIPadProducerVisibility: View {
     }
 
     private var listPane: some View {
-        // Covered focus keeps the same rendered pane; only inherited visibility changes.
         RetainedIPadPane(isVisible: true, keepsCoveredContentVisible: true) {
             List {
                 Section {
@@ -257,7 +250,6 @@ private struct DemoProducerInspection: UIViewRepresentable {
     }
 }
 
-/// Reads the existing native hierarchy without rewriting its visibility or editor binding.
 private final class DemoProducerInspector: UIView {
     private static let selectionLength = 4
     var phase = DemoProducerPhase.visible

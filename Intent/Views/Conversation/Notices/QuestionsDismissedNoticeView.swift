@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// Centered inline divider chip for daemon-delivered dismissal notification
-/// rows (metadata `{ type: "questions_dismissed", … }`,
-/// `agent.dismissQuestions`). Visually distinct from user/assistant bubbles —
-/// the row informs the model that the user dismissed its pending questions
-/// without answering (FE parity: QuestionsDismissedNotice.svelte).
 struct QuestionsDismissedNoticeView: View {
     let notice: QuestionsDismissedNotice
     @Environment(\.colorScheme) var colorScheme

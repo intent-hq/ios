@@ -1,6 +1,5 @@
 import Foundation
 
-/// Immutable text and shared file ownership keep Share valid after cache eviction.
 nonisolated final class WorkspaceTextFile: Sendable {
     let url: URL
     let content: String
@@ -21,8 +20,6 @@ nonisolated final class WorkspaceTextFile: Sendable {
         }
     }
 
-    /// Download and strict decoding stay off the UI executor. Preserve the name
-    /// in an owned, unique directory so the share sheet exports the original name.
     @concurrent
     static func load(path: String, download: @Sendable (FileHandle) async throws -> Int) async throws -> WorkspaceTextFile {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("chat-text-\(UUID())", isDirectory: true)

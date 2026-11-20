@@ -1,14 +1,9 @@
 import PDFKit
 import UIKit
 
-/// Immutable metadata and thumbnail; PDFKit documents stay confined to the
-/// decoding task or viewer. Shared ownership keeps the downloaded file alive.
 nonisolated final class WorkspacePDF: Sendable, Hashable {
     let url: URL
     let name: String
-    /// The cached bytes under the original document name (ios#803), so the share
-    /// sheet and Save to Files never expose the `chat-pdf-<UUID>` cache name.
-    /// Falls back to `url` when the named copy could not be created.
     let shareURL: URL
     let thumbnail: UIImage
     let pageCount: Int
@@ -44,8 +39,6 @@ nonisolated final class WorkspacePDF: Sendable, Hashable {
         URL(fileURLWithPath: path).pathExtension.lowercased() == "pdf"
     }
 
-    /// A single-component, non-hidden filename ending in `.pdf`; path separators,
-    /// colons and control characters become hyphens.
     static func exportFileName(for name: String) -> String {
         let unsafe = CharacterSet(charactersIn: "/:\\").union(.controlCharacters).union(.newlines)
         var cleaned = String(String.UnicodeScalarView(name.unicodeScalars.map { unsafe.contains($0) ? "-" : $0 }))
@@ -62,14 +55,11 @@ nonisolated final class WorkspacePDF: Sendable, Hashable {
         return base + "." + pathExtension
     }
 
-    /// Sibling of the cache file, removed together with it.
     static func shareDirectory(for url: URL) -> URL {
         url.deletingLastPathComponent()
             .appendingPathComponent(url.deletingPathExtension().lastPathComponent + "-share", isDirectory: true)
     }
 
-    /// Hard-links (or copies) the cache file under its export name; the cache
-    /// file itself keeps its unique name for isolation and cleanup.
     private static func makeShareURL(for url: URL, name: String) -> URL {
         let directory = shareDirectory(for: url)
         let target = directory.appendingPathComponent(exportFileName(for: name), isDirectory: false)
@@ -88,13 +78,9 @@ nonisolated final class WorkspacePDF: Sendable, Hashable {
         }
     }
 
-    /// Use the same bounded validation and empty-password unlock when preparing
-    /// the thumbnail and reopening the file in the viewer. Encryption alone is
-    /// not a reason to reject a PDF; only a still-locked document needs a password.
     static func openDocument(at url: URL) throws -> PDFDocument {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
-        // Data.contains tests one byte, not the full signature sequence.
         // swiftlint:disable:next contains_over_range_nil_comparison
         guard let header = try handle.read(upToCount: headerSearchLength), header.range(of: signature) != nil,
               let document = PDFDocument(url: url) else {
@@ -107,7 +93,6 @@ nonisolated final class WorkspacePDF: Sendable, Hashable {
         return document
     }
 
-    /// Takes ownership of a completed temporary download, including on failure.
     @concurrent
     static func prepare(fileURL: URL, name: String, byteCount: Int) async throws -> WorkspacePDF {
         var retained = false

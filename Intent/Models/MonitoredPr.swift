@@ -10,9 +10,6 @@ nonisolated enum MergeabilityState: Equatable {
     }
 }
 
-/// Last-refresh merge-requirements checklist summary (§5.42
-/// `lastSnapshot`). Only the display subset is modeled; `mergeable`,
-/// `mergeBlockedReason`, and `approvals.needed` are presence-detected.
 struct MonitoredPrSnapshot: Equatable {
     struct Checks: Equatable {
         let total: Int
@@ -23,7 +20,6 @@ struct MonitoredPrSnapshot: Equatable {
     struct Approvals: Equatable {
         let decision: String
         let have: Int
-        /// Required approvals; absent when branch rules are unreadable.
         let needed: Int?
         let changesRequested: Int
     }
@@ -35,7 +31,6 @@ struct MonitoredPrSnapshot: Equatable {
     let isDraft: Bool
     let hasConflicts: Bool
     let isBehind: Bool
-    /// Forge tri-state; `.computing` while the forge has not reported it.
     let mergeability: MergeabilityState
     let mergeBlockedReason: String?
     let checks: Checks
@@ -78,31 +73,21 @@ struct MonitoredPrSnapshot: Equatable {
     }
 }
 
-/// Wire `PrMonitor` shape (PROTOCOL §5.42, v6.1). `title`/`url`/`lastSnapshot`
-/// are present once the monitor has a successful poll baseline. Optional
-/// fields are presence-detected (nil when absent), never defaulted in.
 struct MonitoredPr: Identifiable, Equatable {
-    /// Monitor lifecycle state (PROTOCOL §5.42). `active` is the live state;
-    /// `completed` (PR merged/closed — rows retained so merged PRs stay
-    /// visible) and `cancelled` (rows excluded from lists) are terminal.
     enum State: String {
         case active
         case completed
         case cancelled
     }
 
-    /// Last-refresh merge-requirements checklist summary.
     typealias Snapshot = MonitoredPrSnapshot
 
     let monitorId: String
     let workspaceId: String
     let agentId: String
-    /// Combined `"owner/name"` string.
     let repo: String
     let prNumber: Int
     var state: State
-    /// Human-readable change lines accumulated since the last emit
-    /// (awaiting the debounce window; `[]` when nothing is pending).
     var pendingChanges: [String]
     var hasPendingChanges: Bool
     let createdAt: String?
@@ -110,7 +95,6 @@ struct MonitoredPr: Identifiable, Equatable {
     var pendingSince: String?
     let lastChangeAt: String?
     let lastPolledAt: String?
-    /// Most recent forge-poll error; cleared by a successful poll.
     let lastError: String?
     let title: String?
     let url: String?
@@ -118,7 +102,6 @@ struct MonitoredPr: Identifiable, Equatable {
 
     var id: String { monitorId }
 
-    /// Whether the monitor is still watching its PR.
     var isActive: Bool {
         state == .active
     }

@@ -10,7 +10,6 @@ nonisolated enum MessageStreamingState: Equatable {
     }
 }
 
-/// The role of a message sender.
 nonisolated enum MessageRole: String, Codable {
     case assistant
     case error
@@ -24,17 +23,15 @@ nonisolated enum MessageRole: String, Codable {
     }
 }
 
-/// A tool call within a conversation message.
 nonisolated struct ToolCall: Identifiable, Codable, Equatable {
     let id: String
     let name: String
     var arguments: AnyCodable?
     var result: AnyCodable?
     var error: String?
-    var status: String?  // pending, running, completed, failed
+    var status: String?
     var timestamp: String?
 
-    // Legacy aliases
     private var toolName: String?
     private var parameters: AnyCodable?
 
@@ -47,13 +44,11 @@ nonisolated struct ToolCall: Identifiable, Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
 
-        // name with fallback to toolName
         let decodedName = try? container.decode(String.self, forKey: .name)
         let decodedToolName = try? container.decode(String.self, forKey: .toolName)
         name = decodedName ?? decodedToolName ?? "unknown"
         toolName = decodedToolName
 
-        // arguments with fallback to parameters
         arguments = try? container.decode(AnyCodable.self, forKey: .arguments)
         parameters = try? container.decode(AnyCodable.self, forKey: .parameters)
         if arguments == nil, let params = parameters {
@@ -86,7 +81,6 @@ nonisolated struct ToolCall: Identifiable, Codable, Equatable {
     }
 }
 
-/// A tool result within a conversation message.
 nonisolated struct ToolResult: Codable, Equatable {
     let toolCallId: String
     var content: AnyCodable?
@@ -124,15 +118,11 @@ nonisolated struct ToolResult: Codable, Equatable {
     }
 }
 
-/// An image block for queued messages. Either arm as accepted by the daemon
-/// (PROTOCOL §5.5): inline base64 `data` (legacy) or an attachment-registry
-/// `attachmentId` reference (monorepo#3338). Synthesized Codable omits nil
-/// keys, so placed references never carry a `data` key on the wire.
 nonisolated struct ImageBlock: Codable {
-    let type: String  // "image"
-    let data: String?  // base64 (inline arm; nil for placed references)
-    let attachmentId: String?  // attachment-registry reference
-    let mimeType: String?  // optional on the reference arm (§5.5)
+    let type: String
+    let data: String?
+    let attachmentId: String?
+    let mimeType: String?
 
     init(type: String, data: String? = nil, attachmentId: String? = nil, mimeType: String? = nil) {
         self.type = type
@@ -142,7 +132,6 @@ nonisolated struct ImageBlock: Codable {
     }
 }
 
-/// A queued message waiting to be sent to an agent.
 nonisolated struct QueuedMessage: Identifiable, Codable {
     let id: String
     var content: String
@@ -228,17 +217,8 @@ nonisolated struct QueuedMessage: Identifiable, Codable {
     var hasReportedImageBlocks: Bool { imageBlocksWereProvided }
     var hasReportedMessageMetadata: Bool { messageMetadataWasProvided }
 
-    /// Whether this entry was authored by the user. Non-user entries carry
-    /// `messageMetadata` with a string `type` (except the user-authored
-    /// `question_answers` wizard tag), a non-blank `fromAgentId`, or
-    /// `source == "system"` (PROTOCOL §5.5); absent/malformed metadata fails
-    /// open (treated as user-authored).
     var isUserMessage: Bool {
         let metadata = messageMetadata
-        // The Q&A wizard's answer message is USER-authored despite its tag
-        // (`{ type: "question_answers", answeredQuestionsMessageId }`): it
-        // travels through the ordinary send path and can be auto-queued
-        // during the turn-startup race, so it must stay visible in the queue.
         if metadata["type"]?.stringValue == "question_answers" { return true }
         if metadata["type"]?.stringValue != nil { return false }
         if let fromAgentId = metadata["fromAgentId"]?.stringValue,
@@ -248,16 +228,14 @@ nonisolated struct QueuedMessage: Identifiable, Codable {
     }
 }
 
-/// A single message in an agent conversation.
 nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
     let id: String
-    /// Client correlation lifted from row metadata by the daemon (PROTOCOL §5.5).
     var appMessageId: String?
     let role: MessageRole
     var contentBlocks: [ContentBlock] {
         didSet { contentBlocksWereProvided = true }
     }
-    var timestamp: String  // ISO 8601 string from server
+    var timestamp: String
     var turnNumber: Int?
     var toolCalls: [ToolCall] {
         didSet { toolCallsWereProvided = true }
@@ -290,10 +268,6 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         case toolCalls, toolResults, error, isStreaming, metadata
     }
 
-    /// The one message decoder (ios#257): `parseMessage` routes through it, so
-    /// the dictionary and `Codable` paths cannot drift. Array fields are
-    /// lenient per element — a malformed entry is dropped, its siblings kept —
-    /// and id-less blocks take the daemon's `{messageId}:{index}` identity.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let messageId = try container.decode(String.self, forKey: .id)
@@ -373,20 +347,12 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
 
     // MARK: - Parsing from dictionary (JSON-RPC response)
 
-    /// Decodes a raw JSON-RPC message row through `init(from:)`. Nil when the
-    /// row is not a valid JSON object or has no string `id`.
     static func parseMessage(_ dict: [String: Any]) -> Self? {
         guard JSONSerialization.isValidJSONObject(dict),
               let data = try? JSONSerialization.data(withJSONObject: dict) else { return nil }
         return try? JSONDecoder().decode(Self.self, from: data)
     }
 
-    /// `parseMessage` for a whole page (ios#258): one validation walk, one
-    /// serialization and one `JSONDecoder` for all rows instead of one of each
-    /// per row. Rows that do not decode are dropped, so the result equals
-    /// `rows.compactMap(parseMessage)`; a page that cannot be serialized as a
-    /// whole (a non-finite number in one row) falls back to per-row parsing so
-    /// only the offending row is dropped.
     static func parseMessages(_ rows: [[String: Any]]) -> [Self] {
         guard !rows.isEmpty else { return [] }
         guard JSONSerialization.isValidJSONObject(rows),
@@ -397,7 +363,6 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         return page.messages
     }
 
-    /// Array decoder that drops undecodable rows instead of failing the page.
     private struct LenientPage: Decodable {
         let messages: [ConversationMessage]
 

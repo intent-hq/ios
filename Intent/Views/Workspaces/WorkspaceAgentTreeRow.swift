@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Keep padding in a lazy body instead of passing an opaque, non-Sendable
-/// modified view through the deferred row provider.
 struct WorkspaceAgentListEntry: View {
     let row: WorkspaceAgentListRow
     let isFirst: Bool
@@ -13,8 +11,6 @@ struct WorkspaceAgentListEntry: View {
     }
 }
 
-/// One identified layout child per entry keeps section expansion out of nested
-/// dynamic view lists, whose height estimates can cycle near the scroll boundary.
 struct WorkspaceAgentListRow: View, Identifiable {
     enum Content {
         case agent(WorkspaceAgentTreeRow)

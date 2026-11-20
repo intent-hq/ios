@@ -6,10 +6,6 @@ struct PairedServer: Codable, Equatable {
     let name: String
     let pairedAt: Date
     let certFingerprint: String?
-    /// Tailcat tunnel address ("tc..." connection token) when the daemon
-    /// reported one — via the pairing payload (`tc=`) or `system.status`
-    /// (`tcAddress`). Optional: absent on records saved before the field
-    /// existed and on daemons without a running tunnel.
     let tcAddress: String?
 
     init(
@@ -29,40 +25,25 @@ struct PairedServer: Codable, Equatable {
     }
 }
 
-/// A route observation may patch an existing live shared row, never recreate
-/// one or replace its credentials. The baseline detects competing rotations.
 struct PendingBackendRoutePublication: Codable, Equatable {
     var updatedAt: Double
     var hosts: [String]
     var tcAddress: String?
-    /// Time of the actual tunnel observation, unchanged by host-only edits.
-    /// Legacy pending intents fall back to their original updatedAt.
     var tcUpdatedAt: Double?
     var previousTcAddress: String?
 }
 
-/// A saved daemon connection: pairing info plus its API token and metadata.
 struct StoredConnection: Codable, Identifiable, Equatable {
     let id: UUID
     var server: PairedServer
     var token: String
-    /// Daemon hostname when known, else first host:port.
     var displayName: String
     var lastConnectedAt: Date?
-    /// `updatedAt` (ms since epoch) of the last iCloud-synced registry record
-    /// applied or successfully published — the last-writer-wins clock for
-    /// `SyncedBackendConnectionMerge`. `nil` on connections that predate sync
-    /// or were paired locally and never matched a registry record.
     var syncUpdatedAt: Double?
-    /// Durable local edit awaiting shared publication. Kept in the same
-    /// device-local Keychain blob as the credentials; retries never restamp it.
     var pendingSyncUpdatedAt: Double?
-    /// Provenance for automatic route publication. Ordinary imports have none;
-    /// only an explicit pairing newer than a remembered removal can resume it.
     var localPairingSyncClock: Double?
     var pendingRoutePublication: PendingBackendRoutePublication?
     var principal: ConnectionPrincipal?
-    /// Exact invited-v2 payload, protected by the existing local Keychain blob.
     var invitedSyncPayload: Data?
     var invitedPersonKey: String? {
         guard let principal, !principal.isOwner, let pin = server.certFingerprint else { return nil }
@@ -120,10 +101,6 @@ struct WorkspaceAgentInfo: Codable, Identifiable, Equatable {
     let isResponding: Bool
 }
 
-/// One detected PR on a workspace — a lenient subset of PROTOCOL §7.6
-/// `PullRequestInfo`. `status` keeps the raw wire string ("Open" / "Closed" /
-/// "Merged" / "Draft"; serde enum variant names) so unknown future variants
-/// are tolerated; everything but `number`/`status` is optional.
 struct WorkspacePullRequest: Codable, Identifiable, Equatable {
     let number: Int
     let status: String
@@ -150,8 +127,6 @@ struct WorkspacePullRequest: Codable, Identifiable, Equatable {
         self.updatedAt = updatedAt
     }
 
-    /// Failable dict-path parse (JSONSerialization wire shape); rows missing
-    /// the required `number`/`status` are dropped by callers via compactMap.
     init?(wire: [String: Any]) {
         guard let number = wire["number"] as? Int,
               let status = wire["status"] as? String else { return nil }
@@ -167,10 +142,6 @@ struct WorkspacePullRequest: Codable, Identifiable, Equatable {
 }
 
 struct Workspace: Codable, Identifiable, Equatable {
-    /// Id of the daemon's virtual Chief of Staff workspace. It is never shown
-    /// in the workspace list: `workspace.list` filters it server-side, but a
-    /// `workspace.subscribe` delta from an older daemon can still carry it, so
-    /// the client drops it at every ingress as well.
     static let chiefWorkspaceId = "__chief__"
 
     let id: String
@@ -178,27 +149,27 @@ struct Workspace: Codable, Identifiable, Equatable {
     let branch: String?
     let baseRef: String?
     let status: String?
-    let activity: String?      // "idle" | "agent_running" from daemon
-    let displayStatus: String? // BE-owned wire value (snake_case, e.g. "pr_open"); nil on older daemons
-    let attention: String?     // "none" | "unread" | "review_required"; nil on older daemons
-    let waiting: Bool          // orthogonal waiting flag (protocol 6.17); omitted on the wire when false
+    let activity: String?
+    let displayStatus: String?
+    let attention: String?
+    let waiting: Bool
     let lastActivity: String?
     let createdAt: String?
     let updatedAt: String?
     let repositoryOwner: String?
     let repositoryName: String?
-    let prStatus: String?      // "Open", "Closed", "Merged", "Draft"
+    let prStatus: String?
     let prNumber: Int?
-    let diffSummaryTotalFiles: Int?  // from diffSummary.totalFiles
-    let taskStatsTotal: Int?         // from taskStats.total
-    let taskStatsCompleted: Int?     // from taskStats.completed
-    let taskStatsInProgress: Int?    // from taskStats.inProgress
+    let diffSummaryTotalFiles: Int?
+    let taskStatsTotal: Int?
+    let taskStatsCompleted: Int?
+    let taskStatsInProgress: Int?
     let agentSummaryCount: Int?
     let agentSummaryAgents: [WorkspaceAgentInfo]
-    let pullRequests: [WorkspacePullRequest]  // detected-PR pool (§5.1)
+    let pullRequests: [WorkspacePullRequest]
     let agentSummaryWasReported: Bool
     let pullRequestsWereReported: Bool
-    let activePullRequest: WorkspacePullRequest?  // single active PR (§5.1); nil when absent
+    let activePullRequest: WorkspacePullRequest?
     let statusImageAssetId: String?
     let statusMessage: String?
 
@@ -231,9 +202,6 @@ struct Workspace: Codable, Identifiable, Equatable {
         case waiting
     }
 
-    /// Explicit initializer so `attention` / `waiting` / `createdAt` /
-    /// `pullRequests` / `activePullRequest` can default — existing call sites
-    /// (and test fixtures) that predate the fields stay valid.
     init(
         id: String,
         title: String,
@@ -294,9 +262,6 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.statusMessage = statusMessage
     }
 
-    /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
-    /// omitted when false) — the synthesized decoder would throw keyNotFound
-    /// on the common not-waiting shape if a JSONDecoder path is ever added.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -372,13 +337,12 @@ struct Workspace: Codable, Identifiable, Equatable {
     }
 }
 
-/// A model available for the agent.
 struct ModelInfo: Identifiable, Equatable {
-    let id: String       // model id (e.g. "sonnet4.5")
-    let name: String     // display name (e.g. "sonnet4.5 (balanced)")
-    let provider: String // provider id (e.g. "auggie")
-    var isDefault: Bool = false // provider-reported default model (models.list)
-    var effortLevels: [String] = [] // provider-reported reasoning vocabulary (models.list, protocol 5.30)
+    let id: String
+    let name: String
+    let provider: String
+    var isDefault: Bool = false
+    var effortLevels: [String] = []
 }
 
 enum ProviderAuthentication: Equatable, ExpressibleByBooleanLiteral {
@@ -389,10 +353,8 @@ enum ProviderAuthentication: Equatable, ExpressibleByBooleanLiteral {
     init(booleanLiteral value: Bool) { self = value ? .signedIn : .signedOut }
 }
 
-/// An agent provider from `host.providerAuthStatus` (PROTOCOL §5.14).
 struct ProviderInfo: Identifiable, Equatable {
     let id: String
-    /// Tri-state: true (signed in), false (signed out), nil (unknown — probe failed or not installed).
     let authenticated: ProviderAuthentication
 
     init(id: String, authenticated: ProviderAuthentication = .unknown) {
@@ -400,8 +362,6 @@ struct ProviderInfo: Identifiable, Equatable {
         self.authenticated = authenticated
     }
 
-    /// Providers with `authenticated == false` are not selectable;
-    /// `nil` (unknown) stays selectable since probes can fail transiently.
     var isSelectable: Bool { authenticated != .signedOut }
 
     var displayName: String { Self.displayName(for: id) }
@@ -421,9 +381,6 @@ struct ProviderInfo: Identifiable, Equatable {
 }
 
 extension Array where Element == ProviderInfo {
-    /// True when the daemon returned providers but none can be selected (all
-    /// signed out). The pickers show desktop-setup guidance instead of an
-    /// empty-value menu in that state (monorepo#985).
     var noneSelectable: Bool {
         !isEmpty && !contains { $0.isSelectable }
     }

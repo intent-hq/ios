@@ -1,13 +1,11 @@
 import SwiftUI
 
 extension Constants.Accessibility {
-    /// visionOS list-row hit target: 60 pt tall rows keep adjacent row centers
-    /// >= 60 pt apart while comfortably exceeding the 44 pt minimum target.
     static let visionListRowMinimumHeight: CGFloat = 60
+    static let visionChevronHoverPadding: CGFloat = 8
 }
 
 extension Constants.WorkspaceSearch {
-    /// Leave room between the individual gaze highlights without changing iOS.
     static var visionSegmentSpacing: CGFloat {
         #if os(visionOS)
         contentSpacing
@@ -17,9 +15,55 @@ extension Constants.WorkspaceSearch {
     }
 }
 
+extension EnvironmentValues {
+    @Entry var visionContainerDrawsHover = false
+}
+
 extension View {
-    /// Apply inside each workspace control's label, after its frame, so the
-    /// custom button style keeps a single, shaped gaze target per action.
+    @ViewBuilder
+    func visionButtonHover(isEnabled: Bool = true) -> some View {
+        #if os(visionOS)
+        self.hoverEffect(.highlight, isEnabled: isEnabled)
+        #else
+        self
+        #endif
+    }
+
+    @ViewBuilder
+    func visionHoverShape(_ shape: some Shape) -> some View {
+        #if os(visionOS)
+        self.contentShape(.hoverEffect, shape)
+        #else
+        self
+        #endif
+    }
+
+    @ViewBuilder
+    func visionGroupedHoverHint(padding: CGFloat) -> some View {
+        #if os(visionOS)
+        self
+            .padding(padding)
+            .contentShape(.hoverEffect, Circle())
+            .hoverEffect(.highlight)
+            .padding(-padding)
+        #else
+        self
+        #endif
+    }
+
+    @ViewBuilder
+    func visionHoverGroup() -> some View {
+        #if os(visionOS)
+        self.hoverEffectGroup()
+        #else
+        self
+        #endif
+    }
+
+    func visionContainerDrawsHover(_ drawsHover: Bool = true) -> some View {
+        environment(\.visionContainerDrawsHover, drawsHover)
+    }
+
     @ViewBuilder
     func visionWorkspaceControlHover(cornerRadius: CGFloat, isEnabled: Bool = true) -> some View {
         #if os(visionOS)
@@ -35,13 +79,10 @@ extension View {
         #endif
     }
 
-    /// visionOS eyes/hands ergonomics for custom-styled row buttons: grow the
-    /// hit region to a 60 pt minimum height (>= 44 pt targets with >= 60 pt
-    /// center spacing between stacked rows), make the whole area tappable, and
-    /// add hover feedback. No-op on iOS so the existing layout is untouched.
     func visionListRowHitTarget() -> some View {
         #if os(visionOS)
         return self
+            .visionContainerDrawsHover()
             .frame(minHeight: Constants.Accessibility.visionListRowMinimumHeight)
             .contentShape(Rectangle())
             .hoverEffect()
@@ -50,15 +91,11 @@ extension View {
         #endif
     }
 
-    /// visionOS treatment for buttons whose label already draws its own rounded
-    /// card: drop the automatic bordered capsule (`.plain` style) and give the
-    /// gaze hover highlight the card's rounded-rectangle shape, keeping the
-    /// 60 pt minimum row height. No-op on iOS so the existing layout and the
-    /// default button style are untouched.
     func visionCardRowButton(cornerRadius: CGFloat) -> some View {
         #if os(visionOS)
         return self
             .buttonStyle(IntentContentButtonStyle())
+            .visionContainerDrawsHover()
             .frame(minHeight: Constants.Accessibility.visionListRowMinimumHeight)
             .contentShape(.hoverEffect, .rect(cornerRadius: cornerRadius))
             .hoverEffect()

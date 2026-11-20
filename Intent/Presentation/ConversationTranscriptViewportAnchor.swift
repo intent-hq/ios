@@ -1,10 +1,6 @@
 import CoreGraphics
 import Foundation
 
-/// A late divider may resize an offscreen lazy row. Preserve the first fully
-/// visible row's measured offset (or its intersecting oversized message),
-/// not merely the identity of a visible target.
-/// Each divider revision permits one correction; scrolling remains user-owned.
 struct ConversationTranscriptViewportAnchor {
     private static let maximumRestorationEvents = 8
     private static let landingTolerance: CGFloat = 0.5
@@ -118,8 +114,6 @@ struct ConversationTranscriptViewportAnchor {
     mutating func remove(id: String, generation: Int = 0, entryGeneration: Int = 0, ownershipRevision: Int = 0) {
         guard generation == entryGeneration, ownershipRevision == self.ownershipRevision else { return }
         frames[id] = nil
-        // A retained target can leave the lazy stack while it is rehosted.
-        // The transcript owner cancels a deleted target or a later gesture.
         if pending?.id == id, pending?.isReappearance == true { recordRestorationEvent("derealized=\(id)") }
         if pending?.id == id, pending?.isReappearance != true { pending = nil }
     }
@@ -152,8 +146,6 @@ struct ConversationTranscriptViewportAnchor {
         guard let pending, pending.isReappearance, !pending.coarseScrollIssued,
               pending.id == target, pending.generation == generation,
               ownershipRevision == self.ownershipRevision else { return }
-        // The published token rejects pre-command callbacks. Command return
-        // does not mean the lazy stack has applied the requested alignment.
         self.ownershipRevision += 1
         self.pending?.coarseScrollIssued = true
         frames.removeAll()
@@ -164,8 +156,6 @@ struct ConversationTranscriptViewportAnchor {
     private mutating func recordRestorationEvent(_ event: String) {
         restorationEvents.append(event)
         if restorationEvents.count > Self.maximumRestorationEvents {
-            // Retain the saved position and application receipt even when
-            // later layout produces more samples than the bounded history.
             let isApplication = restorationEvents[1].hasPrefix("align ")
             restorationEvents.remove(at: isApplication ? 2 : 1)
         }
@@ -192,7 +182,6 @@ struct ConversationTranscriptViewportAnchor {
         scrollGeometry: ConversationTranscriptScrollPolicy.ViewportGeometry?
     ) -> Bool {
         recordRestorationEvent("measure=\(measurement.frame) viewport=\(viewportHeight) preserve=\(preserve)")
-        // Rehosting can report unavailable geometry before realizing the row.
         let frame = measurement.frame
         guard viewportHeight.isFinite, viewportHeight > 0, !frame.isInfinite,
               frame.origin.x.isFinite, frame.origin.y.isFinite,
@@ -222,9 +211,6 @@ struct ConversationTranscriptViewportAnchor {
         let target = geometry.contentOffsetY + frame.minY - geometry.topInset
         guard minimum.isFinite, maximum.isFinite, target.isFinite else { return false }
         let reachable = min(maximum, max(minimum, target))
-        // A fresh callback can still describe the pre-scroll layout. Settle
-        // only at the requested top alignment or its actual content boundary;
-        // this also completes legitimate already-aligned/no-move commands.
         return abs(reachable - geometry.contentOffsetY) <= Self.landingTolerance
     }
 

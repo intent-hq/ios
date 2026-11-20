@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Presents the workspace page's confirmations, sheets, resources, and failure alerts.
 struct WorkspaceDetailPresentations: ViewModifier {
     @Bindable var presentation: WorkspaceDetailPresentation
     let workspaceId: String
@@ -58,7 +57,6 @@ struct WorkspaceDetailPresentations: ViewModifier {
             .fullScreenCover(
                 item: $presentation.selectedTerminal,
                 onDismiss: {
-                    // The terminal already showed any error inline; don't replay it as an alert.
                     terminalStore.clearError(workspaceId: workspaceId)
                 },
                 content: { terminal in
@@ -69,7 +67,6 @@ struct WorkspaceDetailPresentations: ViewModifier {
     }
 }
 
-/// Archive and delete ask first: an alert on iPhone and iPad, a focused sheet on visionOS.
 private struct WorkspaceActionConfirmations: ViewModifier {
     @Bindable var presentation: WorkspaceDetailPresentation
     let onArchive: () -> Void
@@ -78,8 +75,6 @@ private struct WorkspaceActionConfirmations: ViewModifier {
     func body(content: Content) -> some View {
         content
         #if os(visionOS)
-        // Deliberate confirmation sheets (HIG): destructive/irreversible
-        // workspace actions get a focused sheet with one primary action.
         .sheet(isPresented: $presentation.showDeleteConfirmation) {
             WorkspaceActionConfirmationSheet(
                 title: "Delete Workspace",
@@ -117,7 +112,6 @@ private struct WorkspaceActionConfirmations: ViewModifier {
     }
 }
 
-/// The terminal and workspace-action failures that the page reports over itself.
 private struct WorkspaceDetailAlerts: ViewModifier {
     let presentation: WorkspaceDetailPresentation
     let workspaceId: String
@@ -146,7 +140,6 @@ private struct WorkspaceDetailAlerts: ViewModifier {
     }
 }
 
-/// The Share sheet, wired to this window's connection.
 struct ShareWorkspaceSheet: ViewModifier {
     @Bindable var presentation: WorkspaceDetailPresentation
     @Environment(BackendSession.self) private var session

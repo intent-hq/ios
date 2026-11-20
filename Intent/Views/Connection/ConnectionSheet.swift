@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Native sheet chrome shared by the connection destinations. The detent follows
-/// measured content, while the system limits tall sheets and manages the keyboard.
 struct ConnectionSheet<Content: View>: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme

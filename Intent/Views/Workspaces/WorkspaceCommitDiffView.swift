@@ -31,7 +31,6 @@ struct WorkspaceCommitDiffView: View {
     @State private var collapsedPaths: Set<String> = []
     @State private var visibleHeaderPaths: Set<String> = []
     @State private var visibleDiffPaths: Set<String> = []
-    // Lazy layout can probe a collapsed height offscreen; retain loaded heights until text sizing changes.
     @State private var diffHeights: [String: CGFloat] = [:]
     @State private var isLoading = true
     @State private var errorMessage: String?

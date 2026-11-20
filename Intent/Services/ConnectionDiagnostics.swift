@@ -46,8 +46,6 @@ extension ConnectionManager {
     }
 }
 
-/// Caller-supplied context is a closed enum, never inferred from credentials or
-/// backend IDs. Unannotated connection entry points honestly remain unknown.
 nonisolated enum DiagnosticConnectContext {
     @TaskLocal static var origin: DiagnosticEvent.Context = .unknown
 }

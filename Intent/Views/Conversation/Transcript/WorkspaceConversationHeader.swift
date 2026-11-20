@@ -39,14 +39,12 @@ private struct WorkspacePhoneNavigationModifier<Actions: View>: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            // Outside the shell the Duo's vertical toolbar needs the bar; inside it the rail replaces it.
             .toolbar(usesCustomHeader && (!usesVerticalBar || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .safeAreaInset(edge: .top, spacing: 0) {
                 if usesCustomHeader { navigationHeader }
             }
     }
 
-    /// The iPad shell names the workspace in its sidebar; the header repeats it only while that sidebar is collapsed.
     private var showsHeaderTitle: Bool {
         presentation != .iPad || (showsTitle && !usesVerticalBar)
     }
@@ -75,7 +73,6 @@ struct WorkspaceConversationHeader<Actions: View>: View {
     var showsBackground = true
     var bottomPadding: CGFloat?
     var showsContextualActions = true
-    /// The sidebar names the open agent while its workspace sits there, so the header drops its title.
     var showsTitle = true
     var assistantStore: AssistantStore?
     let onBack: () -> Void
@@ -147,7 +144,6 @@ struct AssistantConversationHeader<Actions: View>: View {
     }
 }
 
-/// Softens the edge where scrolled content meets the opaque navigation header.
 struct WorkspaceHeaderFade: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.conversationBackgroundColor) private var backgroundColor
@@ -161,7 +157,6 @@ struct WorkspaceHeaderFade: View {
     }
 }
 
-/// Workspace, agent and Assistant navigation share the native top safe area and control geometry.
 struct WorkspaceNavigationHeader<Actions: View>: View {
     let title: String
     let subtitle: LocalizedStringKey?
@@ -177,7 +172,6 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     var workspaceCreatedAt: String?
     var usesConversationLayout = false
     var showsContextualActions = true
-    /// The workspace overview drops its empty band on the Duo; conversations keep their spacing.
     var collapsesWhenEmptyOnRail = false
     var onBack: (() -> Void)?
     @ViewBuilder let actions: () -> Actions
@@ -199,7 +193,6 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
         usesConversationLayout && presentation == .iPad
     }
 
-    /// With its controls on the Duo rail and no copy, the header would only be an empty band over the content.
     private var collapsesOnRail: Bool { collapsesWhenEmptyOnRail && usesDuoContextualRail && !showsHeaderCopy }
 
     var body: some View {
@@ -221,10 +214,8 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     private var windowAdaptedControls: some View {
         #if os(iOS)
         if usesIPadDesign {
-            // The shell gutter and header inset keep these controls below system chrome.
             controls
         } else if #available(iOS 26.0, *) {
-            // Reserve only the system's actual corner region (including iPad window controls).
             controls.containerCornerOffset(.horizontal, sizeToFit: true)
         } else {
             controls
@@ -253,7 +244,6 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
                 .accessibilityLabel(backLabel)
                 .accessibilityIdentifier(backIdentifier)
             } else if usesIPadDesign, showsInlineActions {
-                // Balance the trailing menu so Assistant titles share the agent alignment.
                 Color.clear
                     .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
                     .accessibilityHidden(true)
@@ -323,7 +313,6 @@ struct WorkspaceNavigationHeader<Actions: View>: View {
     }
 }
 
-/// Measure cap top to final baseline without clipping native glyphs or descenders.
 private struct WorkspaceHeaderText: View {
     let text: Text
     let style: Constants.Typography.Style
@@ -350,7 +339,6 @@ private struct WorkspaceHeaderText: View {
     }
 }
 
-/// Opt-in cap-to-baseline measurement for workspace text with native baselines.
 struct WorkspaceTextTrimLayout: Layout {
     let capHeight: CGFloat
 
@@ -397,7 +385,6 @@ struct WorkspaceGoToEndLabel: View {
     }
 }
 
-/// The outer display keeps native rail actions, while its title owns the top inset.
 struct WorkspaceVerticalConversationHeader: View {
     let title: String
     let workspaceId: String

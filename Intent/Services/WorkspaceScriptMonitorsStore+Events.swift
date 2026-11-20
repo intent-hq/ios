@@ -18,7 +18,6 @@ extension WorkspaceScriptMonitorsStore {
         var normalized: [String: Any] = ["monitorId": id, "runId": run]
         if terminalEvents.contains(type) { return normalized }
         guard type == "scriptMonitor:registered" else { throw ScriptMonitorReadError.invalidResponse }
-        // Events contain full snapshots. Reduce immediately to bounded summary metadata.
         let detail = try ScriptMonitorDetail(row, workspaceId: workspace, monitorId: id)
         normalized["summary"] = detail.summary
         return normalized

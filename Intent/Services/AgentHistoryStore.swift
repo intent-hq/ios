@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// Agent conversations opened in this install, most recent first, across
-/// every saved connection. One instance serves all windows.
 @MainActor
 @Observable
 final class AgentHistoryStore {

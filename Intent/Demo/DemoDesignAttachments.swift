@@ -1,7 +1,6 @@
 #if DEBUG
 import Foundation
 
-/// In-memory upload/read RPCs for attachments sent to the design demo workspace.
 @MainActor
 final class DemoDesignAttachments {
     private struct Attachment {

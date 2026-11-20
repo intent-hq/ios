@@ -9,15 +9,11 @@ struct UserMessageView: View {
     let workspaceId: String
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
     var onLayoutChange: (() -> Void)?
-    /// Agent-to-agent rows start collapsed (FE parity: ChatMessage.svelte
-    /// `isAgentMessageExpanded`). Owned here so this body tracks the state.
     var disclosure = TranscriptDisclosure()
     private var isAgentMessageExpanded: Bool {
         get { disclosure.binding(for: .agentMessage, default: false).wrappedValue }
         nonmutating set { disclosure.binding(for: .agentMessage, default: false).wrappedValue = newValue }
     }
-    /// Hook, PR and script wake cards also start collapsed (FE parity:
-    /// ChatMessage.svelte `isAutomatedWakeExpanded`).
     private var isAutomatedWakeExpanded: Bool {
         get { disclosure.binding(for: .automatedWake, default: false).wrappedValue }
         nonmutating set { disclosure.binding(for: .automatedWake, default: false).wrappedValue = newValue }
@@ -33,9 +29,6 @@ struct UserMessageView: View {
     @ScaledMetric(relativeTo: .body) private var iPadBubbleWidth = Design.IPad.userBubbleMaximumWidth
     @ScaledMetric(relativeTo: .caption) private var fileIconSide: CGFloat = 12
 
-    /// Derived once per message value in `init` rather than on every `body`
-    /// evaluation (the body also re-runs on the expansion toggle): the wake /
-    /// agent attributions, the partitioned blocks, and the copy-menu text.
     private let scriptWake: ScriptMonitorWakeAttribution?
     private let hookWake: HookWakeAttribution?
     private let prWake: PrMonitorWakeAttribution?
@@ -276,8 +269,6 @@ struct UserMessageView: View {
         }
     }
 
-    /// Keep native bounds between attributed headers, chips, attachments and multiple blocks.
-    /// A plain bubble measures its existing padding from the cap top to the final baseline.
     private var usesTrimmedMessageText: Bool {
         workspaceDesign && !isWatcherWake && agentMessage == nil
             && partitioned.text.count == 1 && partitioned.images.isEmpty
@@ -376,8 +367,6 @@ extension MessageView {
         case chips([ContextMention])
     }
 
-    /// Inline Markdown only, so typed line breaks and list markers stay as written.
-    /// Links keep the text color and read as links by underline, as in replies (#904).
     static func userDisplayText(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         guard var rendered = try? AttributedString(markdown: text, options: options) else {

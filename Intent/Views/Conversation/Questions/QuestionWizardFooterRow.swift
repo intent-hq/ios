@@ -62,7 +62,6 @@ struct QuestionWizardFooterRow: View {
         .disabled(submitted || dismissed)
     }
 
-    /// Skip and Send on the last step send the answers to the Mac.
     private var sendsAnswers: Bool { isLast }
 
     private var legacyFooter: some View {
@@ -108,6 +107,7 @@ struct QuestionWizardFooterRow: View {
                 minWidth: Constants.Accessibility.minimumTapTarget,
                 minHeight: Constants.Accessibility.minimumTapTarget
             )
+            .visionHoverShape(Capsule())
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(index == 0)
@@ -128,6 +128,7 @@ struct QuestionWizardFooterRow: View {
                     minWidth: Constants.Accessibility.minimumTapTarget,
                     minHeight: Constants.Accessibility.minimumTapTarget
                 )
+                .visionHoverShape(Capsule())
         }
         .buttonStyle(IntentContentButtonStyle())
     }
@@ -152,6 +153,7 @@ struct QuestionWizardFooterRow: View {
                 minHeight: Constants.Accessibility.minimumTapTarget
             )
             .contentShape(Rectangle())
+            .visionHoverShape(Capsule())
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(nextDisabled || submitted || dismissed)

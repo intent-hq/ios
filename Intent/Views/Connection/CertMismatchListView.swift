@@ -1,12 +1,5 @@
 import SwiftUI
 
-/// Passive per-host certificate-mismatch list: one row per host with the
-/// fingerprint it actually presented. Rendered while connecting/reconnecting
-/// (retries continue on the remaining hosts), on the cert-mismatch re-pair
-/// screen (every mismatching host, not just the last one), and as a
-/// non-blocking indicator in the connection details while connected via a
-/// route that still has stale mismatching siblings. Purely informational —
-/// no actions.
 struct CertMismatchListView: View {
     private typealias Layout = Constants.CertMismatch
 
@@ -44,9 +37,6 @@ struct CertMismatchListView: View {
         .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
     }
 
-    /// Truncates a colon-separated SHA-256 fingerprint (32 bytes) to its
-    /// leading bytes with an ellipsis so a row stays one line; short values
-    /// (e.g. test fixtures) pass through unchanged.
     static func displayFingerprint(_ fingerprint: String, maxBytes: Int = 8) -> String {
         let parts = fingerprint.split(separator: ":")
         guard parts.count > maxBytes else { return fingerprint }

@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// A pull request's detail in the workspace page's language: a large title
-/// with one quiet subtitle, the shared content switcher, and plain rows for
-/// the linked workspace, checks and reviews above the description. Code lists
-/// the changed files with their diffs.
 struct PullRequestDetailView: View {
     nonisolated enum Tab: String, CaseIterable {
         case code = "Code"
@@ -14,7 +10,6 @@ struct PullRequestDetailView: View {
 
     @State private var store: PullRequestDetailStore
     let linkedWorkspace: Workspace?
-    /// Replaces dismissal where the page is not presented (the iPad main pane).
     var onClose: (() -> Void)?
     let onOpenWorkspace: (String) -> Void
     @State private var tab: Tab = .summary
@@ -74,11 +69,9 @@ struct PullRequestDetailView: View {
             .padding(.bottom, WorkspaceDetailStyle.pageInset)
             .iPadDetailColumn()
         }
-        // On the scroll view only, so header controls keep their own identifiers.
         .accessibilityIdentifier("pullRequest.detail")
         .background(WorkspaceDetailStyle.background(for: colorScheme))
         .safeAreaInset(edge: .top, spacing: 0) {
-            // The workspace page's header: back and overflow menu; the large heading carries the title.
             WorkspaceNavigationHeader(
                 title: item.title,
                 subtitle: nil,
@@ -214,7 +207,6 @@ private extension PullRequestDetailView {
         }
     }
 
-    /// "Approved by mona", "2 reviewers": the one verdict that matters first.
     var reviewSummary: String {
         let reviewers = store.reviewers
         if reviewers.count == 1, let only = reviewers.first {
@@ -277,7 +269,6 @@ private extension PullRequestDetailView {
         case none
     }
 
-    /// The one row shape for the summary: icon, body-sized title, trailing cue.
     func row(
         icon: ImageResource,
         title: String,

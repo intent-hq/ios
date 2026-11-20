@@ -91,10 +91,6 @@ enum MessageBlockPartitioning {
         .joined(separator: "\n\n")
     }
 
-    /// `tool_result` blocks keyed by the id of the `tool_use` block they
-    /// answer (matched on `resolvedToolUseId` / `toolCallId`, first match
-    /// wins). Computed once per message so each block row receives only its
-    /// own result value instead of the whole block array.
     static func pairToolResults(_ blocks: [ContentBlock]) -> [String: ContentBlock] {
         let results = blocks.filter { $0.type == .toolResult }
         guard !results.isEmpty else { return [:] }

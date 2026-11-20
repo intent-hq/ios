@@ -4,9 +4,6 @@ extension PersistenceManager {
     private static let publicationSuppressionsKey = "backendPublicationSuppressions"
     private static let publicationRemovalsKey = "backendPublicationRemovals"
 
-    /// Non-secret observation journal, separate from the credential blob.
-    /// Remembering a winning remote removal must survive a local Keychain
-    /// save failure, relaunch, and eventual iCloud tombstone purge.
     func suppressedPublicationClock(id: UUID) -> Double? {
         publicationClocks(forKey: Self.publicationSuppressionsKey)[id.uuidString]
     }
@@ -32,8 +29,6 @@ extension PersistenceManager {
         return removed.map { $0 < paired } ?? true
     }
 
-    /// Save this route intent atomically with the observed route. Unlike a
-    /// deliberate re-pair, this must not authorize recreation after removal.
     func queueRoutePublication(_ connection: inout StoredConnection, previousRoute: String?, newRoute: String? = nil) {
         if connection.invitedPersonKey != nil {
             queueInvitedRoutePublication(&connection, newRoute: newRoute)
@@ -60,9 +55,6 @@ extension PersistenceManager {
         )
     }
 
-    /// One attempt per pending backend per pairing/foreground opportunity.
-    /// Backfill uses the original pairing time, never today's clock, so an
-    /// old installation cannot revive a newer shared removal or edit.
     func publishPendingBackends() {
         publishPendingInvitedSessions()
         guard backendPublisher != nil, var connections = loadConnectionsWithOutcome().connections else { return }
@@ -75,16 +67,12 @@ extension PersistenceManager {
             connections[index].localPairingSyncClock = connections[index].pendingSyncUpdatedAt
             queuedBackfill = true
         }
-        // No shared mutation can happen until the intent and credentials
-        // have been saved together in the device-local registry.
         if queuedBackfill, !saveConnectionsLocked(connections) { return }
         var acknowledged = false
         for index in connections.indices where connections[index].principal?.isOwner == true {
             if publishPairing(&connections[index]) { acknowledged = true }
             if publishRoutes(&connections[index]) { acknowledged = true }
         }
-        // A failed acknowledgement save is safe: the exact same pending
-        // clock survives, and an equal shared clock needs no second write.
         if acknowledged { saveConnectionsLocked(connections) }
     }
 
@@ -105,8 +93,6 @@ extension PersistenceManager {
     }
 
     private func publishRoutes(_ connection: inout StoredConnection) -> Bool {
-        // A route patch must not race a still-pending credential rotation and
-        // give that older shared token a clock newer than the deliberate edit.
         guard let backendPublisher, connection.pendingSyncUpdatedAt == nil,
               connection.pendingRoutePublication != nil else { return false }
         if routePublicationAllowed(connection) {
@@ -120,8 +106,6 @@ extension PersistenceManager {
             }
         }
         connection.pendingRoutePublication = nil
-        // Leave the import clock alone: the patched row may contain newer
-        // shared credentials/labels that still need to reach the live cache.
         return true
     }
 }

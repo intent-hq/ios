@@ -6,8 +6,6 @@ extension DemoFixtures {
     private static let tableCycleCount = 4
     private static let oddRoundEndToEndBaseMinutes = 9
 
-    /// One `longConversationMessages` row before its id and timestamp are
-    /// assigned.
     struct LongConversationRow {
         var role: String
         var contentBlocks: [[String: Any]]
@@ -26,8 +24,6 @@ extension DemoFixtures {
         ["type": "tool_result", "id": "\(toolUseId)-result", "toolUseId": toolUseId, "output": output]
     }
 
-    /// A user-role row sent by delegate `index` (PROTOCOL §5.5 agent-to-agent
-    /// attribution on the row metadata and the text block's `messageMetadata`).
     static func delegateRow(_ index: Int, text: String) -> LongConversationRow {
         let attribution: [String: Any] = [
             "type": "agent_message",
@@ -47,8 +43,6 @@ extension DemoFixtures {
         let metric: String
     }
 
-    /// Per-round subject matter for longConversationRound; one entry
-    /// per gap between handwritten exchanges.
     private static let longConversationRoundTopics: [LongConversationTopic] = [
         LongConversationTopic(
             subject: "stream id reuse after fork",
@@ -157,10 +151,6 @@ extension DemoFixtures {
         )
     ]
 
-    /// The delegation round inserted after handwritten exchange `round`:
-    /// nine rows of deliberately uneven height — a tool-call group, three
-    /// agent-to-agent reports, a delegation tool call, markdown replies with
-    /// code fences / tables / a thinking block, and one human follow-up.
     static func longConversationRound(_ round: Int) -> [LongConversationRow] {
         longConversationFirstRows(round) + longConversationLastRows(round)
     }

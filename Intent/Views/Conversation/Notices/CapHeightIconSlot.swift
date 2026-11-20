@@ -1,9 +1,6 @@
 import CoreText
 import SwiftUI
 
-/// A slot as tall as a text style's cap height that centres its icon on it.
-/// Bottom-aligned to a first text baseline (or top-aligned to a cap top), the
-/// icon centres on that line's capitals and does not change the row height.
 struct CapHeightIconSlot<Icon: View>: View {
     let style: Constants.Typography.Style
     let width: CGFloat
@@ -31,7 +28,6 @@ struct CapHeightIconSlot<Icon: View>: View {
 }
 
 extension Constants.Typography.Style {
-    /// Cap height at a scaled point size, using the face Bold Text renders.
     func capHeight(size: CGFloat, legibilityWeight: LegibilityWeight?) -> CGFloat {
         let face = legibilityWeight == .bold ? self.face.legibleFace : self.face
         return CTFontGetCapHeight(CTFontCreateWithName(face.rawValue as CFString, size, nil))

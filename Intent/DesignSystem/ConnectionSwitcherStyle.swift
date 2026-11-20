@@ -21,7 +21,6 @@ enum ConnectionSwitcherStyle {
     }
 
     static func selection(for scheme: ColorScheme) -> Color {
-        // Exact 8-bit palette channels preserve Surface/Grey700 from Figma 3575:37803 in dark mode.
         scheme == .dark
             ? Color(sRGBHex: Constants.DesignPalette.charcoalGrey)
             : .white

@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// "Copy" context menu with upright previews throughout the interaction in
-/// the transcript's inverted-scroll hierarchy.
 struct MessageCopyContextMenu: ViewModifier {
     let text: String
     let userStyled: Bool

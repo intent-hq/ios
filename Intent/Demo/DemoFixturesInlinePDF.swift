@@ -3,7 +3,6 @@ import Foundation
 import UIKit
 
 extension DemoFixtures {
-    /// Opt-in so existing demo transcripts and screenshots stay unchanged.
     static var usesInlinePDF: Bool {
         let arguments = LaunchOptions.current.arguments
         return DemoMode.demoDataRequested(by: arguments) && arguments.contains("--demo-inline-pdfs")
@@ -42,7 +41,6 @@ extension DemoFixtures {
         ]
     }
 
-    /// Generated once in memory; no network, external tool, or bundle resource needed.
     private static let inlinePDFBytes: Data = {
         let pageWidth: CGFloat = 300
         let pageHeight: CGFloat = 400

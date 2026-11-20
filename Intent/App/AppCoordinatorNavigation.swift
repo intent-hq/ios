@@ -12,16 +12,10 @@ final class AppCoordinatorNavigationState {
 
     var suppressWorkspaceNavigation = false
     var claimedScreenRestoration = ScreenRestorationClaim.unclaimed
-    /// Cleared by navigation, even when the user later returns to the same overview.
     var recentWorkspaceAgentRequestId: UUID?
 }
 
 extension AppCoordinator {
-    /// Whether this coordinator owns the session's last-screen persistence.
-    /// Only the first window per backend session restores and saves that
-    /// backend's screen; duplicated windows start at the workspace list.
-    /// The claim is consumed lazily on first use so coordinators built for
-    /// discarded SwiftUI view constructions never spend it.
     private var restoresLastScreen: Bool {
         if case let .resolved(claimed) = navigationState.claimedScreenRestoration { return claimed }
         let claimed = dependencies.claimScreenRestoration()
@@ -30,8 +24,6 @@ extension AppCoordinator {
     }
 
     func restoreLastScreenIfAvailable() -> Bool {
-        // Restoring into a workspace counts as viewing it, mirroring the FE.
-        // Only the session's first window restores; other windows show the list.
         guard restoresLastScreen,
               let connectionID = windowConnectionID,
               let saved = dependencies.persistence.loadLastScreen(for: connectionID) else { return false }
@@ -88,7 +80,6 @@ extension AppCoordinator {
         return true
     }
 
-    /// After a reconnect, re-run agent validation if the current screen is a conversation.
     func revalidateCurrentAgentAfterReconnect() {
         if case let .agentConversation(agentId, workspaceId, _) = currentScreen {
             Task { @MainActor in
@@ -97,10 +88,6 @@ extension AppCoordinator {
         }
     }
 
-    /// An explicit workspace tap always lands on the workspace overview
-    /// (ios#349). Saved sub-screens are only restored by cold-start restore
-    /// (`restoreLastScreenIfAvailable`); explicit agent/note selection and
-    /// notification routing go through `onSelectAgent` / `onSelectNote`.
     func onSelectWorkspace(_ workspaceId: String) {
         iPadNavigation.closeTool()
         if workspaceId == Workspace.chiefWorkspaceId {
@@ -115,8 +102,6 @@ extension AppCoordinator {
         revealIPadWorkspaceRoute()
     }
 
-    /// A completed row swipe opens the overview first, then the most recently
-    /// active non-retired agent. Ordinary row taps keep using onSelectWorkspace.
     @discardableResult
     func onOpenRecentWorkspaceAgent(_ workspaceId: String) -> Task<Void, Never> {
         onSelectWorkspace(workspaceId)
@@ -131,8 +116,6 @@ extension AppCoordinator {
                 }
             }
             do {
-                // Unscoped reads include delegated and background agents too.
-                // Every page is read: the newest agents are on the last one.
                 let result = try await PagedReads.requestAgentList(["workspaceId": workspaceId], connection: connection) {
                     self?.recentAgentLookupIsCurrent(requestId, workspaceId: workspaceId) == true
                 }
@@ -144,15 +127,12 @@ extension AppCoordinator {
                           .min(by: AgentListViewModel.byLastActivity) else { return }
                 onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
             } catch is CancellationError {
-                // A newer swipe or navigation superseded this lookup.
             } catch {
                 AppLog.app.error("[AppCoordinator] Recent workspace agent lookup failed: \(error)")
             }
         }
     }
 
-    /// The swipe's lookup still owns navigation: no newer swipe, and the user
-    /// is still on that workspace's overview.
     private func recentAgentLookupIsCurrent(_ requestId: UUID, workspaceId: String) -> Bool {
         guard !Task.isCancelled, navigationState.recentWorkspaceAgentRequestId == requestId,
               selectedSection == .workspaces,
@@ -160,10 +140,6 @@ extension AppCoordinator {
         return currentWorkspaceId == workspaceId
     }
 
-    /// Fire-and-forget workspace.markSeen: clears the server-owned unread
-    /// attention flag (blue dot) across clients when the user opens a
-    /// workspace, mirroring the FE. Failures are logged and ignored — an
-    /// older daemon without the method just keeps its legacy behavior.
     private func markWorkspaceSeen(_ workspaceId: String) {
         dependencies.workspaceStore.clearUnreadAttentionLocally(workspaceId: workspaceId)
         Task { @MainActor in
@@ -178,16 +154,12 @@ extension AppCoordinator {
         }
     }
 
-    /// Called when a restored workspace is no longer found in the workspace list.
-    /// Navigates back to the workspace list and clears the saved screen state.
     func handleMissingWorkspace() {
         if let connectionID = windowConnectionID {
             dependencies.persistence.clearLastScreen(for: connectionID)
         }
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
-        // The next workspace opens from the auto-selection observer; only an
-        // empty list reveals the sidebar.
         if usesIPadShell, iPadNavigation.section == .workspaces, iPadAutoSelectedWorkspaceId == nil {
             iPadNavigation.revealSidebar()
         }
@@ -271,8 +243,6 @@ extension AppCoordinator {
     // MARK: - Screen Persistence
 
     private func saveCurrentScreen() {
-        // Windows without the restoration claim must not overwrite the
-        // restoring window's saved navigation (spec decision 1b).
         guard restoresLastScreen else { return }
         let saved: PersistenceManager.SavedScreen
         switch currentScreen {
@@ -310,8 +280,6 @@ extension AppCoordinator {
         dependencies.persistence.saveLastScreen(saved, for: connectionID)
     }
 
-    /// Validates that a restored agent still exists. Only a definitive not-found falls back —
-    /// transient/transport errors leave the screen in place (the conversation load re-validates).
     func validateRestoredAgent(agentId: String, workspaceId: String) async {
         do {
             _ = try await agentDetails.load(agentId: agentId, workspaceId: workspaceId)
@@ -319,8 +287,6 @@ extension AppCoordinator {
             handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
         } catch {
             AppLog.app.error("[AppCoordinator] Agent validation failed: \(error)")
-            // Only a definitive not-found (-32602 with data.code == "not-found",
-            // PROTOCOL §3.3/§9) reads as deletion.
             let nsError = error as NSError
             if nsError.isEntityNotFound {
                 handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
@@ -335,12 +301,7 @@ extension AppCoordinator {
         }
     }
 
-    /// Called when the agent being viewed is no longer found (restore validation,
-    /// not-found at conversation load, or deletion while open).
-    /// Falls back to the workspace detail (agent list).
     func handleMissingAgent(agentId: String, workspaceId: String) {
-        // Only redirect if we're still viewing this agent's conversation — a stale
-        // validation must not evict a different conversation in the same workspace.
         if case let .agentConversation(aId, wsId, _) = currentScreen,
            aId == agentId, wsId == workspaceId {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
@@ -348,8 +309,6 @@ extension AppCoordinator {
         }
     }
 
-    /// Validates that a restored note still exists. Only a definitive not-found falls back —
-    /// transient/transport errors leave the screen in place.
     func validateRestoredNote(noteId: String, workspaceId: String, noteStore: NoteStore? = nil) async {
         let store = noteStore ?? NoteStore(connectionManager: dependencies.connection)
         if case .notFound = await store.fetchNote(noteId: noteId, workspaceId: workspaceId) {
@@ -357,10 +316,7 @@ extension AppCoordinator {
         }
     }
 
-    /// Called when the note being viewed no longer exists. Falls back to the workspace detail view.
     func handleMissingNote(noteId: String, workspaceId: String) {
-        // Only redirect if we're still viewing this note — a stale validation
-        // must not evict a different note screen in the same workspace.
         if case let .noteDetail(nId, wsId, _) = currentScreen,
            nId == noteId, wsId == workspaceId {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)

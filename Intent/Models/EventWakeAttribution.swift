@@ -1,34 +1,17 @@
 import Foundation
 
-/// Attribution for event-subscription wake messages (agent wakes). The daemon
-/// tags user-role rows delivered by an event-notification wake with
-/// `{ type: "event_notification", eventCount, eventTypes, events? }` — on the
-/// row's `metadata` and on the persisted text block's `messageMetadata`.
-/// Extraction is metadata-first with graceful fallback: absent or malformed
-/// metadata returns nil so the message renders exactly as before (FE parity:
-/// `EventWakeupBanner.svelte`).
 struct EventWakeAttribution: Equatable {
     private static let summaryEventCountThreshold = 5
 
-    /// One structured event from the wake's `events` payload.
     struct Event: Equatable {
         let type: String
-        /// Display name of the event's agent, when the payload carries a
-        /// non-id-shaped `agentName` / `name` field. Nil otherwise so labels
-        /// fall back to generic wording instead of rendering a raw agent id.
         let agentName: String?
     }
 
-    /// Number of events in the wake (falls back to the events / eventTypes
-    /// length when the daemon omitted the count).
     let eventCount: Int
-    /// Raw event types (e.g. `agent:idle`, `file:changed`).
     let eventTypes: [String]
-    /// Structured events, when the daemon included them (may be empty).
     let events: [Event]
 
-    /// Extracts event-wake attribution from an opaque metadata dictionary.
-    /// Returns nil unless `metadata.type == "event_notification"`.
     static func from(_ metadata: [String: AnyCodable]) -> Self? {
         guard metadata["type"]?.stringValue == "event_notification" else { return nil }
         let rawEventTypes: [Any]
@@ -51,7 +34,6 @@ struct EventWakeAttribution: Equatable {
         )
     }
 
-    /// Preserve event order while sharing the name for consecutive actions by one agent.
     var summaryLabel: String {
         if eventCount >= Self.summaryEventCountThreshold { return "\(eventCount) events" }
         let sources = events.isEmpty
@@ -79,9 +61,6 @@ struct EventWakeAttribution: Equatable {
         return labels.joined(separator: ", ")
     }
 
-    /// Human label for one event: agent lifecycle events name the agent when
-    /// the payload carries a usable name; everything else maps to its
-    /// category label (FE parity: activity-labels + event-wake-summary).
     static func activityLabel(for event: Event) -> String {
         let name = event.agentName
         if let action = agentAction(for: event.type) {
@@ -110,9 +89,6 @@ struct EventWakeAttribution: Equatable {
         }
     }
 
-    /// Humanizes an unmapped wire type so machine identifiers never surface
-    /// verbatim in the banner (FE parity: `getActivityLabel` default) —
-    /// `custom:thing` → "Custom thing".
     private static func humanized(_ type: String) -> String {
         let words = type
             .replacingOccurrences(of: ":", with: " ")
@@ -123,8 +99,6 @@ struct EventWakeAttribution: Equatable {
         return first.uppercased() + words.dropFirst()
     }
 
-    /// Ordered mapping of non-agent event-type prefixes to category labels
-    /// (FE parity: event-wake-summary `EVENT_CATEGORY_LABELS`).
     private static let categoryLabels: [(prefix: String, label: String)] = [
         ("file:", "File changes"),
         ("task:", "Task updates"),
@@ -143,9 +117,6 @@ struct EventWakeAttribution: Equatable {
         categoryLabels.first { type.hasPrefix($0.prefix) }?.label
     }
 
-    /// Best display name for an event's agent: `agentName`, else `name` —
-    /// never an id-shaped value (FE parity: `resolveAgentName`, minus the
-    /// live session-store lookup, which iOS does not keep per-message).
     private static func resolveAgentName(_ data: [String: Any]) -> String? {
         for key in ["agentName", "name"] {
             guard let value = data[key] as? String else { continue }
@@ -155,8 +126,6 @@ struct EventWakeAttribution: Equatable {
         return nil
     }
 
-    /// Whether a string is agent-id-shaped (`agent-<uuid>`), so id values
-    /// leaking into name fields never render as display names.
     static func looksLikeAgentId(_ value: String) -> Bool {
         value.range(
             of: "^agent-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
@@ -166,10 +135,6 @@ struct EventWakeAttribution: Equatable {
 }
 
 extension ConversationMessage {
-    /// Event-wake attribution for this row: the daemon tags the row's
-    /// `metadata` AND the persisted text block's `messageMetadata` — check
-    /// both so older rows missing one surface still render the banner
-    /// (FE parity: ChatPanel.svelte event-notification turn branch).
     var eventWakeAttribution: EventWakeAttribution? {
         if let attribution = EventWakeAttribution.from(metadata) { return attribution }
         for block in contentBlocks where block.type == .text {
@@ -177,9 +142,6 @@ extension ConversationMessage {
                 return attribution
             }
         }
-        // Legacy rows carry no metadata, only the machine-text prefix. Fall
-        // back to an empty attribution so the banner (generic label) replaces
-        // the raw machine text (FE parity: `isEventWakeMessage`).
         let text = contentBlocks
             .first { $0.type == .text }?
             .resolvedText?

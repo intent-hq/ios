@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// Presentation-only "New messages" unread marker (FE parity:
-/// NewMessagesDivider.svelte) — hairline, envelope + caption, hairline.
-/// Never part of the transcript; rendered by ConversationView directly
-/// after the session's latched divider anchor message.
 struct NewMessagesDividerView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale

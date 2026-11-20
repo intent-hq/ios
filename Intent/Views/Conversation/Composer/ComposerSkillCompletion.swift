@@ -9,7 +9,6 @@ import UIKit
     @ObservationIgnored private weak var editor: UITextView?
     @ObservationIgnored private var dismissedContext: SlashSkillContext?
     @ObservationIgnored private var ranking: Ranking?
-    /// Number of times the catalog was ranked; reads between query or catalog changes reuse the result.
     @ObservationIgnored private(set) var rankingCount = 0
 
     private struct Ranking {
@@ -19,8 +18,6 @@ import UIKit
         let matches: [SkillInfo]
     }
 
-    /// Reading `catalog.skills` and `context` keeps observers subscribed to both inputs, while the
-    /// ranked result is memoized so repeated reads within one render do not re-rank the catalog.
     var matches: [SkillInfo] {
         let skills = catalog.skills
         let query = context?.query ?? ""

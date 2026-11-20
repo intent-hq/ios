@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Actions float above the navigation content without resetting its scroll position.
 struct WorkspaceActionLauncher: ViewModifier {
     let isSearching: Bool
     var isEnabled = true
@@ -27,7 +26,6 @@ struct WorkspaceActionLauncher: ViewModifier {
     private enum Layout {
         static let blurRadius: CGFloat = 15
         static let shadeOpacity = 0.8
-        // Exact 8-bit palette channels preserve the shared light/dark home-menu fade in IOS Working.
         static let shade = Color(sRGBHex: Constants.DesignPalette.homeMenuFade)
         static let springResponse = 0.35
         static let springDamping = 0.85
@@ -53,22 +51,15 @@ struct WorkspaceActionLauncher: ViewModifier {
         .onChange(of: isOpen) { _, open in HapticManager.impact(open ? .medium : .light) }
     }
 
-    // Keep the original modifier chain and ordering on devices without a vertical bar.
     private func floatingMenu(content: Content) -> some View {
         content
-            // Raised attention rows hide while the menu is open; the launcher's
-            // clearance keeps floating-composer transcripts out from under it.
             .environment(\.workspaceActionMenuOpen, isOpen)
-            .environment(\.workspaceActionLauncherClearance, isSearching ? 0 : AssistantLaunchButton.scrollClearance)
             .scrollDisabled(isOpen)
             .blur(radius: isOpen && !reduceTransparency ? Layout.blurRadius : 0)
             .allowsHitTesting(!isOpen)
-            // Enabled launchers need explicit visibility for drawer hit testing while closed.
-            // Disabled launchers must preserve the hidden states of retained iPad panes.
             .accessibilityHidden(isOpen, isEnabled: isEnabled)
             .overlayPreferenceValue(WorkspaceActionMenuInputTop.self) { inputTop in
                 let bottomInset = avoidsConversationInput ? inputTop.map { max(0, overlayBottom - $0) } ?? 0 : 0
-                // Keep the overlay's measured extent independent of its padded controls.
                 if isEnabled {
                     Color.clear
                         .allowsHitTesting(false)
@@ -88,8 +79,6 @@ struct WorkspaceActionLauncher: ViewModifier {
             }
             .onChange(of: coordinator.selectedWorkspaceId) { _, _ in isOpen = false }
             .onDisappear { isOpen = false }
-            // Temporary coverage: the window's floating chat composer hides
-            // while the menu is open and keeps its draft and imports.
             .coversConversationComposers(while: isOpen)
     }
 
@@ -143,7 +132,6 @@ struct WorkspaceActionLauncher: ViewModifier {
                     .transition(reduceMotion ? .opacity : .offset(y: Layout.tileEntranceOffset).combined(with: .opacity))
             }
             if usesVerticalBar {
-                // Keep the close control inside the modal overlay's accessibility boundary.
                 if isOpen || floatingVerticalBarButtonOffset != nil {
                     verticalBarButton
                 }
@@ -205,7 +193,6 @@ struct WorkspaceActionLauncher: ViewModifier {
     }
 }
 
-/// Pushed compact Duo screens need a launcher after the Workspaces list leaves the screen.
 struct WorkspaceCompactActionLauncher: ViewModifier {
     let showsWorkspaceDetail: Bool
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
@@ -240,14 +227,12 @@ struct WorkspaceCompactActionLauncher: ViewModifier {
     }
 }
 
-/// Navigation content owns the toolbar; its outer launcher still owns the menu overlay.
 struct WorkspaceActionLauncherToolbar: ViewModifier {
     var isEnabled = true
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @Environment(\.workspaceActionMenuPresented) private var menuPresented
 
     func body(content: Content) -> some View {
-        // Gate the modifier itself: older SDKs cannot build an empty toolbar closure.
         #if os(iOS) && canImport(SwiftUI, _version: 8.0.85)
         if #available(iOS 27.1, *), usesVerticalBar {
             content.toolbar {
@@ -273,7 +258,6 @@ struct WorkspaceActionLauncherToolbar: ViewModifier {
     }
 }
 
-/// The active input's top edge in the same global coordinate space as the launcher overlay.
 struct WorkspaceActionMenuInputTop: PreferenceKey {
     nonisolated static var defaultValue: CGFloat? { nil }
 
@@ -311,7 +295,6 @@ private struct WorkspaceVerticalBarKey: UITraitBridgedEnvironmentKey {
         }
     }
 
-    // This observes a system-owned trait; the app must not override its placement.
     static func write(to _: inout any UIMutableTraits, value _: HorizontalEdge?) {}
 }
 #endif

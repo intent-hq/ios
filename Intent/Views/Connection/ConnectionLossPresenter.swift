@@ -1,9 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// A root overlay is below sheets and full-screen covers. A window in the SAME
-/// scene covers those presentations without dismissing them or losing drafts.
-/// Visibility is set synchronously, outside SwiftUI's transition machinery.
 struct ConnectionLossPresenter: UIViewRepresentable {
     let isPresented: Bool
     let mismatches: [HostCertMismatch]
@@ -42,8 +39,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
             isPresented: isPresented,
             content: AnyView(content.environment(\.self, context.environment))
         )
-        // An initial update can precede didMoveToWindow. Window membership
-        // can also disappear temporarily; dismantle owns permanent teardown.
         if let window = uiView.window { coordinator.attach(to: window) }
     }
 
@@ -78,10 +73,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
         private var content = AnyView(EmptyView())
 
         func attach(to window: UIWindow?) {
-            // UIKit/SwiftUI may temporarily remove the anchor during scene
-            // transitions. A missing window is not a request to dismiss an
-            // existing loss or discard pending content. Keep the source until
-            // a real rebind, recovery, Home, or dismantleUIView tears it down.
             guard let window else { return }
             guard sourceWindow !== window else { return }
             hide(reason: .sourceWindowChanged)
@@ -98,8 +89,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
 
         func homeAction(_ onHome: @escaping () -> Void) -> () -> Void {
             { [weak self] in
-                // SwiftUI owns this coordinator while mounted. The stored
-                // content must not own it back, even before a window exists.
                 self?.detach()
                 var transaction = Transaction(animation: nil)
                 transaction.disablesAnimations = true
@@ -129,9 +118,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
                     sourceAccessibilityHidden = sourceWindow.accessibilityElementsHidden
                     sourceInteractionEnabled = sourceWindow.isUserInteractionEnabled
                     sourceWindow.endEditing(true)
-                    // Freeze the actual page, including presented sheets, before
-                    // showing our window. A material would add its own tint on
-                    // top of the design's tint and flatten the frosted detail.
                     sourceSnapshot = snapshot(of: sourceWindow)
                     sourceWindow.accessibilityElementsHidden = true
                     sourceWindow.isUserInteractionEnabled = false
@@ -172,8 +158,6 @@ struct ConnectionLossPresenter: UIViewRepresentable {
 
         private func snapshot(of window: UIWindow) -> UIImage? {
             guard !window.bounds.isEmpty else { return nil }
-            // One point per pixel is sufficient for this diffuse backdrop. Keep this
-            // transient image in memory only; hide releases it on every exit.
             let format = UIGraphicsImageRendererFormat()
             format.scale = 1
             let renderer = UIGraphicsImageRenderer(bounds: window.bounds, format: format)

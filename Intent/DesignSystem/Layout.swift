@@ -72,14 +72,9 @@ extension Constants.Conversation.Composer {
     static let pendingImageSide: CGFloat = 56
     static let pendingFileMaximumWidth: CGFloat = 200
     static let textContainerInset: CGFloat = 4
-    // Composer control hit target: visionOS gaze targeting needs ≥60 pt
-    // (HIG); other platforms keep the 44 pt tap minimum.
+
     #if os(visionOS)
     static let controlTarget: CGFloat = 60
-    // The empty field matches the 60 pt side controls exactly: minimum text
-    // view height equals the control target with no outer vertical padding,
-    // capsule corners, and short content vertically centered by
-    // KeyCommandTextView.
     static let minimumTextViewHeight: CGFloat = controlTarget
     static let fieldVerticalPadding: CGFloat = 0
     static let fieldCornerRadius: CGFloat = 30
@@ -123,7 +118,6 @@ extension Constants.Conversation.QuestionWizard {
     static let progressSegmentCornerRadius: CGFloat = 2
     static let checkboxSide: CGFloat = 15
     static let checkboxCornerRadius: CGFloat = 4
-    // Free-text answer grows from one line up to this many, then scrolls.
     static let freeTextMaximumLineCount = 6
 }
 
@@ -253,8 +247,7 @@ extension Constants.WorkspaceRow {
     static let statusIconSize: CGFloat = 16
     static let statusGlyphScale: CGFloat = 0.5
     static let statusRingWidth: CGFloat = 2
-    // visionOS attention cue: single-step z-lift + scale on rows needing
-    // input, plus a brighter status chip. No continuous animation (HIG).
+
     #if os(visionOS)
     static let attentionCueZOffset: CGFloat = 12
     static let attentionCueScale: CGFloat = 1.02
@@ -288,6 +281,15 @@ extension Constants.WorkspaceSearch {
     static let borderWidth: CGFloat = 0.5
     static let bottomPadding: CGFloat = 8
     static let focusAnimationDuration: Double = 0.2
+
+    #if os(visionOS)
+    static let visionWindowCornerRadius: CGFloat = 46
+    static let windowCornerInset: CGFloat = visionWindowCornerRadius - cornerRadius
+    static let windowCornerBottomPadding: CGFloat = windowCornerInset
+    #else
+    static let windowCornerInset: CGFloat = contentSpacing
+    static let windowCornerBottomPadding: CGFloat = bottomPadding
+    #endif
 }
 
 extension Constants.WorkspaceDetail {
@@ -296,8 +298,7 @@ extension Constants.WorkspaceDetail {
     static let titleBottomPadding: CGFloat = 4
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
-    // visionOS deliberate confirmation sheets for destructive/irreversible
-    // workspace actions (archive, delete).
+
     #if os(visionOS)
     static let confirmationSheetSpacing: CGFloat = 16
     static let confirmationSheetPadding: CGFloat = 32
@@ -343,7 +344,6 @@ extension Constants.RepoOwnerAvatar {
 }
 
 extension Constants.Pairing {
-    // Connect frame 3051:54405. Wide windows retain a readable centered column.
     static let maximumContentWidth: CGFloat = 480
     static let contentSpacing: CGFloat = 64
     static let headerSpacing: CGFloat = 24
@@ -452,10 +452,8 @@ extension Constants.Toast {
     static let glassShadowOpacity: Double = 0.18
     static let glassShadowRadius: CGFloat = 24
     static let glassShadowYOffset: CGFloat = 10
-    /// Background tint that keeps text behind the glass from competing with the banner.
     static let frostOpacity: Double = 0.6
     static let outerHorizontalPadding: CGFloat = 12
-    /// Wide windows keep the toast to the conversation's readable width instead of the full screen.
     static let maximumWidth = Constants.Conversation.Design.IPad.readableWidth
     static let resetSpringResponse: Double = 0.3
     static let resetSpringDamping: Double = 0.7

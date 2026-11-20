@@ -9,7 +9,6 @@ struct LogOffConfirmationSheet: View {
     @State private var isConfirming = false
 
     private enum Layout {
-        // ConnectionSheet replaces this estimate with measured, scrollable content.
         static let initialHeight: CGFloat = 400
         static let actionSpacing: CGFloat = 12
     }

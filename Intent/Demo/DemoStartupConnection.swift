@@ -1,9 +1,6 @@
 import Foundation
 
 #if DEBUG
-/// Debug UI tests seed a saved pinned loopback route, then use the production
-/// ConnectionManager and connecting/recovery views. Only post-admission data is
-/// served by demo fixtures; no progress state or connected flag is injected.
 enum DemoStartupConnection {
     private static var startupBackendID: BackendID?
 

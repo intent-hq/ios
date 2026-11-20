@@ -3,15 +3,11 @@ import Network
 import os
 
 extension WebSocketConnection {
-    /// The result of a successful HTTP upgrade: the agreed compression (nil
-    /// when uncompressed) and any frame bytes that arrived with the 101.
     nonisolated struct Upgrade: Sendable {
         let deflate: PerMessageDeflateParameters?
         let leftover: Data
     }
 
-    /// Sends the RFC 6455 upgrade request over the ready TCP/TLS stream and
-    /// validates the server's 101 response.
     nonisolated static func performUpgrade(
         _ connection: NWConnection,
         url: URL,
@@ -61,7 +57,6 @@ extension WebSocketConnection {
 
     // MARK: - Raw stream I/O
 
-    /// Reads the next available bytes; nil when the peer ended the stream.
     nonisolated static func read(_ connection: NWConnection, host: String) async throws -> Data? {
         try await withCheckedThrowingContinuation { continuation in
             connection.receive(minimumIncompleteLength: 1, maximumLength: readChunkSize) { content, _, isComplete, error in
@@ -82,9 +77,6 @@ extension WebSocketConnection {
         }
     }
 
-    /// Enqueues `data` and waits until Network.framework has processed it.
-    /// The enqueue happens synchronously, before the caller suspends. Used
-    /// for the upgrade request, before the socket is open.
     nonisolated static func write(_ data: Data, to connection: NWConnection, host: String) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             enqueue(data, to: connection) { error in
@@ -93,8 +85,6 @@ extension WebSocketConnection {
         }
     }
 
-    /// `write` for frames after the upgrade: refuses once a close frame has
-    /// been queued, so no data ever follows it on the wire (RFC 6455 §5.5.1).
     nonisolated static func writeWhileOpen(
         _ data: Data,
         to connection: NWConnection,
@@ -111,9 +101,6 @@ extension WebSocketConnection {
         }
     }
 
-    /// Enqueues while holding the lifecycle lock, the same lock `close`
-    /// holds while queuing the close frame, so the two can never reorder.
-    /// Returns false once the socket is closing.
     nonisolated static func enqueueWhileOpen(
         _ data: Data,
         to connection: NWConnection,
@@ -148,8 +135,6 @@ extension WebSocketConnection {
         WebSocketFrameEncoder.encode(WebSocketFrame(opcode: opcode, payload: payload), maskingKey: .random())
     }
 
-    /// The status to answer a peer's close with (RFC 6455 §5.5.1): its own
-    /// code when that code may be sent on the wire, otherwise 1000.
     nonisolated static func echoedCloseCode(_ code: Int) -> UInt16 {
         guard let value = UInt16(exactly: code), WebSocketCloseCode.isSendable(value) else {
             return WebSocketCloseCode.normalClosure
@@ -157,10 +142,6 @@ extension WebSocketConnection {
         return value
     }
 
-    /// Sends a websocket close frame (once, when the socket opened) and
-    /// cancels the underlying connection. Safe to call repeatedly and from any
-    /// context: once the connection is cancelled, further sends complete with
-    /// an error and cancel() is idempotent.
     nonisolated static func close(
         _ connection: NWConnection,
         lifecycle: Lifecycle,
@@ -184,14 +165,10 @@ extension WebSocketConnection {
             connection.cancel()
             return
         case .closing:
-            // A close frame is already in flight with its fallback cancel.
             return
         case .open:
             break
         }
-        // An unresponsive peer or dead path can leave the close-frame send
-        // pending forever; guarantee teardown with a fallback cancel after a
-        // grace period (cancel() is idempotent).
         queue.asyncAfter(
             deadline: .now() + Constants.WebSocket.closeCancellationGracePeriod
         ) { connection.cancel() }

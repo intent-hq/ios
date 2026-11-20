@@ -27,22 +27,13 @@ class PersistenceManager {
     let keychainAccountConnections = "connections"
     let activeConnectionIdKey = "activeConnectionId"
 
-    /// Backing store for non-secret values. Tests inject a private suite so
-    /// persisted state (navigation, drafts, active connection id) can't leak
-    /// between tests or into the real app container.
     let defaults: UserDefaults
 
-    /// Backend for Keychain-stored values. Tests substitute an in-memory
-    /// implementation (SecItem calls fail in headless CI simulators).
     var keychainStorage: KeychainStorage
-    /// Explicit opt-in: custom/test/ephemeral stores never publish through a
-    /// production writer. Only `shared` installs it outside the test host.
     let backendPublisher: SyncedBackendPublisher?
     let invitedRegistry: InvitedSessionRegistry?
     var invitedRefreshInProgress = false // swiftlint:disable:this state_phase_flag
 
-    /// Published only after a saved connection mutation succeeds. Window
-    /// labels observe their own record, independently of the last-used pointer.
     var connectionsDidChange: AnyPublisher<Void, Never> { connectionsChanged.eraseToAnyPublisher() }
     private let connectionsChanged = PassthroughSubject<Void, Never>()
 
@@ -66,8 +57,6 @@ extension PersistenceManager {
         loadConnectionsWithOutcome().connections ?? []
     }
 
-    /// Use this at storage entry/retry boundaries instead of treating a failed
-    /// compatibility `loadConnections()` read as an ordinary empty list.
     func loadConnectionsWithOutcome() -> ConnectionRegistryReadResult {
         let result = readConnectionsLocked()
         guard case .missing = result else { return result }
@@ -78,28 +67,11 @@ extension PersistenceManager {
         readConnectionsLocked().error == .malformed
     }
 
-    /// Inserts the connection, or updates the existing entry in place (preserving its
-    /// id) when its certificate fingerprint matches, or one at the same port
-    /// shares at least one host or tailcat tunnel address. Returns the stored value.
-    ///
-    /// Overlap (not set equality) is the match key because the post-connect route
-    /// refresh grows stored host sets over time: a re-pair of the same daemon via a
-    /// single manually entered host (or a QR payload with a different host list) must
-    /// still update the grown record in place instead of inserting a duplicate. On a
-    /// match, the existing record's hosts are kept (in order) and new hosts appended,
-    /// so previously known routes are never dropped by a narrower re-pair.
-    ///
-    /// A matching tcAddress is an equally valid identity: a manual tunnel-only
-    /// re-pair carries no hosts at all (its host set is disjoint with every
-    /// record), so without this key each re-pair of the same tc address would
-    /// insert a duplicate record.
     @discardableResult
     func upsertConnection(_ connection: StoredConnection) -> StoredConnection {
         upsertConnectionWithOutcome(connection).connection
     }
 
-    /// Upserts a connection and reports whether the resulting registry was
-    /// durably saved. Callers that publish pairing success must use this form.
     @discardableResult
     func upsertConnectionWithOutcome(
         _ connection: StoredConnection
@@ -127,16 +99,11 @@ extension PersistenceManager {
                     name: server.name,
                     pairedAt: server.pairedAt,
                     certFingerprint: server.certFingerprint,
-                    // A re-pair without a tunnel address (manual entry, QR
-                    // from a daemon whose tunnel is down) must not drop the
-                    // known one; the post-connect refresh keeps it current.
                     tcAddress: Self.invitedTunnelAddress(connection, fallback: existing.server.tcAddress)
                 ),
                 token: connection.token,
                 displayName: connection.displayName,
                 lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt,
-                // Keep the last observed clock; a deliberate local pairing
-                // gets its own pending edit clock before the atomic save.
                 syncUpdatedAt: connection.syncUpdatedAt ?? existing.syncUpdatedAt
             )
             stored.principal = connection.principal ?? existing.principal
@@ -183,9 +150,6 @@ extension PersistenceManager {
                 || incoming.server.tcAddress != nil && stored.server.tcAddress == incoming.server.tcAddress)
     }
 
-    /// Existing hosts keep their order and are never dropped; incoming hosts not
-    /// already present are appended, deduped case-insensitively (DNS names and
-    /// IPv6 hex are case-insensitive — ios#341), keeping the first spelling seen.
     static func mergeHostLists(existing: [String], incoming: [String]) -> [String] {
         var merged = existing
         var seen = Set(existing.map(SyncedBackendConnectionMerge.normalizeHost))
@@ -198,10 +162,6 @@ extension PersistenceManager {
         return merged
     }
 
-    /// Replaces the stored host list of the connection with the given id,
-    /// preserving the record identity. Unlike `upsertConnection` (which matches
-    /// by host set + port and would treat a grown host set as a new pairing),
-    /// this never inserts or duplicates records. No-op when the id is unknown.
     @discardableResult
     func updateConnectionHosts(id: UUID, hosts: [String]) -> Bool {
         guard var connections = loadConnectionsWithOutcome().connections else { return false }
@@ -221,10 +181,6 @@ extension PersistenceManager {
         return true
     }
 
-    /// Replaces the stored tailcat tunnel address of the connection with the
-    /// given id, preserving the record identity. Used by the post-connect
-    /// refresh when `system.status` reports a `tcAddress`. No-op when the id
-    /// is unknown.
     @discardableResult
     func updateConnectionTcAddress(id: UUID, tcAddress: String) -> Bool {
         guard var connections = loadConnectionsWithOutcome().connections else { return false }
@@ -246,10 +202,6 @@ extension PersistenceManager {
         return true
     }
 
-    /// Replaces the stored display name of the connection with the given id,
-    /// preserving the record identity. Used by the post-connect refresh so
-    /// records saved before the daemon reported a pretty hostname heal on the
-    /// next successful connect. No-op when the id is unknown.
     @discardableResult
     func updateConnectionDisplayName(id: UUID, displayName: String) -> Bool {
         guard var connections = loadConnectionsWithOutcome().connections else { return false }
@@ -279,9 +231,6 @@ extension PersistenceManager {
         return true
     }
 
-    /// The last-used backend pointer (window model v2: no longer a
-    /// navigation concept — it only seeds which backend a fresh window
-    /// binds to at launch).
     func activeConnection() -> StoredConnection? {
         guard let connections = loadConnectionsWithOutcome().connections else { return nil }
         guard let id = activeConnectionIdLocked() else { return nil }
@@ -296,9 +245,6 @@ extension PersistenceManager {
         return true
     }
 
-    /// The backend a fresh window binds to at launch when system restoration
-    /// supplied none: the last-used pointer when its record still exists,
-    /// else the most recently connected saved record.
     func lastUsedConnection() -> StoredConnection? {
         if let active = activeConnection() { return active }
         return loadConnections().max { lhs, rhs in
@@ -314,14 +260,6 @@ extension PersistenceManager {
         return saveConnectionsLocked(connections)
     }
 
-    /// Merges the iCloud-synced backend registry's per-key winners (including
-    /// tombstones) into the saved connections — one atomic pass under the
-    /// persistence lock (see `SyncedBackendConnectionMerge` for the rules).
-    /// A tombstone that removes the active connection also clears the active
-    /// pointer; the outcome flags it so the caller can disconnect/route away.
-    /// A failed keychain write reports a no-op outcome (pointer untouched) so
-    /// the caller never disconnects while the saved list still holds the
-    /// connection; the merge simply retries on the next registry read.
     @discardableResult
     func mergeSyncedBackends(records: [SyncedBackendRecord]) -> SyncedBackendMergeOutcome {
         let read = loadConnectionsWithOutcome()
@@ -386,12 +324,7 @@ extension PersistenceManager {
         return UUID(uuidString: raw)
     }
 
-    /// One-time migration of the legacy single pairing (Keychain `serverInfo`+`apiToken`,
-    /// or the even older UserDefaults `pairedServer`) into the connections list.
-    /// Legacy entries are only removed after the new blob is written successfully.
     private func migrateLegacyPairingIfNeeded() -> ConnectionRegistryReadResult {
-        // Called only after the registry was positively identified as missing.
-        // Never fall back to older defaults after a failed Keychain server read.
         let serverData: Data?
         switch readDataFromKeychain(account: keychainAccountServer) {
         case .missing: serverData = defaults.data(forKey: serverKey)
@@ -449,12 +382,9 @@ extension PersistenceManager {
         return (connection.server, connection.token)
     }
 
-    /// Forgets the active connection (removes it from the saved list).
     @discardableResult
     func clearPairing() -> Bool {
         guard let connections = loadConnectionsWithOutcome().connections else { return false }
-        // Do not erase legacy entries if their prerequisite reads failed, even
-        // when a newer registry exists and therefore needs no migration.
         for account in [keychainAccountServer, keychainAccountToken] {
             switch readDataFromKeychain(account: account) {
             case .unavailable, .malformed: return false
@@ -464,7 +394,6 @@ extension PersistenceManager {
         if let connection = connections.first(where: { $0.id == activeConnectionIdLocked() }) {
             guard deleteConnection(id: connection.id) else { return false }
         }
-        // Clean up any legacy entries
         deleteFromKeychain(account: keychainAccountToken)
         deleteFromKeychain(account: keychainAccountServer)
         defaults.removeObject(forKey: serverKey)

@@ -87,7 +87,6 @@ private extension ToolClassifier {
 
     static func isWorkspaceApiName(_ name: String) -> Bool {
         let clean = cleanToolName(name).lowercased()
-        // Codex uses mcp.<server>.<tool>; keep this recognition local to workspace_api.
         return clean == "workspace_api"
             || clean.range(of: #"^mcp\.[a-z0-9_-]+\.workspace_api$"#, options: .regularExpression) != nil
     }
@@ -98,8 +97,6 @@ private extension ToolClassifier {
         let p = context.path
         let acpTitle = context.acpTitle
         let summary = context.summary
-        // workspace_api: prefer human-readable label over the raw tool name
-        // (detected by name, or by input shape: code + summary)
         if isWorkspaceApiName(context.name)
             || (input["code"]?.value is String && summary != nil) {
             let titleIsRawName = acpTitle.map { title in
@@ -115,7 +112,6 @@ private extension ToolClassifier {
             }
         }
 
-        // File read
         if clean.contains("view") || clean.contains("read"),
            !clean.contains("terminal"),
            !clean.contains("process"),
@@ -127,8 +123,6 @@ private extension ToolClassifier {
                 let verb = hasSearch ? "Search" : isDir ? "List" : "Read"
                 return ToolDisplay(icon: .file, verb: verb, subject: filename(p), path: dirname(p))
             }
-            // _acpTitle fallback: extract the path from e.g. "Read `src/foo.rs`"
-            // (no end anchor: multi-line titles match on the first line, like desktop)
             if let title = acpTitle,
                let captured = firstCapture(#"^(?:Read|View|List\s+Contents?)\s+(.+)"#, in: title),
                let candidate = pathCandidate(captured) {
@@ -154,7 +148,6 @@ private extension ToolClassifier {
         let clean = context.clean
         let p = context.path
         let acpTitle = context.acpTitle
-        // File write/edit
         if clean.contains("edit") || clean.contains("str-replace") || clean.contains("str_replace")
             || clean.contains("save") || clean.contains("write"),
            !clean.contains("note"),
@@ -164,7 +157,6 @@ private extension ToolClassifier {
                 let file = p ?? ""
                 return ToolDisplay(icon: .edit, verb: verb, subject: filename(file), path: dirname(file))
             }
-            // _acpTitle fallback: extract the path from e.g. "Edit `src/foo.ts`"
             if let title = acpTitle,
                let captured = firstCapture(#"^(?:Edit|Save|Read|Write|Delete|View|Create)\s+(.+)"#, in: title),
                let candidate = pathCandidate(captured) {
@@ -177,7 +169,6 @@ private extension ToolClassifier {
             }
         }
 
-        // File delete
         if clean.contains("remove") || clean.contains("delete"),
            !clean.contains("note"),
            !clean.contains("comment") {
@@ -203,7 +194,6 @@ private extension ToolClassifier {
 
     static func classifyTerminal(_ context: ClassificationContext) -> ToolDisplay? {
         let clean = context.clean
-        // Terminal/process
         guard isTerminalTool(context) else { return nil }
         if let operation = terminalOperationDisplay(clean: clean) { return operation }
         let invocation = context.command.map(terminalCommandInvocation)
@@ -246,8 +236,6 @@ private extension ToolClassifier {
 
     private static func terminalTitleInvocation(_ title: String?) -> TerminalInvocation? {
         guard let title else { return nil }
-        // _acpTitle fallback: extract the verb/command from e.g. "Run `cargo test`",
-        // "Kill terminal 5", "Launch `pnpm dev`" (desktop parity).
         let pattern = #"^(Run|Launch|Read|List|Kill|Write)\s+`?(.+?)`?\s*$"#
         guard let titleVerb = firstCapture(pattern, in: title, group: 1)?.lowercased(),
               let rest = firstCapture(pattern, in: title, group: 2)?
@@ -275,7 +263,6 @@ private extension ToolClassifier {
         let clean = context.clean
         let infoReq = context.informationRequest
         let query = context.query
-        // Script operations
         if clean.contains("script") {
             let scriptName = input["name"]?.value as? String
             if clean.contains("create") { return ToolDisplay(icon: .terminal, verb: "Create script", subject: scriptName, path: nil) }
@@ -285,7 +272,6 @@ private extension ToolClassifier {
             return ToolDisplay(icon: .terminal, verb: "Script", subject: scriptName, path: nil)
         }
 
-        // Context engine
         if clean.contains("codebase") || clean.contains("retrieval") || clean.contains("git_commit_retrieval") || clean.contains("git-commit-retrieval") {
             let request = infoReq ?? query
             let source = clean.contains("git") || clean.contains("commit") ? "Commit History" :
@@ -296,7 +282,6 @@ private extension ToolClassifier {
             return ToolDisplay(icon: .context, verb: "Context Engine", subject: subject, path: nil)
         }
 
-        // Search
         if clean.contains("search") || clean.contains("grep") || clean.contains("glob") || clean.contains("find") {
             if clean.contains("web") {
                 return ToolDisplay(
@@ -324,8 +309,6 @@ private extension ToolClassifier {
 }
 
 private extension ToolClassifier {
-    /// Nth capture group of a case-insensitive regex match, or nil.
-    /// Compiled regexes are cached by pattern (rows re-render often mid-turn).
     private static var regexCache: [String: Regex<AnyRegexOutput>] = [:]
     private static let regexCacheLock = NSLock()
 
@@ -351,9 +334,6 @@ private extension ToolClassifier {
         return String(capture)
     }
 
-    /// Treat a captured title fragment as a file path when it looks like one:
-    /// contains "." or "/", or is a single backtick-quoted token (extensionless
-    /// filenames like "Read `LICENSE`" / "Edit `Makefile`").
     private static func pathCandidate(_ captured: String) -> String? {
         let raw = captured.trimmingCharacters(in: .whitespaces)
         let wasQuoted = raw.count > 2 && raw.hasPrefix("`") && raw.hasSuffix("`")

@@ -30,8 +30,6 @@ extension ConversationTranscriptView {
                 return
             }
             if viewModel.filteredMessages.suffix(Self.eagerTailMessageLimit).contains(where: { $0.id == target }) {
-                // A nested message ID cannot reliably realize its offscreen
-                // lazy parent. Realize the tail first, then resolve the row.
                 proxy.scrollTo("transcript-tail", anchor: .top)
                 let ownership = scrollState.viewportOwnershipRevision
                 DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
@@ -71,10 +69,6 @@ extension ConversationTranscriptView {
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
             cancelBottomBandRePin()
-            // The lifecycle and its tasks live in the parent-owned scroll
-            // state, so they survive the empty view replacing this transcript.
-            // Reuse the all-owner cancellation before resetting the entry
-            // latches; the reset clears its gesture-specific fallback state.
             cancelPendingFollowOnTakeover(proxy: proxy)
             scrollState.rearmAfterTranscriptEmptied()
             return
@@ -115,8 +109,6 @@ extension ConversationTranscriptView {
             return
         }
         traceSnapshot("entryScheduled")
-        // Snapshot appearance can precede an already-running detail read by a
-        // layout pass. Decide at initial layout, not at this scheduling edge.
         scrollState.entryScroll = .scheduled
         let generation = scrollState.initialScrollGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
@@ -152,11 +144,6 @@ extension ConversationTranscriptView {
         }
     }
 
-    /// A `scrollTo` issued before the UIScrollView is hosted is lost and the
-    /// bottom anchor wins, so when the entry timer beats hosting (instant load
-    /// during the push transition) the scroll waits for the finder's edge —
-    /// bounded by `initialScrollHostingTimeout` so a finder that never
-    /// resolves still scrolls. Performs at most once across all paths.
     private func performInitialScrollWhenReady(
         proxy: ScrollViewProxy,
         scrollViewWaitElapsed: Bool,
@@ -203,22 +190,15 @@ extension ConversationTranscriptView {
         }
     }
 
-    /// Without an unread divider the entry scroll is a forced follow, so its
-    /// landing is verified from the live geometry like any other.
     private func performInitialScroll(proxy: ScrollViewProxy, generation: Int) {
         guard let dividerAnchor = viewModel.newMessagesDividerAnchorId else {
             traceEvent("EntryTarget", "target=end")
             scrollToBottom(proxy: proxy, forced: true, animated: false)
             return
         }
-        // The divider is nested inside this stable lazy row. Realize its
-        // bottom first, including when the seen message exceeds the viewport.
-        // The divider's measured frame then aligns the boundary at the top.
         scrollState.pendingEntryDivider = dividerAnchor
         traceEvent("EntryTarget", "target=divider row=\(dividerAnchor)")
         proxy.scrollTo(dividerAnchor, anchor: .bottom)
-        // Runs before `hasInitiallyScrolled` flips (probe < settle delay), so
-        // no automatic follow can be queued ahead of this decision.
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.dividerProbeDelay) {
             scrollState.applyDividerProbe(
                 distanceToBottom: scrollMomentumProxy.distanceToBottom,

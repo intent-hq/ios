@@ -1,7 +1,5 @@
 import Foundation
 
-/// This channel is intentionally separate from AppLog: no message, identifier,
-/// path, dictionary or foreign error can be supplied to a persisted event.
 nonisolated struct DiagnosticEvent: Codable, Equatable, Sendable {
     enum Kind: String, Codable, CaseIterable, Sendable {
         case appSessionStarted = "app.session_started"
@@ -95,8 +93,6 @@ nonisolated struct DiagnosticEvent: Codable, Equatable, Sendable {
         self.context = context
     }
 
-    /// Consecutive repetition only. Recovery, terminal exhaustion, cancellation
-    /// and state changes always get their own record, even if otherwise equal.
     var canSummarize: Bool {
         failure != .none && [.bestEffort, .failed, .fallbackPending, .retrying].contains(outcome)
     }

@@ -2,9 +2,6 @@ import SwiftUI
 import UIKit
 
 extension Constants.Typography.Style {
-    /// For UIKit text and attributed runs. Supply the view's current traits, and resolve
-    /// again when they change. Do not scale this already-scaled font a second time.
-    /// Textual attachment measurement also resolves fonts outside the main actor.
     nonisolated func uiFont(compatibleWith traits: UITraitCollection) -> UIFont {
         let resolvedFace = traits.legibilityWeight == .bold ? face.legibleFace : face
         let base = UIFont(name: resolvedFace.rawValue, size: size) ?? UIFont.systemFont(ofSize: size)

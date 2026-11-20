@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// The window's two connection-loss surfaces: the blocking screen once
-/// reconnection stops, and the read-only banner while it keeps trying.
 struct ConnectionLossLayers: View {
     let coordinator: AppCoordinator
     let connection: any SessionConnectionManaging

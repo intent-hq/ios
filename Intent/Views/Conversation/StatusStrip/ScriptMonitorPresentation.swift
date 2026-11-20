@@ -1,6 +1,5 @@
 import Foundation
 
-/// Watch metadata describes notification triggers, never the runtime state of a script.
 enum ScriptMonitorPresentation {
     static let notificationExplanation = "Notifies the agent when this run finishes or the watch expires."
     static let deadlineReached = "Watch deadline reached; awaiting confirmation"

@@ -108,7 +108,6 @@ nonisolated enum WorkspaceBrowserURL {
         if let port = components.port, !(1...maximumPort).contains(port) {
             throw WorkspaceBrowserError.invalidURL
         }
-        // An empty explicit port is not a usable host:port entry.
         let authority = qualified.dropFirst("\(scheme)://".count).prefix { !"/?#".contains($0) }
         guard !authority.hasSuffix(":") else { throw WorkspaceBrowserError.invalidURL }
         components.scheme = scheme
@@ -125,8 +124,6 @@ nonisolated enum WorkspaceBrowserURL {
             return current.isEmpty || current == "about:blank" ? requestedURL : nil
         }
         if origin(currentURL) == origin(requestedURL) { return currentURL }
-        // The registry retains the pre-rewrite address and rebases its path as
-        // the desktop navigates. Its loaded address can use a desktop-only port.
         let host = URLComponents(string: requestedURL)?.host
         return host == "127.0.0.1" || host == "client.localhost" ? requestedURL : currentURL
     }

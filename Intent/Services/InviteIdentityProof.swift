@@ -1,28 +1,19 @@
 import Foundation
 
-/// The person's own daemon (a Mac this phone is paired to as its owner). A
-/// first-time guest proves a forge account by having that daemon publish the
-/// host's nonce under the account (protocol §5.48 "The identity proof"); the
-/// forge token never leaves the Mac. Abstracted for tests.
 @MainActor
 protocol InviteOwnDaemon: AnyObject {
-    /// `collaborationIdentity: 1`: the separate `identity.*` sign-in exists (§5.49).
     var supportsCollaborationIdentity: Bool { get }
-    /// Protocol 10.8+ serves GitLab proofs (`sourceControl.identityProof.*`).
     var supportsIdentitySeam: Bool { get }
 
     func request(_ method: String, params: [String: Any]) async throws -> Any
     func close()
 }
 
-/// The forge account the own daemon is signed in as.
 nonisolated struct InviteAccount: Equatable, Sendable {
     let provider: String
     let host: String
     let login: String
-    /// Known when the account was matched by stable id.
     let externalUserId: String?
-    /// Read through the separate collaboration sign-in (`identity.*`).
     let collaboration: Bool
 
     var isGitHub: Bool { provider == "github" }
@@ -37,29 +28,19 @@ nonisolated struct InviteAccount: Equatable, Sendable {
     }
 }
 
-/// Why the own daemon could not produce a proof, as bounded reasons.
 nonisolated enum InviteProofFailure: Error, Equatable, Sendable {
-    /// The Mac published the proof under a different account than the one confirmed.
     case accountChanged
-    /// The account lacks the permission a proof needs (`gist` / `api`).
     case missingScope(provider: String)
-    /// No account is signed in for the provider the invite needs.
     case notSignedIn(provider: String)
     case rateLimited
     case unavailable
-    /// The Mac is too old for the invite's GitLab requirement.
     case unsupported
-    /// The signed-in account is not the one the invite was made for.
     case wrongAccount(provider: String)
 }
 
 @MainActor
 enum InviteIdentityProof {
-    /// The account to prove for `pin`, or nil when none is signed in.
     static func account(for pin: InvitePin, on daemon: any InviteOwnDaemon) async throws -> InviteAccount? {
-        // A Mac with the separate collaboration sign-in proves only with it:
-        // falling back to repository credentials is forbidden (§5.49), so a
-        // missing collaboration account means signing in there.
         if daemon.supportsCollaborationIdentity {
             return try await collaborationAccount(for: pin, on: daemon)
         }
@@ -68,8 +49,6 @@ enum InviteIdentityProof {
         case .pinned(let identity):
             required = identity
         case .unpinned where daemon.supportsIdentitySeam:
-            // Explicitly unpinned: the person's selected identity (Settings),
-            // or any connected account when none is selected yet.
             guard let selected = try await selectedIdentity(on: daemon) else { return try await anyAccount(on: daemon) }
             required = selected
         case .unknown, .unpinned:
@@ -107,7 +86,6 @@ enum InviteIdentityProof {
         guard let proofId = (row?["proofId"] as? String) ?? (row?["gistId"] as? String), !proofId.isEmpty,
               let login = row?["login"] as? String, !login.isEmpty else { throw InviteProofFailure.unavailable }
         let proof = InviteProof(provider: account.provider, host: account.host, proofId: proofId, login: login)
-        // Never prove an account the person did not confirm.
         guard login == account.login, (row?["provider"] as? String).map({ $0 == account.provider }) ?? true else {
             await delete(proof, collaboration: account.collaboration, on: daemon)
             throw InviteProofFailure.accountChanged
@@ -115,7 +93,6 @@ enum InviteIdentityProof {
         return proof
     }
 
-    /// Best effort: the proof is spent once the host has read it.
     static func delete(_ proof: InviteProof, collaboration: Bool, on daemon: any InviteOwnDaemon) async {
         var params = target(provider: proof.provider, host: proof.host)
         let method: String
@@ -168,7 +145,6 @@ enum InviteIdentityProof {
         return identity
     }
 
-    /// No requirement (older host): GitHub first, then the Mac's GitLab connection.
     private static func anyAccount(on daemon: any InviteOwnDaemon) async throws -> InviteAccount? {
         let user = try await githubUser(on: daemon)
         if let login = nonBlank(user["login"]) {
@@ -202,7 +178,6 @@ enum InviteIdentityProof {
         return InviteAccount(provider: required.provider, host: required.host, login: login, externalUserId: required.externalUserId, collaboration: false)
     }
 
-    /// Empty when GitHub is not connected; a rate limit is neither.
     private static func githubUser(on daemon: any InviteOwnDaemon) async throws -> [String: Any] {
         do {
             let result = try await daemon.request("github.getUser", params: [:])
@@ -213,7 +188,6 @@ enum InviteIdentityProof {
         }
     }
 
-    /// Empty when the status can't be read; a rate limit throws.
     private static func gitlabStatus(params: [String: Any], on daemon: any InviteOwnDaemon) async throws -> [String: Any] {
         do {
             return try await daemon.request("sourceControl.authStatus", params: params) as? [String: Any] ?? [:]
@@ -225,12 +199,10 @@ enum InviteIdentityProof {
 
     // MARK: - Helpers
 
-    /// GitHub's host param is omitted; other providers name their instance.
     private static func target(provider: String, host: String) -> [String: Any] {
         provider == "github" ? ["provider": provider] : ["provider": provider, "host": host]
     }
 
-    /// The daemon's documented proof refusals (`error.data.code`), else unavailable.
     static func failure(_ error: any Error, provider: String) -> InviteProofFailure {
         if let failure = error as? InviteProofFailure { return failure }
         switch (error as NSError).intentErrorDataCode {
@@ -242,10 +214,8 @@ enum InviteIdentityProof {
         }
     }
 
-    /// The largest integer a JSON number carries exactly (2^53 - 1).
     private static let maximumSafeInteger: Double = 9_007_199_254_740_991
 
-    /// A forge account id as the canonical string (GitHub sends a number).
     static func stableId(_ value: Any?) -> String? {
         if let text = value as? String { return text.isEmpty ? nil : text }
         guard let number = ConnectionPrincipal.number(value), number.isFinite, number >= 0,

@@ -1,7 +1,5 @@
 import Security
 
-/// Classification accepts only closed values. Boundary helpers discard unknown
-/// numeric codes; they never accept Error/NSError or inspect foreign text.
 nonisolated struct DiagnosticFailure: Codable, Equatable, Sendable {
     enum Origin: String, Codable, CaseIterable, Sendable {
         case localOperation = "local_operation"
@@ -86,8 +84,6 @@ nonisolated struct DiagnosticFailure: Codable, Equatable, Sendable {
         self.code = code
     }
 
-    /// Call only at the remote response boundary, not on the flattened
-    /// WebSocket NSError domain shared by local and remote errors.
     static func remoteRPC(code: Int) -> Self {
         let safeCode: Code = switch code {
         case rpcParseError: .parseError
@@ -100,8 +96,6 @@ nonisolated struct DiagnosticFailure: Codable, Equatable, Sendable {
         return Self(origin: .remoteRPC, classification: .remoteRejected, code: safeCode)
     }
 
-    /// The operation owner decides whether item-not-found is a failure at all.
-    /// Unknown status integers are deliberately not retained.
     static func securityStatus(_ status: Int32, classification: Classification) -> Self {
         let safeCode: Code = switch status {
         case errSecAuthFailed: .authentication

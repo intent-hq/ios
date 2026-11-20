@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// One session PR feed serves row and conversation leases. A row never creates
-/// its own registration; each interested workspace has one acknowledged seed.
 @MainActor
 @Observable final class WorkspacePrMonitorsStore {
     static let shared = WorkspacePrMonitorsStore()

@@ -2,9 +2,6 @@ import Combine
 import Observation
 import SwiftUI
 
-/// Owns one window's attachment independently of its native scene value.
-/// Home keeps that value (so openWindow can still raise the native window),
-/// but releases the backend and displays a fresh, unbound pairing session.
 @MainActor
 @Observable
 final class BackendWindowSession {
@@ -32,8 +29,6 @@ final class BackendWindowSession {
             .sink { [weak self] in self?.refreshSceneTitle() }
     }
 
-    /// Attachment identity survives navigation and connection loss. The
-    /// native scene value alone cannot distinguish a bound window from Home.
     var sceneTitle: String? {
         guard let backendID = session?.backendID,
               !registry.isBackendRemoved(backendID) else { return nil }
@@ -45,13 +40,10 @@ final class BackendWindowSession {
             savedDisplayName = nil
             return
         }
-        // A temporarily locked/unavailable Keychain must not erase a known
-        // label. A successful read with no matching record does clear it.
         guard let connections = persistence.loadConnectionsWithOutcome().connections else { return }
         savedDisplayName = connections.first { $0.id == backendID.connectionID }?.displayName
     }
 
-    /// Scene-owned, not session-owned: Home, rebinds and retries keep the same lease.
     func updateNetworkObservation(for phase: ScenePhase) {
         if phase == .active { refreshSceneTitle() }
         if phase == .active, networkLease == nil {
@@ -91,9 +83,6 @@ final class BackendWindowSession {
         bind(to: nil)
     }
 
-    /// SceneStorage survives the demo's ephemeral persistence. Ignore its
-    /// Home flag on a fresh demo launch, but honor explicit Home navigation
-    /// for the rest of this window's lifetime, including reappearances.
     func restoreSavedMachines(_ restored: Bool, isDemo: Bool = DemoMode.isEnabled) -> Bool {
         guard !hasRestoredSavedMachines else { return isShowingSavedMachines }
         hasRestoredSavedMachines = true
@@ -101,28 +90,21 @@ final class BackendWindowSession {
         return isShowingSavedMachines
     }
 
-    /// Hand the explicit selection to a new coordinator, but not an existing
-    /// window that is only being raised or left on the same backend.
     func prepareForSelection(to target: BackendID, route: WindowRetargetRoute) {
         switch route {
         case .rebindInPlace:
             guard session?.backendID != target else { return }
-        case .replaceWindow:
-            // Raising an attached window creates no coordinator to consume a
-            // token. Do not let that selection leak into later restoration.
+        case .openTargetWindow, .replaceWindow:
             guard registry.attachmentCount(for: target) == 0 else { return }
         }
         registry.markConnectionSelected(target)
     }
 
-    /// Also used for an unchanged scene value: writing the same BackendID
-    /// cannot trigger SwiftUI's onChange after returning Home.
     func rebind(to backendID: BackendID?) {
         prepareToRebind()
         bind(to: backendID)
     }
 
-    /// Leaves binding to the root when it must first validate a saved record.
     func prepareToRebind() {
         release()
         isShowingSavedMachines = false

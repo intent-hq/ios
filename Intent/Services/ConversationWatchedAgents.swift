@@ -57,8 +57,6 @@ final class ConversationWatchedAgents {
             guard let snapshot = try await commands.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) else { return }
             guard !Task.isCancelled, generation == readGeneration, isCurrent() else { return }
             guard await awaitAuthority(), !Task.isCancelled, generation == readGeneration, isCurrent() else { return }
-            // Keep sparse field presence and each participant's canonical workspace.
-            // Bundled display rows never grant detail authority.
             summaries.seed(snapshot.agents, since: snapshot.summaryBoundary)
             watchedAgentIds = snapshot.watchedAgentIds
             groups = snapshot.groups
@@ -92,8 +90,6 @@ final class ConversationWatchedAgents {
         )
     }
 
-    /// The view reports actual viewport intersection, not LazyVStack prefetch.
-    /// Each window owns its own interest; one disappearing window cannot cancel another.
     func setVisible(_ agentId: String, visible isVisible: Bool, consumer: UUID) {
         if isVisible, visible[consumer]?.contains(agentId) != true { errors[agentId] = nil }
         if isVisible { visible[consumer, default: []].insert(agentId) } else { visible[consumer]?.remove(agentId) }
@@ -105,8 +101,6 @@ final class ConversationWatchedAgents {
         reconcileVisibility()
     }
 
-    /// Selecting an unresolved placeholder is an explicit detail interest. It
-    /// shares the very same backend/agent flight with visible rows and routes.
     func selectedAgent(_ agentId: String) async -> WatchedAgentRow? {
         let generation = readGeneration
         guard watchedAgentIds.contains(agentId), !row(agentId).isDeleted else { return nil }
@@ -168,7 +162,6 @@ final class ConversationWatchedAgents {
         errors[agentId] = nil
     }
 
-    // Enriched activity is display data, never a reason to discover an offscreen agent.
     func handleActivity(agentId: String, lastAgentResponse: String?, digest: String?) {
         guard watchedAgentIds.contains(agentId), let agent = localAgents[agentId] else { return }
         localAgents[agentId] = agent.applyingPreview(lastAgentResponse: lastAgentResponse, digest: digest)

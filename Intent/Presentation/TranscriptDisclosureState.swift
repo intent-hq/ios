@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Owned by the conversation, so moving a row between lazy history and the
-/// eager tail does not reset the reader's disclosure choices.
 @MainActor
 final class TranscriptDisclosureStore {
     private var rows: [String: TranscriptDisclosureState] = [:]
@@ -37,7 +35,6 @@ extension EnvironmentValues {
     @Entry var transcriptDisclosureState: TranscriptDisclosureState?
 }
 
-/// Standalone previews and non-transcript callers still get local state.
 struct TranscriptDisclosure: DynamicProperty {
     @Environment(\.transcriptDisclosureState) private var retained
     @State private var local: [TranscriptDisclosureState.DisclosureKey: Bool] = [:]

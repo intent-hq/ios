@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// The Settings surface deliberately does not change the app-wide theme.
 enum SettingsStyle {
     static let contentMargin: CGFloat = 24
     static let sectionSpacing: CGFloat = 24

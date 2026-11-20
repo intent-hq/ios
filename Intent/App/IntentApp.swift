@@ -21,10 +21,6 @@ struct IntentApp: App {
         }
         #endif
         _ = NotificationManager.shared
-        // Aggregate agent alerts across every live backend session: each
-        // session attaches an observer on creation and detaches on
-        // last-window teardown (window model v2: there is no default
-        // session; transient pairing sessions carry no backend to observe).
         BackendSessionRegistry.shared.onSessionCreated = { session in
             NotificationManager.shared.attachSessionObserver(for: session)
             #if os(iOS)
@@ -50,12 +46,6 @@ struct IntentApp: App {
     }
 
     var body: some Scene {
-        // Window model v2: every window is bound to exactly one backend.
-        // `openWindow(value:)` raises the existing window for a backend or
-        // opens a new one; system restoration reopens the last open windows
-        // with their values. A nil value (plain launch, restoration loss)
-        // resolves to the last-used backend, else runs a transient pairing
-        // session until a pairing completes and rebinds the window.
         WindowGroup(for: BackendID.self) { $backendID in
             BackendWindowRoot(
                 backendID: $backendID,
@@ -78,7 +68,6 @@ struct IntentApp: App {
         #endif
     }
 
-    /// Debug connection-loss demos substitute a scripted network monitor.
     private static var networkAvailability: NetworkAvailability {
         #if DEBUG
         DemoConnectionLoss.networkAvailability ?? .shared
@@ -88,35 +77,40 @@ struct IntentApp: App {
     }
 }
 
-/// The retarget policy for a switch/pair action performed in a window: a
-/// bound window switches in place on every platform, so picking another
-/// connection never spawns a window ("Open in New Window" in a connection's
-/// context menu is the explicit multi-window path). Where multiple windows
-/// are supported, an unbound (pairing) window is REPLACED by the target's
-/// own window rather than rebound, so the first window bound after pairing
-/// keeps a native scene value that `openWindow(value:)` can raise.
 enum WindowRetargetRoute: Equatable {
+    case openTargetWindow
     case rebindInPlace
     case replaceWindow
 
+    nonisolated static var platformOpensSeparateBackendWindows: Bool {
+        #if os(visionOS)
+        true
+        #else
+        false
+        #endif
+    }
+
     static func route(
         currentBackendID: BackendID?,
-        supportsMultipleWindows: Bool
+        target: BackendID,
+        supportsMultipleWindows: Bool,
+        choosesBackendInPlace: Bool = false,
+        opensSeparateBackendWindows: Bool = platformOpensSeparateBackendWindows
     ) -> Self {
-        supportsMultipleWindows && currentBackendID == nil ? .replaceWindow : .rebindInPlace
+        guard supportsMultipleWindows else { return .rebindInPlace }
+        guard let currentBackendID else { return .replaceWindow }
+        guard opensSeparateBackendWindows, !choosesBackendInPlace, currentBackendID != target else {
+            return .rebindInPlace
+        }
+        return .openTargetWindow
     }
 }
 
-/// Root of one window (scene): owns that window's `AppCoordinator` so windows
-/// sharing a session navigate independently (spec "State split"). `@State`
-/// keeps one coordinator per scene; the session's restoration claim is
-/// consumed lazily on first use, so coordinators built for discarded view
-/// constructions never spend it. Scene phase and incoming URLs are handled
-/// here so each window's coordinator sees its own scene's lifecycle.
 struct SessionWindowRoot: View {
     let session: BackendSession
     let networkAvailability: NetworkAvailability
-    let retargetWindow: ((BackendID) -> Void)?
+    let retargetWindow: ((BackendID, Bool) -> Void)?
+    let retargetRoute: ((BackendID, Bool) -> WindowRetargetRoute)?
     let returnToSavedMachines: (() -> Void)?
     @State private var coordinator: AppCoordinator
     @Environment(\.scenePhase) private var scenePhase
@@ -124,13 +118,15 @@ struct SessionWindowRoot: View {
     init(
         session: BackendSession,
         networkAvailability: NetworkAvailability = .shared,
-        retargetWindow: ((BackendID) -> Void)? = nil,
+        retargetWindow: ((BackendID, Bool) -> Void)? = nil,
+        retargetRoute: ((BackendID, Bool) -> WindowRetargetRoute)? = nil,
         returnToSavedMachines: (() -> Void)? = nil,
         startingAtSavedMachines: Bool = false
     ) {
         self.session = session
         self.networkAvailability = networkAvailability
         self.retargetWindow = retargetWindow
+        self.retargetRoute = retargetRoute
         self.returnToSavedMachines = returnToSavedMachines
         _coordinator = State(initialValue: session.makeCoordinator(startingAtSavedMachines: startingAtSavedMachines))
     }
@@ -143,7 +139,13 @@ struct SessionWindowRoot: View {
             .environment(\.scriptMonitorPresentationDate, DemoScriptMonitorFixtures.configuredPresentationDate())
             #endif
             .onAppear {
-                coordinator.retargetWindow = retargetWindow
+                let coordinator = coordinator
+                coordinator.retargetWindow = retargetWindow.map { hook in
+                    { [weak coordinator] target in hook(target, coordinator?.choosesBackendInPlace ?? false) }
+                }
+                coordinator.retargetRoute = retargetRoute.map { hook in
+                    { [weak coordinator] target in hook(target, coordinator?.choosesBackendInPlace ?? false) }
+                }
                 coordinator.returnWindowToSavedMachines = returnToSavedMachines
             }
             .onOpenURL { url in
@@ -172,26 +174,6 @@ struct SessionWindowRoot: View {
     }
 }
 
-/// Root of one backend-bound window (window model v2). The scene value is
-/// the binding contract: a bound window attaches its backend's shared
-/// session through the registry (created on first attach, refcounted across
-/// windows) and releases it when the window closes or rebinds, so the
-/// registry tears the session down at zero windows. A nil scene value
-/// (plain launch, restoration loss) is resolved once to the last-used
-/// backend; with none paired the window runs a transient pairing session
-/// until a pairing completes and rebinds it via the retarget hook.
-/// Returning Home releases the attachment without rewriting the native
-/// scene value. The per-scene Home flag restores an unbound pairing session
-/// instead of auto-connecting; selecting the native backend reattaches it.
-///
-/// Backend removal: when the registry marks this window's backend removed —
-/// user delete, log off, synced tombstone, or (on bind) a restored window
-/// whose saved record no longer exists — the session is released
-/// immediately (dropping the connection via the normal detach path) and the
-/// window dismisses itself via `dismissWindow(value:)`; the app's last
-/// window rebinds to the pairing surface instead of leaving zero windows.
-/// If a dismissal cannot be delivered, the "connection removed" placeholder
-/// remains with a manual Close Window button applying the same decision.
 struct BackendWindowRoot: View {
     private static let replacementConnectionPollLimit = 20
 
@@ -231,13 +213,11 @@ struct BackendWindowRoot: View {
                 SessionWindowRoot(
                     session: session,
                     networkAvailability: windowSession.networkAvailability,
-                    retargetWindow: retarget,
+                    retargetWindow: retarget(to:choosingInPlace:),
+                    retargetRoute: retargetRoute(for:choosingInPlace:),
                     returnToSavedMachines: windowSession.returnToSavedMachines,
                     startingAtSavedMachines: windowSession.isShowingSavedMachines
                 )
-                    // A rebind must build a fresh window root (new
-                    // coordinator over the new session), not update the old
-                    // one in place.
                     .id(ObjectIdentifier(session))
             } else {
                 Color.clear
@@ -256,8 +236,6 @@ struct BackendWindowRoot: View {
             windowSession.updateNetworkObservation(for: scenePhase)
             #if DEBUG
             if let demoBackendID = DemoSettings.consumeStartupBackendID() ?? DemoStartupConnection.consumeStartupBackendID() {
-                // Connection and settings demos use this process's fresh fixtures,
-                // not an obsolete native scene value or restored Home state.
                 restoresSavedMachines = false
                 backendID = demoBackendID
             }
@@ -265,8 +243,6 @@ struct BackendWindowRoot: View {
             restoresSavedMachines = windowSession.restoreSavedMachines(restoresSavedMachines)
             if backendID == nil, !windowSession.isShowingSavedMachines,
                let lastUsed = PersistenceManager.shared.lastUsedConnection() {
-                // Plain launch (no restored scene value): bind to the
-                // last-used backend; bindCurrentBackend runs via onChange.
                 backendID = BackendID(lastUsed.id)
                 return
             }
@@ -282,8 +258,6 @@ struct BackendWindowRoot: View {
             windowSession.prepareToRebind()
             bindCurrentBackend()
         }
-        // initial: true covers a mark set before this window ever rendered
-        // (removal racing a window that is still opening or being restored).
         .onChange(of: isRemoved, initial: true) { _, removed in
             guard removed else { return }
             windowSession.release()
@@ -295,12 +269,8 @@ struct BackendWindowRoot: View {
         }
     }
 
-    /// Attaches the session for the current scene value: the backend's
-    /// shared session when bound, else a fresh transient pairing session.
     private func bindCurrentBackend() {
         if let backendID, !windowSession.isShowingSavedMachines {
-            // A window restored (or retargeted) after its backend's record
-            // was removed: mark it so the shared auto-close path takes over.
             if !isRemoved,
                !PersistenceManager.shared.loadConnections()
                    .contains(where: { $0.id == backendID.connectionID }) {
@@ -312,16 +282,12 @@ struct BackendWindowRoot: View {
         windowSession.bind(to: backendID)
     }
 
-    /// The coordinator's retarget hook: switch this window to `target` in
-    /// place, or replace this unbound pairing window with the target's own
-    /// window so it stays raisable by value.
-    private func retarget(to target: BackendID) {
-        let route = WindowRetargetRoute.route(
-            currentBackendID: backendID,
-            supportsMultipleWindows: supportsMultipleWindows
-        )
+    private func retarget(to target: BackendID, choosingInPlace: Bool) {
+        let route = retargetRoute(for: target, choosingInPlace: choosingInPlace)
         windowSession.prepareForSelection(to: target, route: route)
         switch route {
+        case .openTargetWindow:
+            openWindow(value: target)
         case .replaceWindow:
             openWindow(value: target)
             dismissWhenReplacementConnects()
@@ -332,6 +298,15 @@ struct BackendWindowRoot: View {
                 backendID = target
             }
         }
+    }
+
+    private func retargetRoute(for target: BackendID, choosingInPlace: Bool) -> WindowRetargetRoute {
+        WindowRetargetRoute.route(
+            currentBackendID: backendID,
+            target: target,
+            supportsMultipleWindows: supportsMultipleWindows,
+            choosesBackendInPlace: choosingInPlace || windowSession.isShowingSavedMachines
+        )
     }
 
     /// Dismisses this (pairing) window once the replacement window's scene
@@ -352,15 +327,6 @@ struct BackendWindowRoot: View {
         }
     }
 
-    /// Close-or-rebind decision for a removed backend: with other windows
-    /// open, dismiss this one; the app's last window rebinds to the pairing
-    /// surface instead of leaving zero windows. Sibling windows still
-    /// attached to the removed backend (this window has already detached)
-    /// are excluded from the count: they will run this same decision and
-    /// cannot be relied on to survive, so two windows on the removed
-    /// backend never race both into `.dismiss` and end at zero windows —
-    /// the first to decide rebinds to pairing, and the later one counts it
-    /// as a surviving window and dismisses.
     private func closeRemovedWindow() {
         guard let removedID = backendID else { return }
         let windowScenes = UIApplication.shared.connectedScenes
@@ -379,20 +345,10 @@ struct BackendWindowRoot: View {
     }
 }
 
-/// What removing a window's backend does to the window (window model v2):
-/// with other windows open, `dismissWindow(value:)` closes it; the app's
-/// last window rebinds to the pairing surface instead — never zero windows,
-/// never a silently dead surface.
 enum RemovedWindowCloseAction: Equatable {
     case dismiss
     case retargetToPairing
 
-    /// `connectedWindowScenes` is the number of window scenes connected to
-    /// the app, including the removed window itself;
-    /// `attachedRemovedBackendWindows` counts the sibling windows still
-    /// attached to the removed backend (the deciding window has already
-    /// detached). Only windows outside both — scenes that survive the
-    /// removal — justify a dismiss.
     static func forWindowCounts(
         connectedWindowScenes: Int,
         attachedRemovedBackendWindows: Int
@@ -402,9 +358,6 @@ enum RemovedWindowCloseAction: Equatable {
     }
 }
 
-/// Fallback surface for a window whose backend was removed but whose
-/// programmatic dismissal could not be delivered: names the state and
-/// offers a manual close that works even as the last window.
 private struct RemovedBackendPlaceholderView: View {
     let onClose: () -> Void
 

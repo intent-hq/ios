@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// A transient viewer route captures its repository so sidebar changes cannot retarget its diffs.
 struct WorkspaceChangeDestination: Hashable {
     let id = UUID()
     let workspaceId: String

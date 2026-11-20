@@ -2,7 +2,6 @@ import PDFKit
 import SwiftUI
 
 struct PDFLightboxView: View {
-    /// Retain the file independently of the transcript attachment/cache.
     let pdf: WorkspacePDF
     @Environment(\.dismiss) private var dismiss
     @ScaledMetric(relativeTo: .body) private var closeIconSide: CGFloat = 17
@@ -56,7 +55,6 @@ struct PDFLightboxView: View {
     }
 }
 
-/// PDFView supplies native continuous scrolling, text accessibility, and pinch zoom.
 struct WorkspacePDFView: UIViewRepresentable {
     let pdf: WorkspacePDF
 

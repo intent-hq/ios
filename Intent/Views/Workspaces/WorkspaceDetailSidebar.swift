@@ -1,8 +1,6 @@
 import CoreText
 import SwiftUI
 
-/// Chrome for the workspace overview while it sits in the iPad shell's sidebar
-/// beside one of its agents or notes. The main view's Back leaves it.
 struct WorkspaceDetailSidebar {
     let onCollapse: () -> Void
 }
@@ -60,12 +58,9 @@ struct WorkspaceSidebarHeader<Title: View, Actions: View>: View {
     }
 }
 
-/// The Duo's sidebar workspace names itself in the list header's slot: same component,
-/// type and insets as "Workspaces", fixed above the scrolling page.
 struct WorkspaceSidebarTitleHeader: View {
     let title: String
 
-    /// The Duo header shows no collapse control, so its action is never invoked.
     private static func ignoreCollapse() {}
 
     var body: some View {
@@ -74,7 +69,6 @@ struct WorkspaceSidebarTitleHeader: View {
                 .interFont(IPadSidebarStyle.titleStyle)
                 .tracking(IPadSidebarStyle.titleTracking)
                 .fixedSize(horizontal: false, vertical: true)
-                // The list's row is as tall as its controls; this one has none.
                 .frame(minHeight: Constants.WorkspaceSearch.compactHeight)
                 .accessibilityAddTraits(.isHeader)
         } actions: {
@@ -84,7 +78,6 @@ struct WorkspaceSidebarTitleHeader: View {
 }
 
 extension View {
-    /// Marks the open agent or note in a sidebar workspace with the sidebar's selection surface.
     func workspaceSidebarSelection(_ isSelected: Bool) -> some View {
         modifier(WorkspaceSidebarSelection(isSelected: isSelected))
     }
@@ -107,7 +100,6 @@ private struct WorkspaceSidebarSelection: ViewModifier {
                             ? IPadSidebarStyle.selection(for: colorScheme)
                             : Theme.sidebarSelection(for: colorScheme))
                         .padding(.vertical, -Self.outset)
-                        // The Duo page sits on the list's 8 pt inset, so the fill stops at the column edge.
                         .padding(.horizontal, -(usesVerticalBar ? IPadSidebarStyle.compactInset : Self.outset))
                 }
             }

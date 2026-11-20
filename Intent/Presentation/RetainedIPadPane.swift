@@ -23,9 +23,6 @@ struct RetainedIPadPane<Content: View>: View {
     }
 }
 
-/// Scopes visibility without adding another accessibility container. Retained
-/// panes already group their children; an outer group around native content can
-/// claim window-sized bounds after focus changes and obscure adjacent controls.
 struct IPadPaneBounds: ViewModifier {
     let identifier: String
     let isAccessible: Bool
@@ -116,7 +113,6 @@ struct IPadNavigationVisibilityBridge: UIViewControllerRepresentable {
                 originalAccessibilityHidden = target.accessibilityElementsHidden
                 originalInteractionEnabled = target.isUserInteractionEnabled
             }
-            // NavigationStack's native children escape outer SwiftUI hiding.
             target.accessibilityElementsHidden = !isInteractive || originalAccessibilityHidden
             target.isUserInteractionEnabled = isInteractive && originalInteractionEnabled
         }

@@ -1,14 +1,11 @@
 import Lottie
 import SwiftUI
 
-/// Full-screen launch splash using the supplied twist intro and pulse loop.
 struct SplashArtView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var playback: SplashPlaybackState
-    /// Held for the view's lifetime only, so the decoded compositions go away with
-    /// the splash (ios#256).
     @State private var lease: SplashAnimationLease?
 
     private let store: SplashAnimationStore
@@ -96,9 +93,6 @@ struct SplashBackground: View {
     }
 }
 
-/// Lottie renders the source paths, keyframes and time remapping directly. The
-/// existing monotonic clock is the sole playback driver: Lottie never starts an
-/// independent animation that could continue while this scene is inactive.
 struct SplashFrameView: View {
     let animation: LottieAnimation
     let frame: AnimationFrameTime
@@ -107,7 +101,6 @@ struct SplashFrameView: View {
 
     var body: some View {
         LottieView(animation: animation)
-            // Honor the SwiftUI proposal instead of the 256-point intrinsic size (ios#475).
             .resizable()
             .configuration(LottieConfiguration(renderingEngine: .mainThread))
             .paused(at: .frame(frame))

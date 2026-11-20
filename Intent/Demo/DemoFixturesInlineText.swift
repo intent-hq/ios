@@ -3,21 +3,16 @@ import Foundation
 import UIKit
 
 extension DemoFixtures {
-    /// Opt-in so existing demo transcripts and screenshots stay unchanged.
     static var usesInlineText: Bool {
         let arguments = LaunchOptions.current.arguments
         return DemoMode.demoDataRequested(by: arguments) && arguments.contains("--demo-inline-text")
     }
 
     private static let inlineTextPath = "docs/Demo notes.txt"
-    /// Linked as a relative path, the way agents often write report links.
     private static let inlineHTMLPath = "reports/Demo report.html"
-    /// Referenced from the report by relative URLs, as generated reports do.
     private static let inlineReportStylesheetPath = "reports/assets/report.css"
     private static let inlineReportChartPath = "reports/images/usage-chart.png"
     private static let inlineReportFontPath = "reports/assets/fonts/Inter-ExtraBold.ttf"
-    /// Where the demo workspace sits on the Mac, for links written as absolute paths.
-    /// The daemon accepts an absolute path inside the workspace, so the report's files serve from both.
     private static let inlineWorkspaceFolder = "/Users/demo/dashboard/"
 
     static var inlineTextMessages: [[String: Any]] {
@@ -27,7 +22,6 @@ extension DemoFixtures {
             "[Open the missing text file](intent://local/file/docs/Missing%20notes.txt)",
             "[Open the HTML report](reports/Demo%20report.html)",
             "[Open the HTML report by absolute path](/Users/demo/dashboard/reports/Demo%20report.html)",
-            // Links the app can't open: each tap shows a message instead of doing nothing.
             "[Open the workspace settings](intent://local/settings)",
             "[Open the signed-in preview](http://user@localhost:3000)",
             "The notes are ready to review and share."
@@ -64,15 +58,11 @@ extension DemoFixtures {
         return files.merging(absolute) { relative, _ in relative }
     }
 
-    /// The app's own bundled Inter (SIL OFL 1.1, Inter-LICENSE.txt), served under a report-only
-    /// family name: the web content process cannot see app-registered fonts, so it renders only via @font-face.
     private static let inlineReportFontBytes: Data = {
         guard let url = Bundle.main.url(forResource: "Inter-ExtraBold", withExtension: "ttf") else { return Data() }
         return (try? Data(contentsOf: url)) ?? Data()
     }()
 
-    /// The inline rule hides the note; only the external stylesheet shows it,
-    /// so the note's presence proves the relative stylesheet loaded.
     private static let inlineHTMLBytes = Data("""
     <!doctype html>
     <html><head><meta charset="utf-8"><title>Demo report</title>
@@ -101,7 +91,6 @@ extension DemoFixtures {
 
     // Chart geometry and bar heights are fixture data, not tunable constants.
     // swiftlint:disable no_magic_numbers
-    /// Generated once in memory; no network, external tool, or bundle resource needed.
     private static let inlineReportChartBytes: Data = {
         let size = CGSize(width: 600, height: 300)
         let format = UIGraphicsImageRendererFormat()

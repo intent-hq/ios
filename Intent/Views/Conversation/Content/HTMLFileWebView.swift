@@ -1,11 +1,8 @@
 import SwiftUI
 import WebKit
 
-/// An inert, isolated document, not a browser: no scripts, network or navigation.
-/// Relative images, stylesheets and fonts load only from the report's own workspace.
 struct HTMLFileWebView: UIViewRepresentable {
     let file: WorkspaceTextFile
-    /// Location of `file`, workspace-relative or absolute; relative subresources resolve against it.
     let path: String
     let workspaceId: String
     let loader: WorkspaceFileImageLoader
@@ -56,7 +53,6 @@ struct HTMLFileWebView: UIViewRepresentable {
         let resources: HTMLFileResourceHandler
         private let onFailure: () -> Void
         private var file: WorkspaceTextFile?
-        /// The one navigation this page allows: its own initial load. Cleared once allowed.
         private var initialLoadURL: URL?
 
         init(resources: HTMLFileResourceHandler, onFailure: @escaping () -> Void) {
@@ -69,9 +65,6 @@ struct HTMLFileWebView: UIViewRepresentable {
             self.file = file
             let baseURL = resources.beginPage(filePath: path)
             initialLoadURL = baseURL ?? URL(string: "about:blank")
-            // Precede all untrusted markup, including any attacker-supplied CSP or <base>.
-            // Inline styling, data images and the report's own relative images, stylesheets and fonts work;
-            // scripts, frames, forms and every other load are denied.
             let prefix = """
             <!doctype html><head>
             <meta http-equiv="Content-Security-Policy" content="\(HTMLFileResourcePolicy.contentSecurityPolicy)">
@@ -82,7 +75,6 @@ struct HTMLFileWebView: UIViewRepresentable {
             webView.loadHTMLString(prefix + file.content, baseURL: baseURL)
         }
 
-        // WebKit only calls the async form of this delegate method.
         // swiftlint:disable:next async_without_await
         func webView(_: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
             guard let initialLoadURL, action.navigationType == .other,

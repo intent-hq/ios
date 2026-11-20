@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// Host policy for creation forms. A refresh hides the previous choices until
-/// catalog, settings and authentication have all been read successfully.
 @MainActor
 @Observable final class WorkspaceProviderOptions {
     enum State: Equatable {
@@ -51,8 +49,6 @@ import Observation
         await load()
     }
 
-    /// Always revalidate on sheet open or retry, joining concurrent callers.
-    /// Failed/unsupported reads never fall back to the unfiltered auth list.
     func load() async {
         hasAttemptedLoad = true
         if let loadTask {
@@ -131,8 +127,6 @@ private extension WorkspaceProviderOptions {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: EnablementCodingKeys.self)
             path = try container.decode(String.self, forKey: .path)
-            // The host returns null for an unset map, but a missing value is
-            // an invalid response. Strict Bool decoding rejects numeric flags.
             value = try container.decodeNil(forKey: .value) ? [:] : container.decode([String: Bool].self, forKey: .value)
         }
     }
@@ -148,7 +142,6 @@ private extension WorkspaceProviderOptions {
 
     struct AuthenticationEntry: Decodable {
         let id: String
-        // Missing or null authentication decodes as unknown, not an explicit signed-out result.
         // swiftlint:disable:next discouraged_optional_boolean
         let authenticated: Bool?
     }

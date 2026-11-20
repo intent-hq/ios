@@ -1,8 +1,6 @@
 #if os(iOS)
 import Foundation
 
-/// Turns workspace rows from every live backend into Live Activity content:
-/// only workspaces whose agents are running right now.
 enum AgentActivityContent {
     struct Entry {
         let connectionId: UUID
@@ -11,7 +9,6 @@ enum AgentActivityContent {
 
     struct Result {
         let state: AgentActivityAttributes.ContentState
-        /// Every running workspace, keyed like `AgentActivityRow.id`.
         let runningKeys: Set<String>
     }
 

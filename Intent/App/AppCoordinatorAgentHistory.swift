@@ -1,7 +1,6 @@
 import Foundation
 
 extension AppCoordinator {
-    /// Records every route into a conversation (taps, restore, alerts, history).
     func recordAgentVisit() {
         guard case let .agentConversation(agentId, workspaceId, agentName) = currentScreen,
               let connectionID = windowConnectionID else { return }
@@ -15,16 +14,11 @@ extension AppCoordinator {
         ))
     }
 
-    /// Forgets a workspace reported deleted or archived, but only when the
-    /// report came from this window's own device: a sheet pairing can borrow
-    /// the shared socket, and transfers keep workspace ids across devices.
     func forgetHistory(ofWorkspace workspaceId: String) {
         guard let connectionID = windowConnectionID, socketReachesWindowDevice else { return }
         agentHistory.removeWorkspace(workspaceId, on: connectionID)
     }
 
-    /// The shared socket is admitted with this window's saved credentials and
-    /// no pairing attempt owns it, so its events describe this device.
     private var socketReachesWindowDevice: Bool {
         let connection = dependencies.connection
         guard connection.connectionState == .connected,
@@ -34,7 +28,6 @@ extension AppCoordinator {
         return admission.token == saved.token && admission.fingerprint == saved.server.certFingerprint
     }
 
-    /// History entries this window can offer: the device must still be saved.
     var visibleAgentHistory: [AgentHistoryEntry] {
         AgentHistory.visible(agentHistory.entries, savedConnectionIDs: Set(savedConnections.map(\.id)))
     }
@@ -44,8 +37,11 @@ extension AppCoordinator {
         return agentId == entry.agentId && windowConnectionID == entry.connectionId
     }
 
-    /// Opens a history entry, switching device when the agent lives on another backend.
-    func onSelectHistoryEntry(_ entry: AgentHistoryEntry, notifications: NotificationManager = .shared) {
+    func onSelectHistoryEntry(
+        _ entry: AgentHistoryEntry,
+        notifications: NotificationManager = .shared,
+        opensSeparateBackendWindows: Bool = WindowRetargetRoute.platformOpensSeparateBackendWindows
+    ) {
         guard !isShowingConversation(of: entry) else { return }
         if entry.connectionId == windowConnectionID {
             onSelectAgent(entry.agentId, workspaceId: entry.workspaceId, agentName: entry.agentName)
@@ -55,7 +51,8 @@ extension AppCoordinator {
             agentId: entry.agentId,
             workspaceId: entry.workspaceId,
             agentName: entry.agentName,
-            connectionId: entry.connectionId
+            connectionId: entry.connectionId,
+            opensSourceWindow: opensSeparateBackendWindows
         ) { onSwitchConnection(id: $0) }
     }
 }

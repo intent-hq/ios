@@ -4,9 +4,6 @@ extension PersistenceManager {
     // MARK: - Last Viewed Screen (keyed per backend)
 
     private static let lastScreensKey = "lastScreens"
-    // Legacy single-slot keys (pre window model v2): read once as a
-    // migration fallback for the connection that was active when they were
-    // written, then cleaned up.
     private static let lastScreenKey = "lastScreen"
     private static let lastWorkspaceIdKey = "lastWorkspaceId"
     private static let lastAgentIdKey = "lastAgentId"
@@ -15,7 +12,7 @@ extension PersistenceManager {
     private static let lastNoteIdKey = "lastNoteId"
 
     struct SavedScreen: Codable {
-        let screen: String  // "workspaceList", "workspaceDetail", "conversation", "note"
+        let screen: String
         let workspaceId: String?
         let agentId: String?
         let agentName: String?
@@ -36,8 +33,6 @@ extension PersistenceManager {
         if let data = dict[connectionID.uuidString] as? Data {
             return try? JSONDecoder().decode(SavedScreen.self, from: data)
         }
-        // Legacy migration: the old single-slot screen belonged to the
-        // connection that was active when it was saved.
         guard let legacy = loadLegacyLastScreen(),
               activeConnection()?.id == connectionID else { return nil }
         saveLastScreen(legacy, for: connectionID)
@@ -89,7 +84,6 @@ extension PersistenceManager {
         defaults.string(forKey: Self.workspaceListViewModeKey).flatMap(ViewMode.init(rawValue:)) ?? .recent
     }
 
-    /// `workspaceListCollapsedRepoGroups` or `workspaceListCollapsedStatusGroups`.
     private static func collapsedGroupsKey(for mode: ViewMode) -> String {
         "workspaceListCollapsed\(mode.rawValue)Groups"
     }

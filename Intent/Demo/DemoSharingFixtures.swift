@@ -1,9 +1,6 @@
 #if DEBUG
 import Foundation
 
-/// Demo invite links for `--demo-data`: `workspace.invite.create` returns a
-/// fresh link that expires in a week (single-use when pinned to a login), so
-/// the Share sheet can be exercised without a host.
 enum DemoSharingFixtures {
     private static let fingerprintBytes = 32
     private static let fingerprint = String(repeating: "ab", count: fingerprintBytes)

@@ -1,8 +1,6 @@
 #if DEBUG
 import Foundation
 
-/// Demo `github.pulls.search` results over the demo workspaces' repositories.
-/// Honors the batch, `state`, `filter` and `query` parameters.
 enum DemoPullRequestFixtures {
     private struct Pull {
         let repo: String

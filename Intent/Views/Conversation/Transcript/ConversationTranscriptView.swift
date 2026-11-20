@@ -1,8 +1,5 @@
 import SwiftUI
 
-// Keep the ordered observation wiring here. Presentation, entry, follow,
-// recovery, geometry re-pinning, and demo support live in named extensions;
-// none introduces a new view identity, observation boundary, or state owner.
 struct ConversationTranscriptView: View {
     typealias Layout = Constants.Conversation.Transcript
 
@@ -12,9 +9,6 @@ struct ConversationTranscriptView: View {
     let scrollState: ConversationTranscriptScrollState
     let onNavigateToNote: (String, String, String) -> Void
     let onNavigateToAgent: (String, String, String) -> Void
-    /// Room kept below the last row for a floating Intent launcher (visionOS
-    /// floating composer only; 0 elsewhere, leaving iPhone/iPad unchanged).
-    var bottomClearance: CGFloat = 0
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -47,14 +41,11 @@ struct ConversationTranscriptView: View {
         scrollState.lifecycle
     }
 
-    /// A follow is pending: in its debounce, or verifying its landing.
     var followOwnsViewport: Bool {
         if case .follow = lifecycle.owner { return true }
         return false
     }
 
-    // Read-only conveniences for the extensions. Mutations still target the
-    // same parent-owned scrollState; no mutable forwarding API is exposed.
     var userIsScrolledAway: Bool { scrollState.userIsScrolledAway }
     var hasInitiallyScrolled: Bool { scrollState.hasInitiallyScrolled }
     var isScrollingToBottom: Bool { scrollState.isScrollingToBottom }
@@ -94,12 +85,6 @@ struct ConversationTranscriptView: View {
 }
 
 private extension ConversationTranscriptView {
-    /// The follow handlers stay gated until the entry-scroll decision finishes,
-    /// so stream updates cannot yank the viewport away from the unread divider.
-    /// Only discrete transitions scroll; streaming deltas ride the bottom anchor
-    /// and at most re-pin a drifted viewport (see the policy). Footer rows
-    /// resizing the container are handled by the geometry observation in
-    /// `transcriptScrollBase`, not per source.
     private func transcriptScrollView(
         proxy: ScrollViewProxy,
         dividerAnchorId: String?
@@ -116,9 +101,6 @@ private extension ConversationTranscriptView {
                 ) {
                     scrollToBottom(proxy: proxy, forced: true)
                 } else if !isStreaming {
-                    // The last delta and the thinking indicator leaving (or
-                    // the suggested prompts arriving) can rest a short
-                    // transcript short of the bottom (#346).
                     scheduleBottomBandRePinIfNeeded(proxy: proxy)
                 }
             }
@@ -158,11 +140,6 @@ private extension ConversationTranscriptView {
             }
     }
 
-    /// The scrolled-away edge is sampled together with the container height so
-    /// a footer row resizing the container and the edge that resize causes
-    /// arrive in one action (#272), and with the distance band so an edge the
-    /// observer drops is re-delivered at the next band crossing (#280, see
-    /// `ConversationTranscriptScrollPolicy.distanceBand`).
     private struct ScrolledAwayGeometry: Equatable {
         let isScrolledAway: Bool
         let distanceBand: Int
@@ -186,8 +163,6 @@ private extension ConversationTranscriptView {
             } action: { width in
                 scrollState.rowHeightCache.updateLayoutWidth(width)
             }
-            // Hosted on the stack itself, not a lazily realized row, so the
-            // UIScrollView is found regardless of which rows exist.
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
         }
         .defaultScrollAnchor(.bottom)
@@ -227,13 +202,7 @@ private extension ConversationTranscriptView {
         .onChange(of: collapseToolActivity) { _, _ in
             scrollState.rowHeightCache.invalidateAll()
         }
-        // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
-        // gesture here would starve Textual's UIKit link-tap recognizer.
         .onScrollGeometryChange(for: ScrolledAwayGeometry.self) { geometry in
-            // `containerSize` excludes the safe-area insets while
-            // `contentOffset` includes them, so measuring with it reads the
-            // top inset (the navigation bar) at rest at the bottom.
-            // `visibleRect` spans the full bounds, matching UIScrollView.
             let distance = ConversationTranscriptScrollPolicy.distanceToBottom(
                 contentHeight: geometry.contentSize.height,
                 contentOffsetY: geometry.contentOffset.y,
@@ -253,14 +222,6 @@ private extension ConversationTranscriptView {
             applyScrolledAwayEdge(geometryAway: new.isScrolledAway, proxy: proxy)
             scheduleBottomBandRePinIfNeeded(proxy: proxy)
         }
-        // A user-driven phase beginning takes over whatever follow is pending
-        // (see `takeOverPendingFollowIfGesture`). A gesture's last geometry
-        // edge can arrive after UIKit has cleared its deceleration flag, and
-        // the band observer above drops a flip that reverses within one
-        // layout pass (#280); the phase ending is one authoritative sample of
-        // where the gesture left the viewport. An explicit follow that cut
-        // the gesture short (Go to End stopping a fling, the tap that sent a
-        // message) owns the flag instead.
         .onScrollPhaseChange { oldPhase, newPhase, context in
             guard lifecycle.isVisible else { return }
             traceEvent("ScrollPhase", "old=\(oldPhase) new=\(newPhase)")
@@ -289,9 +250,6 @@ private extension ConversationTranscriptView {
                 proxy: proxy
             )
         }
-        // A viewport resting past the end of content taller than the container
-        // (blank band under the last message) reads "at bottom" above, so it
-        // is watched separately and re-pinned (#271).
         .onScrollGeometryChange(for: Bool.self) { geometry in
             ConversationTranscriptScrollPolicy.isPastEnd(
                 distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
@@ -330,8 +288,6 @@ private extension ConversationTranscriptView {
 }
 
 private extension ScrollPhase {
-    /// Phases driven by the user's finger or the deceleration after it;
-    /// `.animating` is a programmatic scroll and `.idle` is at rest.
     var isUserDriven: Bool {
         self == .tracking || self == .interacting || self == .decelerating
     }

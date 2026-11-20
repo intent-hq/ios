@@ -2,8 +2,6 @@ import Foundation
 import Network
 import Observation
 
-/// Presentation-only default-path evidence, independent of socket/retry ownership.
-/// Neither a satisfied nor an unsatisfied general path proves endpoint reachability.
 @MainActor @Observable
 final class NetworkAvailability {
     nonisolated enum Status: Equatable, Sendable {
@@ -22,7 +20,6 @@ final class NetworkAvailability {
         }
     }
 
-    /// Share across windows, not with ConnectionManager's per-socket monitor.
     static let shared = NetworkAvailability()
 
     private(set) var status: Status = .unknown
@@ -40,9 +37,6 @@ final class NetworkAvailability {
         self.diagnostics = diagnostics
     }
 
-    /// Retain one lease per foreground scene, including startup and reconnection.
-    /// Cancel/release on background or teardown, not on socket replacement or loss.
-    /// After the last release, the next acquire awaits a fresh real path callback.
     func acquire() -> Lease {
         Lease(owner: self)
     }
@@ -101,7 +95,6 @@ final class NetworkAvailability {
         ))
     }
 
-    /// Idempotent explicit cancellation, with automatic release at scene teardown.
     @MainActor final class Lease {
         private var owner: NetworkAvailability?
 

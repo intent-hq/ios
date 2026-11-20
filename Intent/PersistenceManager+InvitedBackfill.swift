@@ -16,8 +16,6 @@ extension PersistenceManager {
         return true
     }
 
-    /// A saved pre-v2 credential is classified only after pinned admission.
-    /// Its original pairing clock survives: reconnect is never a new intent.
     func backfillInvited(_ connection: inout StoredConnection) {
         guard invitedJournalAvailable, connection.invitedSyncPayload == nil,
               let key = connection.invitedPersonKey, var record = Self.legacyInvitedRecord(connection),
@@ -36,8 +34,6 @@ extension PersistenceManager {
         connection.localPairingSyncClock = record.pairedAt
     }
 
-    /// Authenticated local provenance remains usable for removal and routing
-    /// even when cloud reads or the first v2 publication have not succeeded.
     static func legacyInvitedRecord(_ connection: StoredConnection) -> InvitedSyncRecord? {
         guard let principal = connection.principal, !principal.isOwner,
               let savedPin = connection.server.certFingerprint, let pin = try? InvitedSyncKey.fingerprint(savedPin) else { return nil }

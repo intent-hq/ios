@@ -7,8 +7,6 @@ extension SpecialistPickerView {
         return models.filter { $0.provider == provider.id }
     }
 
-    /// The Create action is unavailable while required selections are absent,
-    /// loading is active, or no provider can be selected (monorepo#1003).
     static func isCreateDisabled(
         hasSpecialist: Bool,
         isCreating: Bool,
@@ -21,13 +19,6 @@ extension SpecialistPickerView {
         return !hasSpecialist || isCreating || isLoadingOptions
     }
 
-    /// Keeps the selection while `current`'s id is still pickable in the
-    /// unfiltered `catalog`, rebound to the fresh entry so refreshed
-    /// metadata is what the picker shows; otherwise the resolved
-    /// orchestrator (PROTOCOL §5.11), else the first pickable specialist in
-    /// daemon order, else nil when the catalog lists nothing pickable (a
-    /// hidden id must never be submitted). An empty catalog (cold load or
-    /// reconnect clear) keeps `current` so the selection survives the reload.
     static func reconciledSpecialist(
         current: SpecialistInfo?, catalog: [SpecialistInfo]
     ) -> SpecialistInfo? {
@@ -47,17 +38,10 @@ extension SpecialistPickerView {
         catalog == nil && !settled
     }
 
-    /// This sheet's settled-load markers, gated by the store's
-    /// `loadGeneration`: a marker is published only when the load returned
-    /// in the generation it started in. A load superseded by a reconnect
-    /// clear (`invalidate()`) returns for a cache the store already dropped;
-    /// settling on it would show the daemon-default row and enable Create
-    /// while the fresh load for the same provider is still pending.
     struct SettledLoads {
         private(set) var options = false
         private(set) var modelProviders: Set<String> = []
 
-        /// Returns true when the marker was published (the load is current).
         @discardableResult
         mutating func settleOptions(startedAt: Int, current: Int) -> Bool {
             guard startedAt == current else { return false }
@@ -72,14 +56,11 @@ extension SpecialistPickerView {
             return true
         }
 
-        /// A reconnect clear: every marker belonged to the dropped cache.
         mutating func reset() {
             self = Self()
         }
     }
 
-    /// Builds the provider/model params for `agent.create`; auggie is omitted
-    /// because it is the daemon default, and model is sent only when selected.
     static func buildCreateAgentSelection(
         provider: ProviderInfo?,
         model: ModelInfo?

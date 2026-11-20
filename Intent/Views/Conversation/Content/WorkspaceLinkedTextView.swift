@@ -29,7 +29,6 @@ struct WorkspaceLinkedTextView: View {
 
     var body: some View {
         let segments = WorkspaceLinks.parse(text, isStreaming: isStreaming)
-        // Resolve workspace availability on MainActor, outside row providers.
         let rows = segments.enumerated().map { (offset: $0.offset, content: segmentContent($0.element)) }
         VStack(alignment: .leading, spacing: Layout.spacing) {
             ForEach(rows, id: \.offset) { @Sendable row in

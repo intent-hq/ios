@@ -31,10 +31,6 @@ nonisolated enum WebSocketPingSupport {
         }
     }
 
-    /// Installs the continuation `sendPing()` waits on, then runs `send`,
-    /// which writes the ping frame. The receive path resumes the continuation
-    /// when the matching pong arrives; send errors, the ping timeout, and
-    /// cancellation resume it through `takePending`.
     static func performPing(pending: PendingPing, send: () -> Void) async throws {
         try await withCheckedThrowingContinuation { continuation in
             let installed = pending.withLock { state in

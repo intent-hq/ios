@@ -15,8 +15,6 @@ enum AnyCodableDictionaryMatch {
     case value([String: Any])
 }
 
-/// A type-erased Codable wrapper for arbitrary JSON values.
-///
 /// Nonisolated so wire models can be decoded off MainActor. `@unchecked
 /// Sendable`: `value` is an immutable JSON container that is never mutated
 /// after construction.
@@ -71,7 +69,6 @@ nonisolated struct AnyCodable: Codable, Equatable, @unchecked Sendable {
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        // Simple equality based on JSON representation
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
         guard let lhsData = try? encoder.encode(lhs),
