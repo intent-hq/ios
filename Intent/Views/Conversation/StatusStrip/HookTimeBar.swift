@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Core Animation owns the continuous shrink, avoiding per-frame SwiftUI work.
-/// The parent keeps `.id(nextRunAt)` so each new hook cycle gets a fresh bar.
 struct HookTimeBar: UIViewRepresentable {
     let nextRunAt: String
     let delayMs: Int
@@ -48,7 +46,6 @@ final class HookTimeBarView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// Retains the original clamping behavior for invalid or out-of-cycle dates.
     static func countdown(nextRunAt: String, delayMs: Int, now: Date) -> (fraction: Double, duration: TimeInterval) {
         guard delayMs > 0, let next = ISO8601DateFormatter.lenientDate(from: nextRunAt) else {
             return (0, 0)
@@ -93,7 +90,6 @@ final class HookTimeBarView: UIView {
         let animates = window != nil && isActive && countdown.duration > 0
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        // The final model value remains zero after the animation is removed.
         bar.transform = CATransform3DMakeScale(animates ? 0 : countdown.fraction, 1, 1)
         if animates {
             let animation = CABasicAnimation(keyPath: "transform.scale.x")

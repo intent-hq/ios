@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Header for script-monitor wake rows: terminal icon, script name and the
-/// monitor outcome (FE parity: `AutomatedWakeCardHeader` script kind).
 struct ScriptMonitorWakeAttributionView: View {
     private typealias Design = Constants.Conversation.Design
 

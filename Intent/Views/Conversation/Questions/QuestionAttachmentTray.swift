@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// One selection shared by every step, separate from the conversation composer.
 struct QuestionAttachmentTray: View {
     let attachments: ConversationAttachmentPipeline
     @Environment(\.colorScheme) private var colorScheme
@@ -17,8 +16,6 @@ struct QuestionAttachmentTray: View {
             if attachments.hasPendingAttachments {
                 ScrollView(.horizontal) {
                     HStack(spacing: Layout.pendingImageRowSpacing) {
-                        // These stateless previews mirror the composer's index-based
-                        // image selection; equal images may be attached twice.
                         ForEach(Array(attachments.pendingImages.enumerated()), id: \.offset) { index, image in
                             imagePreview(image, index: index)
                         }

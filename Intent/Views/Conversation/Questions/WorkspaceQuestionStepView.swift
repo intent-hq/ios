@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Measures complete native content, including controls, at the proposed width.
-/// The host supplies the remaining question region, not a screen-size breakpoint.
 struct WorkspaceQuestionStepView<Footer: View>: View {
     let question: Question
     let index: Int
@@ -54,10 +52,6 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
         .accessibilityIdentifier("question.collapse")
     }
 
-    // The fit candidates contain only stateless controls. The free-text editor
-    // lives outside this panel, so a layout change cannot replace its responder.
-    // The final candidate scrolls the complete content, keeping the footer reachable.
-    // Answers stay stacked even when the keyboard reduces the available height.
     private var content: some View {
         VStack(alignment: .leading, spacing: Design.Question.contentSpacing) {
             HStack(alignment: .top) {
@@ -92,7 +86,6 @@ struct WorkspaceQuestionStepView<Footer: View>: View {
     }
 }
 
-/// Offers the fit candidates a ceiling without expanding short content to that ceiling.
 private struct QuestionHeightLimit: Layout {
     let maximumHeight: CGFloat
 

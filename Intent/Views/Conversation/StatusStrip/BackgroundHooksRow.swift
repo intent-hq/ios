@@ -1,15 +1,5 @@
 import SwiftUI
 
-/// Faint chip row above the composer surfacing the active agent's background
-/// hooks (PROTOCOL §5.40) — the iOS counterpart of cloudlands-fe's
-/// `BackgroundHooksRow`. One chip per `scheduled`/`running` hook: a spinner
-/// while a run is in flight, a thin shrinking time-to-next-run bar while
-/// scheduled (derived from `nextRunAt` − now over `delayMs`; a local
-/// animation, no daemon polling). Perpetual hooks carry a small repeat glyph.
-/// Tapping a chip opens a menu whose header shows name/state, next run,
-/// TTL expiry and last error, with Run now / Cancel hook actions. The parent
-/// hides the row entirely when the agent has no active hooks. No code preview
-/// on iOS (per spec decision).
 struct BackgroundHooksRow: View {
     let viewModel: ConversationViewModel
     private let hookStore: BackgroundHookStore
@@ -52,8 +42,6 @@ struct BackgroundHooksRow: View {
         .opacity(Constants.Conversation.StatusStrip.contentOpacity)
     }
 
-    // MARK: - Chip
-
     private var retryButton: some View {
         Button {
             Task { await hookStore.refetch() }
@@ -75,9 +63,6 @@ struct BackgroundHooksRow: View {
     @ViewBuilder
     private func hookChip(_ hook: BackgroundHook) -> some View {
         Menu {
-            // Detail header: name/state plus timing + error lines (mirrors
-            // the FE hover card). Positional IDs: lines are display strings
-            // with no inherent identity.
             ForEach(Array(Self.detailLines(hook).enumerated()), id: \.offset) { _, line in
                 Text(line)
             }
@@ -152,13 +137,6 @@ struct BackgroundHooksRow: View {
         return name.prefix(Layout.nameMaxLength) + "…"
     }
 
-    // MARK: - Display helpers (pure, unit-tested)
-
-    /// Menu-header detail lines: name/state, "next run in …" / "expires
-    /// in …" relative durations (mirroring the FE hover card's
-    /// nextRunIn/expiresIn helpers; computed against `now` when the menu
-    /// renders), and the last run error when present. Timing lines are
-    /// dropped when the underlying timestamp is absent or unparseable.
     static func detailLines(_ hook: BackgroundHook, now: Date = Date()) -> [String] {
         var lines = ["\(hook.name) — \(stateLabel(hook))"]
         if let next = ISO8601DateFormatter.lenientDate(from: hook.nextRunAt) {

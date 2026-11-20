@@ -1,10 +1,5 @@
 import SwiftUI
 
-/// Kind-flavored notice card for daemon-persisted attention-request rows
-/// (PROTOCOL §5.5): amber for a discussion request, red for a blocker report
-/// or a terminal turn failure. Visual sibling of cloudlands-fe's
-/// DiscussionRequestNotice.svelte / BlockerReportNotice.svelte /
-/// TurnFailureNotice.svelte. Turn failures delegate to `TurnFailureNoticeView`.
 struct AttentionNoticeView: View {
     let notice: AttentionNotice
     var onLayoutChange: (() -> Void)?

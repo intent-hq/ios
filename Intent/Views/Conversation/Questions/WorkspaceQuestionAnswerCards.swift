@@ -15,8 +15,6 @@ struct WorkspaceQuestionAnswerCards: View {
     }
 
     private var cards: some View {
-        // Options are immutable for this mounted question and have no wire ID;
-        // their index is also the existing selection contract, including duplicate labels.
         let answerCards = options.indices.map { index in
             WorkspaceQuestionAnswerCard(
                 index: index,
@@ -27,9 +25,6 @@ struct WorkspaceQuestionAnswerCards: View {
                 onSelect(index)
             }
         }
-        // SwiftUI can request a ForEach row off-main during fit/transition work.
-        // Transfer only prepared view values; actions and environment reads stay
-        // in the main-actor card, not in the framework's row-provider callback.
         return ForEach(answerCards.indices, id: \.self) { @Sendable index in
             answerCards[index]
         }

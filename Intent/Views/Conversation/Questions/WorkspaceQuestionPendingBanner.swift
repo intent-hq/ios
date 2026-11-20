@@ -23,8 +23,6 @@ struct WorkspaceQuestionPendingBanner: View {
         .opacity(panelPresented ? 0 : 1)
         .modifier(WorkspaceQuestionSurface(isPanel: false))
         .opacity(submitting ? 0 : 1)
-        // Return the reserved space during panel closure, not in a second
-        // layout animation after the answers are sent.
         .fixedSize(horizontal: false, vertical: true)
         .frame(height: submitting ? 0 : nil, alignment: .top)
         .allowsHitTesting(!panelPresented && !submitting)

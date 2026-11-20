@@ -13,7 +13,6 @@ struct QuestionAttachmentPickers: ViewModifier {
             .photosPicker(
                 isPresented: $showsPhotos,
                 selection: $attachments.selectedPhotoItems,
-                // Photos interprets zero as unlimited; the menu is disabled at zero.
                 maxSelectionCount: max(1, attachments.remainingPhotoImageCount ?? Constants.Conversation.Composer.maximumImageSelectionCount),
                 matching: .images
             )
@@ -26,7 +25,5 @@ struct QuestionAttachmentPickers: ViewModifier {
                 case .failure(let error): attachments.filePlacementError = error.localizedDescription
                 }
             }
-        // Imports belong to the question set, not its transient presentation.
-        // Remote retirement and successful submission cancel them in the owner.
     }
 }

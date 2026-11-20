@@ -3,8 +3,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct MessageInputView: View {
-    // Bind directly to the model so received edits and external replacements
-    // share one draft. Deferred bidirectional onChange copies can replay old text.
     @Bindable var viewModel: ConversationViewModel
     private let store: ConversationStore
     private let usesWorkspaceDesign: Bool
@@ -31,7 +29,6 @@ struct MessageInputView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var dictation = SpeechDictationController()
     @State private var dictationSession: DictationSession?
-    /// Last observed caret offset; dictation treats nil as end-of-text.
     @State private var caretOffset: Int?
     #endif
 
@@ -54,7 +51,6 @@ struct MessageInputView: View {
         nonmutating set { focusBinding.wrappedValue = newValue }
     }
 
-    /// Read live connection state at both submission boundaries before consuming a draft.
     var isConnectionReadyForSending: Bool { viewModel.connection.connectionState == .connected }
 
     var body: some View {
@@ -62,7 +58,6 @@ struct MessageInputView: View {
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
-            // Earlier picks stay pending after import; size and filter from the remaining image slots.
             maxSelectionCount: viewModel.photoPickerMaxSelectionCount,
             matching: viewModel.photoPickerFilter
         )
@@ -70,7 +65,7 @@ struct MessageInputView: View {
             viewModel.loadSelectedPhotos()
         }
         #if !os(visionOS)
-        .onDisappear { viewModel.cancelPhotoImport() } // visionOS: FloatingComposerOrnament's onWithdraw
+        .onDisappear { viewModel.cancelPhotoImport() }
         #endif
         .fileImporter(
             isPresented: $isFilePickerPresented,
@@ -86,8 +81,6 @@ struct MessageInputView: View {
             if presentation == .iPad, !visible { isFocused = false }
         }
         .onChange(of: questionPanelPresented) { _, presented in
-            // Resign explicitly rather than disabling the native editor: UIKit
-            // restores a disabled first responder when the panel closes.
             if presented { isFocused = false }
         }
         #if os(visionOS)
@@ -134,7 +127,7 @@ private extension MessageInputView {
                 WorkspaceComposerSurface(text: viewModel.messageText, hasAttachments: viewModel.hasPendingAttachments, isStreaming: store.isStreaming)
             } else {
                 #if os(visionOS)
-                Color.clear // the floating ornament host supplies the glass
+                Color.clear
                 #else
                 Theme.card(for: colorScheme).opacity(viewModel.showsLoadingState ? 0 : 1)
                 #endif
@@ -322,11 +315,7 @@ private extension MessageInputView {
 
 private extension MessageInputView {
     #if os(visionOS)
-    // MARK: - visionOS dictation & suggested prompts
 
-    /// Dictation toggle: starts a live Speech-framework session that inserts
-    /// transcriptions at the caret; tapping again stops and keeps the final
-    /// result.
     private var dictationButton: some View {
         Button {
             toggleDictation()
@@ -361,8 +350,6 @@ private extension MessageInputView {
 
     private func toggleDictation() {
         HapticManager.impact(.light)
-        // isActive covers the starting window too: a second tap while the
-        // permission prompts are pending cancels the start before any audio.
         if dictation.isActive {
             dictation.stop(reason: .userTapped)
             return
@@ -376,16 +363,9 @@ private extension MessageInputView {
                 viewModel.messageText = text
                 dictationSession = session
                 if endsSegment {
-                    // Programmatic text sets don't reliably fire a selection
-                    // change, so the observed caret can be stale; track the
-                    // committed insertion point so a re-tap after the
-                    // recognizer finishes appends instead of replacing.
                     caretOffset = session.transcript.insertionOffset
                 }
             case .diverged:
-                // The composer text was edited outside dictation (typed, or
-                // replaced by the view model — e.g. a send cleared it). The
-                // edit wins: stop dictation instead of clobbering it.
                 dictationSession = nil
                 dictation.stop(reason: .textEdited)
             }
@@ -414,9 +394,6 @@ private extension MessageInputView {
         .padding(.top, Constants.Conversation.Composer.dictationHintTopPadding)
     }
 
-    /// Suggested prompts as large chips directly above the field, sized for
-    /// gaze targeting (≥60 pt). The transcript's inline prompt list is
-    /// disabled on visionOS in favor of these.
     @ViewBuilder
     private var suggestedPromptChipsRow: some View {
         ScrollView(.horizontal) {
@@ -457,30 +434,19 @@ private extension MessageInputView {
 }
 
 private extension MessageInputView {
-    // MARK: - Actions
-
     private func sendCurrentMessage() {
         guard isConnectionReadyForSending, allowsSending else { return }
         #if os(visionOS)
-        // Stop app dictation before the text is consumed; a late final
-        // result must not resurrect the sent text (.send cancels outright).
         dictation.stop(reason: .send)
         #endif
 
-        // Commit active dictation before reading the final text below.
         let isDictating = UITextInputMode.activeInputModes.contains { $0.primaryLanguage == "dictation" }
 
         if isDictating {
-            // Resign focus to stop dictation and commit final text
             isFocused = false
         }
 
-        // Defer to next run loop to let dictation finalize (if it was active)
         DispatchQueue.main.async {
-            // The visible send button disables while a send is placing
-            // files, but the text view's submit callback still lands here —
-            // pendingFiles clears only after success, so a second send
-            // would duplicate the uploads.
             guard !viewModel.isUploadingFiles, !viewModel.isLoadingPhotos,
                   isConnectionReadyForSending, allowsSending else { return }
             let text = viewModel.messageText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -489,11 +455,9 @@ private extension MessageInputView {
                 return
             }
             HapticManager.impact(.medium)
-            // Capture images before clearing so they're available for the async send
             let imagesToSend = viewModel.pendingImages
             viewModel.messageText = ""
             viewModel.pendingImages.removeAll()
-            // Sending ends editing on every device; only an explicit tap reopens it.
             isFocused = false
             Task { await viewModel.sendMessage(text, images: imagesToSend) }
         }

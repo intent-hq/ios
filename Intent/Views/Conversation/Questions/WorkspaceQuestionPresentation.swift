@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Keeps the live conversation mounted beneath a deliberate, blocking answer surface.
 struct WorkspaceQuestionPresentation: ViewModifier {
     let viewModel: ConversationViewModel
     @Binding var isPresented: Bool
@@ -94,16 +93,12 @@ struct WorkspaceQuestionPresentation: ViewModifier {
     private func submit(_ answers: [QuestionAnswer], pending: PendingQuestionSet) {
         guard !submitting else { return }
         submittingQuestions = pending
-        // Keep attachment progress and retryable drafts mounted during upload
-        // and the optimistic answer row. A failed RPC must not reset the wizard.
         if viewModel.questionAttachments(for: pending.messageId).hasPendingAttachments {
             submitting = true
             Task { await send(answers, messageId: pending.messageId) }
             return
         }
         AppLog.userInterface.debug("[SCROLL][QUESTION] submit collapse-start")
-        // Keep the banner mounted for the matched transition, but fade it and
-        // release its reserved height as the panel closes, before the send.
         withAnimation(presentationAnimation, completionCriteria: .removed) {
             submitting = true
             isPresented = false
@@ -130,8 +125,6 @@ extension EnvironmentValues {
     @Entry var workspaceQuestionSubmitting = false
 }
 
-/// The surface changes size while its whole contents travel with its top edge.
-/// Matching position only keeps the header and controls at their natural sizes.
 struct WorkspaceQuestionSurface: ViewModifier {
     var isPanel = true
     @Environment(\.workspaceQuestionNamespace) private var namespace
