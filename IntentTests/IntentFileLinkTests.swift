@@ -8,8 +8,6 @@ struct IntentFileLinkTests {
         return IntentFileLink.parse(url)
     }
 
-    // MARK: - parse: accepted forms
-
     @Test func shortFormParsesPathWithoutWorkspace() {
         let link = parse("intent://local/file/foo.png")
         #expect(link == IntentFileLink(workspaceId: nil, path: "foo.png"))
@@ -31,13 +29,9 @@ struct IntentFileLinkTests {
     }
 
     @Test func leadingFileSegmentWinsOverWorkspaceReading() {
-        // `file` in the first slot is the short form even when the path's own
-        // first segment is also named `file`.
         let link = parse("intent://local/file/file/foo.png")
         #expect(link == IntentFileLink(workspaceId: nil, path: "file/foo.png"))
     }
-
-    // MARK: - parse: rejected forms
 
     @Test func noteAndTaskLinksAreNotFileLinks() {
         #expect(parse("intent://local/note/abc-123") == nil)
@@ -57,8 +51,6 @@ struct IntentFileLinkTests {
         #expect(parse("intent://local") == nil)
     }
 
-    // MARK: - parse: traversal-shaped paths (desktop parser parity)
-
     @Test func dotDotAndDotSegmentsAreRejected() {
         #expect(parse("intent://local/file/../secret.png") == nil)
         #expect(parse("intent://local/file/a/../b.png") == nil)
@@ -67,7 +59,6 @@ struct IntentFileLinkTests {
     }
 
     @Test func percentEncodedTraversalIsRejected() {
-        // %2E%2E = "..", %2F = "/" smuggled into one segment.
         #expect(parse("intent://local/file/%2E%2E/secret.png") == nil)
         #expect(parse("intent://local/file/..%2Fsecret.png") == nil)
         #expect(parse("intent://local/file/a%2F..%2Fb.png") == nil)
@@ -82,8 +73,6 @@ struct IntentFileLinkTests {
     @Test func backslashSegmentsAreRejected() {
         #expect(parse("intent://local/file/a%5Cb.png") == nil)
     }
-
-    // MARK: - isImage allowlist
 
     @Test func allowlistedImageExtensionsAreImages() {
         for ext in ["png", "jpg", "jpeg", "gif", "webp"] {

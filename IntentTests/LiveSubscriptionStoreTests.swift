@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Store-level races around `LiveSubscription`: the handler registrations a
-/// store makes and releases when a reconnect, a teardown or a repeated ack
-/// lands in the middle of a subscribe or resnapshot.
 @MainActor
 struct LiveSubscriptionStoreTests {
     private func taskSnapshot(_ subscriptionId: String) -> SubscriptionPush {
@@ -31,21 +28,16 @@ struct LiveSubscriptionStoreTests {
         fake.deliverSubscriptionPush(taskSnapshot("sub-1"))
         #expect(store.tasks.count == 1)
 
-        // A gap starts a resnapshot that parks on its unsubscribe.
         fake.pendingMethods = ["task.unsubscribe"]
         fake.deliverSubscriptionPush(gap("sub-1"))
         try await fake.waitForPendingRequests("task.unsubscribe")
         #expect(fake.unregisteredSubscriptionIds == ["sub-1"])
 
-        // The reconnect tears down (the old id is still held) and resubscribes.
         fake.simulateDisconnect()
         fake.simulateConnect()
         try await waitUntil("reconnect subscription") { fake.hasSubscriptionHandler(id: "sub-2") }
         #expect(fake.unregisteredSubscriptionIds == ["sub-1", "sub-1"])
 
-        // The parked pre-reconnect resnapshot finishes its unsubscribe and sees
-        // that the connection generation advanced, so it does NOT open a
-        // duplicate subscription over the new connection.
         fake.pendingMethods = []
         fake.resolvePending("task.unsubscribe", with: ["ok": true])
         try await expectNever("superseded resnapshot subscribing again", within: .milliseconds(150)) {
@@ -53,7 +45,6 @@ struct LiveSubscriptionStoreTests {
         }
         #expect(fake.hasSubscriptionHandler(id: "sub-2"))
 
-        // The reconnect cleared the resnapshot guard: the next gap recovers again.
         fake.deliverSubscriptionPush(taskSnapshot("sub-2"))
         fake.responseMap["task.unsubscribe"] = ["ok": true]
         fake.deliverSubscriptionPush(gap("sub-2"))
@@ -76,7 +67,6 @@ struct LiveSubscriptionStoreTests {
         fake.pendingMethods = []
         fake.resolvePending("comment.subscribe", with: ["subscriptionId": "sub-1"])
         await subscribing.value
-        // The superseded ack is immediately released daemon-side and never registered locally.
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
         #expect(fake.paramsForMethod("comment.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1"])
         let thread: [String: Any] = [
@@ -98,7 +88,6 @@ struct LiveSubscriptionStoreTests {
         fake.responseMap["workspace.list"] = ["workspaces": []]
         fake.pendingMethods = ["workspace.subscribe"]
 
-        // Two connect notifications race to subscribe; the daemon acks both with one id.
         fake.simulateConnect()
         fake.simulateConnect()
         try await fake.waitForPendingRequests("workspace.subscribe", count: 2)
@@ -115,8 +104,6 @@ struct LiveSubscriptionStoreTests {
         #expect(store.workspaces.map(\.id) == ["ws-1"])
     }
 
-    /// A NoteStore subscribed to `ws-1` through `onConnected`, with
-    /// `note.subscribe` acks taken from `acks` in order.
     private func subscribedNoteStore(acks: [String]) async throws -> (NoteStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -143,7 +130,6 @@ struct LiveSubscriptionStoreTests {
         }
     }
 
-    /// ios#996: a switch subscribes the new workspace once, without waiting for a reconnect.
     @Test func noteStoreWorkspaceSwitchSubscribesTheNewWorkspace() async throws {
         let (store, fake) = try await subscribedNoteStore(acks: ["note-sub-ws1", "note-sub-ws2"])
 
@@ -156,13 +142,10 @@ struct LiveSubscriptionStoreTests {
         ]))
         #expect(store.notes.map(\.title) == ["Live in ws-2"])
 
-        // A same-workspace refresh does not subscribe again.
         await store.fetchNotes(workspaceId: "ws-2")
         #expect(noteSubscribeWorkspaces(fake) == ["ws-1", "ws-2"])
     }
 
-    /// ios#996: an ack for the old workspace that lands after the switch is
-    /// released and never becomes the current subscription.
     @Test func noteStoreLateAckFromPreviousWorkspaceIsReleased() async throws {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -189,8 +172,6 @@ struct LiveSubscriptionStoreTests {
         #expect(noteSubscribeWorkspaces(fake) == ["ws-1", "ws-2"])
     }
 
-    /// ios#996: A → B → A before either list returns ends with one
-    /// subscription, for the last workspace.
     @Test func noteStoreRapidWorkspaceSwitchesSubscribeOnlyTheLastWorkspace() async throws {
         let (store, fake) = try await subscribedNoteStore(acks: ["sub-ws1", "sub-ws1-again", "unexpected"])
         fake.pendingMethods = ["note.list"]
@@ -214,16 +195,12 @@ struct LiveSubscriptionStoreTests {
         }
     }
 
-    /// ios#996: a store whose connect handler ran before it had a workspace
-    /// (NoteDetailView creates its store, then awaits loadNote() before
-    /// fetchNotes) subscribes its first workspace from fetchNotes.
     @Test func noteStoreFirstWorkspaceAfterIdleConnectSubscribesOnce() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["note.list"] = ["notes": []]
         fake.responseQueueMap["note.subscribe"] = [["subscriptionId": "sub-1"], ["subscriptionId": "unexpected"]]
         fake.simulateConnect()
         let store = NoteStore(connectionManager: fake)
-        // The queued connected delivery runs onConnected with no workspace; it only bumps the generation.
         try await waitUntil("idle onConnected") { store.liveSubscriptionGeneration == 1 }
         #expect(!fake.didCallMethod("note.subscribe"))
 
@@ -236,16 +213,12 @@ struct LiveSubscriptionStoreTests {
         }
     }
 
-    /// The first fetch and a connect delivery queued in the same main-queue
-    /// window subscribe once: the replayed connected state does not reset the
-    /// subscription fetchNotes just made.
     @Test func noteStoreFirstFetchWithQueuedConnectSubscribesOnce() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["note.list"] = ["notes": []]
         fake.responseQueueMap["note.subscribe"] = ["sub-1", "sub-2"].map { ["subscriptionId": $0] }
         fake.simulateConnect()
         let store = NoteStore(connectionManager: fake)
-        // The connected emission is still queued on the main queue here.
         await store.fetchNotes(workspaceId: "ws-1")
         try await waitUntil("ws-1 subscribed") { store.liveSubscription.id != nil }
         try await expectNever("a second subscribe or handler", within: .milliseconds(150)) {
@@ -256,7 +229,6 @@ struct LiveSubscriptionStoreTests {
         #expect(fake.subscriptionHandlerCount == 1)
         #expect(fake.unregisteredSubscriptionIds.isEmpty)
 
-        // A real reconnect later still resets and resubscribes.
         fake.simulateDisconnect()
         fake.simulateConnect()
         try await waitUntil("resubscribed after reconnect") { fake.hasSubscriptionHandler(id: "sub-2") }
@@ -264,9 +236,6 @@ struct LiveSubscriptionStoreTests {
         #expect(fake.subscriptionHandlerCount == 1)
     }
 
-    /// Pins the generation fence on its own: in ws-2 -> ws-1 -> ws-2 the first
-    /// call ends with the same workspace current, connected and idle, so only
-    /// the generation stops it from subscribing next to the last call.
     @Test func noteStoreSupersededSwitchToTheSameWorkspaceDoesNotSubscribe() async throws {
         let (store, fake) = try await subscribedNoteStore(acks: ["sub-ws1", "sub-ws2", "unexpected"])
         fake.responseMap["note.unsubscribe"] = [:] as [String: Any]
@@ -280,7 +249,6 @@ struct LiveSubscriptionStoreTests {
         try await fake.waitForPendingRequests("note.list", count: 3)
         fake.pendingMethods = []
 
-        // Finish the superseded first call alone, while ws-2 is current and idle.
         fake.resolvePending("note.list", with: ["notes": []])
         await first.value
         #expect(store.liveSubscription == .idle)

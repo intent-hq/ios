@@ -6,8 +6,6 @@ import Testing
 import Textual
 import UIKit
 
-/// Real media bytes exercise routing, daemon transport, poster decoding and tap
-/// dispatch together. Existing image/remote suites remain the image contract owners.
 @MainActor
 struct IntentFileVideoTests {
     @Test(arguments: ["mp4", "mov", "m4v"])
@@ -199,7 +197,6 @@ struct IntentFileVideoTests {
         var playbackOwner: WorkspaceVideo? = try await loader.video(workspaceId: "ws", path: "first.mp4")
         let firstURL = try #require(playbackOwner?.url)
 
-        // Both video namespaces share the cap, even when posters use very little RAM.
         for index in 1...8 {
             if index.isMultiple(of: 2) {
                 _ = try await loader.assetMedia(workspaceId: "ws", assetId: "asset-\(index)")
@@ -251,9 +248,6 @@ struct IntentFileVideoTests {
     }
 
     @Test func unavailableVideoSymbolPreservesItsSquareAspectRatio() throws {
-        // Textual resolves the body at its ideal size before drawing that symbol
-        // into the square attachment bounds. A short intrinsic VStack stretches
-        // its text unless the rendered symbol has the same aspect ratio.
         let placeholder = IntentFileVideoFailureAttachment(name: "unsupported-demo.webm")
         let renderer = ImageRenderer(content: placeholder.body)
         let image = try #require(renderer.uiImage)
@@ -265,7 +259,6 @@ struct IntentFileVideoTests {
         ["content": data.base64EncodedString(), "bytesRead": data.count, "size": size]
     }
 
-    /// A single deterministic H.264 frame; no network or checked-in binary fixture.
     static func videoBytes(side: Int = 16, duration: Double = 1) async throws -> Data {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("video-test-\(UUID()).mp4")
         defer { try? FileManager.default.removeItem(at: url) }

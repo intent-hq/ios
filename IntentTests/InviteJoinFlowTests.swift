@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// InviteJoinModel against fake transports: who gets asked what, what is
-/// sent to the host, and what is saved and opened.
 @MainActor
 struct InviteJoinFlowTests {
     static let hostFingerprint = String(repeating: "ab", count: 32)
@@ -35,7 +33,6 @@ struct InviteJoinFlowTests {
     final class Recorder {
         var saved: [InviteCredential] = []
         var opened: [(StoredConnection, String?)] = []
-        /// Runs as the credential is saved (which dials the new host).
         var onSave: () -> Void = {}
     }
 
@@ -73,8 +70,6 @@ struct InviteJoinFlowTests {
         if case .confirm = phase { return true }
         return false
     }
-
-    // MARK: - Tests
 
     @Test func ownerOfTheHostOpensItWithoutJoining() async throws {
         let transport = FakeInviteTransport(responses: ["invite.inspect": .success(Self.preview)])
@@ -307,7 +302,6 @@ struct InviteJoinFlowTests {
     }
 }
 
-/// Answers `/invite` calls from a table and records what was sent.
 nonisolated final class FakeInviteTransport: InviteTransport, @unchecked Sendable {
     private let lock = NSLock()
     private let responses: [String: Result<[String: Any], InviteFailure>]
@@ -345,7 +339,6 @@ nonisolated final class FakeInviteTransport: InviteTransport, @unchecked Sendabl
     }
 }
 
-/// The person's own Mac, answering daemon requests from a table.
 @MainActor
 final class FakeOwnDaemon: InviteOwnDaemon {
     let responses: [String: Any]

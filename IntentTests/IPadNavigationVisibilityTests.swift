@@ -110,12 +110,10 @@ struct IPadNavigationVisibilityTests {
     }
 }
 
-/// Passive observations of the existing host; never force-load a controller view.
 @MainActor
 enum IPadVisibilityDiagnostics {
     static func record(_ phase: String, in host: UIView, coordinator: AppCoordinator, trace: SyntheticBadgeHostTrace) async {
         host.layoutIfNeeded()
-        // Let queued SwiftUI bindings run before sampling the settled native flags.
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }
         }

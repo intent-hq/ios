@@ -75,7 +75,6 @@ struct HTMLFileResourcePolicyTests {
         #expect(try resolve("./img/My%20Chart.webp?v=1", from: report).path == "/Users/alice/project/reports/img/My Chart.webp")
         #expect(try resolve("../shared/site.css", from: report).path == "/Users/alice/project/shared/site.css")
 
-        // A file:// link reaches the viewer as the same absolute path.
         let fileURL = try #require(URL(string: "file:///Users/alice/project/reports/report.html"))
         let fileLink = try #require(IntentFileLink.parsePath(fileURL))
         #expect(fileLink.path == report)
@@ -94,12 +93,10 @@ struct HTMLFileResourcePolicyTests {
         ] {
             #expect(try rejection(reference, from: report) == .outsideWorkspace, "\(reference)")
         }
-        // Climbing within the absolute tree stays absolute; the daemon decides whether it is inside the workspace.
         #expect(try resolve("../../../../workspace/x.png", from: report).path == "/workspace/x.png")
         #expect(try rejection("intent-file://other-page/absolute/Users/alice/chart.png", from: report) == .wrongOrigin)
         #expect(try rejection("file:///Users/alice/project/reports/chart.png", from: report) == .wrongOrigin)
 
-        // A workspace-relative report can never reach an absolute path.
         #expect(try rejection("../../absolute/etc/secret.png") == .outsideWorkspace)
         #expect(try rejection("/absolute/Users/alice/chart.png") == .outsideWorkspace)
         let absoluteURL = try #require(URL(string: "chart.png", relativeTo: try base(report))?.absoluteURL)

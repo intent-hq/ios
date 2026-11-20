@@ -23,6 +23,7 @@ Store tests spawn async work and race fakes against each other. Fixed `Task.slee
 
 - A new fixed sleep in a store test needs a reason; prefer a gate or a bounded wait.
 - Test oracles and other fake behaviour: see [0090](0090-test-oracles-and-fakes.md).
+- Test servers listen on 127.0.0.1 only (`loopback(using:)`, ios#981). A listener on `.any` is dual-stack, and macOS then lets another process bind 127.0.0.1 on the same port with `SO_REUSEADDR` and answer the test's requests (for example with HTTP 401).
 
 ## Code
 

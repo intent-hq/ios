@@ -3,8 +3,6 @@ import Foundation
 import Security
 import Testing
 
-/// Models SecItem's access-group + account identity, including the unscoped
-/// query returning both readable groups rather than collapsing their rows.
 nonisolated private final class GroupedInvitedKeychain: SyncedKeychainWriting {
     struct ItemKey: Hashable {
         let group: String
@@ -122,8 +120,6 @@ nonisolated private final class MigrationJournalDefaults: UserDefaults {
         #expect(marker.kind == "legacy-alias")
         #expect((marker.object["personKeys"] as? [String])?.sorted() == saved.compactMap(\.invitedPersonKey).sorted())
 
-        // A frozen v1 writer can overwrite the shared alias after completion;
-        // neither its newer clock nor another claimed person reopens migration.
         try cloud.put("D", group: BackendSyncFixtures.accessGroup, clock: 900)
         _ = await store.relaunch().refreshInvitedSessions { candidate in
             #expect(candidate.token != "D-still-valid")

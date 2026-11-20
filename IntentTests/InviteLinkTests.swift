@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// `intent://invite` links (workspace.invite.create) and the `/invite`
-/// endpoint's response contracts (protocol §5.48).
 struct InviteLinkTests {
     static let fingerprint = String(repeating: "ab", count: 32)
     static let tunnel = "tc1-example"
@@ -11,8 +9,6 @@ struct InviteLinkTests {
     static func url(_ query: String, host: String = "invite") throws -> URL {
         try #require(URL(string: "intent://\(host)?\(query)"))
     }
-
-    // MARK: - Link parsing
 
     @Test func parsesTunnelOnlyLink() throws {
         let link = try #require(InviteLink.parse(try Self.url("v=1&port=5181&fp=\(Self.fingerprint)&inviteId=inv-1&secret=s3cret&tc=\(Self.tunnel)")))
@@ -33,7 +29,6 @@ struct InviteLinkTests {
     }
 
     @Test func matchesSchemeAndHostCaseInsensitively() throws {
-        // ios#406: URI schemes and hosts are case-insensitive.
         let url = try #require(URL(string: "INTENT://Invite?port=5181&fp=\(Self.fingerprint)&inviteId=i&secret=s&tc=\(Self.tunnel)"))
         #expect(InviteLink.isInviteURL(url))
         #expect(InviteLink.parse(url) != nil)
@@ -70,8 +65,6 @@ struct InviteLinkTests {
         let url = try Self.url("port=5181&fp=\(Self.fingerprint)&inviteId=i&secret=s&tc=\(Self.tunnel)")
         #expect(UnopenableLink.reason(for: url) == nil)
     }
-
-    // MARK: - /invite responses
 
     static let workspacePreview: [String: Any] = [
         "workspaceId": "ws-1", "workspaceTitle": "Billing revamp", "hostname": "studio",

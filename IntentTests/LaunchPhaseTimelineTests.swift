@@ -2,22 +2,13 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// ios#230: the launch screens' staged delays must honor task cancellation,
-/// so a dismissed or superseded screen stops advancing its timeline and never
-/// reaches the stage (the coordinator callback) that follows the delay.
 struct LaunchPhaseTimelineTests {
-    /// Records which timeline stages ran and how often the poll condition
-    /// was evaluated.
     private final class Probe {
         var reached: [String] = []
         var polls = 0
         var started = false
     }
 
-    // MARK: - Cancellation
-
-    /// LoadingView: cancelling the intro beat must not fall through to
-    /// `onLoadComplete`.
     @Test func cancelledDelayLeavesLaterStageUnreached() async throws {
         let probe = Probe()
         let task = Task {
@@ -25,9 +16,6 @@ struct LaunchPhaseTimelineTests {
             try await LaunchPhaseTimeline.delay(for: .seconds(2))
             probe.reached.append("advance")
         }
-        // The task and the delay run on the main actor with this test and do
-        // not suspend between `started` and the delay's sleep, so observing
-        // `started` means the task is parked inside the delay.
         try await waitUntil("timeline task to enter its delay") { probe.started }
         task.cancel()
         let start = ContinuousClock.now
@@ -37,8 +25,6 @@ struct LaunchPhaseTimelineTests {
         #expect(throws: CancellationError.self) { try result.get() }
     }
 
-    /// ConnectingView: cancelling mid-poll must finish promptly, stop
-    /// evaluating the condition, and never publish connection success.
     @Test func cancelledPollStopsPromptlyAndLeavesLaterStageUnreached() async throws {
         let probe = Probe()
         let task = Task {
@@ -64,8 +50,6 @@ struct LaunchPhaseTimelineTests {
         #expect(throws: CancellationError.self) { try result.get() }
     }
 
-    /// An attempt superseded between `connect` returning and the poll
-    /// starting must not report success even when the data is already there.
     @Test func pollCancelledBeforeStartingDoesNotReportSuccess() async {
         let task = Task {
             try await LaunchPhaseTimeline.poll(
@@ -78,8 +62,6 @@ struct LaunchPhaseTimelineTests {
         let result = await task.result
         #expect(throws: CancellationError.self) { try result.get() }
     }
-
-    // MARK: - Ordinary timeline
 
     @Test func delayCompletesWhenNotCancelled() async throws {
         let start = ContinuousClock.now

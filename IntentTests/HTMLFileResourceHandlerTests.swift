@@ -4,7 +4,6 @@ import Testing
 import UIKit
 import WebKit
 
-/// Per-resource and per-page limits, cancellation and absolute-path resolution in the report resource handler.
 @MainActor
 struct HTMLFileResourceHandlerTests {
     private typealias Policy = HTMLFileResourcePolicy
@@ -22,8 +21,6 @@ struct HTMLFileResourceHandlerTests {
     private func paddedPNG(byteCount: Int) -> Data { HTMLFileResourceTestSupport.paddedPNG(byteCount: byteCount) }
 
     private func settle(until condition: () -> Bool) async { await HTMLFileResourceTestSupport.settle(until: condition) }
-
-    // MARK: - Limits
 
     @Test func handlerServesTypedResponsesAndRejectsBeforeFetching() async throws {
         let png = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).pngData { _ in }
@@ -61,7 +58,6 @@ struct HTMLFileResourceHandlerTests {
         #expect(await load("ok.png", with: handler, base: base) == .failure(.pageBudgetExhausted))
         #expect(limits.count == Policy.maxPageRequests, "The capped request never reaches the daemon")
 
-        // A new page starts a fresh budget on a new base URL for the same per-view host.
         let next = try #require(handler.beginPage(filePath: "index.html"))
         #expect(await load("ok.png", with: handler, base: next) == .success(png))
     }
@@ -81,8 +77,6 @@ struct HTMLFileResourceHandlerTests {
         #expect(await load("a.png", with: handler, base: base) == .failure(.pageBudgetExhausted))
         #expect(limits == Array(repeating: chunk, count: fullLoads))
     }
-
-    // MARK: - Concurrency and cancellation
 
     @Test func concurrentLoadsReserveThePageBudgetBeforeFetching() async throws {
         let gate = FetchGate()
@@ -188,7 +182,6 @@ struct HTMLFileResourceHandlerTests {
         #expect(await load("chart.png", with: handler, base: absolute) == .success(png))
         #expect(await load("../../../../../../x.png", with: handler, base: absolute) == .failure(.outsideWorkspace))
 
-        // The next page is workspace-relative again, and the absolute page's URLs no longer resolve.
         let relative = try #require(handler.beginPage(filePath: "reports/report.html"))
         #expect(await load("chart.png", with: handler, base: relative) == .success(png))
         #expect(await load("chart.png", with: handler, base: absolute) == .failure(.outsideWorkspace))

@@ -104,7 +104,6 @@ extension IntentFileAttachmentLoaderTests {
         }
         await secondStarted.wait()
         first.cancel()
-        // Do not suspend an unexpected duplicate forever if sharing regresses.
         connection.pendingMethods = []
         let bytes = Self.pdfBytes()
         connection.responseMap["file.readChunk"] = Self.pdfChunk(bytes, size: bytes.count)
@@ -134,7 +133,6 @@ extension IntentFileAttachmentLoaderTests {
         }
     }
 
-    /// ios#803: the share sheet must name the original document, not the cache file.
     @Test func pdfSharesUnderOriginalNameWhileCacheKeepsUniqueNameAndCleanup() async throws {
         let bytes = Self.pdfBytes()
         let connection = FakeConnectionManager()
@@ -289,8 +287,6 @@ extension IntentFileAttachmentLoaderTests {
         }
     }
 
-    /// Real request-timeout race, with bandwidth and deadline scaled equally to
-    /// keep the test fast. At 1 Mbit/s, a 4 MiB base64 response takes >40 s.
     @MainActor
     private final class SlowPDFConnection: FakeConnectionManager {
         let bytes: Data

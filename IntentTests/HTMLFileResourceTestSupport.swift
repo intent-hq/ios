@@ -4,12 +4,10 @@ import Testing
 import UIKit
 import WebKit
 
-/// Shared fakes for the HTML report resource handler suites.
 @MainActor
 enum HTMLFileResourceTestSupport {
     typealias Rejection = HTMLFileResourcePolicy.Rejection
 
-    /// Holds fake fetches until the test releases them, so loads overlap deterministically.
     @MainActor
     final class FetchGate {
         private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -28,7 +26,6 @@ enum HTMLFileResourceTestSupport {
         }
     }
 
-    /// Records every callback WebKit would receive.
     final class RecordingSchemeTask: NSObject, WKURLSchemeTask {
         let request: URLRequest
         private(set) var callbacks: [String] = []
@@ -41,7 +38,6 @@ enum HTMLFileResourceTestSupport {
         func didFailWithError(_: any Error) { callbacks.append("fail") }
     }
 
-    /// A handler for workspace `ws-a` serving `files` by path, honoring the fetch limit like the daemon read.
     static func handler(serving files: [String: Data], fetched: ((String, Int) -> Void)? = nil) -> HTMLFileResourceHandler {
         HTMLFileResourceHandler(workspaceId: "ws-a") { workspaceId, path, limit in
             #expect(workspaceId == "ws-a")
@@ -63,7 +59,6 @@ enum HTMLFileResourceTestSupport {
         return png
     }
 
-    /// Enough main-actor turns for every parked load to run to its next suspension.
     private static let maximumSettleYields = 1000
 
     static func settle(until condition: () -> Bool) async {

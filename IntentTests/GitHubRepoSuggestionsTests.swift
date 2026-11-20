@@ -7,8 +7,6 @@ struct GitHubRepoSuggestionsTests {
         GitHubRepo(owner: owner, name: name, htmlUrl: nil, defaultBranch: nil, updatedAt: nil)
     }
 
-    // MARK: - Prefix filtering
-
     @Test func emptyQueryKeepsAllReposInOrder() {
         let repos = [repo("intent-hq", "intentd"), repo("intent-hq", "ios"), repo("panghy", "tools")]
         #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "") == repos)
@@ -35,8 +33,6 @@ struct GitHubRepoSuggestionsTests {
         #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "  intentd  ") == repos)
     }
 
-    // MARK: - Merged sections
-
     @Test func mergedPinsRecentsAboveOwnReposDeduped() {
         let recents = [repo("intent-hq", "monorepo"), repo("intent-hq", "intentd")]
         let own = [repo("Intent-HQ", "IntentD"), repo("intent-hq", "ios")]
@@ -52,8 +48,6 @@ struct GitHubRepoSuggestionsTests {
     }
 
     @Test func mergedDropsDuplicatesWithinRecents() {
-        // The registry is keyed by path, so two local clones of the same
-        // repo yield two entries with the same owner/name.
         let recents = [repo("intent-hq", "intentd"), repo("Intent-HQ", "IntentD")]
         let sections = GitHubRepoSuggestions.merged(
             recentRepos: recents,
@@ -107,8 +101,6 @@ struct GitHubRepoSuggestionsTests {
     }
 
     @Test func searchSurfacesOwnRepoHiddenByPrefixFilter() {
-        // Dedupe runs against the *displayed* rows, so a repo the local
-        // prefix filter hides can still come back via server-side search.
         let own = [repo("intent-hq", "intentd")]
         let search = [repo("intent-hq", "intentd")]
         let sections = GitHubRepoSuggestions.merged(

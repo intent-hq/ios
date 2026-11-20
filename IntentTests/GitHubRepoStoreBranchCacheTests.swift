@@ -3,8 +3,6 @@ import Foundation
 import Testing
 
 extension GitHubRepoStoreTests {
-    // MARK: - fetchCachedBranches (github.branches.listCached)
-
     @Test func fetchCachedBranchesReadsListCached() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
@@ -18,7 +16,6 @@ extension GitHubRepoStoreTests {
         #expect(calls.count == 1)
         #expect(calls[0]["owner"] as? String == "intent-hq")
         #expect(calls[0]["repo"] as? String == "intentd")
-        // A first paint only: never promoted to the authoritative cache.
         #expect(store.cachedBranchListing(owner: "intent-hq", repo: "intentd") == nil)
     }
 
@@ -43,7 +40,6 @@ extension GitHubRepoStoreTests {
     @Test func fetchCachedBranchesMethodNotFoundIsMiss() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        // Older daemon without the method (-32601) — a miss, never an error.
         fake.errorMap["github.branches.listCached"] = NSError(
             domain: "WebSocket",
             code: -32_601,
@@ -54,8 +50,6 @@ extension GitHubRepoStoreTests {
         #expect(store.lastError == nil)
     }
 
-    // MARK: - loadBranchListing (per-session branch cache)
-
     @Test func loadBranchListingCachesAuthoritativeListing() async throws {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
@@ -65,11 +59,8 @@ extension GitHubRepoStoreTests {
 
         #expect(listing == GitHubBranchListing(branches: ["main", "dev"], defaultBranch: "main"))
         #expect(store.cachedBranchListing(owner: "o", repo: "other") == nil)
-        // A known default branch skips the github.repos.get round-trip.
         #expect(!fake.didCallMethod("github.repos.get"))
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState(listing: listing))
-        // The cache hit is synchronous: no request behind it. The cold load's
-        // fire-and-forget first-paint read must be logged before clearing.
         try await waitFor("paint read") { fake.didCallMethod("github.branches.listCached") }
         fake.clearRequestLog()
         #expect(store.cachedBranchListing(owner: "o", repo: "r") == listing)
@@ -118,7 +109,6 @@ extension GitHubRepoStoreTests {
     @Test func coldBranchLoadFailurePublishesErrorAndDropsPaint() async throws {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        // The paint answers at once; the authoritative read fails later.
         fake.responseMap["github.branches.listCached"] = ["cached": true, "branches": ["main"]]
         fake.pendingMethods = ["github.branches.list"]
 
@@ -135,7 +125,6 @@ extension GitHubRepoStoreTests {
         #expect(state.error == "offline")
         #expect(state.displayed == nil)
         #expect(state.listing == nil)
-        // Retry from another consumer: the error clears for everyone.
         fake.pendingMethods = []
         fake.responseMap["github.branches.list"] = ["branches": ["main"]]
         let listing = try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
@@ -150,18 +139,15 @@ extension GitHubRepoStoreTests {
             code: -1,
             userInfo: [NSLocalizedDescriptionKey: "offline"]
         )
-        // Sheet A: cold load fails.
         await #expect(throws: (any Error).self) {
             try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
         }
         #expect(store.branchState(owner: "o", repo: "r").error == "offline")
 
-        // Sheet B on the same session fills the store.
         fake.errorMap["github.branches.list"] = nil
         fake.responseMap["github.branches.list"] = ["branches": ["main"]]
         let listing = try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
 
-        // Sheet A reads the same state: listing shown, no stuck error.
         let state = store.branchState(owner: "o", repo: "r")
         #expect(state.error == nil)
         #expect(state.displayed == listing)
@@ -189,7 +175,6 @@ extension GitHubRepoStoreTests {
         await #expect(throws: (any Error).self) {
             try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
         }
-        // A failed refresh is silent: the listing stays, no error is shown.
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState(listing: cached))
     }
 
@@ -222,11 +207,8 @@ extension GitHubRepoStoreTests {
 
         fake.resolvePending("github.branches.list", with: ["branches": ["stale"]])
         _ = try await inFlight.value
-        // The pre-invalidate completion is answered but never re-cached.
         #expect(store.cachedBranchListing(owner: "o", repo: "r") == nil)
     }
-
-    // MARK: - Reconnect (connection lifecycle, not manual invalidate)
 
     @Test func reconnectDuringColdBranchLoadClearsStateAndDropsOldCompletion() async throws {
         let fake = FakeConnectionManager()
@@ -240,7 +222,6 @@ extension GitHubRepoStoreTests {
         try await waitFor("hard clear") { store.loadGeneration != generation }
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState())
 
-        // The old flight is no longer joined: a fresh load issues its own read.
         let fresh = Task { try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main") }
         try await waitFor("fresh read") { fake.paramsForMethod("github.branches.list").count == 2 }
 
@@ -267,7 +248,6 @@ extension GitHubRepoStoreTests {
         try await waitFor("hard clear") { store.loadGeneration != generation }
 
         #expect(store.branchState(owner: "o", repo: "r").displayed == nil)
-        // The old flight's answer is dropped, not published.
         fake.resolvePending("github.branches.list", with: ["branches": ["stale"]])
         _ = try await load.value
         #expect(store.branchState(owner: "o", repo: "r") == GitHubBranchLoadState())
@@ -300,7 +280,6 @@ extension GitHubRepoStoreTests {
 
         fake.simulateConnect()
         try await waitFor("hard clear") { store.loadGeneration != generation }
-        // The new connection's cold load is in flight again (state reset).
         _ = Task { try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main") }
         try await waitFor("fresh reads") { fake.paramsForMethod("github.branches.list").count == 2 }
 
@@ -310,7 +289,6 @@ extension GitHubRepoStoreTests {
         await oldPaint.value
         #expect(store.branchState(owner: "o", repo: "r").paint == nil)
 
-        // The new connection's own paint still lands.
         fake.resolvePending("github.branches.listCached", with: ["cached": true, "branches": ["new-paint"]])
         try await waitFor("new paint") { store.branchState(owner: "o", repo: "r").paint != nil }
         #expect(store.branchState(owner: "o", repo: "r").paint?.branches == ["new-paint"])
@@ -340,15 +318,11 @@ extension GitHubRepoStoreTests {
 
         fake.simulateConnect()
         try await waitFor("hard clear") { store.loadGeneration != generation }
-        // The branch step reloads and re-warms on the new connection: exactly
-        // one more request, deduplicated again within it.
         let secondWarm = try #require(store.warmRepoCache(owner: "o", repo: "r"))
         #expect(store.warmRepoCache(owner: "o", repo: "r") == nil)
         await secondWarm.value
         #expect(fake.paramsForMethod("repo.warmCache").count == 2)
     }
-
-    // MARK: - warmRepoCache (repo.warmCache)
 
     @Test func warmRepoCacheSendsGithubUrlOncePerRepo() async throws {
         let fake = FakeConnectionManager()
