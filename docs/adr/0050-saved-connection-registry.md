@@ -41,6 +41,7 @@ The app saves each paired daemon as a `StoredConnection`: its pairing info, its 
 - Two different daemons that share a host and port are treated as the same pairing.
 - A host is never removed from a record by a re-pair. Only an explicit update by id can shrink the list.
 - Legacy migration code stays until no supported installation can hold the old format.
+- Keychain backup policy (ios#263, from test comments): every local credential class is `AfterFirstUnlock`, non-synchronizable and app-private. Synced backend records are read as synchronizable shared-group items with no accessibility constraint of their own. Any change to these attributes, including a move to a `ThisDeviceOnly` class, needs an explicit policy decision and a migration (`SecItemKeychainStorage`, `PersistenceKeychainAccessibilityTests`).
 
 ## Code
 

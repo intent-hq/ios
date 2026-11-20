@@ -24,6 +24,7 @@ Some unit tests render UIKit or SwiftUI views in a real window to check appearan
 
 ## Consequences
 
+- Rendered badge tests are gated, not skipped silently: the simulator lane always turns accessibility on (`scripts/xcodebuild.sh`), so `SyntheticBadgeHost.publishesAccessibilityTree()` is consulted only on a physical device, and a simulator regression fails a badge test (from test comments).
 - A test that calls `makeKeyAndVisible()` can break unrelated suites.
 - Unit-test runners do not start XCTest's UI automation session, and simulator preferences alone do not turn on SwiftUI's in-process accessibility tree. `SyntheticBadgeAccessibilityRuntime` turns it on with the same runtime entry points as AccessibilitySnapshot's `ASAccessibilityEnabler`. It lives only in the test bundle and is never linked into the app (from test comments).
 

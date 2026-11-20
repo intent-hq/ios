@@ -34,4 +34,5 @@ A note opens from the note list, a link in another note, or a link in a conversa
 - `NoteContentView`, `PlainTaskRow`, `LinkedTaskCardRow`
 - `NoteDetailView`: `displayNote`, `loadNote()`, `refreshNote()`, `showsTaskHeader(_:)`, `navigateToNote(_:in:)`, `parseIntentNoteLink(_:)`
 - `NoteTruncationNotice`: `message(shownBytes:totalBytes:)`
+- `NoteContentPages`: `readWholeNote` (from test comments: a whole note is read through the `note.get` content cursor, PROTOCOL §5.2; cuts fall on Unicode scalar boundaries, also inside a multi-scalar emoji, not on grapheme boundaries)
 - `TaskMetadataHeaderView`: `dependedOnBy(noteId:in:)`, `showsUnmetDependency(_:note:)`, `sortedAssigneeIds`, `TaskRelationChip`

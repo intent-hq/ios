@@ -46,6 +46,9 @@ The transcript is a SwiftUI lazy stack in a `ScrollView`. [ADR 0060](0060-transc
 
 - A new footer row must be inside the tail `VStack`, or follows can stop short of it.
 - A new row type must keep closures out of its equatable body.
+- Render block ids are deterministic (`groupContentBlocks`): a synthetic segment id is the source block id plus the segment index, and a group id is the block id plus a per-block ordinal plus the name. Re-parsing the same input gives the same ids. A still-open group and the later closed group get the same id from the opening tag, the first segment reuses the source block id, and a block without tags keeps its raw id when a tag streams into it, so streaming never tears down a rendered row's view state (from test comments).
+- A user row renders text first, then image and video attachments as thumbnails, then file attachments as chips, whatever the block order in the payload (`MessageBlockPartitioning.partitionUserBlocks`) (from test comments).
+- `pairToolResults(_:)` runs once per message over the whole raw block list, not per render row. Each block row's equatable gate then compares only its own tool result, and a `tool_use` inside a group still finds a `tool_result` that lands after the closing tag (from test comments).
 
 ## Code
 

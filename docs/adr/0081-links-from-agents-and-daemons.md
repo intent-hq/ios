@@ -30,6 +30,7 @@ Agents write links in Markdown, and daemons put links in chips, QR codes and inv
 
 - Dropping the legacy pairing dialect or `host=` invites needs a decision that old QR codes and links no longer work.
 - A new link scheme must get its own parser and allowlist; `ExternalLink` stays web-only.
+- Note and task links follow the file-link grammar: the short form `intent://local/note/<id>` has no workspace, so callers use the current one; the long form `intent://local/<workspace-id>/note/<id>` routes cross-workspace links. A resource word in the first slot is always the short form, even when the next segment is also a resource word (from test comments).
 - Every view that hands a daemon-supplied string to `openURL` (context-mention chips, PR-monitor chips) goes through `ExternalLink`, never a bare `URL(string:)` (ios#262). `ExternalLinkTests` scans the call sites from the sources packaged into the test bundle, never the checkout (ios#320, ios#373) (from test comments).
 
 ## Code

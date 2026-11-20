@@ -14,6 +14,8 @@ With the iOS 18.0 deployment target, WebKit's Swift `callAsyncJavaScript(_:argum
 ## Consequences
 
 - Raising the deployment target past the broken runtimes allows a return to the Swift API; remove the check script in the same change.
+- A WebKit async JavaScript call may never resume, even after its task is cancelled. Callers and probes wait for the reply with a bound, never unbounded (from test comments).
+- `evaluateJavaScript(_:completionHandler:)` always runs in the page world. App-owned inspection uses an isolated content world, while page scripts stay disabled (from test comments).
 
 ## Code
 

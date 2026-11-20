@@ -33,6 +33,7 @@ The phone sends its APNs and Live Activity push tokens to the push relay. A mach
 
 - A self-hosted relay is not possible without an app change.
 - Removing a stored field needs a decode fallback, because old state stays on devices.
+- `PushRelayContractTests` checks the contract against services/push-relay (README and test fixtures). Its known-answer values come from Node's crypto, as the relay uses it, not from the Swift code under test (from test comments).
 
 ## Code
 

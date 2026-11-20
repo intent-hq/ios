@@ -27,6 +27,7 @@ A long press on a transcript row opens a Copy menu. SwiftUI's `.contextMenu { } 
 ## Consequences
 
 - A new tappable control in a transcript row needs a passthrough marker, or the overlay swallows its taps.
+- The upright preview correction cancels whatever flip the layer chain above the overlay applies, and is identity when the row's own un-flip already cancels it. Translation in the chain never leaks into the correction (position comes from the target's center), and an ancestor that scales through about zero mid-animation does not produce an enormous one-frame correction (from test comments).
 - The overlay is always applied, so the row subtree never changes structural identity. `shouldEnableCopyInteraction(text:isStreaming:)` only decides whether it carries a live interaction: it attaches once the message has settled and has text. Image-only rows, the thinking phase and streaming rows stay inert (from test comments).
 
 ## Code

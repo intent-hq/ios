@@ -34,6 +34,7 @@ A workspace has notes, tasks, scripts with monitors and browsers, terminals, git
 
 - A missing field in a runtime snapshot is a clear, not "unchanged".
 - Unknown task statuses still render, with a neutral treatment.
+- Task metadata fields that the daemon omits when empty default to empty or nil (PROTOCOL §5.2). On a slim `note.list` row, full `content` still wins when present (from test comments).
 
 ## Code
 

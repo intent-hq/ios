@@ -4,7 +4,7 @@
 
 ## Context
 
-Transcript rows show images, videos and PDFs from three sources: inline base64 image blocks, attachment references (`attachmentId`, no inline bytes, PROTOCOL §5.5), and Markdown links to workspace files, saved assets or the web. The slim transcript projection can truncate a block to a thumbnail, and `agent.getMessageBlock` fetches the full block on demand (hydration). Pinned windows talk to their own backend. Streaming deltas re-render the message many times a second. [ADR 0012](0012-attachment-placement-and-resolution.md) and [ADR 0094](0094-attachment-placement-and-images.md) cover how attachment bytes are resolved and cached.
+Transcript rows show images, videos and PDFs from three sources: inline base64 image blocks, attachment references (`attachmentId`, no inline bytes, PROTOCOL §5.5), and Markdown links to workspace files, saved assets or the web. The slim transcript projection can truncate a block to a thumbnail, and `agent.getMessageBlock` fetches the full block on demand (hydration). Pinned windows talk to their own backend. Streaming deltas re-render the message many times a second. [ADR 0012](0012-attachment-placement-and-resolution.md) covers how attachment bytes are resolved and cached.
 
 ## Decision
 
@@ -35,6 +35,9 @@ Transcript rows show images, videos and PDFs from three sources: inline base64 i
 ## Consequences
 
 - New media kinds must go through the session loader and handle cancellation without a failure state.
+- A shared PDF keeps the original document name in the share sheet, while the cache file keeps its unique name and cleanup (ios#803) (from test comments).
+- Workspace videos and saved-asset media share one retained-bytes cap in `WorkspaceFileImageLoader`, even when posters use little memory (from test comments).
+- Deactivating `AVAudioSession` does not reset its category. Each media consumer sets its own category before activation, also after a different use (`MediaAudioSession`) (from test comments).
 
 ## Code
 

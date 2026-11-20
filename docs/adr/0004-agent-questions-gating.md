@@ -24,6 +24,12 @@ An agent can ask a set of questions. The composer slot then shows a wizard in pl
    4. Each question set owns its attachments, apart from the composer and other sets. The selection survives wizard remounts and failed sends. A late submit for an older mount does not replace a newer card's selection. Success retires only that set's attachments.
 4. **Dismissal** persists in the daemon, so the set does not come back after reload. It is not Ignore, which only collapses the wizard. A failed RPC rolls the optimistic marker back and shows `dismissQuestionsError`.
 5. **Suggested prompts** stay hidden while questions are pending (also when the wizard is collapsed) and while recovery is loading. Prompts and the text that the views strip come from one scan (`SuggestedPrompts.parse(contentBlocks:)`, intent-hq/intent#3936), so they cannot disagree.
+6. **Desktop parity and invariants (from test comments).**
+   1. Derivation, the dismissal marker, the pending-marker authority, payload validation and answer flattening port the desktop functions: `derivePendingQuestions`, `wizard-gate.ts`, `classifyPendingQuestionMarker`, `isQuestion` (which only checks that `attachmentId` is a string) and `answer-message.ts`.
+   2. A malformed question payload is still a question resource block and is stripped from the text.
+   3. Resource blocks survive both decode paths: snapshot rows and live block deltas.
+   4. When the daemon auto-queued a tagged answer mid-turn, the optimistic row is gone and the only local tag is on the queue entry; it still answers the set.
+   5. Every state in which `isPendingQuestionRecoveryLoading` is true also makes `pendingQuestions` nil. The visionOS `composerVisible` gate relies on this: recovery loading and a rendered wizard never hold together.
 
 ## Code
 
