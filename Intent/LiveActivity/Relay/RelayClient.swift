@@ -1,8 +1,6 @@
 #if os(iOS)
 import Foundation
 
-/// `device` in the relay contract. Nil fields are left out, so the same type
-/// serves the full registration body and a partial PATCH.
 nonisolated struct RelayDeviceInfo: Codable, Equatable, Sendable {
     nonisolated struct Preferences: Codable, Equatable, Sendable {
         var liveActivity: Bool
@@ -27,8 +25,6 @@ nonisolated enum RelayClientError: Error, Equatable {
     case status(Int, String)
 }
 
-/// Device-side calls to the push relay. Every request carries a fresh proof.
-/// Encodes `pushToken` as an explicit null when the activity ended.
 nonisolated private struct ActivityTokenBody: Encodable {
     enum CodingKeys: String, CodingKey { case pushToken }
 
@@ -76,7 +72,6 @@ nonisolated struct RelayClient: Sendable {
         _ = try await send("PATCH", "/v1/devices/\(deviceId)", body: try JSONEncoder().encode(DeviceBody(device: device)))
     }
 
-    /// `nil` tells the relay the activity ended.
     func setLiveActivityToken(_ token: String?) async throws {
         _ = try await send("PUT", "/v1/devices/\(deviceId)/live-activity", body: try JSONEncoder().encode(ActivityTokenBody(pushToken: token)))
     }

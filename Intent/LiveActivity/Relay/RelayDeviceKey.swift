@@ -3,13 +3,8 @@ import CryptoKit
 import Foundation
 import Security
 
-/// The phone's push relay identity: one P-256 key kept on this device only.
-/// It lives in the Secure Enclave when there is one; the Keychain holds the
-/// enclave's wrapped blob, or the software key on the Simulator.
 nonisolated final class RelayDeviceKey: RelaySigner, @unchecked Sendable {
     nonisolated enum LoadError: Error {
-        /// The Keychain is locked (before first unlock). Never replace the key
-        /// then, or the relay would see a new device.
         case keychainUnavailable(OSStatus)
         case keyCreationFailed
     }
@@ -47,7 +42,6 @@ nonisolated final class RelayDeviceKey: RelaySigner, @unchecked Sendable {
         }
     }
 
-    /// Reads the stored key, creating and storing one only when none exists.
     static func loadOrCreate() throws -> RelayDeviceKey {
         switch read() {
         case .success(let blob):
@@ -89,8 +83,6 @@ nonisolated final class RelayDeviceKey: RelaySigner, @unchecked Sendable {
                 .map { RelayDeviceKey(.software($0)) }
         }
     }
-
-    // MARK: - Keychain
 
     private static var baseQuery: [String: Any] {
         [

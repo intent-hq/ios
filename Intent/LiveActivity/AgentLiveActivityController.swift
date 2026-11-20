@@ -3,26 +3,17 @@ import ActivityKit
 import Observation
 import UIKit
 
-/// Keeps one Live Activity in step with running agents on every live backend.
-///
-/// The app drives every update, so the activity is current while the app runs
-/// (foreground or its background grace period) and marked stale after. Once a
-/// machine is linked to the push relay, the relay drives it instead and this
-/// controller only ends activities when the switch turns off.
 @MainActor
 final class AgentLiveActivityController {
     static let shared = AgentLiveActivityController()
-    /// User preference, written by the Settings toggle. Defaults to on.
     static let enabledKey = "liveActivitiesEnabled"
 
     private static let publishDelay: Duration = .seconds(1)
-    private static let staleAfter: TimeInterval = 1800 // 30 minutes
+    private static let staleAfter: TimeInterval = 1800
 
     private var stores: [BackendID: WorkspaceStore] = [:]
     private var activityID: String?
     private var publishTask: Task<Void, Never>?
-    /// Running workspaces when the user dismissed the activity; a new one
-    /// starts only when another workspace begins running.
     private var dismissedRunningKeys: Set<String> = []
     private var activeObserver: NSObjectProtocol?
     private var isRelayDriven = RelayLinkState.load(from: .standard).isRelayDriven
@@ -51,8 +42,6 @@ final class AgentLiveActivityController {
         schedulePublish()
     }
 
-    /// Turning off ends the current activity at once; turning on starts one
-    /// when an agent is running.
     func setEnabled(_ enabled: Bool) {
         guard !enabled else {
             schedulePublish()
@@ -68,9 +57,6 @@ final class AgentLiveActivityController {
         Task { await Self.end(id: id, content: nil, policy: .immediate) }
     }
 
-    /// The relay starts its own activity with push tokens, so an app-started
-    /// one ends when the first machine links; the app adopts the relay's
-    /// activity when the last machine unlinks.
     func setRelayDriven(_ driven: Bool) {
         guard driven != isRelayDriven else { return }
         isRelayDriven = driven
@@ -146,7 +132,6 @@ final class AgentLiveActivityController {
         await Self.update(id: id, content: content)
     }
 
-    /// `--demo-live-activity-finished` shows the relay's finished card for screenshots.
     private static func demoState(_ state: AgentActivityAttributes.ContentState) -> AgentActivityAttributes.ContentState {
         #if DEBUG
         if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-live-activity-finished-running"), let row = state.rows.first {
@@ -179,8 +164,6 @@ final class AgentLiveActivityController {
         return state
     }
 
-    // Activities are not Sendable: each helper looks one up and uses it
-    // without leaving its own isolation domain.
     nonisolated private static func state(id: String) -> ActivityState? {
         Activity<AgentActivityAttributes>.activities.first { $0.id == id }?.activityState
     }
@@ -221,8 +204,6 @@ final class AgentLiveActivityController {
         }
     }
 
-    /// Every backend has loaded its workspaces, so an empty result is real
-    /// rather than a launch still connecting.
     private var isSettled: Bool {
         !stores.isEmpty && stores.values.allSatisfy { $0.lastUpdated != nil }
     }

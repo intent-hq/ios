@@ -49,21 +49,13 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     case prOpen
     case prQueued
     case prReady
-    /// A wire value this build does not know (a newer daemon's status) —
-    /// rendered neutrally rather than being folded into another status.
     case unknown
 
-    /// Stable historical iteration order, independent of declaration order.
     static let allCases: [Self] = [
         .failed, .blocked, .needsAttention, .idle, .notStarted, .inProgress,
         .complete, .prReady, .prOpen, .prQueued, .prMerged, .unknown
     ]
 
-    /// Maps the BE-owned wire value (snake_case) to a display status.
-    /// Returns nil for unknown values.
-    /// The retired `"unread"` value (older daemons) maps to `.idle`: unread
-    /// is now the workspace `attention` flag rendered as a dot overlay, not
-    /// a first-class status.
     init?(wireValue: String) {
         guard let status = Self.wireStatuses[wireValue] else { return nil }
         self = status
@@ -80,7 +72,6 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .complete: return Constants.Colors.WorkspaceStatus.complete
         case .prReady: return Constants.Colors.WorkspaceStatus.prReady
         case .prOpen: return Constants.Colors.WorkspaceStatus.prOpen
-        // Queued and merged share Blue 600 in the Figma Status Colors legend.
         case .prQueued: return Constants.Colors.WorkspaceStatus.prMerged
         case .prMerged: return Constants.Colors.WorkspaceStatus.prMerged
         case .unknown: return Constants.Colors.WorkspaceStatus.unknown
@@ -104,12 +95,6 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         }
     }
 
-    /// Order for the Status view grouping. This is presentation ordering that
-    /// matches the FE sidebar status view — attention states first, then a
-    /// lifecycle progression (idle → not started → in progress → complete →
-    /// PR open → mergeable → queued → merged) — not the BE-owned derivation precedence
-    /// (which a workspace never needs here: it already resolves to a single
-    /// status). Unknown values sort last.
     var sortOrder: Int {
         switch self {
         case .failed: return SortOrder.failed
@@ -128,35 +113,20 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     }
 }
 
-/// True when the workspace carries the server-owned unread attention flag
-/// (the blue dot). `review_required` and `none` don't count — only `unread`
-/// is cleared by opening the workspace (workspace.markSeen).
 func hasUnreadAttention(_ workspace: Workspace) -> Bool {
     workspace.attention == "unread"
 }
 
-/// True when the workspace's daemon-reported activity is "agent_running"
-/// (the green dot). Shared by the row's green-dot overlay and the waiting-dot
-/// precedence check so the two predicates can never drift apart.
 func hasRunningAgents(_ workspace: Workspace) -> Bool {
     workspace.activity?.lowercased() == "agent_running"
 }
 
-/// True when the row should show the grey static waiting dot (protocol 6.17
-/// orthogonal `waiting` flag). Dot precedence: running > unread > waiting —
-/// the waiting dot never outranks the green running or blue unread dots.
-/// Informational only: waiting never feeds attention or badge escalation.
 func showsWaitingDot(_ workspace: Workspace) -> Bool {
     workspace.waiting
         && !hasRunningAgents(workspace)
         && !hasUnreadAttention(workspace)
 }
 
-/// Resolves the display status for a workspace from the BE-owned
-/// `displayStatus` wire value. The daemon always emits the field, including
-/// on the lite workspace.subscribe snapshot (intent-hq/intentd#743); an
-/// absent field renders as `.notStarted`, while a value this build does not
-/// recognize renders as `.unknown` rather than being mislabeled.
 func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     guard let wireValue = workspace.displayStatus else { return .notStarted }
     return WorkspaceDisplayStatus(wireValue: wireValue) ?? .unknown
@@ -168,8 +138,6 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         didSet { persistence.saveWorkspaceListViewMode(viewMode) }
     }
     var searchText = ""
-    /// Group keys the user has collapsed, per grouped view mode. Persisted so
-    /// the iPhone list and iPad sidebar share them across launches.
     private(set) var collapsedGroups: [ViewMode: Set<String>]
 
     var showArchived: Bool {
@@ -177,7 +145,6 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         set { workspaceStore.showArchived = newValue }
     }
 
-    /// The window's workspace store, injected from its `BackendSession`.
     @ObservationIgnored private let workspaceStore: WorkspaceStore
     @ObservationIgnored private let persistence: PersistenceManager
     @ObservationIgnored private let activityTime: @MainActor (Workspace) -> TimeInterval
@@ -208,7 +175,6 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         workspaceStore.isLoading
     }
 
-    /// The first `workspace.list` read failed and nothing is shown (ios#462).
     var loadFailureMessage: String? {
         guard workspaces.isEmpty else { return nil }
         return workspaceStore.loadPhase.failureMessage
@@ -226,24 +192,18 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         derivedWorkspaces.filtered
     }
 
-    /// Groups keyed by repo, ordered by the activity time of each group's most
-    /// recent member (its first, since `filteredWorkspaces` is already sorted)
-    /// — the same rule as the FE sidebar's `groupedByRepo`.
     var groupedByRepo: [(String, [Workspace])] {
         derivedWorkspaces.byRepo
     }
 
-    /// The list settings that decide which rows are visible, in what order.
     var presentation: WorkspaceListPresentation {
         WorkspaceListPresentation(viewMode: viewMode, collapsedGroups: collapsedGroups, searchText: searchText)
     }
 
-    /// Searching always shows every group expanded so matches are never hidden.
     func isGroupExpanded(_ key: String, in mode: ViewMode) -> Bool {
         presentation.isGroupExpanded(key, in: mode)
     }
 
-    /// Toggles a Repo or Status group; a no-op while searching, where groups are forced open.
     func toggleGroup(_ key: String, in mode: ViewMode) {
         guard !hasSearchQuery else { return }
         var keys = collapsedGroups[mode, default: []]
@@ -257,8 +217,6 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     }
 
     private var derivedWorkspaces: DerivedWorkspaces {
-        // Read every observable input even on a hit so SwiftUI remains subscribed.
-        // Cache storage itself must not publish changes during a view read.
         let revision = workspaceStore.workspacesRevision
         let query = normalizedSearchText
         let includeArchived = showArchived
@@ -296,7 +254,6 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
             nextTimes[workspace.id] = entry
             return (workspace, entry.time)
         }
-        // Prune removed workspaces; metadata-only updates retain parsed keys.
         activityTimes = nextTimes
         let sorted = timed.sorted { $0.time > $1.time }.map(\.workspace)
         sortedCache = SortedWorkspaces(revision: revision, includeArchived: includeArchived, workspaces: sorted)
