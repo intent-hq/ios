@@ -2,7 +2,6 @@ import SwiftUI
 
 extension WorkspaceDetailView {
     func resetAgentWorkspace(to workspaceId: String) {
-        // A retained workspace keeps its expanded groups; only fresh stores reset.
         if agentStore.workspaceId != workspaceId { viewModel.reset() }
         agentStore.prepareForWorkspaceChange(to: workspaceId)
     }
@@ -23,7 +22,6 @@ extension WorkspaceDetailView {
     }
 
     private func agentTreeRows(_ roots: [AgentSession]) -> [WorkspaceAgentListRow] {
-        // Snapshot values on-main; defer row bodies until the lazy stack requests them.
         viewModel.visibleTree(roots).map { row in
             let group = AgentListGroup.delegated(parentId: row.id)
             let count = viewModel.count(for: group)
@@ -95,7 +93,6 @@ extension WorkspaceDetailView {
         return .ready
     }
 
-    /// The conversation open beside this sidebar workspace.
     private var sidebarAgentId: String? {
         guard sidebar != nil, case let .agentConversation(agentId, _, _) = coordinator.currentScreen else { return nil }
         return agentId
@@ -135,12 +132,10 @@ extension WorkspaceDetailView {
 extension WorkspaceDetailView {
     private static let revealPasses = 4
 
-    /// The sidebar copy keeps the open agent's row in view, and reports whether it lists it.
     var sidebarContent: some View {
         presentedContent
             .onAppear(perform: adoptOverviewExpansion)
             .onChange(of: sidebarAgentId, initial: true) { _, agentId in
-                // An agent opened from elsewhere is found on the Agents tab.
                 if agentId != nil, currentTab != .agents { currentTab = .agents }
             }
             .task(id: sidebarRevealKey) { await revealSidebarAgent() }
@@ -154,7 +149,6 @@ extension WorkspaceDetailView {
             }
     }
 
-    /// The overview's open sections carry over, so the agent just opened from one stays visible.
     private func adoptOverviewExpansion() {
         guard let handoff = coordinator.workspaceSidebarAgents.handoff, handoff.workspaceId == workspaceId else { return }
         viewModel.expansion = handoff.expansion
@@ -182,7 +176,6 @@ extension WorkspaceDetailView {
         }
     }
 
-    /// Opens and loads the sections above the agent; each loaded parent may reveal its own section.
     private func revealSidebarAgent() async {
         let key = sidebarRevealKey
         defer { if !Task.isCancelled { viewModel.completedReveal = key } }

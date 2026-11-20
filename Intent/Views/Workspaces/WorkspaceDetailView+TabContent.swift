@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// The selected tab's content: the agents and workspace resources, the changes, or the context.
 extension WorkspaceDetailView {
     private var showsAgentLoading: Bool {
         agentStore.loadPhase.isAwaitingFirstLoad && viewModel.agents.isEmpty && !hasWorkspaceResources

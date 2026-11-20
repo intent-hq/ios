@@ -14,12 +14,7 @@ struct WorkspaceRowView: View {
     var onStatusCenterChanged: (CGFloat) -> Void = { _ in }
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
-    /// indicator, read from the window's session so pinned windows use their
-    /// own backend; falls back to the shared store when no session is in the
-    /// environment (previews/tests).
     @Environment(BackendSession.self) private var session: BackendSession?
-    /// Raised attention rows hide while the Intent menu is open (visionOS).
     @Environment(\.workspaceActionMenuOpen) private var actionMenuOpen
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var monitorConsumer = UUID()
@@ -65,7 +60,6 @@ struct WorkspaceRowView: View {
 
     var body: some View {
         HStack(alignment: Self.firstTitleLineCenter, spacing: spacious || isSidebar ? Constants.WorkspaceRow.spaciousRowSpacing : Constants.WorkspaceRow.rowSpacing) {
-            // Status icon with agent activity / unread dot overlays
             WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme, size: statusIconSize)
                 .opacity(statusIconHidden ? 0 : 1)
                 .onGeometryChange(for: CGFloat.self) { proxy in
@@ -127,8 +121,6 @@ struct WorkspaceRowView: View {
         count == 1 ? "1 additional pull request" : "\(count) additional pull requests"
     }
 
-    /// Stable identifiers for the PR badges so tests and automation locate them
-    /// without depending on the spoken label or layout position.
     enum BadgeIdentifier {
         static let pullRequest = "workspaceRow.prBadge"
         static let additionalPullRequests = "workspaceRow.prBadge.additional"

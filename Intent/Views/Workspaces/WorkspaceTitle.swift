@@ -21,7 +21,6 @@ struct WorkspaceTitle<Content: View>: View {
                         isAnimating: !reduceMotion && scenePhase == .active && contrast != .increased,
                         highContrast: contrast == .increased
                     )
-                    // Callers may trim the frame to cap height and baseline; keep descenders unmasked.
                     .padding(.vertical, -maskOutset)
                 }
         } else {

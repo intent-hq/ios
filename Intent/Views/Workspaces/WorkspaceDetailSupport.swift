@@ -70,7 +70,6 @@ struct WorkspaceDetailHeading: View {
         return trimmed
     }
 
-    /// The status image leads the summary as a thumbnail; accessibility sizes stack it above.
     private var statusRow: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing))
@@ -105,7 +104,6 @@ struct WorkspaceDetailHeading: View {
                     if !saving { focusBinding.wrappedValue = true }
                 }
                 .onSubmit {
-                    // The draft stays in the field until the Mac is back.
                     if !isRemoteReadOnly { onSaveTitle() }
                 }
                 .accessibilityLabel("Workspace name")

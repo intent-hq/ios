@@ -4,7 +4,6 @@ extension EnvironmentValues {
     @Entry var openConnectionSwitcher = OpenConnectionSwitcherAction()
 }
 
-/// Stores the drawer's state rather than an incomparable environment closure.
 struct OpenConnectionSwitcherAction {
     var isPresented: Binding<Bool>?
     var isEnabled = false
@@ -14,8 +13,6 @@ struct OpenConnectionSwitcherAction {
     }
 }
 
-/// True while the Connections switcher is open, so the global agent history
-/// drawer does not compete for the same horizontal pans.
 struct ConnectionSwitcherOpenPreference: PreferenceKey {
     nonisolated static var defaultValue: Bool { false }
 
@@ -68,7 +65,6 @@ struct WorkspaceConnectionSwitcher<Content: View>: View {
         }
     }
 
-    /// Long-press only, and nil on iPhone where windows cannot be added.
     private var newWindowAction: ((UUID) -> Void)? {
         guard supportsMultipleWindows else { return nil }
         let openWindow = openWindow

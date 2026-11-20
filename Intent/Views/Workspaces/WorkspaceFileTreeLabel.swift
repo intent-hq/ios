@@ -4,7 +4,6 @@ struct WorkspaceFileTreeLabel<Detail: View>: View {
     let name: String
     var isDirectory = false
     var isExpanded = false
-    /// Draws the start of the guide that runs down to this folder's children.
     var showsChildGuide = false
     var showsChevron = true
     var count: Int?
@@ -88,14 +87,12 @@ enum WorkspaceFileTreeLayout {
     static let nameSize: CGFloat = 14
 
     static let folderOpenDuration = 0.25
-    /// Closing runs a little faster than opening so collapsing feels immediate.
     static let folderCloseDuration = 0.18
 
     static func folderToggleAnimation(opening: Bool, reduceMotion: Bool) -> Animation? {
         reduceMotion ? nil : .snappy(duration: opening ? folderOpenDuration : folderCloseDuration)
     }
 
-    /// Rows past the deepest indentation keep the path below their last indented ancestor.
     static func displayName(path: String, depth: Int) -> String {
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
 
@@ -104,10 +101,8 @@ enum WorkspaceFileTreeLayout {
 
     static let guideOpacity = 0.3
     static let guideWidth: CGFloat = 1
-    /// Measured from the icon frame; the folder glyph sits about 2pt inside it.
     static let guideIconGap: CGFloat = 3
 
-    /// Whether an open folder's children sit deeper than it, so a guide can lead to them.
     static func showsChildGuide(depth: Int, isExpanded: Bool) -> Bool {
         isExpanded && depth < maximumIndentationDepth
     }
@@ -137,9 +132,6 @@ struct WorkspaceFileTreeScrollView<Content: View>: View {
 }
 
 extension View {
-    /// Draws a vertical guide under each ancestor folder's icon. Rows stack
-    /// without spacing, so the guides join into one line per open folder;
-    /// the folder's own label starts the line just below its icon.
     func fileTreeGuides(depth: Int) -> some View {
         modifier(FileTreeGuides(depth: depth))
     }
@@ -178,8 +170,6 @@ private struct FileTreeGuides: ViewModifier {
     }
 }
 
-/// `ownGuide` is an x offset and a distance below the vertical center where
-/// a folder's line starts.
 nonisolated private struct FileTreeGuideShape: Shape {
     let offsets: [CGFloat]
     var ownGuide: (x: CGFloat, belowCenter: CGFloat)?

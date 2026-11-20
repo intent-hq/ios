@@ -4,7 +4,6 @@ struct WorkspaceDetailView: View {
     @ScaledMetric(relativeTo: .title) var emptyStateIconSize: CGFloat = 48
     let workspaceId: String
     private let persistence: PersistenceManager
-    /// The window's retained workspace stores; a fresh cache when the caller has none.
     private let storesCache: WorkspaceDetailStoresCache
     private let storesSession: BackendSession
     let isSidebarVisible: Bool
@@ -51,8 +50,6 @@ struct WorkspaceDetailView: View {
         _storedPresentation = State(initialValue: WorkspaceDetailPresentation())
     }
 
-    /// Stores of the shown workspace, kept per window for the last few
-    /// workspaces so a switch back (or a drop) shows them from memory.
     var stores: WorkspaceDetailStores {
         storesCache.stores(for: workspaceId) { WorkspaceDetailStores(session: storesSession) }
     }
@@ -88,7 +85,6 @@ struct WorkspaceDetailView: View {
             surface.ignoresSafeArea()
             VStack(spacing: 0) {
                 if sidebar != nil {
-                    // The Duo sidebar has no collapse control and its rail carries the page actions.
                     if usesVerticalBar {
                         WorkspaceSidebarTitleHeader(title: workspaceName)
                     } else {
@@ -114,7 +110,6 @@ struct WorkspaceDetailView: View {
                     connectionId: connectionId
                 )
             }
-            // AgentStore retains rows while returning from a conversation.
             agentStore.startObservingEvents()
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
@@ -124,7 +119,6 @@ struct WorkspaceDetailView: View {
             titleEditor.cancel()
             scriptStore.cancelPendingLaunch(workspaceId: workspaceId)
             updateStoresLease(to: nil)
-            // Remove only this workspace/connection pair, preserving other windows.
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: workspaceId,
@@ -153,7 +147,7 @@ struct WorkspaceDetailView: View {
             if filesStore.workspaceId != newId { filesStore.reset() }
             notesExpanded = true
             filesExpanded = true
-            agentStore.startObservingEvents()  // Re-register with new workspaceId context
+            agentStore.startObservingEvents()
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: newId) }
             Task { await noteStore.fetchNotes(workspaceId: newId) }
@@ -169,7 +163,6 @@ struct WorkspaceDetailView: View {
             viewModel.agents = newAgents
         }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
-            // After workspaces load, if ours is missing it was deleted/archived externally
             if !presentation.showTransferWorkspace, workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
                 coordinator.handleMissingWorkspace()
             }
@@ -254,7 +247,6 @@ private extension WorkspaceDetailView {
 
     var detailContent: some View {
         ScrollView {
-            // Keep the focused title mounted while the agent rows scroll lazily.
             VStack(spacing: 0) {
                 detailHeader
                 if selectedTab == .agents {
@@ -267,11 +259,9 @@ private extension WorkspaceDetailView {
                 }
             }
             .iPadDetailColumn(isEnabled: sidebar == nil)
-            // Page children own the 24 pt page inset; on the Duo they line up with the list's 8 pt.
             .padding(.horizontal, isDuoSidebar ? IPadSidebarStyle.compactInset - WorkspaceDetailStyle.pageInset : 0)
         }
         .overlay(alignment: .top) { if sidebar == nil, usesIPadPaneTitle { WorkspaceHeaderFade() } }
-        // The Duo pane has no top bar for content to fade under, as in conversations.
         .modifier(ConversationScrollEdgeEffect())
         .accessibilityIdentifier("workspace.detail.scroll")
         .refreshable {
