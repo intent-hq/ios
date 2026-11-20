@@ -31,7 +31,6 @@ struct QuestionStepView: View {
     )
 
     private typealias Layout = Constants.Conversation.QuestionWizard.Step
-    // The text container has a top and a bottom inset; this is not a visual scale.
     private static let textContainerVerticalInsetMultiplier: CGFloat = 2
 
     var body: some View {
@@ -186,15 +185,10 @@ struct QuestionStepView: View {
 
     private static let freeTextPlaceholder = "Type your own answer…"
 
-    /// One body line of the free-text field, measured with the font
-    /// `SubmittableTextView` installs.
     static var freeTextLineHeight: CGFloat {
         Constants.Typography.bodyS.uiFont(compatibleWith: .current).lineHeight
     }
 
-    /// Clamps the free-text field's reported content height between one
-    /// line and `freeTextMaximumLineCount` lines (plus the text container
-    /// insets); past the cap the text view scrolls.
     static func clampedFreeTextHeight(_ contentHeight: CGFloat, lineHeight: CGFloat) -> CGFloat {
         let insets = Constants.Conversation.Composer.textContainerInset
             * textContainerVerticalInsetMultiplier
@@ -204,10 +198,6 @@ struct QuestionStepView: View {
         return min(max(contentHeight, minimum), maximum)
     }
 
-    /// Multiline free-text answer. Reuses the composer's `SubmittableTextView`
-    /// so hardware Return submits and Shift+Return inserts a newline under
-    /// the same `ComposerSubmitPolicy` as the composer; the return-key hint
-    /// is shown only where bare Return actually submits.
     private var otherField: some View {
         HStack(spacing: Layout.otherFieldSpacing) {
             Image(.edit)

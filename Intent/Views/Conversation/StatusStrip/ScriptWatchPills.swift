@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Script watch pills for the workspace status row. One watch opens its details
-/// sheet directly; several collapse into a counted menu that opens the same sheet.
 struct ScriptWatchPills: View {
     let viewModel: ConversationViewModel
     @Environment(\.layoutDirection) private var layoutDirection
@@ -14,7 +12,6 @@ struct ScriptWatchPills: View {
                 if hasMore { loadMorePill }
             }
         }
-        // No movement or countdown animation, including under Reduce Motion.
         .transaction { $0.animation = nil }
         .background {
             #if DEBUG

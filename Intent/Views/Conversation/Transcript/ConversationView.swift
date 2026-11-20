@@ -75,20 +75,16 @@ private struct ConversationViewContent: View {
     @Environment(\.workspaceUsesVerticalBar) private var usesVerticalBar
     @State private var isInNavigation = false
     @State private var hasVisibleConversation = false
-    /// Sheets, alerts and the demo cover, plus a Delete confirmed here.
     @State private var agentPresentation = AgentConversationPresentation()
     @State private var childAgent: AgentDestination?
     @State private var answeringWorkspaceQuestions = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    // Layered opaque expressions keep Release type-checking tractable (intent-hq/monorepo#2352).
-    // Preserve modifier order: column → chrome → presentation → lifecycle.
     var body: some View {
         conversationLifecycle
     }
 
-    /// Outermost layer: navigation destination + load/lifecycle handlers.
     private var conversationLifecycle: some View {
         conversationPresentation
             .navigationDestination(isPresented: $agentPresentation.presenting(.demoCover)) {
@@ -139,7 +135,6 @@ private struct ConversationViewContent: View {
             }
     }
 
-    /// Sheets and alerts; the delete confirmation is anchored to its menu.
     private var conversationPresentation: some View {
         conversationChrome
             .sheet(isPresented: $agentPresentation.presenting(.modelPicker)) {
@@ -155,8 +150,6 @@ private struct ConversationViewContent: View {
                     .disabledWhileReadOnly()
                 Button("Cancel", role: .cancel) {}
             }
-            // Keep the failure detail stable while the wizard restores its pending marker
-            // (intent-hq/monorepo#1800).
             .alert(
                 "Couldn't Dismiss Questions",
                 isPresented: dismissQuestionsErrorPresented,
@@ -166,7 +159,6 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The questions were not dismissed and are still pending. " + detail)
             }
-            // Failed image placement restores the draft and images (monorepo#3338).
             .alert(
                 "Couldn't Send Images",
                 isPresented: imagePlacementErrorPresented,
@@ -176,7 +168,6 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The message was not sent. " + detail)
             }
-            // Failed file placement restores the draft and retains pending attachments.
             .alert(
                 "Couldn't Send Files",
                 isPresented: filePlacementErrorPresented,
@@ -205,7 +196,6 @@ private extension ConversationViewContent {
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.conversationOpened(agentId: viewModel.agentId, connectionId: connectionId)
             }
-            // Entry never marks seen: preserve the unread divider until leaving or finishing.
             viewModel.conversationAppeared()
         } else {
             if let connectionId = session.backendID?.connectionID {
@@ -238,7 +228,6 @@ private extension ConversationViewContent {
         usesWorkspaceDesign && presentation != .iPad
     }
 
-    /// Keep the column's identity (including its scroll state) across width changes.
     private var conversationChrome: some View {
         legacyConversationChrome
             .conversationReadableColumn()
@@ -246,7 +235,6 @@ private extension ConversationViewContent {
             .toolbarBackground(usesVerticalNavigation || viewModel.showsLoadingState ? .hidden : .automatic, for: .navigationBar)
             .nativeNavigationBackGesture(isEnabled: !usesPhoneQuestionPresentation || !answeringWorkspaceQuestions)
             #if os(iOS)
-            // In the Duo shell the rail replaces the vertical toolbar, so no bar sits over the transcript top.
             .toolbar(usesWorkspaceDesign && (!usesVerticalNavigation || presentation == .iPad) ? .hidden : .automatic, for: .navigationBar)
             .toolbar(usesWorkspaceDesign && assistantStore == nil ? .hidden : .automatic, for: .tabBar)
             .modifier(ConversationFocusHeaderInset(isEnabled: usesWorkspaceDesign, floats: isNamedBySidebar && !usesVerticalNavigation) { usesMiniHeader in
@@ -306,7 +294,6 @@ private extension ConversationViewContent {
             }
     }
 
-    /// Innermost layer: the column itself plus geometry/animation modifiers.
     private var conversationColumn: some View {
         ConversationColumnView(
             viewModel: viewModel,
@@ -317,9 +304,6 @@ private extension ConversationViewContent {
         ) { agentPresentation.present(.demoCover) }
     }
 
-    /// Presented-or-not binding for the dismiss-failure alert, hoisted out of
-    /// the `body` expression so the type checker doesn't solve the `Binding`
-    /// construction inline.
     private var dismissQuestionsErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.dismissQuestionsError != nil },
@@ -341,7 +325,6 @@ private extension ConversationViewContent {
         )
     }
 
-    /// The native menu owns its container shape and dismissal on every device.
     private var agentMenu: some View {
         WorkspaceResourceActions(workspaceId: viewModel.workspaceId, isEnabled: assistantStore == nil) {
             nativeAgentMenu
@@ -377,7 +360,6 @@ private extension ConversationViewContent {
         }
     }
 
-    /// Ellipsis toolbar menu (model selection, rename, delete).
     private var nativeAgentMenu: some View {
         Menu {
             if let assistantStore {
@@ -411,7 +393,6 @@ private extension ConversationViewContent {
         .accessibilityIdentifier(assistantStore == nil ? "conversation.actions.open" : "assistant.actions")
     }
 
-    /// Note detail sheet content for a tapped note reference.
     private func noteSheet(for noteInfo: NoteSheetInfo) -> some View {
         ConversationNoteSheet(noteInfo: noteInfo, session: session) {
             agentPresentation.dismissNote()
@@ -426,7 +407,6 @@ private extension ConversationViewContent {
         }
     }
 
-    /// Delete-confirmation action: deletes the agent then dismisses this view.
     private func deleteAgent() {
         HapticManager.notification(.warning)
         agentPresentation.beginDeletion()
@@ -451,7 +431,6 @@ private extension ConversationViewContent {
         }
     }
 
-    /// Rename-alert action: applies the trimmed name if non-empty.
     private func renameAgent() {
         let newName = agentPresentation.renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !newName.isEmpty else { return }
@@ -464,9 +443,6 @@ private extension ConversationViewContent {
         }
     }
 
-    /// Coordinator-driven fallback when the agent no longer exists (not-found at
-    /// load or deleted while open): navigate back to the workspace's agent list.
-    /// Skipped for a self-initiated delete (the Delete button already dismisses).
     private func handleAgentNotFoundIfNeeded() {
         guard viewModel.agentNotFound, !agentPresentation.suppressesMissingAgentFallback else { return }
         if let onAgentUnavailable {

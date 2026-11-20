@@ -13,9 +13,6 @@ struct AssistantMessageView: View {
     var onLayoutChange: (() -> Void)?
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
-    /// Derived once per message value in `init` rather than on every `body`
-    /// evaluation: the prompt-stripped blocks grouped into render blocks,
-    /// the tool_use → tool_result pairing, and the copy-menu text.
     private let renderBlocks: [RenderBlock]
     private let toolResults: [String: ContentBlock]
     private let copyText: String
@@ -48,14 +45,11 @@ struct AssistantMessageView: View {
         self.copyText = MessageBlockPartitioning.assistantCopyText(from: blocks)
     }
 
-    /// True while `block` or its paired tool result is being hydrated.
     private func isHydrating(_ block: ContentBlock) -> Bool {
         hydratingBlockIds.contains(block.id)
             || (toolResults[block.id].map { hydratingBlockIds.contains($0.id) } ?? false)
     }
 
-    /// The pairing and hydration set narrowed to one group's children, so the
-    /// group's equatable gate only sees changes that concern its own rows.
     private func groupInputs(_ group: ResponseGroup) -> (toolResults: [String: ContentBlock], hydrating: Set<String>) {
         var scopedResults: [String: ContentBlock] = [:]
         var hydrating: Set<String> = []
@@ -100,7 +94,6 @@ struct AssistantMessageView: View {
                 }
                 .padding(.top, blockSpacing(at: index))
             }
-            // Rebuild cached markdown when a streamed prompt block closes and disappears.
             .id(hasStrippedPrompts)
         }
         .padding(.vertical, workspaceDesign ? 0 : Layout.verticalPadding)

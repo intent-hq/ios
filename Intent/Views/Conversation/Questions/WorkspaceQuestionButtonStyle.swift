@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Question actions use the workspace palette without restyling shared buttons.
 struct WorkspaceQuestionButtonStyle: ButtonStyle {
     var primary = false
     var fillsWidth = false

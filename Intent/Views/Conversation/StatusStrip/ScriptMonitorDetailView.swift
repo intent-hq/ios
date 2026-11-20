@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Read-only watch details in the app's shared sheet chrome.
 struct ScriptMonitorDetailView: View {
     let viewModel: ConversationViewModel
     let selection: ScriptMonitorSelection

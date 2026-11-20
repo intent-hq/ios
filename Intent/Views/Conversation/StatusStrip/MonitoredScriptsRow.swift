@@ -1,9 +1,5 @@
 import SwiftUI
 
-/// The sheet host outlives an empty status row so a terminal event can explain
-/// that the selected watch ended without asserting what happened to its run.
-/// The workspace design shows its watches as pills in `WorkspaceStatusPillsRow`
-/// and keeps only this host.
 struct MonitoredScriptsRow: View {
     let viewModel: ConversationViewModel
     var showsRow = true
@@ -24,7 +20,6 @@ struct MonitoredScriptsRow: View {
                 Divider()
             }
         }
-        // No movement or countdown animation, including under Reduce Motion.
         .transaction { $0.animation = nil }
         .sheet(item: Binding(
             get: { viewModel.selectedScriptMonitor },

@@ -1,7 +1,5 @@
 import SwiftUI
 
-// These builders remain on the transcript so extraction does not add a new
-// observation boundary or change the lazy stack's row and anchor identities.
 extension ConversationTranscriptView {
     static let eagerTailMessageLimit = 12
 
@@ -9,8 +7,6 @@ extension ConversationTranscriptView {
     func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         let generation = scrollState.initialScrollGeneration
         let ownershipRevision = scrollState.viewportOwnershipRevision
-        // Snapshot hydration, cached heights and workspace inputs on MainActor.
-        // SwiftUI may request these prepared row values on its render thread.
         let rows = viewModel.filteredMessages.map { message in
             (id: message.id, content: transcriptMessageRow(
                 for: message,
@@ -28,9 +24,6 @@ extension ConversationTranscriptView {
         ForEach(rows.dropLast(Self.eagerTailMessageLimit), id: \.id) { @Sendable row in
             row.content
         }
-        // Realize a bounded tail and its footer together. A separately lazy
-        // footer can remain absent at the stack's estimated bottom after
-        // rows resize, even when repeated scrollTo calls land.
         VStack(spacing: transcriptRowSpacing) {
             ForEach(rows.suffix(Self.eagerTailMessageLimit), id: \.id) { @Sendable row in
                 row.content
@@ -43,8 +36,6 @@ extension ConversationTranscriptView {
     @ViewBuilder
     private func transcriptEndRows(proxy: ScrollViewProxy) -> some View {
         #if !os(visionOS)
-        // On visionOS the composer renders these as large chips above the
-        // field instead (MessageInputView).
         if !viewModel.suggestedPrompts.isEmpty, !viewModel.isStreaming {
             suggestedPromptsView
                 .id("suggested-prompts")
@@ -57,13 +48,6 @@ extension ConversationTranscriptView {
                 .id("thinking-indicator")
         }
 
-        // The stack's bottom padding lives on the marker so that
-        // `scrollTo("scroll-bottom", anchor: .bottom)` targets the true end
-        // of the content, not a point 12 points above it that a landing
-        // judged against `followLandingTolerance` could never reach. Its realization is the end-row signal the unrealized-end recovery
-        // reads (#338): the lazy stack appears and disappears the marker as
-        // it realizes and drops it. Realizing while scrolled away replays
-        // the live edge; derealizing arms the recovery.
         if !isDemoEndWithdrawn {
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
@@ -82,12 +66,6 @@ extension ConversationTranscriptView {
                     send(.endDerealized, proxy: proxy)
                 }
         } else {
-            // Demo-only stand-in while the marker is withdrawn (see
-            // `withdrawEndRowForDemo`): the same height, so the content
-            // height and every offset the recovery reads are unchanged, but
-            // no id and no realization handlers — `scrollTo("scroll-bottom")`
-            // finds nothing and `isEndRealized` stays false, exactly as over
-            // a dropped end row.
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
         }
@@ -101,8 +79,6 @@ extension ConversationTranscriptView {
         ownershipRevision: Int
     ) -> some View {
         let marker = restorationMarker(for: message.id)
-        // One stable lazy-stack target per message. A late divider changes
-        // its height without shifting the identity of all following rows.
         return VStack(spacing: Layout.transcriptRowSpacing) {
             messageRow(for: message)
             if message.id == dividerAnchorId {
@@ -110,7 +86,6 @@ extension ConversationTranscriptView {
             }
         }
         .id(message.id)
-        // Pass the prepared marker directly, without a render-thread closure capture (#737).
         .overlay(marker, alignment: .top)
         .onGeometryChange(for: ConversationTranscriptViewportAnchor.Measurement.self) { geometry in
             .init(frame: geometry.frame(in: .named(Self.viewportCoordinateSpace)), divider: dividerAnchorId, generation: generation, ownershipRevision: ownershipRevision)
@@ -126,8 +101,6 @@ extension ConversationTranscriptView {
     }
 
     private func restorationMarker(for messageId: String) -> some View {
-        // A realized row's top marker lets SwiftUI own the final retained
-        // offset even for partial or viewport-sized rows, without layout space.
         Color.clear
             .frame(height: ConversationTranscriptViewportAnchor.restorationMarkerHeight)
             .id(ConversationTranscriptViewportAnchor.RestorationTarget(messageID: messageId))
@@ -152,13 +125,9 @@ extension ConversationTranscriptView {
         messageId: String, measurement: ConversationTranscriptViewportAnchor.Measurement, proxy: ScrollViewProxy
     ) {
         guard lifecycle.isVisible else { return }
-        // This live check also covers a queued callback that beats the
-        // column's message-ID observer after an authoritative deletion.
         scrollState.retainViewportMessages(withIDs: viewModel.filteredMessageIDs)
         guard measurement.divider == viewModel.newMessagesDividerAnchorId,
               let geometry = scrollMomentumProxy.restingGeometry else { return }
-        // The geometry callback includes the divider identity, so even a row
-        // already held by bottom anchoring consumes this revision with no move.
         let application = scrollState.viewportAnchor.application(
             id: messageId,
             measurement: measurement,
