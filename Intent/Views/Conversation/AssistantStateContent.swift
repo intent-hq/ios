@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// The compact Assistant keeps its sheet and actions while its thread list loads.
 struct AssistantStateContent: View {
     let isLoading: Bool
     let canCreateConversation: Bool

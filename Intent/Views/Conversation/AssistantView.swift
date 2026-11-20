@@ -90,7 +90,6 @@ struct AssistantView: View {
     }
 
     @ViewBuilder private var errorBanner: some View {
-        // A drop is not an error; the read-only banner covers it.
         if let error = store.errorMessage, !isRemoteReadOnly {
             if usesWorkspaceDesign {
                 AssistantErrorBanner(error: error) { Task { await store.refresh() } }
@@ -187,7 +186,6 @@ struct AssistantView: View {
 
 struct AssistantHistoryMenu: View {
     let store: AssistantStore
-    // Explicit input survives native toolbar hosting without environment inheritance (#745).
     let coordinator: AppCoordinator
     var onOpenHistory: (() -> Void)?
 
@@ -222,7 +220,6 @@ struct AssistantHistoryMenu: View {
             .disabledWhileReadOnly()
             .accessibilityIdentifier("assistant.history.newConversation")
             Divider()
-            // SwiftUI may request menu rows off-main; return only prepared values.
             ForEach(rows, id: \.id) { @Sendable row in
                 row.content
             }

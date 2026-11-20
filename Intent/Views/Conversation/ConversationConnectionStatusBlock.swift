@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Inline progress shared by conversation loading surfaces. The caller owns
-/// the start date so stage changes and manual retries keep one elapsed clock.
 struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
     let phase: Phase
     let message: LocalizedStringResource
@@ -47,7 +45,7 @@ struct ConversationConnectionStatusBlock<Phase: Equatable>: View {
                         .foregroundStyle(Palette.secondaryForeground(for: colorScheme, contrast: contrast))
                         .monospacedDigit()
                         .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityHidden(true) // Announced with the current step instead.
+                        .accessibilityHidden(true)
                     ConversationConnectionRetryButton(onRetry: onRetry)
                 }
             }

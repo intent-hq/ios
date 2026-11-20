@@ -21,7 +21,6 @@ struct IntentFilePDFAttachment: Attachment {
         }
         .interFont(Constants.Typography.subtextXXS)
         .padding(Constants.Conversation.ImageThumbnail.cornerRadius)
-        // Textual draws an ideal-sized symbol into the square run bounds.
         .frame(width: SquareImageThumbnail.transcriptSide, height: SquareImageThumbnail.transcriptSide)
         .background(.background, in: .rect(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
         .accessibilityElement(children: .ignore)

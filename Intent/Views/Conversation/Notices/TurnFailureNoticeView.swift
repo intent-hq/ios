@@ -1,11 +1,6 @@
 import SwiftUI
 import Textual
 
-/// The `turn-failure` attention card: a friendly title and message from
-/// `TurnFailureSummary`, an optional retry hint and provider link, and the
-/// untouched reason behind a collapsed "Details" disclosure with Copy.
-/// Rendered the same way by the legacy and workspace transcript designs;
-/// only the body type size follows the active design.
 struct TurnFailureNoticeView: View {
     let summary: TurnFailureSummary
     var onLayoutChange: (() -> Void)?
@@ -22,15 +17,11 @@ struct TurnFailureNoticeView: View {
     private typealias Card = Constants.Conversation.NoticeCard
     private typealias Design = Constants.Conversation.Design
 
-    /// Details start collapsed. A row holds one notice, so the row's shared
-    /// `.attentionNotice` slot is free for this card.
     private var isExpanded: Bool {
         get { disclosure.binding(for: .attentionNotice, default: false).wrappedValue }
         nonmutating set { disclosure.binding(for: .attentionNotice, default: false).wrappedValue = newValue }
     }
 
-    /// Amber for a usage limit (the user did nothing wrong and can wait it
-    /// out); red for every real failure, matching the blocker card.
     private var tint: Color {
         summary.category == .usageLimit ? .orange : .red
     }
@@ -92,13 +83,9 @@ struct TurnFailureNoticeView: View {
                     .accessibilityAddTraits(.isHeader)
 
                 if let message = summary.message {
-                    // Textual's selectable text is the view the row's Copy
-                    // overlay passes link taps through to; plain `Text` links
-                    // are swallowed by the overlay.
                     InlineText(message, parser: TurnFailureMessageParser(linkURL: summary.linkURL))
                         .interFont(bodyStyle)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
-                        // Underlined body color, not the system accent, on the tinted card.
                         .textual.inlineStyle(InlineStyle().link(.foregroundColor(Theme.foreground(for: colorScheme))))
                         .textual.textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
@@ -114,28 +101,21 @@ struct TurnFailureNoticeView: View {
                 }
             }
         }
-        // Contain rather than combine so an inline link stays its own
-        // VoiceOver and UI-test element; title and message still read in order.
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("turnFailure.summary")
     }
 
-    /// Whether `linkURL` is tappable in place inside the message; otherwise
-    /// the link gets its own row below.
     private var hasInlineLink: Bool {
         guard let message = summary.message, let url = summary.linkURL else { return false }
         return TurnFailureMessageParser.linkRange(of: url, in: AttributedString(message)) != nil
     }
 
-    /// The provider's reset phrase, only when the message does not already say it.
     private var visibleRetryHint: String? {
         guard let hint = summary.retryHint else { return nil }
         if let message = summary.message, message.localizedCaseInsensitiveContains(hint) { return nil }
         return hint
     }
 
-    /// Neutral secondary text that sits on the amber or red card without
-    /// borrowing the app accent; full foreground under increased contrast.
     private var secondaryForeground: Color {
         Theme.foreground(for: colorScheme).opacity(contrast == .increased ? 1 : Card.turnFailureSecondaryOpacity)
     }
@@ -202,8 +182,6 @@ struct TurnFailureNoticeView: View {
         VStack(alignment: .leading, spacing: Card.turnFailureActionSpacing) {
             Text(summary.rawDetails)
                 .font(.caption.monospaced())
-                // A language without hyphenation data keeps tokens such as
-                // "usageLimitExceeded" from breaking with an inserted hyphen.
                 .typesettingLanguage(Locale.Language(identifier: "zxx"))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
                 .textSelection(.enabled)
@@ -254,15 +232,12 @@ struct TurnFailureNoticeView: View {
         }
     }
 
-    /// "try again at 8:07 AM" → "Try again at 8:07 AM" for its own line.
     private static func sentenceCased(_ text: String) -> String {
         guard let first = text.first else { return text }
         return first.uppercased() + text.dropFirst()
     }
 }
 
-/// Plain message text with `linkURL` linked where its text appears; no
-/// Markdown, so provider text is shown exactly as sent.
 private struct TurnFailureMessageParser: MarkupParser {
     let linkURL: URL?
 

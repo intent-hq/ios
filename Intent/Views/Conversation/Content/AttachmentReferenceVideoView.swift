@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// User-attached video: a poster until tapped, a retry for failed fetches,
-/// or the caller's file chip when the format cannot be played.
 struct AttachmentReferenceVideoView<Fallback: View>: View {
     let workspaceId: String
     let attachmentId: String?
@@ -88,12 +86,10 @@ struct AttachmentReferenceVideoView<Fallback: View>: View {
             let loaded = attempt == 0
                 ? try await loader.video(workspaceId: workspaceId, attachmentId: attachmentId, mimeType: mimeType)
                 : try await loader.retryVideo(workspaceId: workspaceId, attachmentId: attachmentId, mimeType: mimeType)
-            // Shared cached fetches can finish after SwiftUI cancels this row's task.
             try Task.checkCancellation()
             video = loaded
             loadedKey = key
         } catch is CancellationError {
-            // Scrolling away is not a failed download.
         } catch {
             guard !Task.isCancelled else { return }
             if error as? WorkspaceFileImageLoader.LoadError == .notAVideo {

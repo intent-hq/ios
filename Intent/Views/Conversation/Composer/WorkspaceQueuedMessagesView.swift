@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Workspace-only queue presentation. Commands still belong to the conversation owner.
 struct WorkspaceQueuedMessagesView: View {
     let viewModel: ConversationViewModel
 
@@ -69,8 +68,6 @@ private struct WorkspaceQueuedMessageRow: View {
                 displayActions
             }
         }
-        // Keep the reference's glyph spacing while giving each action a
-        // non-overlapping 44pt hit region. The surrounding gaps absorb the inset.
         .padding(.trailing, -Layout.controlInset)
         .padding(.vertical, -Layout.controlInset)
         .accessibilityElement(children: .contain)
@@ -117,7 +114,6 @@ private struct WorkspaceQueuedMessageRow: View {
     }
 }
 
-/// Wraps the existing composer without changing its identity as the queue appears/disappears.
 struct WorkspaceQueuePanel<Content: View>: View {
     let viewModel: ConversationViewModel
     let isVisible: Bool

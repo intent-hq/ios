@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Slash-command skill picker: a horizontally scrolling row of chips above the composer.
-/// The highlighted chip uses the accent; Return or a tap inserts it.
 struct SkillSuggestionsView: View {
     let completion: ComposerSkillCompletion
     let workspaceId: String
@@ -104,7 +102,6 @@ struct SkillSuggestionsView: View {
         .id(skill.id)
     }
 
-    /// Long-press preview: the chip itself shows only the name.
     private func skillPreview(_ skill: SkillInfo) -> some View {
         VStack(alignment: .leading, spacing: Layout.previewSpacing) {
             Text(verbatim: "/\(skill.name)")

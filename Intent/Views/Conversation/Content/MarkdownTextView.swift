@@ -3,15 +3,9 @@ import Textual
 
 struct MarkdownTextView: View {
     let text: String
-    /// Optional handler for URL taps. Return `.handled` to prevent default behavior.
     var onOpenURL: ((URL) -> OpenURLAction.Result)?
-    /// Workspace resolving short-form `intent://local/file/<path>` image links.
-    /// Intent-file images render even when nil if the link carries its own
-    /// workspace ID (long form).
     var workspaceId: String?
-    /// `.chat` renders single-link lines as full-width rows.
     var linkStyle: MarkdownLinkStyle
-    /// Prepared source is reused across view reconstruction and conversation visits.
     private let markdownSource: String
     private let mermaidSources: [String: String]
     private let pendingDiagram: MermaidMarkdownContent.PendingDiagram?
@@ -20,8 +14,6 @@ struct MarkdownTextView: View {
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.assistantMessageStreaming) private var isStreaming
     @Environment(\.conversationComposerFocus) private var composerFocus
-    /// The window's session, when present: workspace images then load over
-    /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
     @State private var videoItem: VideoItem?
@@ -51,8 +43,6 @@ struct MarkdownTextView: View {
         self.pendingDiagram = prepared.pendingDiagram
     }
 
-    /// Intent-file image fetcher bound to the session's loader when one is in
-    /// the environment, else the shared (default-backend) loader.
     private var fileImageFetcher: @Sendable (String, String) async throws -> UIImage {
         let fileLoader = session?.workspaceFileImageLoader ?? .shared
         return { workspaceId, path in
@@ -60,7 +50,6 @@ struct MarkdownTextView: View {
         }
     }
 
-    /// Bind saved images to the window's session, never to URL backend hints.
     static func assetMediaFetcher(session: BackendSession?) -> @Sendable (String, String) async throws -> WorkspaceFileMedia {
         let fileLoader = session?.workspaceFileImageLoader ?? .shared
         return { workspaceId, assetId in
@@ -141,13 +130,10 @@ struct MarkdownTextView: View {
                     attachmentAttempt += 1
                 }
             }
-            // Textual resolves URLs once per attributed string. Recreate that
-            // state on explicit retry; successful media still uses the cache.
             .id(attachmentAttempt)
             .interFont(Constants.Typography.bodyS)
             .tracking(workspaceDesign ? Constants.Conversation.Design.Typography.bodyTracking : 0)
             .foregroundStyle(textColor)
-            // SwiftUI draws link runs in the tint; links match the text and are underlined instead.
             .tint(textColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
@@ -201,9 +187,6 @@ struct MarkdownTextView: View {
         return try store.open(workspaceId: workspaceId, url: url.absoluteString)
     }
 
-    /// Routes attachment taps: only loaded markdown images (intent-file, saved assets and
-    /// remote http(s)) open the image lightbox. Videos and retry placeholders
-    /// have separate actions in the attachment tap handler.
     static func lightboxImage(for attachment: AnyAttachment) -> UIImage? {
         (attachment.base as? IntentFileImageAttachment)?.image
     }
@@ -216,20 +199,12 @@ struct MarkdownTextView: View {
         (attachment.base as? IntentFilePDFAttachment)?.pdf
     }
 
-    /// GFM task-list line: optional blockquote prefix, indent, list marker
-    /// (bullet or ordered), then a `[ ]`/`[x]` marker.
     private static let taskListMarker =
         /^((?:[ \t]{0,3}>[ \t]?)*[ \t]*(?:[-*+]|[0-9]{1,9}[.)])[ \t]+)\[([ xX])\][ \t]+/
 
-    /// Any list-item line (task or not), used to track list continuation so
-    /// nested items indented 4+ columns are not mistaken for indented code.
     private static let listItemMarker =
         /^(?:[ \t]{0,3}>[ \t]?)*[ \t]*(?:[-*+]|[0-9]{1,9}[.)])[ \t]+\S/
 
-    /// Textual's Markdown parser (Foundation's, cmark-based) has no task-list
-    /// extension, so `- [ ]` / `- [x]` markers would render as literal
-    /// brackets. Swap them for checkbox glyphs, skipping fenced and indented
-    /// code blocks.
     static func replacingTaskListMarkers(_ text: String) -> String {
         guard text.contains("[") else { return text }
         var codeFence: MarkdownCodeFence?
@@ -270,8 +245,6 @@ struct MarkdownTextView: View {
             .joined(separator: "\n")
     }
 
-    /// Leading indentation in columns; a tab advances to the next multiple
-    /// of 4, matching CommonMark's tab-stop rule.
     private static func leadingIndentWidth(of line: String) -> Int {
         var width = 0
         for char in line {
@@ -287,8 +260,6 @@ struct MarkdownTextView: View {
     }
 }
 
-/// Identifiable wrapper so a tapped attachment image can drive
-/// `fullScreenCover(item:)`.
 private struct LightboxItem: Identifiable {
     let id = UUID()
     let image: UIImage

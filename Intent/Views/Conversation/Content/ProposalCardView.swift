@@ -104,7 +104,6 @@ struct ProposalCardView: View {
     private func itemList(_ store: ProposalActionStore) -> some View {
         let completed = store.completed[store.receiptKey(proposal, messageId: messageId)] ?? []
         let isBusy = store.isBusy
-        // Read selection and store state on MainActor, not in the row provider.
         let rows = proposal.items.map { item in
             let isCompleted = completed.contains(item.id)
             let content = selectionButton(item, isCompleted: isCompleted, isSelected: selection.contains(item.id))

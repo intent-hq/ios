@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Sender navigation and message disclosure remain separate tap targets.
 struct AgentMessageAttributionView: View {
     let attribution: AgentMessageAttribution
     var preview: String = ""
