@@ -18,8 +18,11 @@ Applies to: `DeepLinkRequest`, `AppCoordinator.handleIncomingURL(_:)`, `AppCoord
 `IntentApp`'s `onOpenURL` routes Live Activity `intent://agent` links before
 `handleIncomingURL`. After that, two kinds are actionable: `intent://pair`
 (`DeepLinkPairingView`) and `intent://invite`, a shared workspace
-(`InviteJoinView`). Each waits for explicit user confirmation before anything
-is sent. `pendingDeepLink` drives the sheet in `RootView`, which is presented
+(`InviteJoinView`). Each waits for explicit user confirmation. A pair link
+contacts the host only after the person taps Connect. An invite link reads the
+invite's preview and, on the proof path, a challenge before confirmation, but
+accepts no credential and publishes or proves no identity until the person
+confirms (ADR-0512, decision 13). `pendingDeepLink` drives the sheet in `RootView`, which is presented
 over whichever screen is current (first-run pairing or a connection). Every
 other or malformed `intent://` URL is ignored without disturbing app state.
 
