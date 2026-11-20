@@ -428,8 +428,8 @@ jobs:
       # toolchain, so cache them on a hash of those inputs. go.mod is
       # included because it picks the toolchain (setup-go go-version-file)
       # and module versions. On a hit the job never needs Go at all, which
-      # skips the multi-minute toolchain download and the 800 MB Go cache
-      # restore/save. warm-cache.yml seeds this cache on main.
+      # skips the multi-minute toolchain download. warm-cache.yml seeds this
+      # cache on main.
       - name: Cache TailcatKit.xcframework
         id: tailcat-cache
         uses: actions/cache@v6
@@ -439,12 +439,15 @@ jobs:
             TailcatKit/build/tcecho
           key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
 
+      # No Go cache in this required job: saving the ~1 GB archive after
+      # tests passed timed the job out (run 44786122848). A miss compiles
+      # cold and saves only the TailcatKit cache above.
       - name: Set up Go
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
         uses: actions/setup-go@v7
         with:
           go-version-file: TailcatKit/go.mod
-          cache-dependency-path: TailcatKit/go.sum
+          cache: false
 
       - name: Build TailcatKit.xcframework
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
@@ -873,12 +876,13 @@ jobs:
             TailcatKit/build/tcecho
           key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
 
+      # No Go cache, matching build-and-test.
       - name: Set up Go
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
         uses: actions/setup-go@v7
         with:
           go-version-file: TailcatKit/go.mod
-          cache-dependency-path: TailcatKit/go.sum
+          cache: false
 
       - name: Build TailcatKit.xcframework
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
