@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
-- Applies to: `ConversationColumnView`, `ConversationHeaderBackdrop`, `ConversationBackground` (`Intent/Views/Conversation/Transcript/ConversationColumnView.swift`)
+- Applies to: `ConversationColumnView`, `ConversationHeaderBackdrop`, `ConversationBackground` (`Intent/Views/Conversation/Transcript/ConversationColumnView.swift`), `ConversationView` (`Intent/Views/Conversation/Transcript/ConversationView.swift`)
 
 ## Context
 
@@ -86,3 +86,11 @@ Applies to: `ConversationHeaderBackdrop`, `ConversationBackground`
   of overlapping the bar.
 - `ConversationBackground` is owned by the screen, outside its top safe-area
   inset, not by the transcript slot.
+
+### 8. The dismiss-failure alert binding is a property, not built inline
+
+Applies to: `ConversationView.dismissQuestionsErrorPresented`
+
+The presented-or-not `Binding` for the dismiss-questions failure alert is
+hoisted out of the `body` expression into its own property, so the type checker
+does not have to solve the `Binding` construction inline.
