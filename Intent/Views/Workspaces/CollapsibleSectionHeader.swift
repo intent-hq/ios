@@ -12,6 +12,8 @@ struct CollapsibleSectionHeader<Label: View>: View {
     @ViewBuilder let label: Label
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var iconSize = WorkspaceChangesLayout.treeIconSize
+    /// Room around the chevron for its visionOS gaze highlight.
+    private static var chevronHoverPadding: CGFloat { 8 }
 
     var body: some View {
         Button {
@@ -27,12 +29,16 @@ struct CollapsibleSectionHeader<Label: View>: View {
                     .frame(width: iconSize, height: iconSize)
                     .rotationEffect(.radians(isExpanded ? .pi / 2 : 0))
                     .accessibilityHidden(true)
+                    // The whole heading toggles, but only the chevron lights up.
+                    .visionGroupedHoverHint(padding: Self.chevronHoverPadding)
             }
             .padding(insets)
             .frame(maxWidth: .infinity, minHeight: minHeight, alignment: alignment)
             .contentShape(.rect)
+            .visionHoverGroup()
         }
         .buttonStyle(IntentContentButtonStyle())
+        .visionContainerDrawsHover()
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .accessibilityHint(isExpanded ? "Double-tap to collapse this section" : "Double-tap to expand this section")
         .accessibilityAddTraits(.isHeader)

@@ -47,6 +47,33 @@ extension View {
         #endif
     }
 
+    /// visionOS: highlights only this small view (a disclosure chevron)
+    /// while its enclosing `visionHoverGroup()` is looked at. The negative
+    /// padding keeps layout unchanged. No-op elsewhere.
+    @ViewBuilder
+    func visionGroupedHoverHint(padding: CGFloat) -> some View {
+        #if os(visionOS)
+        self
+            .padding(padding)
+            .contentShape(.hoverEffect, Circle())
+            .hoverEffect(.highlight)
+            .padding(-padding)
+        #else
+        self
+        #endif
+    }
+
+    /// visionOS: looking anywhere in this view activates its descendants'
+    /// hover effects together. No-op elsewhere.
+    @ViewBuilder
+    func visionHoverGroup() -> some View {
+        #if os(visionOS)
+        self.hoverEffectGroup()
+        #else
+        self
+        #endif
+    }
+
     /// Marks the buttons below as highlighted by this container on visionOS.
     func visionContainerDrawsHover(_ drawsHover: Bool = true) -> some View {
         environment(\.visionContainerDrawsHover, drawsHover)
