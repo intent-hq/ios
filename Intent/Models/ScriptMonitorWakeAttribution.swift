@@ -1,12 +1,5 @@
 import Foundation
 
-/// Attribution for script-monitor wake messages. The daemon tags user-role
-/// rows delivered by a `ws.script.monitor` watch with
-/// `{ type: "script_monitor_wake", source: "system", monitorId, workspaceId,
-/// scriptId, runId, scriptName, reason, trigger? }`. Only this structured
-/// metadata attributes a row: script output never supplies a text prefix.
-/// Malformed metadata returns nil so the row renders as before
-/// (FE parity: `script-monitor-wake-attribution.ts`).
 struct ScriptMonitorWakeAttribution: Equatable {
     enum Reason: String {
         case finished
@@ -21,7 +14,6 @@ struct ScriptMonitorWakeAttribution: Equatable {
     let monitorId: String
     let workspaceId: String
     let reason: Reason
-    /// The matched output line for `output-match` wakes (untrusted script output).
     let matchedLine: String?
 
     static func from(_ metadata: [String: AnyCodable]) -> Self? {
@@ -65,8 +57,6 @@ struct ScriptMonitorWakeAttribution: Equatable {
 }
 
 extension ConversationMessage {
-    /// Script-monitor wake attribution: the row's `metadata` first, then the
-    /// persisted text blocks' `messageMetadata`.
     var scriptMonitorWakeAttribution: ScriptMonitorWakeAttribution? {
         if let attribution = ScriptMonitorWakeAttribution.from(metadata) { return attribution }
         for block in contentBlocks where block.type == .text {

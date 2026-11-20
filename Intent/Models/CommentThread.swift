@@ -1,7 +1,5 @@
 import Foundation
 
-/// A comment thread summary returned by comment.subscribe.
-/// Maps to CommentThreadSummary from intentd (intent-core/src/model.rs).
 struct CommentThread: Identifiable, Equatable {
     let threadId: String
     let noteId: String

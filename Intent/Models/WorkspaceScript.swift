@@ -53,7 +53,6 @@ nonisolated struct WorkspaceScript: Equatable, Identifiable, Sendable {
             || runtime["startedAt"] is String
             || runtime["stoppedAt"] is String
             || runtime["exitCode"] is Int
-        // Runtime snapshots omit cleared fields; absence must clear the old run.
         detectedURL = runtime["detectedUrl"] as? String
         error = runtime["error"] as? String
     }

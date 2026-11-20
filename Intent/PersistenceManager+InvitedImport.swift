@@ -3,8 +3,6 @@ import Foundation
 extension PersistenceManager {
     typealias InvitedAuthenticator = (StoredConnection) async throws -> ConnectionPrincipal
 
-    /// All reads and removal folding precede authentication and writes. The
-    /// caller supplies isolated connections; no owner-side socket is borrowed.
     func refreshInvitedSessions(authenticate: InvitedAuthenticator) async -> InvitedImportOutcome {
         guard invitedJournalAvailable, !invitedRefreshInProgress else { return InvitedImportOutcome() }
         invitedRefreshInProgress = true
@@ -38,8 +36,6 @@ extension PersistenceManager {
         return InvitedImportOutcome(before: initial, after: loadConnectionsWithOutcome(), suppressed: removed)
     }
 
-    /// Authentication is an async boundary. Only the credential just checked
-    /// may be installed, with freshly merged route/metadata and removal state.
     private func refreshedInvitedRecord(
         _ authenticated: InvitedSyncRecord, migrated: [InvitedSyncRecord], original: InvitedSessionRegistry.Snapshot
     ) -> InvitedSyncRecord? {
@@ -52,8 +48,6 @@ extension PersistenceManager {
         journal.observe(records)
         journal.reconcileLegacySources(fresh)
         guard persistInvitedMigrationJournal(journal) else { return nil }
-        // Prepared migrations are not durable yet. Observe fresh removals now,
-        // but let publication retire aliases only after the local save succeeds.
         if fresh.hasSameEntries(as: original) {
             records += migrated.filter { record in
                 !journal.pendingLegacy.contains { $0.personKey == record.personKey && $0.invalidated }
@@ -74,8 +68,6 @@ extension PersistenceManager {
             }
             .map(\.id)
         if !removed.isEmpty {
-            // Return suppressed IDs even on a failed credential save: windows
-            // must stop serving a person once their removal has been observed.
             saveConnectionsLocked(connections.filter { !removed.contains($0.id) })
         }
         return removed
@@ -109,15 +101,11 @@ extension PersistenceManager {
 
     private func migrateInvited(snapshot: InvitedSessionRegistry.Snapshot, authenticate: InvitedAuthenticator) async -> [InvitedSyncRecord] {
         let candidates = InvitedLegacyMigration.candidates(snapshot, journal: invitedJournal)
-        // Reserve every eligible source before any await or peer save can retire
-        // their shared alias. This grants retry of the row, never socket authority.
         var journal = invitedJournal
         journal.reserveLegacySources(candidates)
         guard persistInvitedMigrationJournal(journal) else { return [] }
         let ambiguous = Set(candidates.filter { $0.legacy.deleted && $0.principalId == nil }.map(\.account))
         var prepared: [InvitedSyncRecord] = []
-        // Authenticate all attributable live candidates before selecting v1 LWW
-        // winners. Row ordering cannot turn a missing-person deletion into C.
         for candidate in candidates where !ambiguous.contains(candidate.account) && !candidate.legacy.deleted {
             guard !Task.isCancelled else { return [] }
             let legacy = candidate.legacy
@@ -169,8 +157,6 @@ extension PersistenceManager {
                 invitedJournal = journal
             }
             merged.object["legacyAccounts"] = InvitedSyncKey.sorted(live.flatMap(\.legacyAccounts) + deletes.map(\.account))
-            // Retirement is installed only after this candidate is persisted and
-            // published by the ordinary invited pass.
             result.append(merged)
         }
         for deletion in candidates where deletion.legacy.deleted && deletion.principalId != nil && !ambiguous.contains(deletion.account) {

@@ -5,7 +5,6 @@ nonisolated enum ScriptMonitorMode: String, Equatable, Sendable {
     case service
 }
 
-/// Active observation metadata, separate from a script's runtime status.
 nonisolated struct ScriptMonitorSummary: Equatable, Identifiable, Sendable {
     let monitorId: String
     let workspaceId: String
@@ -42,7 +41,6 @@ nonisolated extension ScriptMonitorSummary {
         self.scriptName = scriptName
         self.mode = mode
         self.state = "active"
-        // Preserve server text: an invalid date renders as unavailable, never a guessed deadline.
         self.createdAt = try Self.requiredText(row, "createdAt")
         self.expiresAt = try Self.requiredText(row, "expiresAt")
         self.lineCount = try Self.parseLineCount(row)
@@ -71,7 +69,6 @@ nonisolated extension ScriptMonitorSummary {
     }
 }
 
-/// Only an explicitly selected active watch loads full trigger configuration.
 nonisolated struct ScriptMonitorDetail: Equatable, Sendable {
     let summary: ScriptMonitorSummary
     let outputPattern: String?
@@ -89,7 +86,6 @@ nonisolated extension ScriptMonitorDetail {
         if let raw = row["outputPattern"] {
             guard let pattern = raw as? String else { throw ScriptMonitorReadError.invalidResponse }
             outputPattern = pattern
-            // Match the wire preview's UTF-8 bound without splitting a scalar or executing the regex.
             var preview = ""
             for scalar in pattern.unicodeScalars {
                 let next = String(scalar)

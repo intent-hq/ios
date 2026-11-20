@@ -13,7 +13,6 @@ enum KeychainReadResult: Equatable {
     }
 }
 
-/// Abstraction over Keychain item storage so tests can run hermetically.
 protocol KeychainStorage {
     @discardableResult
     func save(data: Data, service: String, account: String) -> Bool
@@ -43,7 +42,6 @@ final class EphemeralKeychainStorage: KeychainStorage, @unchecked Sendable {
     }
 }
 
-/// Production backend over the Security framework.
 struct SecItemKeychainStorage: KeychainStorage {
     struct SecurityCalls {
         let copyMatching: ([String: Any]) -> (OSStatus, AnyObject?)

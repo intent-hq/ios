@@ -1,7 +1,5 @@
 import Foundation
 
-/// The pull request detail reads (FE Home `github.pulls.get`, `.checks`,
-/// `.reviews`, `.files`), parsed leniently from their wire dictionaries.
 struct PullRequestDetail: Equatable {
     var body: String
     var headRef: String?
@@ -49,8 +47,6 @@ struct PullRequestCheck: Identifiable, Equatable {
         )
     }
 
-    /// The collapsed checks row: the worst outcome leads ("2 Failed"), then
-    /// pending, then the passed count. Nil when there are no checks.
     static func summary(_ checks: [Self]) -> (state: State, label: String)? {
         guard !checks.isEmpty else { return nil }
         let failed = checks.filter { $0.state == .failure || $0.state == .cancelled }.count
@@ -69,8 +65,6 @@ struct PullRequestReviewer: Identifiable, Equatable {
 
     var id: String { login }
 
-    /// One row per author with their latest review (the wire list is oldest
-    /// first), then requested reviewers who have not reviewed yet.
     static func rows(reviews: [[String: Any]], requested: [String]) -> [Self] {
         var latest: [String: String] = [:]
         var order: [String] = []
@@ -118,7 +112,6 @@ struct PullRequestFile: Identifiable, Hashable {
 extension PullRequestFile: @MainActor ChangeTreeFile {}
 
 extension WorkspaceDiffBuilder {
-    /// Hunks of a GitHub file `patch` (unified diff hunks without file headers).
     nonisolated static func hunks(patch: String) -> [WorkspaceDiffHunk] {
         var hunks: [WorkspaceDiffHunk] = []
         var header: HunkHeader?
@@ -166,7 +159,6 @@ extension WorkspaceDiffBuilder {
         return hunks
     }
 
-    /// `@@ -a,b +c,d @@ …`; a missing count means one line.
     nonisolated private struct HunkHeader {
         let oldStart: Int
         let oldLines: Int

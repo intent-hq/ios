@@ -7,8 +7,6 @@ nonisolated struct MobileTerminal: Codable, Equatable, Identifiable, Sendable {
     let name: String
 }
 
-/// The program running in a terminal, from the daemon's `foregroundProcess` and
-/// `lastProcess` fields. Nil when the terminal has only ever run its shell.
 nonisolated struct MobileTerminalProcess: Equatable, Sendable {
     let foreground: String?
     let last: String?
@@ -64,7 +62,6 @@ final class MobileTerminalPersistence {
         defaults.set(data, forKey: key)
     }
 
-    /// Names the user gave terminals, by terminal id.
     func loadNames() -> [String: String] {
         guard let namesKey else { return [:] }
         return defaults.dictionary(forKey: namesKey) as? [String: String] ?? [:]

@@ -1,16 +1,6 @@
 import Foundation
 
-// How a block gets its `id`: the wire `id`, a `FallbackIdentity` when the
-// wire omits one (per-item and batched decodes), or a fresh UUID for
-// programmatic creation.
 nonisolated extension ContentBlock: DecodableWithConfiguration {
-    /// Identity for a block served without a wire `id` (ios#257). A block
-    /// decoded as part of a message takes the daemon's own synthetic
-    /// `{messageId}:{index}` (PROTOCOL §7.1), so an id-less row keys exactly
-    /// like a stamped one; a block decoded on its own is keyed by a
-    /// deterministic fingerprint of its content, scoped to its message when
-    /// known. Never a fresh UUID: re-decoding the same payload always yields
-    /// the same id, so SwiftUI rows survive re-decodes.
     enum FallbackIdentity {
         case indexed(messageId: String, index: Int)
         case fingerprint(messageId: String?)
@@ -21,8 +11,6 @@ nonisolated extension ContentBlock: DecodableWithConfiguration {
         try self.init(from: decoder, fallbackIdentity: configuration)
     }
 
-    /// The id an id-less block takes under `identity`; `fingerprintParts` are
-    /// the block's identifying fields, used only for `.fingerprint`.
     static func fallbackId(for identity: FallbackIdentity, fingerprintParts: [String?]) -> String {
         switch identity {
         case let .indexed(messageId, index):
@@ -43,13 +31,6 @@ nonisolated extension ContentBlock: DecodableWithConfiguration {
         return try? JSONDecoder().decode(Self.self, from: data, configuration: fallbackIdentity)
     }
 
-    /// `decode` for a whole batch (ios#258): one serialization and one
-    /// `JSONDecoder` for every dictionary instead of one pair per element.
-    /// Element `i` decodes with `fallbackIdentities[i]`; the result keeps one
-    /// slot per input, nil where that element does not decode. When the batch
-    /// as a whole cannot be serialized (a non-finite number in one element)
-    /// every element is decoded on its own, so the outcome per element is the
-    /// same either way.
     static func decodeBatch(
         _ dictionaries: [[String: Any]],
         fallbackIdentities: [FallbackIdentity]
@@ -67,8 +48,6 @@ nonisolated extension ContentBlock: DecodableWithConfiguration {
         return batch.blocks
     }
 
-    /// Lenient array decoder for `decodeBatch`: each element decodes with its
-    /// own positional `FallbackIdentity`; a failing element yields nil.
     private struct Batch: DecodableWithConfiguration {
         let blocks: [ContentBlock?]
 
@@ -93,8 +72,6 @@ nonisolated extension ContentBlock: DecodableWithConfiguration {
     private static let fingerprintFieldSeparator: UInt8 = 0x1f
     private static let fingerprintRadix = 16
 
-    /// FNV-1a over the block's identifying fields (nil kept distinct from
-    /// empty); process-independent, unlike `Hasher`.
     private static func contentFingerprint(_ parts: [String?]) -> String {
         var hash = fnvOffsetBasis
         func mix(_ byte: UInt8) {

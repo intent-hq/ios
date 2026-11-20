@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 
-/// A lazy section of the workspace list. Orphaned falls back to the whole
-/// delegated bin when the daemon omits delegatedCounts.orphaned.
 enum AgentListGroup: Hashable {
     case background
     case delegated(parentId: String)
@@ -10,8 +8,6 @@ enum AgentListGroup: Hashable {
     case retired
 }
 
-/// Successful reads also establish absence: a newer empty whole-bin read
-/// must reject unseen rows from an older, overlapping by-parent response.
 enum AgentListReadScope: Hashable {
     case allActive
     case background
@@ -29,8 +25,6 @@ enum AgentListReadScope: Hashable {
         case let .delegated(parentId):
             return row.parentAgentId != nil && (parentId == nil || row.parentAgentId == parentId)
         case .topLevel: return row.parentAgentId == nil && !row.isBackground
-        // An orphan read has authority over its own membership only. An
-        // incomplete cache cannot classify an arbitrary delegated row.
         case .orphaned, .retired: return false
         }
     }
@@ -64,7 +58,6 @@ struct AgentDelegatedCounts: Equatable {
 
     let running: Int
     let byParent: [String: Count]
-    /// Absence means the orphan-only read is unsupported; zero is supported.
     let orphaned: Count?
 
     init?(wire: [String: Any]) {
@@ -76,8 +69,6 @@ struct AgentDelegatedCounts: Equatable {
     }
 }
 
-/// Display state and request bookkeeping for one workspace. No transcript or
-/// detail cache lives here: all list reads seed AgentSummaryStore separately.
 @MainActor @Observable
 final class AgentListState {
     var retiredAgents: [AgentSession] = []
@@ -87,8 +78,6 @@ final class AgentListState {
     var loadedGroups: Set<AgentListGroup> = []
     var loadingGroups: Set<AgentListGroup> = []
     var errors: [AgentListGroup: String] = [:]
-    /// Authoritative membership from orphanedOnly, never guessed from an
-    /// incomplete cache (background parents may not have been loaded yet).
     var orphanedAgentIds: Set<String> = []
 
     @ObservationIgnored var epoch = UUID()

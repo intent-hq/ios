@@ -11,23 +11,13 @@ struct Note: Identifiable, Equatable {
     let parentId: String?
     let createdAt: String
     let updatedAt: String
-    /// Remaining `metadata.task` fields (PROTOCOL §5.2/§5.4). All are
-    /// omitted-when-empty on the wire; empty array / nil when absent or when
-    /// the note is not a task.
     let assignedAgentIds: [String]
     let dependsOn: [String]
     let conflictsWith: [String]
-    /// Daemon-computed projection of `dependsOn` entries not yet complete.
     let unmetDependsOn: [String]
     let estimatedEffort: String?
-    /// Slim `note.list` projection fields (PROTOCOL §5.2 `projection: "slim"`):
-    /// slim rows omit `content` and carry the first 500 chars plus the total
-    /// char count instead. nil on full rows.
     let contentPreview: String?
     let contentLength: Int?
-    /// True when `content` is only a prefix of the note: the daemon cut a row
-    /// too large for one read (PROTOCOL §5.2 "Bounded note and comment reads")
-    /// and the rest could not be read. `contentBytes` is the full UTF-8 size.
     let contentTruncated: Bool
     let contentBytes: Int?
 
@@ -73,31 +63,19 @@ struct Note: Identifiable, Equatable {
         self.contentBytes = contentBytes
     }
 
-    /// True when this is a slim-projection row whose full body has not been
-    /// loaded: the daemon reported a non-empty content length but the local
-    /// row carries no content. Full rows (no `contentLength`) and genuinely
-    /// empty notes (`contentLength == 0`) are never stale.
     var isContentStale: Bool {
         if let contentLength, contentLength > 0, content.isEmpty { return true }
         return false
     }
 
-    /// Display treatment for `taskStatus`; nil when the note is not a task.
-    /// Note: the checkbox markers in `content` are unaffected — the wire
-    /// checkbox vocabulary is only `[ ]`/`[x]`/`[/]`; `blocked` and
-    /// `discussion_needed` exist only in task-note metadata status.
     var taskDisplayStatus: TaskDisplayStatus? {
         taskStatus.map { TaskDisplayStatus(wire: $0) }
     }
 
-    /// True when the cached row lacks the note's whole body: a slim row
-    /// without content, or a row the daemon cut to fit one read.
     var needsFullContent: Bool {
         isContentStale || contentTruncated
     }
 
-    /// Copy carrying `source`'s body and cut markers (grafting a fetched body
-    /// onto a cached list row whose metadata should win).
     func withBody(of source: Self) -> Self {
         Self(
             id: id,
@@ -122,7 +100,6 @@ struct Note: Identifiable, Equatable {
         )
     }
 
-    /// Copy with different content (optimistic local updates).
     func withContent(_ newContent: String) -> Self {
         Self(
             id: id,
@@ -147,7 +124,6 @@ struct Note: Identifiable, Equatable {
         )
     }
 
-    /// Copy with a different task-note status (optimistic local updates).
     func withTaskStatus(_ newStatus: String) -> Self {
         Self(
             id: id,
@@ -172,9 +148,6 @@ struct Note: Identifiable, Equatable {
         )
     }
 
-    /// A short preview of the content for list display. Slim rows carry no
-    /// `content`, so fall back to the daemon's `contentPreview` (first 500
-    /// chars) — plenty for a one-line excerpt.
     var preview: String? {
         let body = content.isEmpty ? (contentPreview ?? "") : content
         let stripped = body

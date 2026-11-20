@@ -1,9 +1,6 @@
 import Foundation
 import UIKit
 
-/// Session-local recovery, independent of the replaceable transcript. The
-/// original identity never changes; selections and placed references remain
-/// owned until delivery is confirmed. Not a durable outbox or an idempotency key.
 struct ConversationSendAttempt: Identifiable {
     enum Status: Equatable {
         case preparing
@@ -32,8 +29,6 @@ struct ConversationSendAttempt: Identifiable {
     var isCheckingStatus = false
     var confirmedMessageId: String?
 
-    /// Only a locally proven pre-dispatch failure may be retried. The daemon
-    /// auto-queues duplicate ordinary sends rather than deduplicating them.
     var canRetry: Bool { status == .notSent && isPrepared }
 
     mutating func releaseConfirmedResources() {
@@ -58,7 +53,6 @@ struct ConversationSendAttempt: Identifiable {
     }
 }
 
-/// Extra leases owned by an attempt, not by the changing composer selection.
 final class ConversationSendFileAccess {
     private let urls: [URL]
     private let stopAccess: @Sendable (URL) -> Void

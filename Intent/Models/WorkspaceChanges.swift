@@ -1,6 +1,5 @@
 import Foundation
 
-/// File-tracking rows retain their stage so a partly staged file appears in both sections.
 struct WorkspaceChange: Identifiable, Equatable, Sendable {
     let id: String
     let path: String
@@ -63,7 +62,6 @@ struct WorkspaceChange: Identifiable, Equatable, Sendable {
     ]
 }
 
-/// Metadata-only commit rows; per-file diffs are fetched when opening the commit.
 struct WorkspaceCommit: Identifiable, Equatable, Sendable {
     var id: String { hash }
     let hash: String
@@ -105,8 +103,6 @@ struct WorkspaceGitRoot: Identifiable, Equatable, Sendable {
     let displayName: String
     let branch: String?
     let registeredCommitSha: String?
-    /// Detected by the daemon from the worktree's git submodules (`source: "auto"`),
-    /// as opposed to registered by an agent.
     var isSubmodule = false
 
     static func parse(_ dictionary: [String: Any]) -> Self? {
@@ -174,7 +170,6 @@ struct WorkspaceChangesSnapshot {
         let changes = rows.compactMap { WorkspaceChange.parseStatus($0, rootId: rootId) }
         guard changes.count == rows.count else { throw WorkspaceChangesDecodingError.invalidChanges }
         let trackedByPath = Dictionary(grouping: trackedChanges, by: \.path)
-        // Git owns membership and stage; attribution only enriches an exact path and stage match.
         self.changes = changes.map { change in
             guard let tracked = trackedByPath[change.path]?.first(where: { $0.stage == change.stage }) else { return change }
             return WorkspaceChange(
