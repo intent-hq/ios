@@ -47,8 +47,9 @@ class LexerTests(unittest.TestCase):
         // fixture-protocol-version: brackets the cutoff
         // periphery:ignore
         // MARK: - Section
+        // MARKING is prose
         """
-        self.assertEqual(counted(source), [5])
+        self.assertEqual(counted(source), [6])
 
     def test_comments_inside_interpolations_are_counted(self):
         self.assertEqual(counted('let s = "\\(1 /* note */)"\nlet t = 2\n'), [1])
@@ -89,7 +90,7 @@ class StripTests(unittest.TestCase):
 
         /// Doc.
         struct A {
-            // MARK: - First
+            // First
 
             let a = 1 // trailing
 
@@ -108,15 +109,17 @@ class StripTests(unittest.TestCase):
     def test_strip_keeps_directives_strings_and_unselected_lines(self):
         source = """\
         // keep
+        // MARK: - Section
         // swiftlint:disable:next force_try
         let a = try! f("// text") // drop
         """
         expected = """\
         // keep
+        // MARK: - Section
         // swiftlint:disable:next force_try
         let a = try! f("// text")
         """
-        self.assertEqual(self.strip(source, {3}), textwrap.dedent(expected))
+        self.assertEqual(self.strip(source, {2, 3, 4}), textwrap.dedent(expected))
 
     def test_strip_removes_a_block_comment_that_ends_beside_code(self):
         self.assertEqual(self.strip("/* note\n*/ let x = 1\n"), "let x = 1\n")

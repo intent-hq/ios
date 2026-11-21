@@ -26,7 +26,7 @@ To find small directories, run `inventory` on each and count the `==` lines. Do 
 python3 scripts/comment_budget.py inventory <slice> > "$TMPDIR/inventory.txt"
 ```
 
-Each block shows `path:lines kind`, the comment, and `->` the next code line. Read the code around a block when the next line is not enough. Tool directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) are not in the inventory. Keep them.
+Each block shows `path:lines kind`, the comment, and `->` the next code line. Read the code around a block when the next line is not enough. Tool directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) and `// MARK:` section headings are not in the inventory. Keep them.
 
 ## 3. Sort each block
 
@@ -34,7 +34,7 @@ Give every block exactly one category. Record it in a scratch table in `$TMPDIR`
 
 | Category | Test | Action |
 | --- | --- | --- |
-| **Tautology** | Says what the name, type, signature or next lines already say. Includes `// MARK:`, unit notes (`// 30 minutes`), "Starts X", "The Y changed". | Delete. |
+| **Tautology** | Says what the name, type, signature or next lines already say. Includes unit notes (`// 30 minutes`), "Starts X", "The Y changed". | Delete. |
 | **Stale** | Names code, files, behaviour or history that no longer exists or no longer applies ("anymore", "was", "old", removed symbols, decision ids nobody can find). Check with `grep`. | Delete. |
 | **Excuse** | Explains why a workaround, duplicate, suppression, swallowed error, legacy branch, or cache trick is acceptable. Signs: "not Sendable so…", "must read X even on a hit", `catch {}`, `swiftlint:disable` with a reason, "old daemons…", "may arrive while…". | Delete. File one issue per workaround (step 5). |
 | **Decision record** | States an important, non-obvious rule that the code cannot show: a security boundary, a protocol or wire contract, an ordering or precedence rule, a race rule, desktop parity, a product rule. | Delete. Move the rule into an ADR (step 4). |

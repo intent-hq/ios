@@ -20,7 +20,7 @@
 
 ## Comments
 
-- Swift code has no comments ([ADR 0001](docs/adr/0001-no-code-comments.md)). Put non-obvious decisions in [docs/adr/](docs/adr/README.md) and workarounds in issues; only tool directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) stay.
+- Swift code has no comments ([ADR 0001](docs/adr/0001-no-code-comments.md)). Put non-obvious decisions in [docs/adr/](docs/adr/README.md) and workarounds in issues; only tool directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) and `// MARK:` section headings stay.
 - `python3 scripts/comment_budget.py check` ratchets per-file comment lines against [scripts/comment-budget.json](scripts/comment-budget.json); new files start at zero. Run `update` after deleting comments; it only lowers the baseline.
 - Burn down a slice with the [/delete-comment skill](.claude/skills/delete-comment/SKILL.md).
 

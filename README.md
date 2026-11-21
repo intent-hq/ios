@@ -756,8 +756,8 @@ Swift code has no comments; decisions live in [docs/adr/](docs/adr/README.md)
 `python3 scripts/test_comment_budget.py` and `python3 scripts/comment_budget.py check`,
 which fail when a file has more comment lines than `scripts/comment-budget.json`
 allows (zero for unlisted files) or fewer without a lowered baseline. Tool
-directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) are
-exempt. `comment_budget.py estimate`, `inventory`, `strip` and `update` drive the
+directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) and
+`// MARK:` section headings are exempt. `comment_budget.py estimate`, `inventory`, `strip` and `update` drive the
 [/delete-comment skill](.claude/skills/delete-comment/SKILL.md).
 
 ### Contributor rules

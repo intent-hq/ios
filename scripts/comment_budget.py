@@ -2,9 +2,9 @@
 """Ratchet Swift comments down to zero.
 
 Code must explain itself; decisions live in docs/adr/. New files may hold no
-comments and listed files may only lose them. Tool directives that change
-behaviour (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`)
-are exempt.
+comments and listed files may only lose them. Tool directives (`// swiftlint:`,
+`// periphery:`, `// fixture-protocol-version:`) and Xcode section headings
+(`// MARK:`) are exempt.
 
   check                     fail on new comments or a stale baseline
   update                    lower the baseline to current counts (never raises)
@@ -26,7 +26,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE = Path("scripts/comment-budget.json")
 SOURCE_ROOTS = ("Intent", "IntentTests", "IntentUITests")
-DIRECTIVE = re.compile(r"^(?://|/\*)\s*(?:swiftlint|periphery|fixture-protocol-version):")
+DIRECTIVE = re.compile(r"^(?://|/\*)\s*(?:swiftlint|periphery|fixture-protocol-version|MARK):")
 REGEX_PREFIXES = set("(,=:[{;!&|?")
 WHITESPACE = " \t\r\n"
 

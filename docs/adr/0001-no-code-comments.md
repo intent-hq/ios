@@ -18,7 +18,7 @@ Tautologies drift from the code. Excuses make a workaround look intentional, so 
 ## Decision
 
 1. Swift code in `Intent/`, `IntentTests/` and `IntentUITests/` has no comments.
-2. Tool directives are not comments: `// swiftlint:`, `// periphery:` and `// fixture-protocol-version:`.
+2. Tool directives are not comments: `// swiftlint:`, `// periphery:` and `// fixture-protocol-version:`. Xcode section headings (`// MARK:`) are also allowed, because Xcode shows them as headings in the jump bar and minimap.
 3. A decision that names and types cannot show goes into an ADR in `docs/adr/`.
 4. A workaround gets an issue in `intent-hq/ios`, not a comment.
 5. `scripts/comment_budget.py check` enforces this as a ratchet. `scripts/comment-budget.json` holds the comment-line count per file. New files must be at zero. A listed file can only go down, and the check fails until the baseline is lowered.
