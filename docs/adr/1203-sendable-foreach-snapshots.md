@@ -36,3 +36,10 @@ Applies to: `ForEach.init(snapshots:id:content:)`
 
 The initializer returns a `ForEach` directly, which preserves the row identity
 and row counts of lazy containers.
+
+## Consequences
+
+A new row list on a lazy container follows this pattern, and a row snapshot
+never carries an opaque, non-Sendable modified view (ADR-1009).
+`scripts/test-row-provider-isolation.sh` checks the row-provider boundary on
+macOS.

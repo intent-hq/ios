@@ -75,5 +75,7 @@ Applies to: `InviteJoinView`
 `InviteJoinView` is the sheet for an `intent://invite` link: someone shared a
 workspace with this person. Until the person taps Join, the flow only reads from
 the host: the invite's preview and, when the person must prove an identity, a
-challenge. It accepts no credential and publishes no proof before Join. The flow is in `InviteJoinModel`
+challenge (`invite.inspect`, then `invite.challenge` on the proof path), plus
+the forge account on the person's own Mac. It accepts no credential and
+publishes no proof before Join. The flow is in `InviteJoinModel`
 (`Intent/Services/InviteJoinFlow.swift`).

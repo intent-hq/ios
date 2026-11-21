@@ -54,6 +54,9 @@ resource load, and an interleaved first play from another window could
 re-anchor the shared audio session in between. Anchoring after the load keeps
 this window's anchor in effect when its sound starts.
 
+Anchoring is best effort. A failed anchor or an unresolved scene id does not
+stop playback.
+
 ### 5. The scene identifier is reported asynchronously
 
 Applies to: `WindowSceneIdentifierReader`

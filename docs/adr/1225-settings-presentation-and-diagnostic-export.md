@@ -39,6 +39,13 @@ Applies to: `DiagnosticExportView`
 The view has no backend or session environment dependency, so every entry point
 works offline.
 
+### 6. The export list keeps native list button styles
+
+Applies to: `DiagnosticExportView`
+
+The diagnostic export list keeps the native list button styles. Only navigation
+uses Intent button chrome.
+
 ### 5. The share sheet callback keeps the lease and logs nothing foreign
 
 Applies to: `DiagnosticShareSheet.makeUIViewController(context:)`

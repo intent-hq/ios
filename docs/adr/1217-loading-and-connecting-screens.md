@@ -69,14 +69,23 @@ superseded, or no saved connection). When the bound backend's saved connection
 was deleted out from under the window, the view reports a failure; the window
 root's removal observation closes or rebinds the window.
 
-### 7. One Debug seam
+### 7. Connecting waits for workspace data, with a timeout
+
+Applies to: `ConnectingView.waitForWorkspaceData(timeout:)`
+
+After the connect succeeds, the view waits until `WorkspaceStore.lastUpdated` is
+set, bounded by `Constants.Connecting.workspaceLoadTimeout`. The user never sees
+an empty workspace list and never gets stuck on the splash. A superseded attempt
+does not route after this wait either (decision 3).
+
+### 8. One Debug seam
 
 Applies to: `ConnectingView.connectDemoSessionIfRequested()`
 
 This is the view's single Debug seam. Demo and screenshot launches have no
 daemon, so it marks the connection live and lets the stores fetch from fixtures.
 
-### 8. Certificate mismatch list
+### 9. Certificate mismatch list
 
 Applies to: `CertMismatchListView`, `CertMismatchListView.displayFingerprint(_:maxBytes:)`
 
@@ -90,7 +99,7 @@ a colon-separated SHA-256 fingerprint (32 bytes) to its leading bytes with an
 ellipsis so a row stays on one line; short values (for example test fixtures)
 pass through unchanged.
 
-### 9. Daemon startup progress
+### 10. Daemon startup progress
 
 Applies to: `DaemonStartupProgressView`
 
@@ -98,7 +107,7 @@ The view is shared by initial connection and the scene-covering reconnection
 surface. Counts are exact; any daemon estimate applies only to indexing, not to
 readiness.
 
-### 10. Intent logo vector
+### 11. Intent logo vector
 
 Applies to: `IntentLogo`
 

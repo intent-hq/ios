@@ -114,6 +114,8 @@ Applies to: `NoteContentPages`
    overflow the read budget and marks it `contentTruncated` with
    `contentBytes`, `contentOffset`, and `nextContentOffset`. Passing
    `nextContentOffset` back as `contentOffset` reads on, on UTF-8 boundaries.
+   Cuts fall on Unicode scalar boundaries, not grapheme boundaries, so a cut
+   can land inside a multi-scalar emoji; the join restores it.
 2. `readWholeNote` returns the reply in its original shape (`{ note }` or a
    bare note, which `unwrap` accepts) with the whole `content` and no cut
    markers. If the note changes between pages (`rev`), the read restarts. If

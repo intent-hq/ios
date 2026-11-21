@@ -46,4 +46,6 @@ blaming the connection.
    the same bytes, so retrying cannot help. Every extension routed to the
    media preview is one this device decodes, so `notAnImage` or `notAVideo`
    means bad bytes.
-4. `unavailable`: the request itself failed (timeout, disconnect, server error).
+4. `unexpectedResponse`: the daemon answered with a reply the loader could not
+   read (`malformedResponse`), which is neither a size, type nor byte problem.
+5. `unavailable`: the request itself failed (timeout, disconnect, server error).

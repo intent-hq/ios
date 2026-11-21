@@ -28,6 +28,12 @@ disconnect, so re-establishing the session must be an explicit action. "Retry
 Disconnect" retries forgetting the record; it does not reconnect (ios#235).
 Certificate failures route to re-pairing.
 
+`isCertificateMismatchMessage(_:)` treats a message that contains
+"certificate", case-insensitively, as a certificate failure. That covers
+"Certificate fingerprint mismatch", "Server certificate has changed" and "No
+trusted certificate is saved". All of them take the certificate path: no
+auto-retry, a "Re-pair Device" action, and the saved record is kept.
+
 ### 3. Backoff
 
 Applies to: `ConnectionFailureView.retryBackoff(attempt:)`
