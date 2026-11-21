@@ -3,6 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `ToolClassifier` (`Intent/Presentation/ToolClassifier.swift`, `Intent/Presentation/ToolClassifier+Classification.swift`)
+- Related issues: ios#1090
 
 ## Context
 
@@ -64,3 +65,23 @@ file names such as "Read `LICENSE`" and "Edit `Makefile`".
 Applies to: `ToolClassifier.regexCache`, `ToolClassifier.firstCapture(_:in:group:)`
 
 Compiled regexes are cached by pattern, because rows re-render often mid-turn.
+
+### 7. Deferred tool loads use the desktop's name cleaning
+
+Applies to: `ToolClassifier.isDeferredToolLoad(_:)`, `ToolClassifier.deferredToolName(_:)`, `ToolClassifier.cleanToolName(_:)`
+
+Deferred-load recognition matches the desktop classifier, and
+`deferredToolName` ports the desktop `cleanToolName`. Other categories still
+use the iOS `cleanToolName`; aligning them is tracked in ios#1090.
+
+### 8. The generic fallback shows the tool name and first meaningful input
+
+Applies to: `ToolClassifier.classifyFallback(_:)`
+
+When no category and no prose title applies, the row uses the tool name as
+the verb and the first meaningful input value as the subject.
+
+## Consequences
+
+A new tool family needs a branch in the classifier and a test; the row view
+does not change.

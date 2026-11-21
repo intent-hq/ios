@@ -51,7 +51,7 @@ bookkeeping then sees every line, and a later well-formed block is still found.
 Applies to: `SuggestedPrompts.parse(_:)`, `SuggestedPrompts.prompts(fromLastOf:)`, `SuggestedPrompts.looksLikeBodyText(_:)`
 
 Every well-formed block is stripped from the rendered text. Only the last block
-supplies prompts. It yields nothing when any captured line is shaped like body
+supplies prompts. It yields nothing when its body is empty or any captured line is shaped like body
 text (a heading, a fence, a table row, a Mermaid edge), so response body text
 can never render as chips. Mermaid edges cannot be prompts.
 
@@ -155,3 +155,8 @@ Applies to: `SuggestedPromptLinks.displayText(_:)`
 A chip's label renders inline markdown, with links underlined in the chip's
 own text color. The chip sends the prompt on tap, so its links are not
 separately tappable and carry no link attribute.
+
+## Consequences
+
+iOS and the desktop show the same chips for the same reply. A parsing change
+needs a shared fixture case and the matching desktop change.

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
-- Applies to: `CreateWorkspaceView` (`Intent/Views/Workspaces/CreateWorkspaceView.swift`), `CreateWorkspaceView.showsOptionsLoading`, `CreateWorkspaceView.showsModelCatalogLoading`, `CreateWorkspaceView.buildCreateWorkspaceParams` (`Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift`)
+- Applies to: `CreateWorkspaceView` (`Intent/Views/Workspaces/CreateWorkspaceView.swift`), `CreateWorkspaceView.showsOptionsLoading`, `CreateWorkspaceView.showsModelCatalogLoading`, `CreateWorkspaceView.buildCreateWorkspaceParams`, `CreateWorkspaceView.createRequestTimeout` (`Intent/Views/Workspaces/CreateWorkspaceSpecialistStepView.swift`)
 
 ## Context
 
@@ -193,3 +193,24 @@ Applies to: `CreateWorkspaceView.buildCreateWorkspaceParams(source:idempotencyKe
 The `initialAgent.provider` parameter is always sent for the enabled
 selection, including Auggie. The host's default (or the specialist's default)
 may name a disabled provider.
+
+### 16. The request leaves ids, clone paths and defaults to the daemon
+
+Applies to: `CreateWorkspaceView.buildCreateWorkspaceParams(source:idempotencyKey:initialAgent:)`
+
+- `initialAgent` never carries an `agentId`; the server assigns agent ids.
+- With `githubUrl`, the request omits `repositoryPath` and `clonePath`, which
+  selects the daemon's cache-hydrated clone (PROTOCOL §5.1). `baseRef` is the
+  plain branch name from `github.branches.list`, with no remote prefix.
+- An empty message omits `prompt`, like the desktop, so a specialist alone can
+  create the workspace.
+- A model is sent only when the user picked one, even when it equals the
+  specialist's resolved default preview.
+
+### 17. `workspace.create` gets a 120-second timeout
+
+Applies to: `CreateWorkspaceView.createRequestTimeout`
+
+`createRequestTimeout` is 120 s, like cloudlands-fe `CREATE_TIMEOUT_MS`
+(#1954). The daemon's NPX budget plus first-turn overhead exceeds the default
+10 s request timeout.

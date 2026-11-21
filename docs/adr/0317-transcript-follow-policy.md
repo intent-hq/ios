@@ -3,7 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `ConversationTranscriptScrollPolicy` (`Intent/Presentation/ConversationTranscriptScrollPolicy.swift`)
-- Related issues: #272, #280, #281, #338, #350, #404, #426
+- Related issues: #271, #272, #276, #280, #281, #338, #346, #350, #404, #426
 
 ## Context
 
@@ -171,3 +171,11 @@ when a give-up was transferred to that follow (ADR-0316).
 - `replaced`: a newer request superseded the follow before it came due.
 
 The cases are in state-machine order, not alphabetical order.
+
+## Consequences
+
+- No code path except a gesture may set the scrolled-away flag. These rules
+  replaced per-source patches (#271, #272, #276, #280, #281, #346, #404,
+  #426), so a new source of content growth needs no new patch.
+- A new follow source must go through `shouldExecuteFollow` and the takeover
+  latch.

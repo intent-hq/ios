@@ -199,3 +199,39 @@ Applies to: `lastForcedFollowOutcome`, `lastForcedFollowCorrections`, `lastUnrea
   fired, so a re-run of the poll does not withdraw the row again.
 - `demoRecoveryResize` is a content-free receipt for the opt-in
   footer/recovery overlap control.
+
+## Consequences
+
+Recovery, follows and takeover cannot disagree about who scrolls. A new
+asynchronous path must carry a token and go through `transition`.
+
+`TranscriptRecoveryLifecycleTests` asserts these invariants on every
+transition:
+
+1. There is one owner, and only an owner issues a scroll. A demoted recovery
+   exists only under the follow that demoted it.
+2. A give-up over an unrealized end row always resolves.
+3. The follow that a give-up was transferred to discharges it once, at its
+   terminal: Go to End if it did not execute over a still-unrealized row,
+   nothing if it executed or the row realized. An executed drain over an
+   unrealized row re-arms the recovery. A replacing follow inherits the
+   transfer.
+4. Over an unrealized end row, at-bottom edges clear and re-pin nothing until
+   the row realizes, which replays the live edge.
+5. A stale token changes nothing.
+6. The reducer keeps no budget, records the terminal's own outcome once, and
+   keeps a recovery's token when it is demoted and restored.
+
+Go to End shows at most once, only from a give-up or the terminal it was
+transferred to. An inactive transcript has no task owner and no deferred
+give-up; only end-row realization changes until it appears, and a new visible
+visit gets fresh tokens.
+
+The #350 handoff defects (scenarios 1 to 6) are replayed as event sequences
+through `LifecycleHarness`, which runs the effects against scripted geometry as
+the view does. Mutation checks: removing `dischargeFallback` from `transition`
+must fail the transferred give-up sequences, and removing the realization gate
+(the `isEndRealized` guard in
+`ConversationTranscriptScrollPolicy.scrolledAwayTransition`, or the
+`replayLiveEdge` that `endRealized` issues) must fail the blank at-bottom
+sequence.

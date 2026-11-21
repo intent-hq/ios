@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
-- Applies to: `NoteContentSegmenter`, `NoteTaskLine`, `LinkedTaskRef` (`Intent/Presentation/NoteContentSegments.swift`)
+- Applies to: `NoteContentSegmenter`, `NoteContentSegment`, `NoteTaskLine`, `LinkedTaskRef` (`Intent/Presentation/NoteContentSegments.swift`)
 
 ## Context
 
@@ -28,7 +28,7 @@ checkbox.
 Applies to: `NoteContentSegmenter.segments(for:)`
 
 Fenced blocks stay in the markdown segment, so diagrams share its reference
-context.
+context. Segments that hold only whitespace are dropped.
 
 ### 3. Line numbers follow the daemon protocol
 
@@ -39,6 +39,16 @@ parameter of the daemon's `task.update` method (PROTOCOL §5.4). `marker` is
 normalized to " ", "x" or "/" (uppercase "X" becomes "x"). `linkedTask` is the
 first `[title](intent://local/task/{id})` link on the line.
 
+One trailing carriage return from CRLF content is accepted on a checkbox
+line.
+
 `markerStatus` is the display status implied by the marker. Plain checkbox rows
 use it directly. Linked-task lines use it as the fallback while their note is
 not yet resolved in the workspace note list.
+
+### 4. Marker rewrites accept only the three checkbox statuses
+
+Applies to: `NoteContentSegmenter.replacingCheckboxMarker(in:line:status:)`
+
+A local marker rewrite accepts only `todo`, `in-progress` and `done`, and only
+on a line that is a checkbox line. Any other status or line returns `nil`.

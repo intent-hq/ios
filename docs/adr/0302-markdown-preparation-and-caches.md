@@ -3,6 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `BoundedMarkdownCache` (`Intent/Presentation/BoundedMarkdownCache.swift`), `MarkdownContentCache` (`Intent/Presentation/MarkdownContentCache.swift`), `MermaidMarkdownContent` (`Intent/Presentation/MermaidMarkdownContent.swift`), `StandaloneLinkRow` (`Intent/Presentation/StandaloneLinkRow.swift`)
+- Related issues: ios#1015
 
 ## Context
 
@@ -19,6 +20,10 @@ Applies to: `BoundedMarkdownCache.value(for:version:cost:create:)`
 The cache has a hard entry limit and a hard accounted-cost limit. The cost
 includes the source key bytes. A value too large to fit is returned to the
 caller without being stored, so it does not displace the reusable working set.
+
+Recency bookkeeping is linear in the entry count. That is acceptable only
+while the entry limit stays small; raising it substantially needs an O(1)
+recency structure.
 
 ### 2. Keys compare the exact UTF-8 bytes of the source
 
@@ -89,7 +94,8 @@ Applies to: `StandaloneLinkRow`, `StandaloneLinkRow.init?(paragraph:)`, `Standal
 
 A paragraph or list item whose whole text is one link, such as an agent's
 "Open the report" line, renders in chat as a full-width row instead of an
-inline run. Textual hit-tests inline links on their glyphs only.
+inline run. Textual hit-tests inline links on their glyphs only (ios#1015),
+so a line that is only a link is hard to tap.
 
 Textual's block styles receive a type-erased label, not the paragraph's
 content. The parse step therefore rewrites the paragraph into a code block
@@ -108,3 +114,8 @@ Applies to: `StandaloneLinkRow.opensFile`
 
 Workspace files (intent file links and relative paths) get a file icon. Every
 other destination gets a chevron.
+
+## Consequences
+
+Markdown parse cost is bounded per process, and a parser change invalidates
+old entries through the version keys.
