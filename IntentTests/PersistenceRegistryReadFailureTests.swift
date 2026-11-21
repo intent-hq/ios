@@ -3,8 +3,6 @@ import Foundation
 import Security
 import Testing
 
-/// Faults are injected beneath SecItemKeychainStorage, not by mocking the
-/// persistence result: a read can fail while the write backend remains usable.
 @Suite("Saved connection read safety")
 final class PersistenceRegistryReadFailureTests {
     private let fake = FakeSecItemStore()

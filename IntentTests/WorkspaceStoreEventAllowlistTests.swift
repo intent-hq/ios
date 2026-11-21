@@ -4,9 +4,6 @@ import Testing
 
 // MARK: - Event allowlist (non-live fallback)
 
-/// Only `workspace:*` types that can change a rendered `Workspace` field or
-/// list membership refetch `workspace.list`; a `lastActivity`-only
-/// `workspace:updated` delta is patched in place and must not refetch.
 @MainActor
 struct WorkspaceStoreEventAllowlistTests {
     private func makeWorkspace(id: String, lastActivity: String?) -> Workspace {
@@ -73,8 +70,6 @@ struct WorkspaceStoreEventAllowlistTests {
         try await fake.waitForRequests("workspace.list")
     }
 
-    /// A delta that carries `lastActivity` alongside another rendered field
-    /// must still refetch: only the `lastActivity`-only case is patch-complete.
     @Test func workspaceUpdatedWithLastActivityAndTitleRefetches() async throws {
         let fake = FakeConnectionManager()
         let store = WorkspaceStore(connectionManager: fake)
@@ -91,7 +86,6 @@ struct WorkspaceStoreEventAllowlistTests {
                 ]
             )
         )
-        // A mixed delta must refetch for the title.
         try await fake.waitForRequests("workspace.list")
     }
 
@@ -147,10 +141,6 @@ struct WorkspaceStoreEventAllowlistTests {
         }
     }
 
-    /// Mirrors the Note/Task suites: once the `workspace.subscribe` snapshot
-    /// makes the store live, an allowlisted event must not refetch — the
-    /// `guard !workspaceLive` sits between the in-place patches and the
-    /// allowlist switch.
     @Test func allowlistedWorkspaceEventSuppressedWhileLive() async throws {
         let fake = FakeConnectionManager()
         let store = WorkspaceStore(connectionManager: fake)

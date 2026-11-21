@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - Sidebar selection
+
 extension WorkspaceDetailView {
     func resetAgentWorkspace(to workspaceId: String) {
         if agentStore.workspaceId != workspaceId { viewModel.reset() }
@@ -126,8 +128,6 @@ extension WorkspaceDetailView {
         }
     }
 }
-
-// MARK: - Sidebar selection
 
 extension WorkspaceDetailView {
     private static let revealPasses = 4

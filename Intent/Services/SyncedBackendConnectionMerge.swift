@@ -93,7 +93,6 @@ enum SyncedBackendConnectionMerge {
         }
     }
 
-    /// Same fingerprint normalization as `SyncedBackendRecord.registryKey`.
     static func normalizeFingerprint(_ raw: String?) -> String {
         (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }

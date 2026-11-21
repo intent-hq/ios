@@ -39,13 +39,10 @@ extension SpecialistPickerSelectionTests {
         let fake = FakeConnectionManager()
         configureStoreResponses(fake)
         let store = CreationOptionsStore(connectionManager: fake)
-        // A previous sheet (or the New Workspace flow) warmed the cache.
         await store.loadIfNeeded()
         await store.loadModelsIfNeeded(providerId: "auggie")
         fake.clearRequestLog()
 
-        // A reopened sheet before its own load settles: no spinner on either
-        // step, and the selections resolve synchronously from the cache.
         #expect(
             !CreateWorkspaceView.showsOptionsLoading(
                 storeIsLoading: store.isLoading,
@@ -72,7 +69,6 @@ extension SpecialistPickerSelectionTests {
                 selectedProvider: provider
             )
         )
-        // Nothing was fetched to render the cached lists.
         #expect(fake.requestLog.isEmpty)
     }
 
@@ -82,8 +78,6 @@ extension SpecialistPickerSelectionTests {
         configureStoreResponses(fake)
         let store = CreationOptionsStore(connectionManager: fake)
 
-        // First open in the session: nothing cached, both steps spin and
-        // Create stays disabled.
         #expect(
             CreateWorkspaceView.showsOptionsLoading(
                 storeIsLoading: store.isLoading,
@@ -132,9 +126,6 @@ extension SpecialistPickerSelectionTests {
         await store.loadIfNeeded()
 
         await store.loadModelsIfNeeded(providerId: "auggie")
-        // The catalog stays uncached, but the sheet's load settled: the
-        // Model section shows the daemon-default row and Create is enabled
-        // rather than wedged behind "Loading models...".
         #expect(store.models(for: "auggie") == nil)
         #expect(!SpecialistPickerView.showsModelsLoading(catalog: store.models(for: "auggie"), settled: true))
         #expect(
@@ -155,9 +146,6 @@ extension SpecialistPickerSelectionTests {
         let store = CreationOptionsStore(connectionManager: fake)
         await store.loadIfNeeded()
 
-        // The user picks grok (slow), then auggie (fast): the picker derives
-        // `models` from the selected provider's cache slot, so grok's late
-        // response can only land under "grok" and never as auggie's list.
         fake.pendingMethods = ["models.list"]
         let grokLoad = Task { await store.loadModelsIfNeeded(providerId: "grok") }
         for _ in 0..<200 where fake.paramsForMethod("models.list").isEmpty {
@@ -182,15 +170,10 @@ extension SpecialistPickerSelectionTests {
         let auggieModels = store.models(for: "auggie") ?? []
         #expect(auggieModels.map(\.id) == ["sonnet4.5"])
         #expect(store.models(for: "grok")?.map(\.id) == ["grok-4"])
-        // An explicit grok pick does not survive the switch to auggie even
-        // if a bare id were shared: reconciliation matches id and provider.
         let stalePick = makeModel("grok-4", provider: "grok")
         #expect(CreationSelectionPolicy.reconciledModel(current: stalePick, models: auggieModels) == nil)
     }
 
-    /// Holds the sheet's auggie load, reconnects (hard clear), starts the
-    /// fresh same-provider load, and returns the OLD request first while the
-    /// fresh one stays held.
     @MainActor
     private func makeReconnectRace(
         _ fake: FakeConnectionManager,
@@ -257,9 +240,6 @@ extension SpecialistPickerSelectionTests {
         }
         #expect(fake.paramsForMethod("models.list").count == 2)
 
-        // The old request answers first: the store drops its catalog, and
-        // the sheet must not settle on it — the Model section keeps loading
-        // (Create disabled) until the fresh request answers.
         fake.resolvePending(
             "models.list",
             with: [
@@ -308,9 +288,6 @@ extension SpecialistPickerSelectionTests {
         let (oldGeneration, oldLoad) = (race.oldGeneration, race.oldLoad)
         var settled = race.settled
 
-        // The fresh request fails outright: the sheet's current load settled,
-        // so the Model section shows the daemon-default row rather than
-        // spinning on a catalog that will not arrive.
         fake.pendingMethods = []
         fake.errorMap["models.list"] = URLError(.notConnectedToInternet)
         let freshGeneration = store.loadGeneration
@@ -329,8 +306,6 @@ extension SpecialistPickerSelectionTests {
             )
         )
 
-        // The old request answering later changes nothing: its catalog is
-        // dropped and its marker is not published.
         fake.resolvePending(
             "models.list",
             with: [

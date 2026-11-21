@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// The media preview names the real cause of a failure instead of always
-/// blaming the connection, and offers Retry only where it can help.
 @MainActor
 struct WorkspaceFilePreviewFailureTests {
     private typealias Failure = WorkspaceFilePreview.Failure

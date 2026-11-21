@@ -11,18 +11,8 @@ extension ConnectionManagerTests {
         let data: Data
         let method: String
     }
-    /// Loopback plain-WS listener with a minimal JSON-RPC responder: any
-    /// request carrying an `id` gets an empty-object result; notifications
-    /// are ignored. Lets `connect()` tests establish real sockets and prove
-    /// a connection still serves round-trips. Nonisolated for the same
-    /// reason as ManualTokenEntryViewTests' TLS listener: the handlers run
-    /// on the listener queue and must not inherit MainActor isolation.
     nonisolated private struct LoopbackWebSocketServerState: Sendable {
         var accepted: [NWConnection] = []
-        // Connections held back by a gated server: accepted but not
-        // started, so the client's WS handshake stays pending until
-        // `open()` releases them. Lets tests control which of two
-        // racing connect() calls completes first.
         var pendingStart: [NWConnection] = []
         var isOpen: Bool
         var acceptedTotal = 0
@@ -40,8 +30,6 @@ extension ConnectionManagerTests {
     nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
         private let listener: NWListener
         private let queue = DispatchQueue(label: "ConnectionManagerTests.ws-server")
-        // Retain accepted connections for the listener's lifetime (an
-        // unreferenced NWConnection deallocates and drops the socket).
         private let state: OSAllocatedUnfairLock<LoopbackWebSocketServerState>
 
         var port: Int { Int(listener.port?.rawValue ?? 0) }
@@ -170,9 +158,6 @@ extension ConnectionManagerTests {
             return server
         }
 
-        /// Releases a gated server: starts every held-back connection so
-        /// their pending WS handshakes complete, and starts future ones
-        /// immediately.
         func open() {
             let held = state.withLock { state in
                 state.isOpen = true

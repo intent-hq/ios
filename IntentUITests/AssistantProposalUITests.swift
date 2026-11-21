@@ -97,8 +97,6 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         XCTAssertTrue(app.buttons["proposal.openWorkspace"].exists)
     }
 
-    /// Taps land on the pill padding, outside the label glyphs, where the
-    /// message's copy overlay used to claim them.
     @MainActor
     func testProposalButtonPaddingReceivesTaps() {
         let app = openAssistant(arguments: ["--demo-assistant-proposal"])
@@ -152,8 +150,6 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         XCTAssertTrue(open.waitForNonExistence(timeout: Self.timeout))
     }
 
-    /// Taps 8pt inside the leading edge at mid-height: within the 20pt
-    /// horizontal padding and the pill's rounded shape.
     @MainActor
     private func tapPadding(of button: XCUIElement) {
         XCTAssertTrue(button.isHittable)

@@ -4,27 +4,9 @@ import Foundation
 import Testing
 import UIKit
 
-/// ios#264 measurement harness for the three session-lifetime caches with no
-/// count bound: `WorkspaceFileImageLoader.failedKeys`,
-/// `RemoteImageLoader.failedKeys` and `AttachmentImageLoader.pathCache`.
-///
-/// Each cache is driven through a scripted long session of distinct keys
-/// shaped like production ids/paths/URLs. Entry counts are sampled at
-/// checkpoints so the growth curve is visible, and retained bytes are
-/// estimated from each collection's observed table capacity plus Swift
-/// native string storage
-/// (malloc-level `mstats` deltas print alongside as an informational
-/// cross-check — process-wide, so concurrent suites add noise). Rows print
-/// with an `[ios#264]` prefix for the issue/PR table; the assertions pin the
-/// measured contract: linear growth (no eviction) at a few hundred bytes per
-/// entry, immaterial at realistic cardinality. Adding a bound later must
-/// update the growth expectations here.
 @Suite(.serialized)
 @MainActor
 struct SessionCacheBoundsMeasurementTests {
-    /// A scripted session: `workspaces` distinct workspaces, each rendering
-    /// `keysPerWorkspace` distinct image references that all populate the
-    /// cache (every link broken, or every image an attachment reference).
     private struct SessionProfile {
         let name: String
         let workspaces: Int
@@ -34,21 +16,12 @@ struct SessionCacheBoundsMeasurementTests {
         }
     }
 
-    /// A long day across many workspaces where every rendered image
-    /// populates the cache — already a worst case for the negative caches.
     private static let realistic = SessionProfile(name: "realistic", workspaces: 25, keysPerWorkspace: 40)
-    /// Ten times the realistic session, to expose the growth slope.
     private static let stress = SessionProfile(name: "stress", workspaces: 100, keysPerWorkspace: 100)
 
-    /// Ceiling on the per-entry estimate: a regression that starts retaining
-    /// heavier values (decoded images, errors, responses) trips this.
     private static let maxBytesPerEntry = 512
-    /// Materiality threshold for the realistic session, per cache.
     private static let realisticRetainedCeiling = 1 << 20
 
-    /// Routing stub that records nothing, so retained bytes reflect the
-    /// loader caches alone. `file.getAttachmentInfo` resolves each attachment
-    /// to a distinct path; every other request fails like a missing file.
     @MainActor
     private final class ScriptedConnection: ConnectionManagerRouting {
         var connectionState: ConnectionState = .connected
@@ -92,7 +65,6 @@ struct SessionCacheBoundsMeasurementTests {
 
     // MARK: - Key shapes (deterministic, production-length)
 
-    /// A 36-character UUID-shaped id derived from two indices.
     nonisolated private static func syntheticId(_ high: Int, _ low: Int) -> String {
         String(format: "%08X-0000-4000-8000-%012X", high, low)
     }
@@ -101,12 +73,10 @@ struct SessionCacheBoundsMeasurementTests {
         syntheticId(0xA0, workspace)
     }
 
-    /// Broken `intent://local/file/...` link target, workspace-relative.
     nonisolated private static func filePath(_ workspace: Int, _ index: Int) -> String {
         "docs/screenshots/\(syntheticId(workspace, index)).png"
     }
 
-    /// GitHub user-attachment URL, the common remote image shape.
     nonisolated private static func remoteURL(_ workspace: Int, _ index: Int) -> URL {
         guard let url = URL(string: "https://github.com/user-attachments/assets/\(syntheticId(workspace, index))") else {
             fatalError("Could not create synthetic attachment URL")
@@ -118,7 +88,6 @@ struct SessionCacheBoundsMeasurementTests {
         syntheticId(0xB0 + workspace, index)
     }
 
-    /// Registry-row path under `.intent/attachments/`.
     nonisolated private static func attachmentPath(_ attachmentId: String) -> String {
         ".intent/attachments/\(attachmentId)-screenshot.png"
     }
@@ -132,18 +101,11 @@ struct SessionCacheBoundsMeasurementTests {
 
     // MARK: - Retained-bytes model
 
-    /// Swift native string storage: up to 15 UTF-8 bytes live inline in the
-    /// 16-byte `String`; longer strings own a heap object (32-byte header +
-    /// bytes + NUL) rounded up to malloc's 16-byte quantum.
     nonisolated private static func heapBytes(of string: String) -> Int {
         let count = string.utf8.count
         return count <= 15 ? 0 : (32 + count + 1 + 15) / 16 * 16
     }
 
-    /// Native hash tables keep a power-of-two bucket count and advertise
-    /// `capacity` as the ≤ 3/4-load fill of that table, so the table the
-    /// collection actually allocated (including any over-reservation) is
-    /// recovered from its observed `capacity`, never inferred from `count`.
     nonisolated private static func bucketCount(forCapacity capacity: Int) -> Int {
         var buckets = 1
         while buckets * 3 / 4 < capacity {
@@ -152,16 +114,12 @@ struct SessionCacheBoundsMeasurementTests {
         return buckets
     }
 
-    /// Storage header + one 16-byte slot per bucket + 1-bit occupancy map +
-    /// heap storage of every key.
     nonisolated private static func retainedBytes(of set: Set<String>) -> Int {
         let buckets = bucketCount(forCapacity: set.capacity)
         return 64 + buckets * MemoryLayout<String>.stride + buckets / 8
             + set.reduce(0) { $0 + heapBytes(of: $1) }
     }
 
-    /// As `retainedBytes(of: Set)` with a second 16-byte slot per bucket for
-    /// values and their heap storage.
     nonisolated private static func retainedBytes(of dictionary: [String: String]) -> Int {
         let buckets = bucketCount(forCapacity: dictionary.capacity)
         return 64 + buckets * 2 * MemoryLayout<String>.stride + buckets / 8
@@ -187,10 +145,8 @@ struct SessionCacheBoundsMeasurementTests {
     private struct Measurement {
         let cache: String
         let profile: SessionProfile
-        /// Entry count after each quarter of the session.
         var checkpoints: [(driven: Int, entries: Int)] = []
         var retainedBytes = 0
-        /// Process-wide malloc growth across the run — informational only.
         var mallocDelta = 0
 
         var entries: Int {
@@ -210,8 +166,6 @@ struct SessionCacheBoundsMeasurementTests {
         }
     }
 
-    /// Drives `populate(workspace, index)` over the whole profile, sampling
-    /// `entries()` after each quarter and `retained()` once at the end.
     private static func run(
         cache: String,
         profile: SessionProfile,
@@ -238,9 +192,6 @@ struct SessionCacheBoundsMeasurementTests {
         return measurement
     }
 
-    /// The measured contract: no eviction (entries track distinct keys
-    /// exactly), a few hundred bytes per entry, and an immaterial footprint
-    /// for the realistic session.
     private static func expectMeasuredContract(
         _ measurement: Measurement,
         sourceLocation: SourceLocation = #_sourceLocation
@@ -269,10 +220,6 @@ struct SessionCacheBoundsMeasurementTests {
 
     // MARK: - Estimator sensitivity
 
-    /// The estimate must follow the allocated table, not the entry count:
-    /// a cache that starts over-reserving (e.g. `reserveCapacity(n * n)`)
-    /// with the same keys has to breach the per-entry ceiling and the
-    /// realistic footprint ceiling, or the guards above are inert.
     @Test func overReservedCollectionsBreachFootprintGuards() {
         let keys = (0 ..< Self.realistic.workspaces).flatMap { workspace in
             (0 ..< Self.realistic.keysPerWorkspace).map { Self.filePath(workspace, $0) }
@@ -355,10 +302,6 @@ struct SessionCacheBoundsMeasurementTests {
                 retained: { Self.retainedBytes(of: loader.pathCache) }
             )
             Self.expectMeasuredContract(measurement)
-            // Immutable rows: one resolution plus one (failing) byte fetch per
-            // attachment, never a second `file.getAttachmentInfo`. The malloc
-            // delta for this row also carries the companion file loader's
-            // negative cache.
             #expect(connection.requestCount == 2 * profile.totalKeys)
         }
     }

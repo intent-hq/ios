@@ -2,10 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// `agent.getQueue` against a bounded daemon (protocol "Paged agent lists and
-/// queues"): entries keep drain order and whole-queue positions across pages.
-/// The token is a queue position, so a walk overtaken by `agent:queue:updated`
-/// stops, and any re-read starts from the first page.
 @MainActor
 struct ConversationQueuePagingTests {
     private static func entries(_ range: ClosedRange<Int>) -> [[String: Any]] {
@@ -22,7 +18,6 @@ struct ConversationQueuePagingTests {
         QueuedMessage(id: "q-old", content: "previous", queuedAt: "2026-11-02T00:00:00Z", position: 0)
     ]
 
-    /// A store with a live chat subscription, so queue events reach it.
     private func liveStore() async -> (ConversationStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot()
@@ -63,7 +58,6 @@ struct ConversationQueuePagingTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
         store.queuedMessages = Self.previous
-        // The second page has no configured reply, so it fails.
         fake.responseQueueMap["agent.getQueue"] = [Self.page(Self.entries(1...200), next: "t1")]
 
         await store.fetchQueue(agentId: "agent-1")
@@ -112,8 +106,6 @@ struct ConversationQueuePagingTests {
         #expect(fake.paramsForMethod("agent.getQueue").count == 1, "Positions shifted, so the walk must not read on")
     }
 
-    /// A drain or acknowledged local change between pages shifts positions,
-    /// so the next page could skip an entry: the walk stops without publishing.
     @Test(arguments: ["processing", "local"])
     func queueChangeBetweenPagesStopsTheWalk(change: String) async throws {
         let fake = FakeConnectionManager()
@@ -131,8 +123,6 @@ struct ConversationQueuePagingTests {
         #expect(store.queuedMessages.map(\.id) == ["q-old"], "A cut-short walk is never published")
     }
 
-    /// The same change while the last page is in flight: that page may start
-    /// one entry late (q-202 instead of q-201), so the walk is not published.
     @Test(arguments: ["processing", "local"])
     func queueChangeDuringTheLastPageDropsTheWalk(change: String) async throws {
         let fake = FakeConnectionManager()
@@ -152,7 +142,6 @@ struct ConversationQueuePagingTests {
         #expect(store.queuedMessages.map(\.id) == ["q-old"], "A walk that may have skipped q-201 is never published")
     }
 
-    /// One page is a single snapshot, so a change during it still folds in.
     @Test func queueChangeDuringASinglePageFoldsIn() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -181,7 +170,6 @@ struct ConversationQueuePagingTests {
         let read = Task { await store.fetchQueue(agentId: "a") }
         try await fake.waitForPendingRequests("agent.getQueue")
 
-        // An event without a readable queue asks for a fresh read.
         queueUpdated(store, queue: "not-an-array")
         fake.resolvePending("agent.getQueue", with: Self.page(Self.entries(1...200), next: "t1"))
         try await fake.waitForPendingRequests("agent.getQueue")

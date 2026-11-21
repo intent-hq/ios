@@ -159,7 +159,6 @@ struct WorkspaceCreationImagesTests {
         view.onPasteImages = draft.addPaste
         #expect(view.canPerformAction(#selector(UIResponderStandardEditActions.paste(_:)), withSender: nil))
         #expect(pasteboard.readCount == 0)
-        // Same responder selector dispatched by edit-menu Paste and Command-V.
         view.paste(nil)
         #expect(draft.isImporting)
         #expect(pasteboard.readCount == 1, "Snapshot the bytes synchronously during Paste")
@@ -223,7 +222,6 @@ struct WorkspaceCreationImagesTests {
         #expect(throws: WorkspaceCreationImages.ImportError.self) {
             try WorkspaceCreationImages.validateRequest(["prompt": String(repeating: "a", count: limit)])
         }
-        // Quotes are one source byte but two encoded bytes; counting raw text fails.
         #expect(throws: WorkspaceCreationImages.ImportError.self) {
             try WorkspaceCreationImages.validateRequest(["prompt": String(repeating: "\"", count: limit / 2)])
         }

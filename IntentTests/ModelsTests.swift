@@ -3,8 +3,6 @@ import Foundation
 import Testing
 
 struct ModelsTests {
-    /// Records saved before the tcAddress field existed must keep decoding
-    /// (the optional field defaults to nil).
     @Test func pairedServerDecodesLegacyJSONWithoutTcAddress() throws {
         let legacy = Data("""
         {"hosts":["192.168.1.1"],"port":3000,"name":"My Mac","pairedAt":1000}
@@ -63,7 +61,6 @@ struct ModelsTests {
     }
 
     @Test func workspacePullRequestKeepsUnknownStatusRaw() throws {
-        // Future status variants pass through as raw strings (lenient).
         let json = Data("""
         {"id": "ws-1", "title": "Test", "pullRequests": [{"number": 7, "status": "SomeFutureStatus"}]}
         """.utf8)

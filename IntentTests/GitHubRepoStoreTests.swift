@@ -25,8 +25,6 @@ struct GitHubRepoStoreTests {
         return dict
     }
 
-    /// A fake whose three load reads answer immediately with one recent and
-    /// one own repo, plus a store that has completed its cold load over it.
     func makeLoadedStore(
         configured: Bool = true
     ) async -> (store: GitHubRepoStore, fake: FakeConnectionManager) {
@@ -46,9 +44,6 @@ struct GitHubRepoStoreTests {
         return (store, fake)
     }
 
-    /// Bounded wait until the condition holds, for assertions on
-    /// Task-spawned background refreshes. Throws on timeout so a missed
-    /// update cannot pass silently.
     func waitFor(
         _ description: String = "condition",
         sourceLocation: SourceLocation = #_sourceLocation,
@@ -188,7 +183,6 @@ struct GitHubRepoStoreTests {
         #expect(store.ownRepos.map(\.name) == ["a", "b"])
         #expect(store.lastError == nil)
 
-        // Exactly one request with the 50-repo cap; the nextToken is ignored.
         let calls = fake.paramsForMethod("github.repos.list")
         #expect(calls.count == 1)
         #expect(calls[0]["limit"] as? Int == GitHubRepoStore.ownReposLimit)
@@ -256,10 +250,6 @@ extension GitHubRepoStoreTests {
     }
 
     @Test func searchReposReturnsPerCallerResultsWithoutTouchingSharedLists() async {
-        // The store is shared by every picker on the session, so search
-        // results are returned to the caller (per-view state) and never
-        // stored: two pickers searching different queries each get their
-        // own answer and the cached lists stay untouched.
         let (store, fake) = await makeLoadedStore()
         let cachedRecents = store.recentRepos
         let cachedOwn = store.ownRepos
@@ -353,7 +343,6 @@ extension GitHubRepoStoreTests {
         let branches = try await store.fetchRemoteBranches(owner: "intent-hq", repo: "intentd")
         #expect(branches == ["main", "dev"])
 
-        // Exactly one request with the 50-branch cap; the nextToken is ignored.
         let calls = fake.paramsForMethod("github.branches.list")
         #expect(calls.count == 1)
         #expect(calls[0]["owner"] as? String == "intent-hq")

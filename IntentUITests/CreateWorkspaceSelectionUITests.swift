@@ -1,7 +1,6 @@
 import UIKit
 import XCTest
 
-/// Exercises the real navigation, observation and reconciliation path for #446.
 nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     private static let elementTimeout: TimeInterval = 15
 
@@ -130,8 +129,6 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         app.buttons["creation.back"].tap()
         app.buttons["Next"].tap()
         XCTAssertTrue(remove.waitForExistence(timeout: Self.elementTimeout))
-        // Demo workspace.create returns no workspace: exercise the real failure UI,
-        // without creating live data or adding a test-only production hook.
         app.buttons["Create"].tap()
         XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
         app.alerts.buttons["OK"].tap()
@@ -228,7 +225,6 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         attachEvidence(in: app, name: "selected-after-refresh-\(appearance)")
         XCTAssertTrue(app.buttons["Create"].isEnabled)
         editSourceAndCheckDraft(in: app)
-        // Never tap Create: this check only navigates and edits a draft.
     }
 
     @MainActor

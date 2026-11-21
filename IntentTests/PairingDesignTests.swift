@@ -41,7 +41,6 @@ struct PairingDesignTests {
 
     @Test(arguments: [ColorScheme.light, .dark])
     func paletteMatchesConnectDesign(scheme: ColorScheme) {
-        // Full-frame Figma modes: light 3051:54203, dark 3051:54405.
         let expected: [(Color, [CGFloat])] = [
             (Constants.Pairing.background(for: scheme), scheme == .light ? [240, 240, 235] : [22, 22, 22]),
             (Constants.Pairing.foreground(for: scheme), scheme == .light ? [8, 8, 8] : [240, 240, 235]),
@@ -58,7 +57,6 @@ struct PairingDesignTests {
     }
 
     @Test func lightPrimaryTextAndGlyphsRemainReadableOnBothSurfaces() {
-        // Exact Figma secondary text is below 4.5:1; palette parity is not an accessibility approval.
         for background in [Constants.Pairing.background(for: .light), Constants.Pairing.surface(for: .light)] {
             #expect(contrast(Constants.Pairing.foreground(for: .light), background) >= 4.5)
         }

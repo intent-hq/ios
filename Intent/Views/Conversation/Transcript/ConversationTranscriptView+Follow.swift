@@ -181,20 +181,6 @@ extension ConversationTranscriptView {
         }
     }
 
-    /// Polls the live scroll view until the forced follow has landed within
-    /// `followLandingTolerance` of the bottom, scrolling again from short of the bottom and
-    /// clamping from past the end a bounded number of times (#281, #271; see
-    /// `ConversationTranscriptScrollPolicy.followLandingStep`). Ends early
-    /// when the user takes over — the geometry edges then carry the gesture
-    /// rule, and the live distance is applied once as the gesture's sample in
-    /// case its edge was dropped — and on the timeout, leaving the pin as it
-    /// is. Bails out silently when the follow is restarted (task cancelled).
-    ///
-    /// Each correction is judged from two fresh reads taken after its scroll
-    /// has had its animation's duration to move: a poll that reused the
-    /// pre-correction rest as `previous` before a frame rendered read the
-    /// same geometry twice, spent the next correction on it and gave up with
-    /// the viewport still on its way (#305).
     private func awaitForcedFollowLanding(proxy: ScrollViewProxy, animated: Bool) async {
         let deadline = ContinuousClock.now
             + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)

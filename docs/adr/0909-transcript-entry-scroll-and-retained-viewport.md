@@ -63,3 +63,11 @@ Applies to: `performInitialScroll(proxy:generation:)`
 3. The divider probe runs before `hasInitiallyScrolled` flips, because
    `dividerProbeDelay` is shorter than `initialScrollSettleDelay`. So no
    automatic follow can be queued ahead of this decision.
+
+### 6. Short transcripts stay bottom-aligned
+
+Applies to: `ConversationTranscriptView` (`.frame(minHeight: viewportContentHeight, alignment: .bottom)`)
+
+The transcript content has a minimum height equal to the viewport and aligns to
+the bottom. A transcript shorter than the screen then stays against the
+composer when the keyboard changes the viewport, instead of jumping to the top.

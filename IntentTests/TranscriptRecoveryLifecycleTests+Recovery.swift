@@ -2,8 +2,6 @@ import CoreGraphics
 @testable import Intent
 import Testing
 
-/// `followCancelledByGesture`, the claims, and the recovery's
-/// continuations and terminal against each state they read.
 extension TranscriptRecoveryLifecycleTests {
     // MARK: - followCancelledByGesture
 
@@ -69,8 +67,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(armedUnderFollow.fallback == .transferred(follow: follow1))
         #expect(armedUnderFollow.armedRecovery == nil)
 
-        // A demoted recovery is cancelled too: the follow's drain restores
-        // nothing.
         var demotedUnderFollow = makeState(owner: .follow(follow1, forced: false), armed: .demoted(recovery2))
         #expect(step(&demotedUnderFollow, .explicitClaim) == [.cancelRecoveryTask(recovery2)])
         #expect(demotedUnderFollow.owner == .follow(follow1, forced: false))
@@ -108,7 +104,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(state.owner == .recovery(recovery1))
         #expect(state.armedRecovery == nil)
         #expect(state.isFollowing)
-        // A second correction keeps the claim.
         #expect(nonLog(step(&state, .recoveryStep(recovery1, .followToEnd))) == [.scrollToEnd])
         #expect(state.owner == .recovery(recovery1))
     }
@@ -143,9 +138,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(nonLog(yielded).isEmpty)
         #expect(logs(yielded) == ["[SCROLL] End recovery yielded the paged-up viewport to the user"])
         #expect(owning.owner == .recovery(recovery1))
-        // Demoted under a follow requested meanwhile: the token is current
-        // but no longer owns, so no follow back is issued over the follow,
-        // while its yield is still reported.
         var demoted = makeState(owner: .follow(follow1, forced: true), armed: .demoted(recovery2))
         let before = demoted
         #expect(step(&demoted, .recoveryPagedUp(recovery2, mayFollowBack: true)).isEmpty)
@@ -154,7 +146,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(nonLog(demotedYield).isEmpty)
         #expect(logs(demotedYield) == ["[SCROLL] End recovery yielded the paged-up viewport to the user"])
         #expect(demoted == before)
-        // A stale token neither scrolls nor logs.
         var stale = makeState(owner: .recovery(recovery1))
         let staleBefore = stale
         #expect(step(&stale, .recoveryPagedUp(recovery2, mayFollowBack: true)).isEmpty)
@@ -206,9 +197,6 @@ extension TranscriptRecoveryLifecycleTests {
         }
     }
 
-    /// The report tells a `noCorrectionNeeded` finish from an episode still
-    /// in flight only if the finish is recorded (see
-    /// `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport`).
     @Test func aRecoveryThatCorrectedNothingStillRecordsItsOutcome() {
         var state = makeState(armed: .polling(recovery1), realized: true)
         #expect(step(&state, .recoveryFinished(recovery1, .notNeeded, corrections: 0)) == [

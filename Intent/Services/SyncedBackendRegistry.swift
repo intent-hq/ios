@@ -36,7 +36,6 @@ extension SyncedBackendRecord {
         return accountKey > other.accountKey
     }
 
-    // Keep the 30-day duration and its conversion to wire-format milliseconds explicit.
     static let tombstoneTTLMs: Double = 30 * 24 * 60 * 60 * 1000 // swiftlint:disable:this no_magic_numbers
     private static let millisecondsPerSecond: Double = 1000
 

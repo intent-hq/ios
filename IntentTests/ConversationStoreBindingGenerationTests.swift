@@ -2,11 +2,9 @@ import Foundation
 @testable import Intent
 import Testing
 
-// Extracted wire fixtures intentionally mirror the daemon payloads inline.
 // swiftlint:disable no_magic_numbers
 
 extension ConversationStoreLiveStateTests {
-    /// Agent B's seq-0 snapshot row.
     var agentBRow: [String: Any] {
         [
             "id": "msg-b1", "role": "user",
@@ -15,7 +13,6 @@ extension ConversationStoreLiveStateTests {
         ]
     }
 
-    /// Parks agent A's `chat.subscribe` in flight (its `isLoading` raised).
     private func startPendingSubscribeForAgentA(
         _ store: ConversationStore,
         _ fake: FakeConnectionManager
@@ -30,8 +27,6 @@ extension ConversationStoreLiveStateTests {
         return subscribeA
     }
 
-    /// Rebind the store to agent B (`chat.subscribe` → `liveTranscript.subscribe`
-    /// binds synchronously) and seed B's transcript from its live snapshot.
     private func rebindToAgentB(_ store: ConversationStore, _ fake: FakeConnectionManager) async {
         fake.pendingMethods = []
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat-123"]
@@ -53,40 +48,30 @@ extension ConversationStoreLiveStateTests {
         let (store, fake) = makeStore()
         let subscribeA = await startPendingSubscribeForAgentA(store, fake)
 
-        // Rebind while A's registration is still in flight, then let A's ack arrive.
         await rebindToAgentB(store, fake)
         fake.resolvePending("chat.subscribe", with: ["subscriptionId": "sub-a"])
         await subscribeA.value
 
         expectAgentBTranscriptIntact(store)
         #expect(!fake.hasSubscriptionHandler(id: "sub-a"), "A's orphaned registration is not wired up")
-        // A's registration released the test channel it replaced; B found
-        // nothing acked to release; A's late ack is released as an orphan.
         try await fake.waitForRequests("chat.unsubscribe", count: 2)
         #expect(
             fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String }
                 == ["sub-chat-123", "sub-a"]
         )
-        // B's snapshot settled the shared loading flag A raised.
         #expect(store.isLoading == false)
     }
 
-    /// A stale registration for agent A must not finish agent B's own
-    /// in-flight initial load: `isLoading` stays up, and the streaming flag
-    /// the firehose raised meanwhile is settled by B's snapshot, the
-    /// authoritative transcript.
     @Test func staleSubscribeDoesNotFinishNewAgentInFlightInitialLoad() async {
         let (store, fake) = makeStore()
         let subscribeA = await startPendingSubscribeForAgentA(store, fake)
 
-        // Rebind to B via its own pending registration (messages stay empty).
         let subscribeB = Task { await store.subscribeLiveChat(agentId: "agent-b", workspaceId: "ws-1") }
         while fake.paramsForMethod("chat.subscribe").count < 2 {
             await Task.yield()
         }
         #expect(store.isLoading)
 
-        // The channel has not seeded yet, so the firehose is the liveness signal.
         store.handleStreamEvent("events.event", params: [
             "event": [
                 "type": "agent:stream:activity",
@@ -112,9 +97,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.map(\.id) == ["msg-b1"])
     }
 
-    /// Same as above, but A's stale registration *fails* (cancellation, as
-    /// the real ConnectionManager throws on task cancellation): the stale
-    /// error is dropped, and it must not finish B's in-flight initial load.
     @Test func staleSubscribeFailureDoesNotFinishNewAgentInFlightInitialLoad() async {
         let (store, fake) = makeStore()
         let subscribeA = await startPendingSubscribeForAgentA(store, fake)
@@ -147,9 +129,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.map(\.id) == ["msg-b1"])
     }
 
-    /// A definitive not-found for agent A that lands after the transcript was
-    /// rebound to agent B says nothing about B: it must not reach
-    /// `onSubscribeError` and flag the new binding as deleted (intent-hq/ios#283).
     @Test func staleNotFoundForPreviousAgentDoesNotFlagNewBinding() async {
         let (store, fake) = makeStore()
         let subscribeA = await startPendingSubscribeForAgentA(store, fake)
@@ -165,8 +144,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.isLoading == false)
     }
 
-    /// Counterpart: the same in-flight failure for the agent that is *still*
-    /// bound keeps raising `agentNotFound`.
     @Test func notFoundForStillBoundAgentRaisesAgentNotFound() async {
         let (store, fake) = makeStore()
         let subscribeA = await startPendingSubscribeForAgentA(store, fake)
@@ -180,8 +157,6 @@ extension ConversationStoreLiveStateTests {
         #expect(!store.isLoading, "a definitive not-found settles the initial load")
     }
 
-    /// Rebinding releases A's channel, which then no longer owns liveness:
-    /// until B's snapshot applies, the firehose alone raises the flag.
     @Test func rebindHandsLivenessToTheFirehoseUntilTheNewSnapshotApplies() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -208,7 +183,6 @@ extension ConversationStoreLiveStateTests {
         expectAgentBTranscriptIntact(store)
     }
 
-    /// `-32602` with `data.code == "not-found"` (docs/PROTOCOL.md §3.3/§9).
     private func definitiveNotFound(agentId: String) -> NSError {
         NSError(
             domain: "WebSocket",
@@ -222,9 +196,6 @@ extension ConversationStoreLiveStateTests {
 
     // MARK: - Structural binding guard (`whileBound`)
 
-    /// A `whileBound` body that suspends while the transcript is rebound to a
-    /// different agent must have its result suppressed; a same-agent rebind in
-    /// the same window must not (concurrent same-agent channel work keeps merging).
     @Test func whileBoundSuppressesResultOnlyWhenBoundAgentChanges() async {
         let fake = FakeConnectionManager()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
@@ -295,9 +266,6 @@ extension ConversationStoreLiveStateTests {
         expectAgentBTranscriptIntact(store)
     }
 
-    /// A `chat.subscribe` reply for agent A that lands after the transcript was
-    /// rebound to agent B must neither re-point the push handler nor overwrite
-    /// B's active subscription id, and A's orphaned subscription is released.
     @Test func staleSubscribeReplyAfterRebindKeepsNewAgentChannel() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -309,7 +277,6 @@ extension ConversationStoreLiveStateTests {
             await Task.yield()
         }
 
-        // B's subscribe resolves immediately with its own id while A's is in flight.
         fake.pendingMethods = []
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-b"]
         await store.subscribeLiveChat(agentId: "agent-b")
@@ -323,7 +290,6 @@ extension ConversationStoreLiveStateTests {
         let unsubscribed = fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String }
         #expect(unsubscribed == ["sub-a"])
 
-        // A push tagged with A's id is ignored; one tagged with B's id is applied.
         var stalePush = snapshotParams(messages: [
             [
                 "id": "msg-a1", "role": "user",

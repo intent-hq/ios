@@ -10,7 +10,6 @@ struct WorkspaceVideoDownloadTests {
         let bytes = try await IntentFileVideoTests.videoBytes()
         let total = ImportedPhotoVideo.maxBytes
         let length = WorkspaceFileImageLoader.chunkLength
-        // Append a valid MP4 free-space atom without constructing a 200 MB Data.
         var freeSize = UInt32(total - bytes.count).bigEndian
         var first = bytes
         withUnsafeBytes(of: &freeSize) { first.append(contentsOf: $0) }
@@ -88,7 +87,6 @@ struct WorkspaceVideoDownloadTests {
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
-    // #883: UTType treats .ts/.mts as MPEG transport streams.
     @Test(arguments: ["Web/collector.ts", "src/index.mts", "LIB/TYPES.TS"])
     func typeScriptPathsWithoutVideoMIMEAreNotVideo(_ path: String) {
         #expect(!WorkspaceVideo.isVideo(path: path))

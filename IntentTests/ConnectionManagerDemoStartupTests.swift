@@ -37,7 +37,6 @@ extension ConnectionManagerTests {
         await model.load()
         #expect(manager.globalSubscriptionState == .subscribed)
         #expect(model.isEntryScrollReady)
-        // Demo loss/recovery drives this same publisher without a socket.
         manager.connectionState = .reconnecting(attempt: 1)
         #expect(manager.globalSubscriptionState == .idle)
         manager.connectionState = .connected

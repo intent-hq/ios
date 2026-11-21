@@ -67,10 +67,14 @@ extension PersistenceManager {
         readConnectionsLocked().error == .malformed
     }
 
+    // MARK: - Pairing (compatibility shims over the connections API)
+
     @discardableResult
     func upsertConnection(_ connection: StoredConnection) -> StoredConnection {
         upsertConnectionWithOutcome(connection).connection
     }
+
+    // MARK: - Keychain
 
     @discardableResult
     func upsertConnectionWithOutcome(
@@ -364,8 +368,6 @@ extension PersistenceManager {
         }
     }
 
-    // MARK: - Pairing (compatibility shims over the connections API)
-
     @discardableResult
     func savePairing(server: PairedServer, token: String) -> Bool {
         let outcome = upsertConnectionWithOutcome(
@@ -399,8 +401,6 @@ extension PersistenceManager {
         defaults.removeObject(forKey: serverKey)
         return true
     }
-
-    // MARK: - Keychain
 
     @discardableResult
     func saveDataToKeychain(data: Data, account: String) -> Bool {

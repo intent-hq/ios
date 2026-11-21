@@ -94,7 +94,6 @@ extension ConnectionManagerTests {
         cloud.items[initial.account] = initial.data
         _ = await store.persistence.refreshInvitedSessions { _ in InvitedSessionFixtures.principal() }
         let saved = try #require(store.persistence.loadConnections().first)
-        // Holding host.status proves guests never request the owner-only method.
         server.holdHostStatus()
         try server.setSystemStatus(["collaborationName": "Team Studio", "prettyHostname": "Mac Studio"])
         try await manager.connect(hosts: saved.server.hosts, port: server.port, token: saved.token, certFingerprint: saved.server.certFingerprint)

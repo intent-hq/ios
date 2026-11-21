@@ -5,18 +5,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// ios#258 measurement harness for transcript decoding. Every chat snapshot
-/// page and every block delta arrives as `[[String: Any]]` from the inbound
-/// frame parser and is re-serialized to `Data` and run through a
-/// `JSONDecoder` to reach the `Codable` models. Per-row decoding paid one
-/// `JSONSerialization.isValidJSONObject` walk, one `JSONSerialization.data`
-/// and one fresh `JSONDecoder` per message (and per delta block); the batched
-/// decoders pay each once per page/delta.
-///
-/// The harness decodes representative payloads both ways, asserts the outputs
-/// are identical, and prints median wall time per payload with an `[ios#258]`
-/// prefix for the issue/PR table. Timing is informational — CI simulators are
-/// noisy — so the only asserted contract is output parity.
 @Suite(.serialized)
 struct TranscriptDecodingMeasurementTests {
     private static let iterations = 15
@@ -41,8 +29,6 @@ struct TranscriptDecodingMeasurementTests {
 
     // MARK: - Payloads
 
-    /// One assistant turn shaped like production: thinking, a tool call
-    /// whose result carries a multi-line output, then a text answer.
     private static func assistantRow(turn: Int) -> [String: Any] {
         let output = String(repeating: toolOutputLine, count: toolOutputLineCount)
         return [
@@ -72,12 +58,10 @@ struct TranscriptDecodingMeasurementTests {
         ]
     }
 
-    /// `turns` user/assistant pairs, i.e. `2 * turns` message rows.
     static func snapshotPage(turns: Int) -> [[String: Any]] {
         (0..<turns).flatMap { [userRow(turn: $0), assistantRow(turn: $0)] }
     }
 
-    /// A streaming delta: `count` block entities spread over ten messages.
     static func blockDelta(count: Int) -> [[String: Any]] {
         (0..<count).map { index in
             let messageId = "msg-\(index % deltaMessageCount)-a"
@@ -103,7 +87,7 @@ struct TranscriptDecodingMeasurementTests {
     private static func time(_ body: () -> Void) -> Duration {
         let clock = ContinuousClock()
         var samples: [Duration] = []
-        body() // warm-up
+        body()
         for _ in 0..<iterations {
             samples.append(clock.measure(body))
         }
@@ -253,8 +237,6 @@ struct TranscriptRowHeightIntegrationTests {
         #expect(recorder.appearances == 1)
     }
 
-    /// The extracted modifier must keep its natural-height state when only
-    /// streaming changes, and replay it without recreating the lazy row.
     @Test func streamingCompletionReplaysNaturalHeightWithoutRecreation() async throws {
         let message = Self.message(id: "streaming-completion-row", text: Self.shortText)
         let source = TranscriptLateTextSource(text: Self.shortText)

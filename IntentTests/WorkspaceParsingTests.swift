@@ -50,8 +50,6 @@ struct WorkspaceParsingTests {
     }
 
     @Test func parseNeedsAttentionDisplayStatus() {
-        // "needs_attention" is a known wire value: it parses verbatim and
-        // resolves to .needsAttention (no fallback to .notStarted).
         let dict: [String: Any] = ["id": "ws-6", "title": "Attention", "displayStatus": "needs_attention"]
         let workspace = WorkspaceStore.parseWorkspace(dict)
         #expect(workspace != nil)
@@ -60,8 +58,6 @@ struct WorkspaceParsingTests {
     }
 
     @Test func parseUnknownDisplayStatusTolerated() {
-        // Unknown future wire values are kept as-is; mapping to the enum
-        // happens at display time and lands on the neutral `.unknown`.
         let dict: [String: Any] = ["id": "ws-4", "title": "Future", "displayStatus": "some_future_status"]
         let workspace = WorkspaceStore.parseWorkspace(dict)
         #expect(workspace != nil)
@@ -87,9 +83,6 @@ struct WorkspaceParsingTests {
     }
 
     @Test func parseStatusImageAssetIdTreatsBlankAsUnset() {
-        // The daemon omits the field until an agent sets one and folds a
-        // blank string to a clear (PROTOCOL §5.1 `statusImageAssetId`); the
-        // parser mirrors that so the views never render an empty asset id.
         let blank = WorkspaceStore.parseWorkspace(
             ["id": "ws-s1", "title": "S", "statusImageAssetId": "   "]
         )
@@ -123,8 +116,6 @@ struct WorkspaceParsingTests {
     }
 
     @Test func parseWaitingField() {
-        // Present-true, present-false, and absent (⇒ false — the wire omits
-        // the field when false, and older daemons never send it).
         let waitingTrue = WorkspaceStore.parseWorkspace(
             ["id": "ws-w1", "title": "W", "waiting": true]
         )
@@ -142,10 +133,6 @@ struct WorkspaceParsingTests {
     }
 
     @Test func decodeWaitingViaJSONDecoder() throws {
-        // The Decodable conformance must honor the same absent ⇒ false
-        // contract as parseWorkspace (PROTOCOL §5.1: the wire omits the
-        // field when false), so a future JSONDecoder path can't throw
-        // keyNotFound on the common not-waiting row shape.
         let decoder = JSONDecoder()
 
         let absent = try decoder.decode(
@@ -178,8 +165,6 @@ struct WorkspaceParsingTests {
     }
 
     @Test func parsePullRequests() throws {
-        // Present array: full row, minimal row, and a malformed row missing
-        // the required `number` (skipped — lenient dict-path parse).
         let dict: [String: Any] = [
             "id": "ws-pr1",
             "title": "PRs",
@@ -260,7 +245,6 @@ struct WorkspaceParsingTests {
     }
 
     @Test func parseMalformedActivePullRequestDropped() {
-        // Missing the required `number` — the lenient wire init rejects it.
         let dict: [String: Any] = [
             "id": "ws-apr3",
             "title": "Malformed",

@@ -4,7 +4,6 @@ import Testing
 
 @testable import Intent
 
-/// Projects actual production values without normalizing routes or identities.
 enum BackendKeychainConformanceSupport {
     typealias Fixtures = BackendKeychainFixtures
 

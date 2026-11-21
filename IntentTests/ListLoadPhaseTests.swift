@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// ios#462: each list's first read is not started, loading, loaded (empty or
-/// not), or failed, and Retry after a failure loads the list.
 @MainActor
 struct ListLoadPhaseTests {
     private static let offline = NSError(

@@ -2,11 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// SHELL-5: a wide iPad window opens the workspace in the top visible row of
-/// the user's list, from one decision and one trigger.
 @MainActor
 struct IPadWorkspaceAutoSelectionTests {
-    /// Flat order: chief, archived, a, b, c. Status order puts failed (b, c) first.
     private static let workspaces = [
         makeWorkspace(id: Workspace.chiefWorkspaceId, repo: "assistant", display: "idle", day: 9),
         makeWorkspace(id: "archived", repo: "zero", display: "blocked", day: 8, status: "archived"),
@@ -103,7 +100,6 @@ struct IPadWorkspaceAutoSelectionTests {
         #expect(Self.choice(screen: .workspaceDetail(workspaceId: "b")) == nil)
     }
 
-    /// The sidebar renders from the view model's groups; the decision must agree with them.
     @Test(arguments: ViewMode.allCases)
     func matchesTheRowTheSidebarRendersFirst(_ mode: ViewMode) throws {
         let suiteName = "IPadWorkspaceAutoSelectionTests.\(UUID().uuidString)"

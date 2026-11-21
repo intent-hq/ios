@@ -4,7 +4,6 @@ import Network
 import Observation
 import SwiftUI
 
-/// Temporary, opt-in phone evidence.
 @MainActor @Observable
 final class NetworkCopyDiagnostics {
     static let launchArgument = "--diagnose-network-copy"

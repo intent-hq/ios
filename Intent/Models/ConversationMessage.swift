@@ -61,6 +61,8 @@ nonisolated struct ToolCall: Identifiable, Codable, Equatable {
         timestamp = try? container.decode(String.self, forKey: .timestamp)
     }
 
+    // MARK: - Convenience initializer
+
     init(
         id: String,
         name: String,
@@ -308,8 +310,6 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
             metadataWasProvided = false
         }
     }
-
-    // MARK: - Convenience initializer
 
     init(
         id: String,

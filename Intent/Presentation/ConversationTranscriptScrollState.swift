@@ -181,9 +181,6 @@ final class ConversationTranscriptScrollState {
     private(set) var viewportOwnershipRevision = 0
     @ObservationIgnored private var viewportGestureActive = false
     @ObservationIgnored private(set) var initialScrollGeneration = 0
-    /// Mirrors a forced follow owning the viewport (`lifecycle.owner`): raised
-    /// by the Go to End tap ahead of its request and by a forced follow
-    /// starting, cleared when that follow drains or is cancelled.
     var isScrollingToBottom = false
     @ObservationIgnored var goToEndRequested = false
     var lastFollowToBottomAt: TimeInterval?

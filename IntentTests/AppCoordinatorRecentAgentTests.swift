@@ -106,7 +106,6 @@ extension AppCoordinatorTests {
 
         coordinator.onSelectAgent("agent-1", workspaceId: "workspace-1", agentName: "Agent")
         coordinator.onSelectWorkspace("workspace-1")
-        // Await the ordinary markSeen request so queued entry work has run.
         try await fake.waitForRequests("workspace.markSeen")
 
         #expect(Self.isWorkspaceDetail(coordinator.currentScreen, for: "workspace-1"))
@@ -152,8 +151,6 @@ extension AppCoordinatorTests {
         #expect(coordinator.conversationRequestId == 1)
     }
 
-    /// Rows ascend by creation, so the most recent agent can sit on a later
-    /// `agent.list` page ("Paged agent lists and queues").
     @Test @MainActor func workspaceSwipe_readsEveryAgentPage() async {
         let (coordinator, fake) = makeRecentAgentCoordinator()
         fake.responseQueueMap["agent.list"] = [
@@ -171,7 +168,6 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func workspaceSwipe_pageErrorKeepsOverview() async {
         let (coordinator, fake) = makeRecentAgentCoordinator()
-        // The second page has no configured reply, so the walk fails.
         fake.responseQueueMap["agent.list"] = [
             ["agents": [["id": "old", "name": "Old"]], "nextToken": "t1"]
         ]

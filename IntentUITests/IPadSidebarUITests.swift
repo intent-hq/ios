@@ -117,7 +117,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         app.buttons["ipad.rail.workspaces"].tap()
         XCTAssertTrue(childTitle.isHittable, "Section changes must retain the pushed conversation")
         try Data().write(to: trigger)
-        // The reselected parent is named by its highlighted sidebar row rather than a header title.
         XCTAssertTrue(childTitle.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
@@ -145,7 +144,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             expand.tap()
         }
         XCTAssertTrue(app.buttons["Workspace actions"].firstMatch.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
-        // History reopened the conversation, so resolve its composer again.
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         verifyPopulatedHistory(in: app)
     }
@@ -158,7 +156,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let panel = try IPadFocusBackgroundTap.paneFrame("ipad.detail.panel", in: app)
         XCTAssertEqual(panel.width, Self.focusPanelWidth, accuracy: 2, app.debugDescription)
         XCTAssertEqual(panel.midX, app.windows.firstMatch.frame.midX, accuracy: 2, app.debugDescription)
-        // The header is conditionally removed; retained background panes need an input test.
         XCTAssertFalse(app.buttons["conversation.back"].exists)
         XCTAssertEqual(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.filter { $0.isHittable }.count, 1)
         XCTAssertTrue(try app.buttons.matching(identifier: "composer.send").singleHittableElement().isHittable)
@@ -297,7 +294,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
-        // Only the ordinary iPad shell keeps the global rail; the unfolded Duo uses the launcher.
         let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
         XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
         return app
@@ -324,8 +320,6 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 }
 
 extension IPadSidebarUITests {
-    /// An open conversation moves its workspace into the persistent sidebar; the
-    /// conversation's Back restores the list. Returns whether a conversation was closed.
     @MainActor
     @discardableResult
     private func showWorkspaceList(in app: XCUIApplication) -> Bool {
@@ -396,8 +390,6 @@ extension IPadSidebarUITests {
 
     @MainActor
     private func verifyBlockedTypingBackground(in app: XCUIApplication, controls: TypingBackgroundControls, panel: CGRect) throws {
-        // Calibrated native tests preserve editor identity/selection. Snapshot counts
-        // include retained editors and cannot establish VoiceOver traversal.
         for control in [controls.connections, controls.workspace] {
             try control.assertBlocked(in: app, focusedPane: panel) {
                 let editors = app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.filter { $0.isHittable }
@@ -426,7 +418,6 @@ extension IPadSidebarUITests {
         XCTAssertNotEqual(visibleRow.identifier, firstIdentifier, "The long-list fixture must actually scroll")
         let indicator = list.otherElements.matching(NSPredicate(format: "label BEGINSWITH %@", "Vertical scroll bar")).firstMatch
         XCTAssertTrue(indicator.exists, "The overflowing list must expose its native scroll indicator")
-        // AX expands the thumb's hit target; compare its outer edge, then inspect the screenshot for the visible track.
         XCTAssertGreaterThan(indicator.frame.maxX, visibleRow.frame.maxX, app.debugDescription)
         XCTAssertLessThanOrEqual(indicator.frame.maxX, list.frame.maxX + 1, app.debugDescription)
     }
@@ -479,7 +470,6 @@ extension IPadSidebarUITests {
             XCTAssertEqual(app.buttons["intent.menu.open"].exists, usesDuoLauncher)
             capture(app, name: "Shared shell chat scrollback \(appearance)")
             if usesDuoLauncher {
-                // The unfolded Duo reaches sections through the launcher instead of the rail.
                 app.openHomeAction("settings")
                 app.openHomeAction("workspaces")
             } else {

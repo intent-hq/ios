@@ -30,9 +30,6 @@ extension HomeActionMenuUITests {
         }
     }
 
-    /// Largest accessibility text makes cards taller than the capped menu viewport
-    /// (iPhone stays portrait; an unfolded Duo rotates to a short landscape window).
-    /// Every card's label and the close control must stay reachable.
     @MainActor
     func testMenuCardsStayReachableWithLargestText() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "iPad opens sections from its rail, not the floating carousel")
@@ -56,7 +53,6 @@ extension HomeActionMenuUITests {
         XCTAssertLessThanOrEqual(viewport.frame.maxY, close.frame.minY + 1, "Cards must not overlap the close control")
         for action in ["assistant", "workspace", "connections", "appearance", "settings"] {
             let tile = app.revealHomeAction(action)
-            // Titles sit at the bottom of each card, so its bottom edge must be reachable.
             app.scrollHomeActionBottomIntoView(tile, in: viewport)
             XCTAssertLessThanOrEqual(tile.frame.maxY, viewport.frame.intersection(app.frame).maxY + 1, "\(action) label must be reachable")
             XCTAssertTrue(close.isHittable)
@@ -119,7 +115,6 @@ extension XCUIApplication {
         let tile = buttons["intent.menu.\(action)"]
         let image = try XCTUnwrap(screenshot().image.cgImage)
         let scale = CGFloat(image.width) / frame.width
-        // The tile center is empty background between the icon and label.
         let region = CGRect(
             x: (tile.frame.midX - frame.minX) * scale,
             y: (tile.frame.midY - frame.minY) * scale,
@@ -154,7 +149,6 @@ extension XCUIApplication {
         for _ in 0..<HomeActionMenuTestSupport.maximumSwipes {
             let viewport = carousel.frame.intersection(frame)
             guard tile.frame.maxY > viewport.maxY + 1 else { return }
-            // Short drags fall under the scroll slop; overshooting stops at the content end.
             let distance = min(max(tile.frame.maxY - viewport.maxY, HomeActionMenuTestSupport.minimumScrollDrag), viewport.height / 2)
             let start = coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
                 dx: tile.frame.midX - frame.minX,

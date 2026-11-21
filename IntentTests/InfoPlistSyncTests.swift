@@ -1,18 +1,8 @@
 import Foundation
 import Testing
 
-/// Info-visionOS.plist is a full copy of Intent/Info.plist (selected via the
-/// SDK-conditioned INFOPLIST_FILE build setting) plus the two dictation usage
-/// strings that must not appear on iOS. The duplication is deliberate — the
-/// per-SDK INFOPLIST_KEY_ route leaves empty usage keys in the built iOS
-/// plist — so this test enforces the sync: every iOS key must be mirrored
-/// verbatim, and the visionOS extras must be exactly the dictation pair.
-/// Both plists are read from the copies packaged into the test bundle (see
-/// TestSourceInputs), not from the checkout.
 struct InfoPlistSyncTests {
     @Test func builtAppSupportsOnlyUprightPortraitOnIPhone() throws {
-        // Read the built declaration, not Bundle's current-device dictionary:
-        // an iPad runtime may omit the iPhone-qualified entry from that view.
         let data = try Data(contentsOf: Bundle.main.bundleURL.appendingPathComponent("Info.plist"))
         let plist = try #require(
             try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
@@ -56,10 +46,6 @@ struct InfoPlistSyncTests {
         )
     }
 
-    /// Multi-scene support is a shared key (pinned-backend windows via
-    /// WindowGroup(for: BackendID.self) on visionOS and iPad). The mirror
-    /// check above keeps the plists in sync; this pins the value so a
-    /// regression fails deliberately, not via a missing-key sync error.
     @Test func bothPlistsDeclareMultipleSceneSupport() throws {
         for path in ["Intent/Info.plist", "Info-visionOS.plist"] {
             let plist = try loadPlist(path)

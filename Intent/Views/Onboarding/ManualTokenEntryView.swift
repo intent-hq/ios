@@ -286,8 +286,6 @@ struct ManualTokenEntryView: View {
         }
         let input = ManualConnectionInput.classify(host)
         #if os(visionOS)
-        // Belt-and-braces behind the field explanation above: a pasted tc
-        // address fails fast here instead of spinning through the dialer.
         if case .tailcat = input {
             PairingDiagnostics.phase(.input, .failed, failure: DiagnosticFailure(origin: .localOperation, classification: .unavailable))
             showError("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")

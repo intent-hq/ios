@@ -1,12 +1,10 @@
 import XCTest
 
-/// Shared by the connection-loss UI test files.
 enum ConnectionLossUITestFixture {
     static let timeout: TimeInterval = 15
     static let maximumCompactActionWidth: CGFloat = 0.75
     static let layoutTolerance: CGFloat = 2
     static let homeIdentifier = "connection-loss.home"
-    /// The always-present navigation control once the remote UI is up.
     static var navigationIdentifier: String {
         UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
     }
@@ -18,7 +16,6 @@ enum ConnectionLossUITestFixture {
     static let lowerMiddle: CGFloat = 0.6
     static let bottomEdge: CGFloat = 0.95
     static let dragHold: TimeInterval = 0.1
-    /// Off-centre so it misses the read-only pill, which floats mid-screen above the keyboard.
     static let readOnlyTapPoint = CGVector(dx: leadingEdge, dy: upperArea)
     static let menuDismissPoint = CGVector(dx: leadingEdge, dy: lowerMiddle)
     static let sheetDismissPoint = CGVector(dx: horizontalCenter, dy: bottomEdge)
@@ -30,8 +27,6 @@ enum ConnectionLossUITestFixture {
     static let agentName = "Test Stabilizer"
 }
 
-/// Loss/recovery uses ConnectionManager's publisher with static demo RPC data;
-/// no host network toggles, fixed presentation delays, or overlay-flag shortcuts.
 nonisolated final class ConnectionLossUITests: XCTestCase {
     private typealias Fixture = ConnectionLossUITestFixture
 
@@ -63,8 +58,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     func testLossQueuedAtActivationNeverPresentsBannerOrDismissesSheet() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: ["--demo-background-loss=activation-quick"])
-        // Saved Connections no longer opens Manual Connection. Use a real
-        // editable sheet while connected, without submitting the draft.
         openCreateWorkspace(in: app)
         let repository = app.staticTexts["nova-labs/console"]
         XCTAssertTrue(repository.waitForExistence(timeout: Fixture.timeout))
@@ -77,7 +70,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         next.tap()
         let sheet = app.buttons["creation.back"]
         XCTAssertTrue(sheet.waitForExistence(timeout: Fixture.timeout))
-        // The identifier remains stable after typing; this sheet has one editable field.
         let message = app.textViews["creation.prompt"]
         XCTAssertTrue(message.waitForExistence(timeout: Fixture.timeout))
         XCTAssertEqual(app.textViews.count, 1)
@@ -141,7 +133,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("recover", in: directory)
         XCTAssertTrue(app.buttons[Fixture.bannerIdentifier].waitForNonExistence(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, "Draft survives connection loss")
-        // iPad shows the conversation beside the sidebar, without a Back button.
         if UIDevice.current.userInterfaceIdiom != .pad {
             XCTAssertTrue(app.buttons["conversation.back"].exists, "Still in the same conversation")
         }
@@ -159,7 +150,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("loss", in: directory)
         assertBannerTitle("Reconnecting( to Demo Mac)?… · Read-only", in: app)
 
-        // Only advisory status changes: the presented banner must refresh in place.
         try trigger("network-offline", in: directory)
         assertBannerTitle("Local Network access needed · Read-only", in: app)
         app.buttons[Fixture.bannerIdentifier].tap()
@@ -190,7 +180,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"
         ])
         app.openHomeAction("connections")
-        // Wait for the parent sheet and its action before presenting a nested sheet.
         let machine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Demo Mac")).firstMatch
         XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
         XCTAssertTrue(machine.isHittable)
@@ -402,8 +391,6 @@ extension ConnectionLossUITests {
         let app = XCUIApplication()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
         app.launch()
-        // First launch on a fresh simulator is inactive behind this prompt;
-        // the scene-owned network monitor cannot start until it is dismissed.
         let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
         if allowNotifications.waitForExistence(timeout: 2) {
             allowNotifications.tap()
@@ -420,7 +407,6 @@ extension ConnectionLossUITests {
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
         workspace.tap()
-        // The workspace page restores its last tab; agents live on Agents.
         let agentsTab = app.buttons["workspace.content.Agents"]
         if agentsTab.waitForExistence(timeout: Fixture.backNavigationTimeout) { agentsTab.tap() }
         let agent = app.staticTexts[Fixture.agentName].firstMatch

@@ -309,11 +309,6 @@ struct BackendWindowRoot: View {
         )
     }
 
-    /// Dismisses this (pairing) window once the replacement window's scene
-    /// has connected: the scene opened by `openWindow` connects
-    /// asynchronously, and dismissing the app's only window is a system
-    /// no-op — a synchronous `dismissWindow()` right after `openWindow`
-    /// leaves the pairing window behind (observed on visionOS).
     private func dismissWhenReplacementConnects() {
         Task { @MainActor in
             for _ in 0..<Self.replacementConnectionPollLimit {

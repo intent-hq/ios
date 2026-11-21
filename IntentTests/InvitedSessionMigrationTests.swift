@@ -38,8 +38,6 @@ import Testing
         #expect(record.principalId == "B")
         #expect(record.object["futureMetadata"] is [String: Any])
         #expect(try cloud.object()["kind"] as? String == "legacy-alias")
-        // Simulate the documented frozen v1 writer replacing that alias.
-        // The separate exported-source proof exercises the actual old reader.
         try cloud.put(legacy("C", clock: 900))
         _ = await store.relaunch().refreshInvitedSessions { _ in InvitedSessionFixtures.principal() }
         #expect(store.persistence.loadConnections().count == 1)
@@ -135,8 +133,6 @@ import Testing
         #expect(store.persistence.invitedJournal.floors[stale.account] == removal.floor)
         let remembered = try #require(store.persistence.invitedJournal.removals[removal.account])
 
-        // A later cloud snapshot loses the removal and reintroduces the still-valid
-        // old credential. Durable local removal evidence must beat both v1 and v2.
         cloud.items[removal.account] = nil
         cloud.items[stale.account] = stale.data
         cloud.writeFailure = nil

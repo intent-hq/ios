@@ -30,7 +30,6 @@ struct ConnectionLossPresenterTests {
             previousKey?.makeKey()
         }
         presenter.attach(to: source)
-        // A new loss must capture the new page, not reuse pixels from the last loss.
         for panelColor in [UIColor.white, .black] {
             panel.backgroundColor = panelColor
             _ = try render(source)
@@ -48,8 +47,6 @@ struct ConnectionLossPresenterTests {
         let row = image.size.height * 0.18
         let left = try red(in: image, at: CGPoint(x: image.size.width * 0.2, y: row))
         let right = try red(in: image, at: CGPoint(x: image.size.width * 0.8, y: row))
-        // Approved native treatment: 255 * 0.35 + 26 * 0.65 = 106;
-        // black beneath the same tint = 17. Allow rounding, not a second material tint.
         let expectedLeft = reduced ? 26 : hasWhitePanel ? 106 : 17
         let expectedRight = reduced ? 26 : 17
         #expect(abs(left - expectedLeft) <= 4, "Source contrast must survive one dark tint")
@@ -175,8 +172,6 @@ struct ConnectionLossPresenterTests {
         let overlay = try #require(scene.windows.first { $0.windowLevel > .alert && !$0.isHidden })
         let host = overlay.rootViewController
 
-        // Window membership can disappear before SwiftUI dismantles the view.
-        // Drive didMoveToWindow itself, not only the coordinator's update API.
         anchor.removeFromSuperview()
         #expect(anchor.window == nil)
         #expect(!overlay.isHidden)
@@ -228,8 +223,6 @@ struct ConnectionLossPresenterTests {
         #expect(source.isKeyWindow)
         #expect(source.isUserInteractionEnabled)
         #expect(!source.accessibilityElementsHidden)
-        // The window closes synchronously, but SwiftUI releases its rendered
-        // graph on a later run-loop turn. Keep the coordinator alive throughout.
         let deadline = Date().addingTimeInterval(Self.teardownTimeout)
         while weakCapture != nil, Date() < deadline {
             try await Task.sleep(for: .milliseconds(10))

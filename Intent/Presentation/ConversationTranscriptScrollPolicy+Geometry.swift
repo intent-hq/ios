@@ -36,15 +36,6 @@ extension ConversationTranscriptScrollPolicy {
         distanceToBottom > atBottomThreshold
     }
 
-    /// `onScrollGeometryChange` compares successive transformed values and
-    /// runs its action on a change, but a value flipping twice inside one
-    /// layout pass (a lazily realized row re-measuring mid-drag read 52, 46,
-    /// then 172 points from the bottom within 8 ms) had only the first flip
-    /// delivered while the observer recorded the second, so the scrolled-away
-    /// flag stayed frozen for the rest of that scroll (#280). Observing the
-    /// distance in bands of `atBottomThreshold` next to the flag makes the
-    /// next band crossing deliver the current flag again, bounding the loss
-    /// to one band of travel.
     static func distanceBand(
         distanceToBottom: CGFloat,
         bandHeight: CGFloat = Constants.Conversation.Transcript.atBottomThreshold

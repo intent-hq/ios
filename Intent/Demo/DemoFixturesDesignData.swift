@@ -2,7 +2,6 @@
 import Foundation
 
 extension DemoDesignFixtures {
-    // Exact fixture payload literals, not production layout or timing constants.
     // swiftlint:disable no_magic_numbers
     static let timestamp = "2026-09-26T09:41:00Z"
     static let assistantText = "Worth adding tests? There is no test runner configured, so verification stayed on the build plus browser inspection."

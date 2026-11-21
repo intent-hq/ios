@@ -1,8 +1,5 @@
 import XCTest
 
-/// The usage-limit turn failure from `--demo-design-scenario=turn-failure`
-/// must read as a friendly card, keeping the raw JSON-RPC reason behind a
-/// collapsed Details disclosure with Copy, in both appearances.
 nonisolated final class TurnFailureNoticeUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
@@ -77,13 +74,8 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
         details.tap()
         XCTAssertTrue(raw.waitForNonExistence(timeout: Self.timeout), "Collapsing hides the raw reason again")
 
-        // The row's Copy overlay must not swallow the inline link tap.
         let link = inlineLink(in: app)
         XCTAssertTrue(link.waitForExistence(timeout: Self.timeout), app.debugDescription)
-        // Selectable text overlays the semantic link in accessibility hit-testing
-        // (as in InlineResponseImageUITests), so tap inside the link's frame.
-        // A wrapped link's frame spans two lines; its lower-left corner is on
-        // the link's start in either the one- or two-line layout.
         let frame = link.frame
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.75)).tap()
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")

@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// A new visible visit receives fresh tokens while preserving bounded
-/// recovery and the user's ability to take over the viewport.
 extension TranscriptRecoveryLifecycleTests {
     @Test(arguments: [false, true])
     func cancelledVisitCallbacksCannotAffectTheNextVisitsOwners(forced: Bool) {

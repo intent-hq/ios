@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Uses the real backend session composition across actual view models. A second
-/// panel shares conversation, detail and workspace status owners. The recorder
-/// measures every request made by those owners, including window/row leases.
 @MainActor
 final class ConversationStartupFixture {
     static let workspaceId = "startup-workspace"
@@ -81,8 +78,6 @@ final class ConversationStartupFixture {
         ProposalActionStore(connection: connection, agentId: agentId, workspaceId: Self.workspaceId, details: details)
     }
 
-    /// A bounded negative observation lets the real receive(on:) replay run
-    /// while all stores are unbound. No requests should originate from it.
     func deliverInitialConnectionBeforeBinding() async throws {
         let checkpoint = connection.checkpoint
         connection.releaseConnectionStateDelivery()

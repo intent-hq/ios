@@ -315,7 +315,6 @@ extension AppCoordinator {
         revalidateCurrentAgentAfterReconnect()
     }
 
-    /// Falls back to a 5-second timeout so the overlay never gets stuck.
     private func waitForWorkspaceLoadThenClearOverlay() {
         connectionLoss = .lost
 
@@ -325,7 +324,6 @@ extension AppCoordinator {
         }
 
         let observationID = UUID()
-        // Timeout: if the fetch takes too long or fails silently, clear the overlay anyway.
         let timeout = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(for: Constants.AppCoordination.reconnectOverlayTimeout)

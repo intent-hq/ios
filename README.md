@@ -749,6 +749,17 @@ Three checks keep implicit state machines from growing back:
 Prefer one enum per lifecycle, `CoalescedRead` for single-flight reads, and
 `WorkspaceAuthorityGate` for callers that wait on a resolved value.
 
+### Comment ratchet
+
+Swift code has no comments; decisions live in [docs/adr/](docs/adr/README.md)
+([ADR 0001](docs/adr/0001-no-code-comments.md)). The CI lint job runs
+`python3 scripts/test_comment_budget.py` and `python3 scripts/comment_budget.py check`,
+which fail when a file has more comment lines than `scripts/comment-budget.json`
+allows (zero for unlisted files) or fewer without a lowered baseline. Tool
+directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) and
+`// MARK:` section headings are exempt. `comment_budget.py estimate`, `inventory`, `strip` and `update` drive the
+[/delete-comment skill](.claude/skills/delete-comment/SKILL.md).
+
 ### Contributor rules
 
 **Conventional commits** are required (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`); PR titles are validated in CI.

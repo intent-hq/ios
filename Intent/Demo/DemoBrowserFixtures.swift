@@ -6,7 +6,6 @@ enum DemoBrowserFixtures {
     private static var scriptRuntimes: [String: [String: [String: Any]]] = [:]
     private static var removedScripts: [String: Set<String>] = [:]
 
-    // Nil keeps the ordinary demo transcript when this scenario was not requested.
     static var conversationMessages: [[String: Any]]? { // swiftlint:disable:this discouraged_optional_collection
         guard LaunchOptions.current.contains("--demo-browsers") else { return nil }
         return [

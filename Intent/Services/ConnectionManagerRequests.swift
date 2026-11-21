@@ -84,8 +84,6 @@ extension ConnectionManager {
         )
     }
 
-    /// Internal for test visibility (lets tests
-    /// exercise the timeout race without a live socket).
     func awaitResponse(
         id: Int,
         timeout: TimeInterval,
@@ -242,7 +240,6 @@ extension ConnectionManager {
         }
     }
 
-    // Keep each frame metric and the reporting threshold explicit in this pure log formatter.
     // swiftlint:disable:next function_parameter_count
     nonisolated static func slowFrameLogLine(
         label: String,
@@ -298,7 +295,6 @@ extension ConnectionManager {
         subscriptionRouter.bufferedPushCount
     }
 
-    /// Internal entry point for testing message dispatch.
     @MainActor
     func dispatchMessage(_ text: String) {
         handleTextMessage(text)
@@ -330,7 +326,6 @@ extension ConnectionManager {
         connectionGeneration == generation && socket === currentSocket
     }
 
-    // Keep retry ordering unchanged; owner context is scoped to each request.
     // swiftlint:disable:next function_body_length
     private func runGlobalSubscription(
         socket currentSocket: WebSocketConnection,

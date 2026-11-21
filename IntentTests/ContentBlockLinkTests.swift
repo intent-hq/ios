@@ -114,7 +114,6 @@ struct ContentBlockLinkTests {
         ("intent://local/settings", .unsupportedIntentLink),
         ("intent://local/file/../page.html", .unsupportedIntentLink),
         ("workspace-asset://current/notes.txt", .unsupportedLocation),
-        // Path links that can't be resolved to a workspace file keep the message.
         ("../report.html", .unsupportedLocation),
         ("reports/../../report.html", .unsupportedLocation),
         ("./../report.html", .unsupportedLocation),

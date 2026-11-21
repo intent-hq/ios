@@ -25,8 +25,6 @@ struct WorkspaceChromePresentationTests {
         #expect(!presentation.isPresenting(.switcher))
     }
 
-    /// The drawer reports `false` when it is disabled or disappears, after the
-    /// sheet that replaced it has already opened.
     @Test func lateDismissalOfAClosedPresentationKeepsItsSuccessor() {
         var presentation = WorkspaceChromePresentation.connections
         presentation.setPresenting(.switcher, false)
@@ -78,8 +76,6 @@ struct AgentConversationPresentationTests {
         #expect(presentation.showsModelPicker)
     }
 
-    /// Alert actions run before the alert dismisses, so the confirmation
-    /// closes after `beginDeletion`; the in-flight delete must survive it.
     @Test func confirmedDeleteOutlivesItsConfirmationAndLaterModals() {
         var presentation = AgentConversationPresentation()
         presentation.present(.deleteConfirmation)
@@ -88,7 +84,6 @@ struct AgentConversationPresentationTests {
         #expect(presentation.modal == nil)
         #expect(presentation.suppressesMissingAgentFallback)
 
-        // As on main, the menu stays usable while the request runs.
         presentation.present(.modelPicker)
         presentation.dismiss(.modelPicker)
         presentation.present(.deleteConfirmation)
@@ -135,7 +130,6 @@ struct QuestionWizardPresentationTests {
         let second = presentation.confirmDismiss(isSubmitting: false, isReadOnly: false)
         #expect(!second)
 
-        // As on main, the pickers stay usable after a dismissal.
         presentation.setPresenting(.photos, true)
         #expect(presentation.isPresenting(.photos))
         #expect(presentation.isDismissed)

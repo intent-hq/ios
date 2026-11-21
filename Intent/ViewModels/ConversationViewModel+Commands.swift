@@ -3,7 +3,6 @@ import Foundation
 extension ConversationViewModel {
     var messages: [ConversationMessage] { store.messages }
 
-    /// All transcript messages — nothing is display-filtered anymore.
     var filteredMessages: [ConversationMessage] {
         store.messages
     }
@@ -93,7 +92,6 @@ extension ConversationViewModel {
 
     var modelProviderId: String? { currentProviderId ?? optionsStore.defaultModelProvider }
 
-    // nil distinguishes a cache miss from a loaded empty provider catalog.
     // swiftlint:disable:next discouraged_optional_collection
     var selectableModels: [ModelInfo]? {
         if let providerId = modelProviderId {

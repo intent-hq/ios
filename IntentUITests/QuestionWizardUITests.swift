@@ -1,6 +1,5 @@
 import XCTest
 
-/// Exercises the real workspace wizard and demo RPC response, not a layout toggle.
 nonisolated final class QuestionWizardUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
@@ -91,7 +90,6 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(first)
         XCTAssertEqual(first.value as? String, "Selected")
         attachScreenshot("questions-selected-answer", in: app)
-        // The in-place panel must exclude the conversation from interaction.
         for identifier in ["question.answer", "question.dismiss", "conversation.back", "conversation.actions.open"] {
             XCTAssertFalse(app.buttons[identifier].isHittable, "The question panel must block \(identifier)")
         }
@@ -181,7 +179,6 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertFalse(submit.exists, "Whitespace alone must not offer submission")
         let firstAnswer = "Use the staging repository\nand keep production unchanged"
         editor.typeText(firstAnswer)
-        // Input delivery and the accessibility value can settle after typeText returns.
         let typedAnswer = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", " \n" + firstAnswer), object: editor
         )
@@ -257,8 +254,6 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(isVisible(lastTool, in: transcript), "The transcript tail must remain visible after dismissal")
     }
 
-    /// Unlike hosted component tests, this exercises native keyboard avoidance
-    /// and draft isolation while the floating panel blocks the conversation.
     @MainActor
     func testExpandedQuestionsKeepDraftWithoutSendingAboveKeyboard() throws {
         let app = try openQuestions()
@@ -357,8 +352,6 @@ extension QuestionWizardUITests {
 
     @MainActor
     private func assertPendingBannerSideMargins(in app: XCUIApplication, outerInset: CGFloat) {
-        // Buttons sit 20pt inside the banner surface; use their native frames
-        // without adding a test-only element or changing accessibility grouping.
         let dismiss = app.buttons["question.dismiss"].frame
         let answer = app.buttons["question.answer"].frame
         XCTAssertEqual(dismiss.minX - app.frame.minX, outerInset + 20, accuracy: 1)
@@ -373,8 +366,6 @@ extension QuestionWizardUITests {
         XCTAssertTrue(dismissRegion.exists)
         XCTAssertTrue(dismissRegion.isHittable)
 
-        // The native modal dismissal region intercepts the tap, not the app beneath it.
-        // Its frame covers the popover too, so avoid its center and use the exposed left strip.
         let regionFrame = dismissRegion.frame.intersection(app.frame)
         let popoverFrame = popover.frame
         XCTAssertGreaterThan(popoverFrame.minX, regionFrame.minX)

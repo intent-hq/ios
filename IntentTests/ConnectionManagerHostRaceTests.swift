@@ -16,7 +16,6 @@ extension ConnectionManagerTests {
         let manager = ConnectionManager.shared
         var received: [CollectionPushRecord] = []
 
-        // Registered-first (normal collection-channel flow): pushes route live
         manager.registerSubscriptionHandler(id: "col-sub-1") { push in
             let count: Int
             if case let .collectionSnapshot(snapshot) = push.payload {
@@ -37,7 +36,6 @@ extension ConnectionManagerTests {
         #expect(received[1].kind == .delta && received[1].sequence == 1)
         #expect(!manager.hasBufferedSubscriptionPush(for: "col-sub-1"))
 
-        // Array-shaped (collection) snapshot arriving pre-registration replays intact
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"col-sub-2","kind":"snapshot","seq":0,"snapshot":[{"id":"task-1"}]}}
         """)
@@ -52,7 +50,6 @@ extension ConnectionManagerTests {
         #expect(replayedSnapshotCount == 1)
         #expect(replayedSnapshotID == "task-1")
 
-        // Clean up
         manager.unregisterSubscriptionHandler(id: "col-sub-1")
         manager.unregisterSubscriptionHandler(id: "col-sub-2")
     }
@@ -62,8 +59,6 @@ extension ConnectionManagerTests {
         let store = ConversationStore(connectionManager: manager)
         store.setTestChatChannel(subscriptionId: "buf-chat-race")
 
-        // Snapshot + first delta arrive BEFORE the store registers its handler
-        // (the seq-0 race this fix addresses)
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{\
         "subscriptionId":"buf-chat-race","kind":"snapshot","seq":0,\
@@ -80,8 +75,6 @@ extension ConnectionManagerTests {
         "updated":[],"removedIds":[]}}}
         """)
 
-        // The store registers its handler (as subscribeLiveChat does after the
-        // subscribe response resumes) → buffered pushes replay and apply
         manager.registerSubscriptionHandler(id: "buf-chat-race") { [weak store] push in
             store?.handleChatSubscriptionPush(push)
         }
@@ -92,8 +85,6 @@ extension ConnectionManagerTests {
         #expect(store.messages[1].contentBlocks.first?.resolvedText == "Working")
         #expect(store.isStreaming == true)
 
-        // The channel is seeded correctly: the next live delta continues the
-        // sequence without a gap (no resnapshot wiped the seeded state)
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{\
         "subscriptionId":"buf-chat-race","kind":"delta","seq":2,\
@@ -104,7 +95,6 @@ extension ConnectionManagerTests {
         """)
         #expect(store.messages[1].contentBlocks.first?.resolvedText == "Working on it.")
 
-        // Clean up
         manager.unregisterSubscriptionHandler(id: "buf-chat-race")
     }
 
@@ -119,8 +109,6 @@ extension ConnectionManagerTests {
     }
 
     @Test @MainActor func mergeHostsKeepsExistingOrderFirstAndNeverDrops() {
-        // The user-entered host is not in the daemon-reported list (e.g. a
-        // hostname or NAT address) — it must stay, and stay first.
         let merged = ConnectionManager.mergeHosts(
             existing: ["daemon.local", "10.0.0.5"],
             reported: ["10.0.0.5", "192.168.1.10"]
@@ -157,9 +145,6 @@ extension ConnectionManagerTests {
     }
 
     @Test @MainActor func mergeHostsDedupesCaseVariantsOfExistingAndReportedHosts() {
-        // ios#341: `seen` was a case-sensitive set, so HOST.local and
-        // host.local both survived as separate routes. The stored spelling
-        // wins; the first reported spelling wins among new entries.
         let merged = ConnectionManager.mergeHosts(
             existing: ["HOST.local", "[fe80::1]"],
             reported: ["host.local", "Host.Local", "[FE80::1]", "fe80::1", "New-Mac.local", "new-mac.local", "10.0.0.5"]
@@ -168,8 +153,6 @@ extension ConnectionManagerTests {
     }
 
     @Test @MainActor func mergeHostsRejectsStructurallyInvalidNamesAndAddresses() {
-        // ios#341: the character allowlist admitted these; they must not be
-        // raced or persisted.
         let merged = ConnectionManager.mergeHosts(
             existing: ["daemon.local"],
             reported: ["a..b", "-bad", "bad-", ".bad", "999.999.999.999", "1.2.3", "256.0.0.1", "10.0.0.5"]
@@ -178,9 +161,6 @@ extension ConnectionManagerTests {
     }
 
     @Test @MainActor func persistedMergeKeepsStoredHostsSessionDidNotConnectWith() {
-        // Reviewer scenario: the stored record holds a NAT hostname the current
-        // session didn't connect with. The persisted list is the stored hosts
-        // merged with the session's merge result — the NAT hostname survives.
         let storedHosts = ["nat.example.com", "192.168.1.10"]
         let sessionMerged = ConnectionManager.mergeHosts(
             existing: ["192.168.1.10"],
@@ -310,9 +290,6 @@ extension ConnectionManagerTests {
         }
     }
 
-    /// Platforms without a TailcatKit build (visionOS) default to
-    /// `UnavailableTunnelDialer`: a tunnel candidate fails with the clear
-    /// unavailable error, labeled to the tunnel route, instead of crashing.
     @Test func unavailableTunnelDialerFailsWithClearError() async {
         let outcome = await ConnectionManager.raceCandidates([ConnectionManager.tunnelCandidateLabel]) { _ in
             try await ConnectionManager.connectViaTunnel(
@@ -331,9 +308,6 @@ extension ConnectionManagerTests {
         #expect(host == ConnectionManager.tunnelCandidateLabel)
         #expect(message == UnavailableTunnelDialer.unavailableMessage)
     }
-
-    /// A failed tunnel dial surfaces as a candidate failure with the tunnel
-    /// label (not a raw loopback host).
 }
 
 extension ConnectionManagerTests {
@@ -356,11 +330,7 @@ extension ConnectionManagerTests {
         #expect(outcome.failure is WebSocketTransportError)
     }
 
-    /// When the tunnel establishes but the WSS handshake through it fails,
-    /// the session must be closed (no leaked tunnel from a dead candidate).
     @Test func tunnelClosedWhenSocketHandshakeFails() async {
-        // Port 1 on loopback: connection refused, fast deterministic failure.
-        // Pinned so the failure is the handshake itself, not pin admission.
         let tunnel = FakeTunnelSession(localPort: 1)
         let dialer = FakeTunnelDialer(result: .success(tunnel))
         await #expect(throws: (any Error).self) {
@@ -399,8 +369,6 @@ extension ConnectionManagerTests {
         #expect(tunnel.isClosed)
     }
 
-    /// A raced candidate that mirrors `RacedConnection`: `disconnect()` closes
-    /// the carried tunnel session, so loser cleanup releases tunnel resources.
     nonisolated private struct FakeTunnelRaceConnection: HostRacingConnection {
         let host: String
         let tunnel: FakeTunnelSession?
@@ -410,10 +378,6 @@ extension ConnectionManagerTests {
         }
     }
 
-    /// When a direct host wins the race, the LOSING tunnel candidate's session
-    /// must be closed by `raceCandidates` loser cleanup (no leaked tunnel).
-    /// The tunnel candidate holds its lane until the win cancels it, so it
-    /// always completes as a late success.
     @Test func losingTunnelCandidateSessionClosedWhenDirectHostWins() async {
         let tunnel = FakeTunnelSession(localPort: 1)
         let outcome = await ConnectionManager.raceCandidates(
@@ -431,14 +395,6 @@ extension ConnectionManagerTests {
         #expect(tunnel.isClosed)
     }
 
-    /// Regression: the race must settle as soon as a candidate wins instead of
-    /// waiting for every loser to finish. A loser that ignores cancellation
-    /// (a tunnel dial whose Go side does not abort promptly) must not delay
-    /// the connect, and must still be disconnected by the background drain.
-    /// The loser is released only after the race has returned, so a race that
-    /// waited on it would hit the time limit instead of racing a stopwatch;
-    /// the time limit's cancellation of the test opens the gate so that
-    /// regression fails instead of hanging.
     @Test(.timeLimit(.minutes(1)))
     func raceSettlesOnWinnerWithoutWaitingForUncancellableLoser() async {
         let loserTunnel = FakeTunnelSession(localPort: 1)
@@ -448,8 +404,6 @@ extension ConnectionManagerTests {
                 ["direct.host", ConnectionManager.tunnelCandidateLabel]
             ) { host -> FakeTunnelRaceConnection in
                 if host == ConnectionManager.tunnelCandidateLabel {
-                    // `TestGate.wait()` is not interrupted by the candidate
-                    // task's cancellation.
                     await loserRelease.wait()
                     return FakeTunnelRaceConnection(host: host, tunnel: loserTunnel)
                 }
@@ -459,7 +413,6 @@ extension ConnectionManagerTests {
 
         #expect(outcome.winner?.host == "direct.host")
         #expect(outcome.failure == nil)
-        // The loser is still in flight; cleanup happens off the critical path.
         #expect(!loserTunnel.isClosed)
         loserRelease.open()
         _ = await outcome.drain?.value

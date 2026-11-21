@@ -37,14 +37,6 @@ final class WorkspaceAttentionCueCenter {
 
     private(set) var windowCueEvent: WindowCueEvent?
 
-    /// One agent event often drives BOTH audible paths: the agent:idle
-    /// alert chime (NotificationManager) and this attention cue — the same
-    /// completion flips its workspace to unread, and a raised blocker also
-    /// emits agent:idle, so blocked/needsAttention transitions coincide
-    /// with alert chimes too. Whichever kind fires first for a workspace
-    /// suppresses the *other* kind for that workspace within this window;
-    /// same-kind repeats are never suppressed here, and the visual cues
-    /// (z-lift, chip brightness) are unaffected.
     static let dedupInterval: TimeInterval = 2.5
 
     @ObservationIgnored private var tracker = WorkspaceAttentionCueTracker()

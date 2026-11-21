@@ -2,8 +2,6 @@ import CoreGraphics
 @testable import Intent
 import Testing
 
-/// `followRequested`, `followDue` and `followFinished` against each
-/// owner / fallback state they read.
 extension TranscriptRecoveryLifecycleTests {
     // MARK: - followRequested
 
@@ -38,10 +36,8 @@ extension TranscriptRecoveryLifecycleTests {
         let replacement = FollowToken(id: 3)
         step(&state, .followRequested(forced: true))
         #expect(state.fallback == .transferred(follow: replacement))
-        // The replaced follow's terminal is stale and cannot discharge it.
         #expect(step(&state, .followFinished(follow1, .dropped)).isEmpty)
         #expect(state.fallback == .transferred(follow: replacement))
-        // The replacement's does, exactly once.
         #expect(step(&state, .followFinished(replacement, .yielded)).contains(.showGoToEnd))
         #expect(state.fallback == .none)
     }
@@ -135,12 +131,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(state.nextTokenId == 3)
     }
 
-    /// The verifier's repro of the shipped view's order at a drain: a
-    /// message appended mid-correction requests an automatic follow whose
-    /// debounce (100 ms) elapses before the page up settles (150 ms) and is
-    /// dropped on the paged-up distance; the view keeps
-    /// `isRecoveringUnrealizedEnd` raised, so the drain's replayed edge sees
-    /// `isFollowing` and the page-up check then follows back.
     @Test func aDrainedFollowRestoresTheRecoveryItDemoted() {
         var state = State(visibility: .visible)
         step(&state, .endDerealized)
@@ -151,14 +141,11 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(state.armedRecovery == .demoted(recovery1))
         #expect(state.isFollowing)
         #expect(step(&state, .followDue(follow2, execute: false)).isEmpty)
-        // The drain replays the swallowed edge with the recovery owning
-        // again: `isFollowing` still reads true for that replay, no re-arm.
         #expect(step(&state, .followFinished(follow2, .dropped)) == [.replayLiveEdge(.live)])
         #expect(state.owner == .recovery(recovery1))
         #expect(state.armedRecovery == nil)
         #expect(state.isFollowing)
         #expect(state.currentRecovery == recovery1)
-        // Then the settled page up is granted its follow back.
         #expect(step(&state, .recoveryPagedUp(recovery1, mayFollowBack: true)) == [.scrollToEnd])
         #expect(state.owner == .recovery(recovery1))
         #expect(step(&state, .recoveryFinished(recovery1, .notNeeded, corrections: 1)) == [
@@ -168,9 +155,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(!state.isFollowing)
     }
 
-    /// Correcting recovery → follow → drain → geometry edge: the geometry
-    /// paths read `isFollowing` from the restored owner until the recovery's
-    /// own terminal, where a never-claimed polling recovery leaves it false.
     @Test func aRestoredRecoveryKeepsIsFollowingForTheGeometryEdgeUntilItsTerminal() {
         var corrected = State(visibility: .visible)
         step(&corrected, .endDerealized)

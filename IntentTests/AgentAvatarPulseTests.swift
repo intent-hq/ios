@@ -72,8 +72,6 @@ struct AgentAvatarPulseTests {
         let (window, view) = try makeRing()
         let ring = try ring(in: view)
         defer { view.removeFromSuperview(); window.isHidden = true }
-        // Drive appearance from the window, as the app's root preferredColorScheme
-        // does. iOS 18 doesn't propagate a view's own traitOverrides in a hidden window.
         for style in [UIUserInterfaceStyle.light, .dark, .light] {
             window.overrideUserInterfaceStyle = style
             window.layoutIfNeeded()
@@ -86,7 +84,6 @@ struct AgentAvatarPulseTests {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let window = UIWindow(windowScene: scene)
         window.rootViewController = UIViewController()
-        // Visible but not key: other suites rely on the host window keeping key status.
         window.isHidden = false
         let view = AgentAvatarPulse.PulseView(cornerRadius: 6)
         view.frame = CGRect(x: 0, y: 0, width: 20, height: 20)

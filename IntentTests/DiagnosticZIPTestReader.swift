@@ -1,12 +1,7 @@
 import Foundation
 import Testing
 
-/// Independent, strict stored-ZIP reader for regression tests. Walks the
-/// central directory, follows each local-header offset, extracts payloads and
-/// checks CRC using a bitwise implementation independent of the writer table.
-/// Real Files/system-share interoperability is still a separate runtime gate.
 nonisolated enum DiagnosticZIPTestReader {
-    // Fixed byte offsets/signatures from the ZIP format, not runtime tuning.
     // swiftlint:disable no_magic_numbers
     static func extract(_ data: Data) throws -> [String: Data] {
         let end = data.count - 22

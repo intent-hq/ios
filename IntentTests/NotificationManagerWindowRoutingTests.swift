@@ -52,8 +52,6 @@ extension NotificationManagerTests {
     // MARK: - Presentation routing (per-backend windows)
 
     @Test func singleWindowRendersEveryToast() {
-        // iPhone: the sole window renders the toast regardless of its bound
-        // backend — unchanged behavior.
         #expect(NotificationManager.windowPresentsAlert(
             source: Self.pinnedBackend,
             windowBackendID: Self.pinnedBackend,
@@ -144,9 +142,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func multiWindowAlertWithoutSourceWindowPresentsNothing() {
-        // visionOS/iPad: an alert whose source backend has no registered
-        // window plays no feedback and stores no toast — it would render
-        // nowhere and clobber another backend's visible toast.
         var feedbackCount = 0
         let (manager, center) = makeNotificationManager(state: .active) {
             feedbackCount += 1
@@ -166,8 +161,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func multiWindowSuppressedAlertStillPlaysFeedbackInSourceWindow() {
-        // The connection-scoped suppression downgrade (open conversation →
-        // feedback only) keeps working when the source window is registered.
         var feedbackCount = 0
         let (manager, _) = makeNotificationManager(state: .active) {
             feedbackCount += 1
@@ -191,9 +184,6 @@ extension NotificationManagerTests {
     // MARK: - Window-emitted feedback sound (visionOS spatial audio)
 
     @Test @MainActor func windowEmittingAlertPublishesEventInsteadOfGlobalFeedback() {
-        // visionOS: the manager publishes a per-backend feedback request
-        // for the source window to emit spatially instead of playing the
-        // global (non-spatial) sound.
         var feedbackCount = 0
         let (manager, center) = makeNotificationManager(
             state: .active,
@@ -217,8 +207,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func windowEmittingSuppressedAlertStillPublishesEvent() {
-        // The suppression downgrade (open conversation → feedback only)
-        // still emits the sound from the source window, with no toast.
         var feedbackCount = 0
         let (manager, _) = makeNotificationManager(
             state: .active,
@@ -242,8 +230,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func repeatWindowEmittedAlertsPublishDistinctEventIds() {
-        // Each request carries a fresh id so a window's onChange re-fires
-        // for back-to-back alerts from the same backend.
         let (manager, _) = makeNotificationManager(
             state: .active,
             windowEmitsFeedbackSound: true

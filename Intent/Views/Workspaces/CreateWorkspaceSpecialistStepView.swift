@@ -210,7 +210,6 @@ extension CreateWorkspaceView {
         storeIsLoading || (!storeHasLoaded && !settled)
     }
 
-    // Nil means no provider is selected; false means its catalog has not loaded yet.
     // swiftlint:disable:next discouraged_optional_boolean
     static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
         catalogCached == false && !settled

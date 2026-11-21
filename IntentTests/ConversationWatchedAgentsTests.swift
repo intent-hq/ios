@@ -89,7 +89,6 @@ extension ConversationWatchedAgentsTests {
         try await expectNever("detail for a cached workspace row") { fixture.connection.traffic(since: checkpoint).calls("agent.get").count > 1 }
         #expect(watched.row(ConversationStartupFixture.childId).agent.name == "Agent watched-child")
         #expect(fixture.details.cached(agentId: ConversationStartupFixture.childId) == nil)
-        // A summary cannot satisfy a richer route/parent/proposal detail request.
         _ = try await fixture.details.load(agentId: ConversationStartupFixture.childId)
         #expect(fixture.connection.traffic(since: checkpoint).calls("agent.get").count == 2)
 
@@ -120,7 +119,6 @@ extension ConversationWatchedAgentsTests {
             try await waitUntil("scrolled child") { watched.row("child-1").hasSummary }
             let selected = await watched.selectedAgent("child-2")
             #expect(selected?.workspaceId == ConversationStartupFixture.workspaceId)
-            // Route handoff consumes the already-read detail, without a second read.
             _ = try await fixture.details.load(agentId: "child-2", workspaceId: selected?.workspaceId)
             watched.releaseVisibility(consumer: consumer)
             fixture.stop()

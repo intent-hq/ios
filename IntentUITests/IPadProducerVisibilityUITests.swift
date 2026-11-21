@@ -1,6 +1,5 @@
 import XCTest
 
-/// Temporary discriminator: hidden snapshots are observations, not presumed fixes.
 nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let identifiers = [

@@ -28,8 +28,6 @@ struct IntentNoteLinkParsingTests {
     }
 
     @Test func shortFormCarriesNoWorkspaceId() {
-        // Short forms have no embedded workspace: callers fall back to the
-        // current workspace.
         #expect(parsedWorkspaceId("intent://local/note/abc-123") == nil)
         #expect(parsedWorkspaceId("intent://local/task/def-456") == nil)
     }
@@ -45,15 +43,11 @@ struct IntentNoteLinkParsingTests {
     }
 
     @Test func longFormCarriesEmbeddedWorkspaceId() {
-        // Long forms carry the embedded workspace ID so callers can route
-        // cross-workspace links to the right workspace.
         #expect(parsedWorkspaceId("intent://local/my-workspace/note/abc-123") == "my-workspace")
         #expect(parsedWorkspaceId("intent://local/other-ws/task/2b87bc19-86af") == "other-ws")
     }
 
     @Test func shortFormReadingWinsWhenWorkspaceIdCollidesWithType() {
-        // `note` in the first slot is the short form even when the next
-        // segment is also a resource-type word.
         let link = parse("intent://local/note/task")
         #expect(link?.id == "task")
         #expect(link?.workspaceId == nil)

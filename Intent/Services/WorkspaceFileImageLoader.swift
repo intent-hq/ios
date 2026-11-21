@@ -60,7 +60,6 @@ final class WorkspaceFileImageLoader {
         }
     }
 
-    // Keep MiB conversions visible in the named transfer and decoded-memory limits.
     // swiftlint:disable no_magic_numbers
     nonisolated static let chunkLength = 4 * 1024 * 1024
     nonisolated static let pdfChunkLength = 256 * 1024

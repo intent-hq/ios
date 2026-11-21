@@ -2,9 +2,7 @@ import Foundation
 @testable import Intent
 import Testing
 
-// These extracted tests retain the parent suite's compact fixture vocabulary.
 // swiftlint:disable identifier_name large_tuple
-// Keep the existing polling attempt count and interval explicit without changing the test budget.
 // swiftlint:disable no_magic_numbers
 
 extension ConversationViewModelTests {
@@ -114,8 +112,6 @@ extension ConversationViewModelTests {
         return (vm, store, fake)
     }
 
-    /// Bounded poll; records a failure on timeout so a missed update cannot
-    /// pass silently.
     private func waitFor(_ description: String, _ condition: () -> Bool) async throws {
         for _ in 0 ..< 200 {
             if condition() {
@@ -126,8 +122,6 @@ extension ConversationViewModelTests {
         Issue.record("Timed out waiting for \(description)")
     }
 
-    /// The menu label reads the session's shared per-provider cache once the
-    /// provider is known, so a warm cache renders the name with no request.
     @Test func currentModelDisplayNameReadsSharedProviderCatalog() async {
         let (vm, _, fake) = makeCatalogVM()
         vm.currentModelId = "sonnet4.5"
@@ -148,10 +142,6 @@ extension ConversationViewModelTests {
         #expect(fake.requestLog.count == requestsAfterLoad)
     }
 
-    /// A reconnect during the cold catalog load never flips `isCached`, so
-    /// the task identity must move on the generation alone: the stale
-    /// completion is dropped (nil before, nil after) and the next task run
-    /// starts a fresh flight.
     @Test func reconnectDuringColdCatalogLoadBumpsKeyAndReloadsFresh() async throws {
         let (vm, store, fake) = makeCatalogVM()
         await vm.fetchCurrentModel()
@@ -178,9 +168,6 @@ extension ConversationViewModelTests {
         #expect(fake.paramsForMethod("models.list").count == 2)
     }
 
-    /// An `agent.get` response from before a reconnect is stale: it never
-    /// installs its model/provider; the read repeats under the new
-    /// generation and only that answer lands.
     @Test func staleAgentGetFromBeforeReconnectNeverInstallsMetadata() async throws {
         let (vm, store, fake) = makeCatalogVM()
         fake.pendingMethods = ["agent.get"]
@@ -203,9 +190,6 @@ extension ConversationViewModelTests {
         #expect(vm.modelMetadataGeneration == store.loadGeneration)
     }
 
-    /// After a reconnect the catalog task re-reads the agent's metadata
-    /// (the model may have changed while offline) before reloading the
-    /// catalog, so the label shows the authoritative post-reconnect model.
     @Test func reconnectRereadsAgentMetadataThenReloadsCatalog() async {
         let (vm, store, fake) = makeCatalogVM()
         await vm.fetchCurrentModel()
@@ -233,10 +217,6 @@ extension ConversationViewModelTests {
         #expect(fake.requestLog.count == requestsAfterReload)
     }
 
-    /// A failed post-reconnect re-read leaves no authoritative metadata:
-    /// the pre-reconnect model/provider are dropped (placeholder label, not
-    /// a stale one) and no catalog is loaded for them; the next task run
-    /// re-reads, and only a fresh `agent.get` restores the label.
     @Test func failedPostReconnectRereadDropsStaleMetadataAndSkipsCatalog() async {
         let (vm, store, fake) = makeCatalogVM()
         await vm.fetchCurrentModel()
@@ -266,9 +246,6 @@ extension ConversationViewModelTests {
         #expect(vm.currentModelDisplayName == "Opus")
     }
 
-    /// A failed provider-scoped `models.list` leaves the catalog nil: the
-    /// picker must surface a retryable failure state instead of spinning
-    /// forever, and a successful retry clears it.
     @Test func pickerSurfacesCatalogLoadFailureInsteadOfSpinning() async {
         let (vm, _, fake) = makeCatalogVM()
         await vm.fetchCurrentModel()
@@ -284,8 +261,6 @@ extension ConversationViewModelTests {
         #expect(!vm.modelCatalogLoadFailed)
     }
 
-    /// A catalog load superseded by a reconnect is neither a success nor a
-    /// failure: the flag stays clear and the generation-keyed task reloads.
     @Test func catalogLoadSupersededByReconnectDoesNotFlagFailure() async throws {
         let (vm, store, fake) = makeCatalogVM()
         await vm.fetchCurrentModel()

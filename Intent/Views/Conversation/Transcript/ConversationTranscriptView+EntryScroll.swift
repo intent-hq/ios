@@ -100,8 +100,6 @@ extension ConversationTranscriptView {
         )
     }
 
-    /// Runs exactly once per transcript lifetime from whichever loading trigger
-    /// fires first, after LazyVStack has had time to finish layout.
     func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
         guard lifecycle.isVisible else { return }
         guard !scrollState.entryScroll.isScheduled else {
@@ -120,16 +118,10 @@ extension ConversationTranscriptView {
         }
     }
 
-    /// The finder resolving is the signal the transcript is hosted; an entry
-    /// scroll issued while waiting for it is picked up here. Hosting precedes
-    /// LazyVStack's first layout pass, so the resolved path gets the same
-    /// `initialScrollDelay` the loading triggers get before it scrolls.
     func handleScrollViewResolved(proxy: ScrollViewProxy) {
         guard lifecycle.isVisible else { return }
         let generation = scrollState.initialScrollGeneration
         guard scrollState.entryScroll == .awaitingScrollView else {
-            // Defensive: onAppear / isLoading already schedule the entry
-            // scroll, so this only matters if the edge ever precedes both.
             if !viewModel.isLoading {
                 runInitialScrollIfNeeded(proxy: proxy)
             }

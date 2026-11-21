@@ -3,7 +3,6 @@ import Foundation
 import UIKit
 
 enum DemoFixtures {
-    // Numeric values below are intentional status-image fixture geometry and color data.
     // swiftlint:disable no_magic_numbers
     nonisolated private static let statusImageSize = CGSize(width: 640, height: 360)
     nonisolated private static let statusImageRowCount = 5
@@ -57,7 +56,6 @@ enum DemoFixtures {
     }()
 
     nonisolated private static func drawStatusImage(in context: UIGraphicsImageRendererContext) {
-        // Literal RGB components preserve the status-image fixture's reference colors.
         // swiftlint:disable no_magic_numbers
         let background = UIColor(
             cgColor: CGColor(srgbRed: 0.11, green: 0.11, blue: 0.13, alpha: 1)

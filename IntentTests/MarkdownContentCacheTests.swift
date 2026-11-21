@@ -27,7 +27,6 @@ struct MarkdownContentCacheTests {
         #expect(closed.pendingDiagram == nil)
         #expect(closed.mermaidSources.count == 2)
         #expect(cache.preparedEntryCount == 2)
-        // Streaming is a live choice by MarkdownTextView, not part of prepared state.
         #expect(cache.preparedContent(for: source).pendingDiagram?.markdown == pending.markdown)
     }
 

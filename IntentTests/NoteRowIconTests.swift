@@ -74,8 +74,6 @@ struct NoteRowIconTests {
     }
 
     @Test func allCancelledLinksFallBackToDocumentIcon() {
-        // Cancelled tasks are excluded from the total, so the ring has no
-        // denominator and the note falls back to the doc icon.
         let notes = [makeNote(id: "a", taskStatus: "cancelled")]
         let note = makeNote(id: "n1", content: link("a"))
         #expect(NoteRowIcon.kind(for: note, notes: notes) == .document)

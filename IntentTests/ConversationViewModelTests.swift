@@ -135,18 +135,15 @@ struct ConversationViewModelTests {
         let viewModel = makeVM()
         viewModel.store.queuedMessages = [
             queuedEntry(id: "q-user"),
-            // Malformed agent message (no fromAgentId): typed metadata → hidden.
             queuedEntry(id: "q-agent-bad", metadata: ["type": AnyCodable("agent_message")]),
             queuedEntry(id: "q-system", metadata: ["source": AnyCodable("system")]),
             queuedEntry(id: "q-benign", metadata: ["userAppMessageId": AnyCodable("uam-1")])
         ]
         #expect(viewModel.queuedMessages.map(\.id) == ["q-user", "q-benign"])
-        // The store keeps the full queue (flush behavior untouched).
         #expect(viewModel.store.queuedMessages.count == 4)
     }
 
     @Test func queuedMessagesHidesAgentMessageEntries() {
-        // Agent-to-agent sends are daemon-originated: hidden from the section.
         let viewModel = makeVM()
         viewModel.store.queuedMessages = [
             queuedEntry(id: "q-agent", metadata: [
@@ -159,9 +156,6 @@ struct ConversationViewModelTests {
     }
 
     @Test func queuedMessagesHidesEventNotificationEntries() {
-        // Metadata-typed event-notification wakes are hidden; legacy
-        // content-prefix entries without metadata fail open as user-authored
-        // (`isUserMessage` rules unchanged).
         let viewModel = makeVM()
         viewModel.store.queuedMessages = [
             queuedEntry(id: "q-event", metadata: ["type": AnyCodable("event_notification")]),
@@ -179,8 +173,6 @@ struct ConversationViewModelTests {
     }
 
     @Test func queuedMessagesHidesWakeEntries() {
-        // Hook and PR-monitor wakes (PROTOCOL §5.40 / §5.42) are
-        // daemon-originated: hidden from the section.
         let viewModel = makeVM()
         viewModel.store.queuedMessages = [
             queuedEntry(id: "q-hook", metadata: [
@@ -195,7 +187,6 @@ struct ConversationViewModelTests {
                 "repo": AnyCodable("intent-hq/intentd"),
                 "prNumber": AnyCodable(7)
             ]),
-            // Malformed PR wake (no repo): still a typed entry → hidden.
             queuedEntry(id: "q-pr-bad", metadata: ["type": AnyCodable("pr_monitor_wake")])
         ]
         #expect(viewModel.queuedMessages.isEmpty)
@@ -267,8 +258,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func suggestedPromptsSpanningTwoTextBlocks() {
-        // Text blocks join with the empty separator (desktop parity), so a
-        // block boundary reassembles the original stream — even mid-line.
         let viewModel = makeVM()
         viewModel.store.messages = [
             ConversationMessage(

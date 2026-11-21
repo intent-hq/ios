@@ -2,14 +2,7 @@ import CoreGraphics
 @testable import Intent
 import Testing
 
-/// The #350 handoff defects (scenarios 1-4) replayed as event sequences
-/// through `LifecycleHarness`.
 extension TranscriptRecoveryLifecycleTests {
-    /// Scenario 1 (14927b8): a correction pages up and the finger lands
-    /// during the settle. The takeover cancels the recovery; the settle's
-    /// continuation and terminal are stale, granted or not, so nothing
-    /// scrolls the user back and the recovery shows no Go to End — the flag
-    /// raised is the gesture's own edge.
     @Test func aPageUpTakenOverByAGestureDuringTheSettleIsStale() {
         var harness = makeHarness()
         #expect(harness.send(.endDerealized) == [.startRecoveryTask(recovery1)])
@@ -35,14 +28,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(harness.state.owner == .idle)
     }
 
-    /// Scenario 2 (e3cd988): a message appended mid-correction requests an
-    /// automatic follow; the recovery's budget is spent under it, so the
-    /// give-up is transferred to that follow; content grows during the
-    /// debounce and the follow comes due 120pt short with no gesture —
-    /// dropped. Its drain shows Go to End over the still-unrealized row,
-    /// re-pins nothing over the button and arms nothing; the transfer is
-    /// discharged exactly once. Without the transfer the drain would have
-    /// replayed the edge as a raw re-pin with the button hidden.
     @Test func aGiveUpUnderAPendingAutomaticFollowIsShownWhenThatFollowIsDropped() {
         var harness = makeHarness()
         #expect(harness.send(.endDerealized) == [.startRecoveryTask(recovery1)])
@@ -82,11 +67,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(harness.goToEndShown == 1)
     }
 
-    /// Migrated from `deferredGiveUpShowsGoToEndWhenTheFollowIsDropped`
-    /// (the executed half): a follow that executed clears the transfer and
-    /// re-arms the recovery instead of showing Go to End — automatic (no
-    /// landing) or forced, whatever its landing. Without a transfer, a
-    /// dropped automatic follow's drain is the raw edge replay.
     @Test func aTransferredGiveUpIsClearedByAnyExecutedDrainWhichReArmsTheRecovery() {
         var automatic = transferredGiveUp(forced: false)
         automatic.distanceToBottom = 30
@@ -125,10 +105,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(plain.rePins == 1)
     }
 
-    /// Scenario 3 (7e0ecbc): the transferred give-up does not depend on the
-    /// follow executing. A forced follow yielding to the finger and an
-    /// automatic one a gesture cancels each show Go to End once; the
-    /// cancelled task's own terminal is stale.
     @Test func aTransferredGiveUpIsDischargedOnceByYieldOrCancel() {
         var yielded = transferredGiveUp(forced: true)
         yielded.isInteracting = true
@@ -156,12 +132,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(cancelled.scrolls == 0)
     }
 
-    /// Scenario 3, continued: a follow a newer request replaces hands the
-    /// transfer to the replacing token — today's
-    /// `scrollDebounceTask?.cancel()` in `scrollToBottom` resolves no
-    /// deferral, so it survives to the replacing follow's drain, which
-    /// re-arms the recovery if it executed and shows Go to End if it did
-    /// not. The replaced task's own terminal is stale.
     @Test func aTransferredGiveUpIsHandedToAReplacingFollowAndDischargedByItsDrain() {
         var replaced = transferredGiveUp(forced: false)
         #expect(replaced.send(.explicitClaim).isEmpty)
@@ -193,9 +163,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(replacementYielded.goToEndShown == 1)
     }
 
-    /// The transfer over an end row that realized before the follow drained
-    /// clears silently: the dropped follow's replayed edge re-pins the
-    /// viewport to the realized row by the growth path.
     @Test func aTransferOverAnEndRowThatRealizedMeanwhileClearsSilently() {
         var harness = transferredGiveUp(forced: false)
         #expect(harness.send(.endRealized(userIsScrolledAway: false)).isEmpty)
@@ -209,13 +176,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(harness.rePins == 1)
     }
 
-    /// Scenario 4 (b0c0941; migrated from
-    /// `followDrainingOverAnUnrealizedEndRowArmsTheRecovery`): Go to End
-    /// over a blank with nothing armed. The tap's forced follow executes and
-    /// drains with the end row still unrealized, so the recovery is
-    /// re-armed from the level — whatever the landing reported — and judges
-    /// the blank from geometry; a follow that yielded landed nowhere and
-    /// arms nothing; a realized end row needs nothing either way.
     @Test func aForcedFollowDrainingOverAnAlreadyUnrealizedEndRowReArmsTheRecovery() {
         var harness = makeHarness(realized: false, scrolledAway: true)
         #expect(harness.tapGoToEnd() == [.startFollowTask(follow1, forced: true)])
@@ -260,9 +220,6 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(yieldedRealized.state.currentRecovery == nil)
     }
 
-    /// Scenario 4, continued: an automatic follow (the user's message) that
-    /// executed re-arms the recovery the same way; one that was dropped
-    /// landed nowhere and arms nothing; a realized end row needs nothing.
     @Test func anAutomaticFollowDrainingOverAnAlreadyUnrealizedEndRowReArmsTheRecovery() {
         var automatic = makeHarness(realized: false)
         #expect(automatic.send(.followRequested(forced: false)) == [.startFollowTask(follow1, forced: false)])

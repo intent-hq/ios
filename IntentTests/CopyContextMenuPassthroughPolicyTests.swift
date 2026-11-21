@@ -1,24 +1,10 @@
 import Foundation
 import Testing
 
-/// Every Button that renders inside a transcript row must apply
-/// `copyContextMenuPassthrough()` to its label, or the row's long-press Copy
-/// overlay claims the tap and the Button silently does nothing. Missing
-/// markers shipped three times: tool rows (ios#344, ios#369), image taps
-/// (ios#212), and the agent-message card (ios#982).
-///
-/// The overlay cannot pass SwiftUI Buttons through by itself. A SwiftUI
-/// Button has no UIKit view, so the overlay's hit-test probe resolves to the
-/// same shared hosting view for a Button as for plain text. Only a UIKit view
-/// in the Button's label (the marker) makes the two distinguishable, so this
-/// scan is the guard. See `CopyContextMenuButtonScanner` for the rules.
 struct CopyContextMenuPassthroughPolicyTests {
     private static let conversationRoot = "Intent/Views/Conversation"
     private static let scannedDirectories = ["Transcript", "Notices", "Content"]
 
-    /// Scanned files whose Buttons never render inside a
-    /// `MessageCopyContextMenu` row, with the exact number of unmarked
-    /// Buttons each holds, so a new Button in one of them still fails.
     private static let rowlessFiles: [String: (buttons: Int, reason: String)] = [
         "Transcript/ConversationColumnView.swift": (1, "DEBUG demo cover button in the column, outside the transcript rows."),
         "Transcript/ConversationTranscriptView+History.swift": (1, "History retry row has no copy menu."),
@@ -33,8 +19,6 @@ struct CopyContextMenuPassthroughPolicyTests {
         "Content/VideoLightboxView.swift": (1, "Full-screen lightbox presented from a row.")
     ]
 
-    /// Scans of every Swift file under the scanned directories, keyed relative
-    /// to `conversationRoot`.
     private func scansByFile() throws -> [String: CopyContextMenuButtonScanner.Scan] {
         let root = try TestSourceInputs.url(for: Self.conversationRoot)
         let rootPrefix = root.standardizedFileURL.path + "/"
@@ -87,7 +71,6 @@ struct CopyContextMenuPassthroughPolicyTests {
         )
     }
 
-    /// ios#982 regression: the agent-message card's buttons lose their marker.
     @Test func scanFlagsAgentMessageAttributionWithoutMarkers() throws {
         let url = try TestSourceInputs.url(for: "\(Self.conversationRoot)/Notices/AgentMessageAttributionView.swift")
         let source = try String(contentsOf: url, encoding: .utf8)

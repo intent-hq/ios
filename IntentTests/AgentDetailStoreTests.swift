@@ -84,7 +84,6 @@ struct AgentDetailStoreTests {
         await #expect(throws: AgentDetailError.identityMismatch) {
             try await secondDetails.load(agentId: "parent", workspaceId: "workspace")
         }
-        // A cross-workspace child read supplies its own id, without the parent's workspace.
         let child = try await secondDetails.load(agentId: "parent")
         #expect(child.values["workspaceId"] as? String == "other")
         #expect(second.paramsForMethod("agent.get").count == 1)
@@ -127,7 +126,6 @@ struct AgentDetailStoreTests {
         let connection = FakeConnectionManager()
         connection.responseMap["agent.get"] = agent()
         let details = AgentDetailStore(connection: connection)
-        // A route-validation result is reusable by the first activation.
         _ = try await details.load(agentId: "parent", workspaceId: "workspace")
         let first = details.retain(agentId: "parent")
         let second = details.retain(agentId: "parent")
@@ -168,7 +166,6 @@ struct AgentDetailStoreTests {
         connection.resolvePending("agent.get", with: agent())
         _ = try await read.value
         #expect(connection.paramsForMethod("agent.get").count == 1)
-        // A later route validation still seeds its following activation.
         connection.pendingMethods = []
         connection.responseMap["agent.get"] = agent()
         _ = try await details.load(agentId: "parent", workspaceId: "workspace")
@@ -374,7 +371,7 @@ extension AgentDetailStoreTests {
         try await expectNever("a trailing event refresh after the activation ended") {
             connection.paramsForMethod("agent.get").count > 2
         }
-        _ = try await details.load(agentId: "parent") // A new route load remains valid without a lease.
+        _ = try await details.load(agentId: "parent")
         #expect(connection.paramsForMethod("agent.get").count == 3)
     }
 

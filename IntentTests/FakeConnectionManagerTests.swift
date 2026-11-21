@@ -100,7 +100,6 @@ struct FakeConnectionManagerTests {
             _ = try await fake.request("unconfigured.method", params: [:])
             Issue.record("Expected error for unconfigured method")
         } catch {
-            // Expected
         }
     }
 
@@ -147,7 +146,7 @@ struct FakeConnectionManagerTests {
         #expect(fake.eventHandlerCount == 0)
 
         fake.deliverEvent(method: "note.deleted", params: ["noteId": "note-2"])
-        #expect(receivedEvents.count == 1) // No new event received after removal
+        #expect(receivedEvents.count == 1)
     }
 
     // MARK: - Subscription Push Routing
@@ -236,12 +235,6 @@ struct FakeConnectionManagerTests {
         #expect(fake.pendingRequestCount("agent.get") == 0)
     }
 
-    /// The escape hatch the time-limited race tests rely on: a candidate
-    /// cancelled while awaiting the gate stays parked (the race's loser
-    /// cancellation must not release it), while cancelling the test-level
-    /// task wrapped in `opening(onCancellationOf:)` opens the gate so a
-    /// system under test that regressed into awaiting the loser fails the
-    /// time limit instead of hanging the runner.
     @Test func testGateOpensOnTestTaskCancellationButNotOnCandidateCancellation() async throws {
         let gate = TestGate()
         let candidateFinished = Mutex(false)

@@ -2,20 +2,16 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Pins the connection screen and connection-loss states (survey item 7).
 extension AppCoordinatorTests {
     @Test @MainActor func connectionScreenKeepsOnlyTheVisibleScreensFields() {
         let launch = ConnectionScreen.connecting(startedByLaunch: true)
         let offer = ConnectionScreen.pairing(showsSavedConnections: true)
-        // The splash spans loading and connecting, so launch survives that step.
         #expect(launch.kept(on: .loading) == launch)
         #expect(launch.kept(on: .connecting) == launch)
         #expect(offer.kept(on: .pairing) == offer)
-        // Entering a connection screen without an explicit value starts off.
         #expect(offer.kept(on: .connecting) == .connecting(startedByLaunch: false))
         #expect(ConnectionScreen.other.kept(on: .loading) == .connecting(startedByLaunch: false))
         #expect(launch.kept(on: .pairing) == .pairing(showsSavedConnections: false))
-        // Every other screen carries neither field.
         #expect(launch.kept(on: .workspaceList) == .other)
         #expect(offer.kept(on: .connectionFailed(error: "x")) == .other)
         #expect(offer.kept(on: .settings) == .other)
@@ -41,14 +37,10 @@ extension AppCoordinatorTests {
         #expect(coordinator.connectionScreen == .other)
         #expect(!coordinator.connectingStartedByLaunch)
 
-        // Every route back to Connecting is user-started and shows Back.
         coordinator.restartConnectionAttempt()
         #expect(coordinator.connectionScreen == .connecting(startedByLaunch: false))
     }
 
-    /// Deliberate: Connect to… reached without a fresh saved-connection read
-    /// starts without the saved list. On `main` a value left from an earlier
-    /// visit to Connect to… could still offer it.
     @Test @MainActor func pairingWithoutAFreshReadDoesNotReuseAnEarlierOffer() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -66,13 +58,11 @@ extension AppCoordinatorTests {
         coordinator.onReconnect()
         #expect(coordinator.connectionScreen == .pairing(showsSavedConnections: true))
 
-        // Re-pairing the same Mac restarts its attempt, which then fails.
         coordinator.onPaired(stored)
         #expect(coordinator.connectionScreen == .connecting(startedByLaunch: false))
         coordinator.onConnectionFailed(error: "timeout")
         #expect(coordinator.connectionScreen == .other)
 
-        // An unreadable store keeps the old snapshot but cannot refresh the offer.
         #expect(persistence.saveDataToKeychain(
             data: Data("{\"v\": 99, \"schema\": \"future\"}".utf8),
             account: persistence.keychainAccountConnections
@@ -82,8 +72,6 @@ extension AppCoordinatorTests {
         #expect(coordinator.connectionScreen == .pairing(showsSavedConnections: false))
     }
 
-    /// ConnectingView's fallback for a window with no saved Mac matches `main`:
-    /// that path never had the saved list turned on.
     @Test @MainActor func connectingFallbackToPairingStartsWithoutSavedList() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -100,7 +88,6 @@ extension AppCoordinatorTests {
         let fake = FakeConnectionManager()
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
-        // Before entry, a drop is not a loss: the startup screens own it.
         fake.simulateDisconnect()
         await Self.awaitConnectionScreenTurn()
         guard case .none = coordinator.connectionLoss else {
@@ -120,7 +107,6 @@ extension AppCoordinatorTests {
             return
         }
 
-        // Reconnected but still waiting for data: the overlay stays.
         fake.simulateConnect()
         await Self.awaitConnectionScreenTurn()
         guard case .recovering(_, let timeout) = coordinator.connectionLoss else {
@@ -130,7 +116,6 @@ extension AppCoordinatorTests {
         #expect(fake.connectionState == .connected)
         #expect(coordinator.isDisconnected)
 
-        // Dropping again during recovery shows the loss and retires the timeout.
         fake.simulateDisconnect()
         await Self.awaitConnectionScreenTurn()
         guard case .lost = coordinator.connectionLoss else {
@@ -139,7 +124,6 @@ extension AppCoordinatorTests {
         }
         #expect(timeout.isCancelled)
 
-        // Leaving the remote UI clears the loss whatever the transport says.
         coordinator.currentScreen = .connectionFailed(error: "x")
         #expect(!coordinator.isDisconnected)
     }
@@ -152,11 +136,7 @@ extension AppCoordinatorTests {
     }
 
     @Test func cancelledConnectIsNeverShownAsAFailure() {
-        // A newer connect on the same session (e.g. a pairing link moving
-        // this window to another host) owns the screen.
         #expect(ConnectingView.failureOutcome(for: CancellationError(), replacedByNewerAttempt: true) == .leave)
-        // Cancelled with no successor (sync refreshed the credentials during
-        // startup): connect again rather than stay on Connecting.
         #expect(ConnectingView.failureOutcome(for: CancellationError(), replacedByNewerAttempt: false) == .retry)
         #expect(ConnectingView.failureOutcome(for: DaemonStartupError.failed, replacedByNewerAttempt: false) == .leave)
         let timedOut = WebSocketTransportError.timedOut(host: "studio")

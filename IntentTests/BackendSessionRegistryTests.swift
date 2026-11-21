@@ -2,22 +2,14 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Session-connection fake: `FakeConnectionManager` already implements the
-/// session surface `BackendSession` owns (including disconnect recording).
 typealias SessionFakeConnectionManager = FakeConnectionManager
 
-/// Registry create/reuse/teardown semantics over a fake session factory —
-/// pure unit tests, no sockets.
 @Suite(.serialized)
 @MainActor
 final class BackendSessionRegistryTests {
-    /// Per-test isolated persistence (same pattern as AppCoordinatorTests):
-    /// a private UserDefaults suite plus in-memory keychain so no state
-    /// leaks between tests or into the real app container.
     let persistence: PersistenceManager
     private let suiteName: String
 
-    /// Fakes created by the injected factory, in creation order.
     private var createdConnections: [SessionFakeConnectionManager] = []
     private var createdBackendIDs: [BackendID?] = []
 
@@ -274,7 +266,6 @@ extension BackendSessionRegistryTests {
             Issue.record("Expected .workspaceDetail on the navigating window, got \(first.currentScreen)")
         }
         if case .workspaceList = second.currentScreen {
-            // pass — the sibling window over the same session is unaffected
         } else {
             Issue.record("Expected .workspaceList on the sibling window, got \(second.currentScreen)")
         }
@@ -310,7 +301,6 @@ extension BackendSessionRegistryTests {
             Issue.record("Expected the first window on the backend to restore, got \(first.currentScreen)")
         }
         if case .workspaceList = second.currentScreen {
-            // pass — duplicated windows start at the workspace list
         } else {
             Issue.record("Expected .workspaceList on the extra window, got \(second.currentScreen)")
         }
@@ -354,7 +344,6 @@ extension BackendSessionRegistryTests {
         coordinator.onConnectionSuccess()
 
         if case .workspaceList = coordinator.currentScreen {
-            // pass — last-screen state is keyed per backend
         } else {
             Issue.record("Another backend's window must start at the workspace list, got \(coordinator.currentScreen)")
         }

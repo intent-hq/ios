@@ -19,8 +19,6 @@ struct QuestionWizardLayoutTests {
             optionsStore: CreationOptionsStore()
         )
         let pending = PendingQuestionSet(messageId: "pending", questions: [question])
-        // Keep the question set mounted: submission must release its space
-        // during panel closure, not wait for the later answer-send removal.
         let view = VStack(spacing: 0) {
             Text("Before banner").accessibilityIdentifier("banner.before")
             WorkspaceQuestionPendingBanner(viewModel: viewModel, pendingSet: pending) {}
@@ -127,16 +125,12 @@ struct QuestionWizardLayoutTests {
             #expect(previous.maxY < next.minY)
             #expect(abs(previous.minX - next.minX) < 1)
         }
-        // Accessibility frame subtraction can report 43.99999999999997 for a 44pt target.
         #expect(compact.sendFrame.height >= 44 - 0.001, "Rendered action frame: \(compact.sendFrame)")
     }
 
     @Test func customAnswerCaretUsesTheDesignedTextEdge() async throws {
         let empty = try await renderAnswerText("")
         let typed = try await renderAnswerText("Message")
-        // The design puts the text origin 20pt inside the field. Check UIKit's
-        // real caret, not a duplicate of the padding formula or an ink threshold
-        // whose result changes with the placeholder's opacity and antialiasing.
         #expect(abs(empty - 20) <= 1, "Empty caret x: \(empty)")
         #expect(abs(typed - 20) <= 1, "Typed text origin x: \(typed)")
     }
@@ -148,7 +142,6 @@ struct QuestionWizardLayoutTests {
         return try await SyntheticBadgeHost.render(view, width: 320, height: 100, safeAreaRegions: []) { hostView, _ in
             hostView.layoutIfNeeded()
             let (editor, input) = try #require(textInput(in: hostView))
-            // No first responder is needed to measure the insertion rect.
             let caret = editor.convert(input.caretRect(for: input.beginningOfDocument), to: hostView)
             return caret.minX
         }
@@ -216,7 +209,6 @@ struct QuestionWizardLayoutTests {
             )
         }
         .environment(\.dynamicTypeSize, typeSize)
-        // This models the question region after the parent has already resolved safe areas.
         return try await SyntheticBadgeHost.render(view, width: width, height: height, safeAreaRegions: []) { hostView, _ in
             try inspect(hostView)
         }

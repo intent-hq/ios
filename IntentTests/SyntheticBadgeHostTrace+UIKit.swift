@@ -4,7 +4,6 @@ extension SyntheticBadgeHostTrace {
     func bind(window: UIWindow, controller: UIViewController) {
         captureState = { [weak window, weak controller] in
             guard let window, let controller else { return ["host": "released"] }
-            // viewIfLoaded observes attachment without causing UIKit to load or lay out a view.
             let view = controller.viewIfLoaded
             return [
                 "window": String(describing: ObjectIdentifier(window)),

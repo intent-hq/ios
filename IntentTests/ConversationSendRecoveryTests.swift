@@ -327,7 +327,6 @@ extension ConversationStoreTests {
 }
 
 extension ConversationStoreTests {
-    /// Use production decoding/apply paths for transcript and queue updates.
     func deliverRecoveryRow(
         _ rowId: String,
         source: String,

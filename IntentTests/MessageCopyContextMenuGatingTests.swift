@@ -3,32 +3,20 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Availability gate for the copy-context-menu interaction
-/// (MessageCopyContextMenu): the overlay is applied unconditionally so the
-/// row subtree never changes structural identity, and this predicate only
-/// decides whether the overlay carries a live `UIContextMenuInteraction`.
-/// The interaction attaches once the message has settled and there is text
-/// to copy — image-only rows and live streaming rows stay inert.
 struct MessageCopyContextMenuGatingTests {
     @Test func emptyTextNeverEnables() {
         #expect(!MessageCopyContextMenu.shouldEnableCopyInteraction(text: "", isStreaming: false))
         #expect(!MessageCopyContextMenu.shouldEnableCopyInteraction(text: "", isStreaming: true))
     }
 
-    /// The first text delta makes the copy text non-empty while the turn is
-    /// still streaming — the interaction must NOT attach mid-stream.
     @Test func streamingRowWithTextDoesNotEnable() {
         #expect(!MessageCopyContextMenu.shouldEnableCopyInteraction(text: "partial delta", isStreaming: true))
     }
 
-    /// Settled rows with copyable text keep the upright-lift-preview
-    /// interaction from #140.
     @Test func settledRowWithTextEnables() {
         #expect(MessageCopyContextMenu.shouldEnableCopyInteraction(text: "final answer", isStreaming: false))
     }
 
-    /// User rows never stream and pass isStreaming: false — a non-empty
-    /// user bubble gets the interaction exactly as before the gate.
     @Test func userRowBehaviorUnchanged() {
         let copyText = MessageView.userCopyText(from: [
             ContentBlock(id: "u1", type: .text, text: "hello there")
@@ -36,10 +24,6 @@ struct MessageCopyContextMenuGatingTests {
         #expect(MessageCopyContextMenu.shouldEnableCopyInteraction(text: copyText, isStreaming: false))
     }
 
-    /// End-to-end shape of the assistant flow: during the thinking phase
-    /// assistantCopyText is empty (no interaction); after the first text
-    /// delta it is non-empty, and only the streaming flag keeps the row
-    /// inert until the turn settles.
     @Test func assistantCopyTextDrivesTheGateAcrossPhases() {
         let thinkingOnly: [ContentBlock] = [
             ContentBlock(id: "t1", type: .thinking, text: "reasoning...")
@@ -58,19 +42,8 @@ struct MessageCopyContextMenuGatingTests {
     }
 }
 
-/// Selective hit-testing of the transparent overlay
-/// (CopyContextMenuOverlay.OverlayView): as a sibling above the row content
-/// it must claim touches over plain SwiftUI regions (the underlying hit view
-/// is its ancestor — the hosting view — whose gesture recognizers still see
-/// the touch), pass touches through to UIKit-backed sibling subtrees
-/// (in-row scroll views), and be completely inert while the interaction is
-/// disabled. The probe runs from the window, so every fixture is rooted in
-/// a real `UIWindow`.
 @MainActor
 struct CopyContextMenuOverlayHitTestTests {
-    /// Holds the fixture's strong references: `UIContextMenuInteraction`
-    /// keeps its delegate weakly, so the coordinator must outlive the
-    /// assertions for the fixture to stay realistic.
     private struct Fixture {
         let window: UIWindow
         let host: UIView
@@ -78,9 +51,6 @@ struct CopyContextMenuOverlayHitTestTests {
         let coordinator: CopyContextMenuOverlay.Coordinator
     }
 
-    /// Builds `window > host > [siblings..., overlay]`. With `wrapped: true`
-    /// the overlay sits inside an intermediate wrapper sized exactly to it,
-    /// mimicking SwiftUI's per-representable wrapper in production.
     private func makeFixture(enabled: Bool, wrapped: Bool = false) -> Fixture {
         let frame = CGRect(x: 0, y: 0, width: 100, height: 100)
         let window = UIWindow(frame: frame)
@@ -112,17 +82,12 @@ struct CopyContextMenuOverlayHitTestTests {
     }
 
     @Test func overlayClaimsTouchesOverPlainContent() {
-        // No UIKit-backed sibling below: the probe finds the host (an
-        // ancestor), so the overlay claims the touch for its interaction.
         let fixture = makeFixture(enabled: true)
         let hit = fixture.host.hitTest(CGPoint(x: 50, y: 50), with: nil)
         #expect(hit === fixture.overlay)
     }
 
     @Test func overlayPassesThroughToUIKitBackedSiblings() {
-        // A scroll view beneath the overlay (e.g. a code block) must keep
-        // receiving its touches; the overlay yields over that sub-region
-        // and still claims the rest of the row.
         let fixture = makeFixture(enabled: true)
         let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 50, height: 100))
         fixture.host.insertSubview(scrollView, belowSubview: fixture.overlay)
@@ -131,11 +96,6 @@ struct CopyContextMenuOverlayHitTestTests {
     }
 
     @Test func probeSeesSiblingsThroughSizedWrapper() throws {
-        // Production shape: the overlay's immediate superview is SwiftUI's
-        // per-representable wrapper, sized exactly to the overlay with the
-        // overlay as its only subview. A probe from that superview could
-        // only ever find the wrapper; the window-rooted probe must disable
-        // the wrapper chain and still find the scroll view beneath.
         let fixture = makeFixture(enabled: true, wrapped: true)
         let wrapper = try #require(fixture.overlay.superview)
         let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 50, height: 100))
@@ -153,11 +113,6 @@ struct CopyContextMenuOverlayHitTestTests {
     }
 
     @Test func overlayPassesThroughToImagePassthroughMarker() {
-        // A pass-through marker (the background of a tappable image
-        // thumbnail) beneath the overlay: the probe resolves to the marker,
-        // so the touch reaches the SwiftUI Button above it instead of
-        // being claimed for the copy interaction. The rest of the row is
-        // still claimed.
         let fixture = makeFixture(enabled: true)
         let marker = CopyContextMenuPassthroughMarker.MarkerView(
             frame: CGRect(x: 0, y: 0, width: 50, height: 100)
@@ -168,9 +123,6 @@ struct CopyContextMenuOverlayHitTestTests {
     }
 
     @Test func overlayFindsPassthroughMarkerUnderZeroFramedWrapper() {
-        // Regular hit-testing never descends into a zero-framed wrapper, so
-        // the probe resolves to the host (an ancestor); the overlay must
-        // still find the correctly-framed marker beneath it.
         let fixture = makeFixture(enabled: true)
         let wrapper = UIView(frame: .zero)
         let marker = CopyContextMenuPassthroughMarker.MarkerView(
@@ -197,12 +149,6 @@ struct CopyContextMenuOverlayHitTestTests {
     }
 }
 
-/// Window hit-testing and accessibility activation of `AssistantMessageView` (ios#344): a
-/// settled message carrying text AND a tool_use block enables the copy
-/// overlay over the whole row, but a header-center hit must not be claimed
-/// by it. Accessibility activation must expand/hydrate the real Button.
-/// The text region keeps copy behavior, and a tool-only message keeps an
-/// inert overlay. Physical tap delivery remains required at the integration UI gate.
 @MainActor
 struct AssistantMessageToolRowHitTestTests {
     private static let hostWidth: CGFloat = 390
@@ -241,10 +187,6 @@ struct AssistantMessageToolRowHitTestTests {
         )
     }
 
-    /// Every accessibility element reachable from `root`, depth-first. Unlike
-    /// `SyntheticBadgeHost.accessibilityElements(in:)` this also descends into
-    /// SwiftUI's non-`UIView` container nodes, which is where a nested row's
-    /// buttons and text live.
     private static func allAccessibilityElements(
         under root: NSObject,
         visited: inout Set<ObjectIdentifier>,
@@ -264,11 +206,6 @@ struct AssistantMessageToolRowHitTestTests {
         }
     }
 
-    /// SwiftUI publishes a freshly hosted view's accessibility nodes
-    /// asynchronously (the first hosting in a test process may take a few
-    /// run-loop turns), so the lookup observes the run loop, bounded, until
-    /// the element appears — the same observation the rendered badge tests
-    /// perform, not a sleep.
     private static let accessibilityObservationDeadline: TimeInterval = 3
     private static let accessibilityObservationInterval: TimeInterval = 0.02
 
@@ -289,8 +226,6 @@ struct AssistantMessageToolRowHitTestTests {
         return (match, seen)
     }
 
-    /// Frame of the first accessibility element whose label (or value, for
-    /// UIKit-backed text views) contains `fragment`, in window coordinates.
     private static func frame(
         ofElementContaining fragment: String,
         in hostView: UIView,
@@ -326,7 +261,6 @@ struct AssistantMessageToolRowHitTestTests {
         return nil
     }
 
-    /// The row's single copy overlay, with its frame in window coordinates.
     private static func copyOverlay(
         in hostView: UIView,
         window: UIWindow
@@ -338,8 +272,6 @@ struct AssistantMessageToolRowHitTestTests {
         return (overlay, window.convert(overlay.bounds, from: overlay))
     }
 
-    /// Window-level hit at `point`: must resolve to a non-nil view inside the
-    /// hosted row whose own bounds contain the point.
     private static func requireHit(at point: CGPoint, in hostView: UIView, window: UIWindow) throws -> UIView {
         let hit = try #require(window.hitTest(point, with: nil), "nothing hit-tests at \(point)")
         try #require(hit.isDescendant(of: hostView), "hit \(hit) lies outside the hosted row")
@@ -350,9 +282,6 @@ struct AssistantMessageToolRowHitTestTests {
         return hit
     }
 
-    /// Check overlay exclusion separately from the observable accessibility
-    /// action; a private SwiftUI drawing-view class is not a routing contract.
-    /// Activation does not synthesize a physical touch.
     private static func expectHeaderPassThroughAndActivation(
         subject: String,
         in hostView: UIView,
@@ -360,7 +289,6 @@ struct AssistantMessageToolRowHitTestTests {
         workspaceDesign: Bool
     ) throws {
         let headerFrame = try frame(ofElementContaining: subject, in: hostView, window: window)
-        // Compare window-space edges: subtracting fractional endpoints can make 44pt appear one ULP short.
         if workspaceDesign { #expect(headerFrame.maxY >= headerFrame.minY + 44) }
         let point = CGPoint(x: headerFrame.midX, y: headerFrame.midY)
         let hit = try requireHit(at: point, in: hostView, window: window)
@@ -411,14 +339,10 @@ struct AssistantMessageToolRowHitTestTests {
             + "physical-device unit-test run needs VoiceOver or an XCUITest session)"
     )
 
-    // Gated like the rendered badge tests: always true on the simulator, so a
-    // missing header element there is a real failure, not a skip.
     @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() }, arguments: [false, true])
     func toolRowHeaderPassesHitTestAndActivatesInTextBearingMessage(workspaceDesign: Bool) async throws {
         let subject = try toolSubject
         try await hitTest(includeText: true, workspaceDesign: workspaceDesign, expectExpansion: true) { hostView, window in
-            // The copy interaction is live and spans the header: the overlay
-            // is what would otherwise claim the tap.
             let overlay = try Self.copyOverlay(in: hostView, window: window)
             #expect(overlay.view.interactions.contains { $0 is UIContextMenuInteraction })
             let headerFrame = try Self.frame(ofElementContaining: subject, in: hostView, window: window)
@@ -429,8 +353,6 @@ struct AssistantMessageToolRowHitTestTests {
         }
     }
 
-    /// Minimum height of the text band above the tool row for the probe point
-    /// to be unambiguously inside the text block rather than on its edge.
     private static let minimumTextBandHeight: CGFloat = 12
 
     @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() }, arguments: [false, true])
@@ -442,10 +364,6 @@ struct AssistantMessageToolRowHitTestTests {
                 overlay.view.interactions.contains { $0 is UIContextMenuInteraction },
                 "copy interaction is not attached to a settled text-bearing message"
             )
-            // Textual's text is not published as a labelled accessibility
-            // element, so locate the text block geometrically: the row lays
-            // the text block out above the tool row, so the band between the
-            // overlay's top edge and the header's top edge is text.
             let headerFrame = try Self.frame(ofElementContaining: subject, in: hostView, window: window)
             let textBandHeight = headerFrame.minY - overlay.frame.minY
             try #require(
@@ -454,10 +372,6 @@ struct AssistantMessageToolRowHitTestTests {
             )
             let point = CGPoint(x: headerFrame.midX, y: overlay.frame.minY + textBandHeight / 2)
             #expect(overlay.frame.contains(point), "overlay \(overlay.frame) does not cover the text at \(point)")
-            // The overlay either claims the text touch itself or defers to
-            // Textual's UITextInput-conforming text view beneath it (which
-            // keeps its own selection / copy affordances); either way the
-            // tap must not land on a pass-through marker.
             let hit = try Self.requireHit(at: point, in: hostView, window: window)
             #expect(
                 hit === overlay.view || hit is UITextInput,
@@ -471,7 +385,6 @@ struct AssistantMessageToolRowHitTestTests {
     func toolRowHeaderPassesHitTestAndActivatesInToolOnlyMessage(workspaceDesign: Bool) async throws {
         let subject = try toolSubject
         try await hitTest(includeText: false, workspaceDesign: workspaceDesign, expectExpansion: true) { hostView, window in
-            // No copy text: the overlay remains present but inert.
             let overlay = try Self.copyOverlay(in: hostView, window: window)
             #expect(
                 !overlay.view.interactions.contains { $0 is UIContextMenuInteraction },

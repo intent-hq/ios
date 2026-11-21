@@ -52,7 +52,6 @@ struct PersistenceBackendSyncTests {
             connection: connection,
             persistence: store.manager
         )
-        // The route refresh/publication task runs independently of pairing UI.
         let maxTaskYields = 20
         for _ in 0..<maxTaskYields where store.cloud.writeCount == 0 { await Task.yield() }
         #expect(store.cloud.writeCount == 1)

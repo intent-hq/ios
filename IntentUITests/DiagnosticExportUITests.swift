@@ -1,7 +1,5 @@
 import XCTest
 
-/// Run on both iPhone (compact) and iPad (regular) when validation resumes.
-/// Uses demo data, never a live backend or an automatic share destination.
 nonisolated final class DiagnosticExportUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let maximumSwipes = 12
@@ -17,7 +15,6 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         let sessionStarted = app.staticTexts["app.session_started"].firstMatch
         XCTAssertTrue(sessionStarted.exists)
 
-        // Opening the entry presents our readable screen, not UIKit sharing.
         app.buttons["diagnosticClear"].tap()
         XCTAssertTrue(app.buttons["Clear logs"].waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.staticTexts["Clear local diagnostic logs?"].exists)
@@ -93,8 +90,6 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         if app.buttons["Cancel"].exists {
             app.buttons["Cancel"].tap()
         } else {
-            // Native confirmation popovers expose their outside-dismiss region,
-            // including on iPhone under iOS 26, instead of a Cancel button.
             let dismissRegion = app.otherElements["PopoverDismissRegion"]
             XCTAssertTrue(dismissRegion.waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(dismissRegion.isHittable)

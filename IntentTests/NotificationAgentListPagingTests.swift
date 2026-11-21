@@ -3,9 +3,6 @@ import Foundation
 import Testing
 import UIKit
 
-/// The idle-alert suppression read walks every `agent.list` page (protocol
-/// "Paged agent lists and queues"): an active agent on a later page still
-/// suppresses the alert, and a walk that fails falls back to alerting.
 @Suite("NotificationManager paged agent reads")
 @MainActor
 struct NotificationAgentListPagingTests {
@@ -77,7 +74,6 @@ struct NotificationAgentListPagingTests {
 
     @Test func pageErrorMidWalkFallsBackToTheAlert() async throws {
         let fake = FakeConnectionManager()
-        // The second page has no configured reply, so it fails.
         fake.responseQueueMap["agent.list"] = [AgentListPagingTests.page(AgentListPagingTests.rows(1...200), next: "t1")]
         let (manager, _) = makeManager(fake)
 

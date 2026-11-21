@@ -1,7 +1,6 @@
 import XCTest
 
 extension InlineResponseImageUITests {
-    /// ios#803: the share item keeps the original document name, never the cache name.
     func assertPDFShareKeepsOriginalName(in app: XCUIApplication, timeout: TimeInterval) {
         let activity = app.otherElements["ActivityListView"].firstMatch
         let named = activity.descendants(matching: .any).matching(

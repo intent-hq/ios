@@ -2,11 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Every event type intentd can emit on a channel a store consumes must be a
-/// deliberate decision in that store's classification tables. The catalog is
-/// the vendored intentd golden `IntentTests/Fixtures/event_types.json`
-/// (`crates/intent-core/tests/goldens/event_types.json` in intent-hq/intentd);
-/// re-vendor it when the daemon adds a type, then classify the new type.
 private struct EventCatalogDiscriminator: Decodable {
     let path: String
     let kind: String
@@ -60,15 +55,8 @@ struct EventCatalogCoverageTests {
         let refetch: Set<String>
         let patchInPlace: Set<String>
         let ignore: Set<String>
-        /// Per discriminated type: the discriminator values the store's
-        /// table names (golden `values`; the `absent` case is checked by
-        /// classifying without the path present).
         let discriminatorValues: [String: Set<String>]
-        /// Per discriminated type: the classification each golden value
-        /// (and the `absent` shape) must produce. Spelled out here rather
-        /// than read from the store's table so a flipped table entry fails.
         let discriminatorExpectations: [String: DiscriminatorExpectation]
-        // Classifiers must accept absent event data as well as an explicitly empty payload.
         // swiftlint:disable:next discouraged_optional_collection
         let classify: (String, [String: Any]?) -> EventClassification?
     }
@@ -78,16 +66,11 @@ struct EventCatalogCoverageTests {
         let absent: EventClassification
     }
 
-    /// `task:ready-tasks-changed`: only `note-deleted` signals a row left the
-    /// list; `relations-changed` and the reason-less status-change shape are
-    /// covered by other events.
     private static let readyTasksChangedExpectation = DiscriminatorExpectation(
         values: ["note-deleted": .refetch, "relations-changed": .ignore],
         absent: .ignore
     )
 
-    /// `workspace:updated`: only a `lastActivity`-only delta is patched in
-    /// place; every other key, and a missing `changes`, refetches.
     private static let workspaceUpdatedExpectation = DiscriminatorExpectation(
         values: [
             "lastActivity": .patchInPlace,
@@ -174,8 +157,6 @@ struct EventCatalogCoverageTests {
         )
     ]
 
-    /// Builds an event `data` payload placing `leaf` at the golden's
-    /// discriminator `path` (`data.a.b` → `["a": ["b": leaf]]`).
     private static func data(at path: String, leaf: Any) -> [String: Any] {
         var segments = path.split(separator: ".").map(String.init)
         precondition(segments.first == "data", "discriminator path must start with data.")
@@ -189,12 +170,6 @@ struct EventCatalogCoverageTests {
         }
         return dict
     }
-
-    /// Every discriminator value (or `changes` key) the golden lists for a
-    /// type on the store's channels must be named by that store's table and
-    /// classify to the classification this test spells out for it; the
-    /// `absent` shape must classify to its expected value too. For `keys`
-    /// discriminators a refetch key must dominate a patch-in-place key.
 }
 
 extension EventCatalogCoverageTests {
@@ -295,8 +270,6 @@ extension EventCatalogCoverageTests {
         }
     }
 
-    /// A store's tables are inert unless `ConnectionManager` subscribes to
-    /// the channel globally.
     @Test func globalSubscriptionCoversEveryHandledChannel() {
         for store in Self.stores {
             for channel in store.channels {
@@ -312,8 +285,6 @@ extension EventCatalogCoverageTests {
         golden.types.filter { type in channels.contains { $0.hasSuffix(":") ? type.hasPrefix($0) : type == $0 } }
     }
 
-    /// Any type on a handled channel that no table names is a silent drop of
-    /// a possibly-rendered change — fail naming the store and the type.
     @Test func everyCatalogTypeOnHandledChannelsIsClassified() {
         for store in Self.stores {
             let types = Self.catalogTypes(on: store.channels)
@@ -327,8 +298,6 @@ extension EventCatalogCoverageTests {
         }
     }
 
-    /// A table entry the catalog does not contain is a typo or a type the
-    /// daemon no longer emits.
     @Test func everyTableEntryIsInCatalog() {
         let catalog = Set(Self.golden.types)
         for store in Self.stores {

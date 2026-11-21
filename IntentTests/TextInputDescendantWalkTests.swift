@@ -2,18 +2,8 @@
 import Testing
 import UIKit
 
-/// The overlay's hit-test pass-through defers to a `UITextInput`-conforming
-/// descendant (Textual's text-interaction view) that claims the point, even
-/// when an intermediate SwiftUI wrapper is zero-framed and would make the
-/// regular recursive hit-test skip the subtree. These tests exercise the
-/// `textInputDescendant(containing:with:excluding:)` walk directly; the
-/// overlay's `hitTest` override itself is covered end-to-end in
-/// `CopyContextMenuOverlayHitTestTests`.
 @MainActor
 struct TextInputDescendantWalkTests {
-    /// Minimal `UITextInput` conformance is impractical to stub; the walk
-    /// only checks protocol conformance, so a UITextView (which conforms)
-    /// stands in for Textual's interaction view.
     private func makeTextInputView(frame: CGRect) -> UIView {
         let view = UITextView(frame: frame)
         view.isEditable = false
@@ -22,8 +12,6 @@ struct TextInputDescendantWalkTests {
 
     @Test func findsTextInputThroughZeroFramedWrapper() {
         let container = UIView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
-        // Zero-framed intermediate wrapper: regular hit-testing would fail
-        // its containment check and never descend into it.
         let wrapper = UIView(frame: .zero)
         let textInput = makeTextInputView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
         container.addSubview(wrapper)
@@ -38,9 +26,6 @@ struct TextInputDescendantWalkTests {
         #expect(match === textInput)
     }
 
-    /// Coordinate conversion accumulates wrapper frames hop by hop, so a
-    /// non-zero-origin wrapper offsets the point on the way down — a text
-    /// input that compensates (correct absolute position) is still found.
     @Test func findsTextInputUnderOffsetWrapper() {
         let container = UIView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
         let wrapper = UIView(frame: CGRect(x: 50, y: 25, width: 0, height: 0))
@@ -57,8 +42,6 @@ struct TextInputDescendantWalkTests {
         #expect(match === textInput)
     }
 
-    /// The walk ignores wrapper *bounds* but not wrapper state: a hidden or
-    /// disabled intermediate wrapper prunes its whole subtree.
     @Test func skipsTextInputUnderHiddenOrDisabledWrapper() {
         let container = UIView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
         let frame = CGRect(x: 0, y: 0, width: 300, height: 100)

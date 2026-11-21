@@ -410,8 +410,6 @@ extension ConnectionManager {
         subscriptionRouter.reset()
     }
 
-    /// Internal for test
-    /// visibility.
     func resetCertMismatchesIfTargetChanged(
         hosts: [String],
         port: Int,

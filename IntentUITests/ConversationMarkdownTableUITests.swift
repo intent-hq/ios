@@ -16,7 +16,6 @@ nonisolated final class ConversationMarkdownTableUITests: XCTestCase {
     @MainActor
     private func verifyTable(accessibleText: Bool) {
         continueAfterFailure = false
-        // iPhone supports portrait only, including the AX5 flow through Go to End.
         XCUIDevice.shared.orientation = .portrait
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = XCUIApplication()
@@ -79,8 +78,6 @@ nonisolated final class ConversationMarkdownTableUITests: XCTestCase {
 
     @MainActor
     private func revealHeader(_ header: XCUIElement, in transcript: XCUIElement) {
-        // A full-screen fling can skip the header, especially at large text sizes.
-        // Correct in either direction instead of continuing past the table to the top.
         for _ in 0..<40 {
             let viewport = transcript.frame.insetBy(dx: 0, dy: 80)
             let headerFrame = frame(of: header)

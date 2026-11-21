@@ -13,7 +13,6 @@ struct HTMLFileWebViewTests {
         let port = try #require(server.listener.port)
         let address = "http://127.0.0.1:\(port.rawValue)/pixel.png"
 
-        // Positive control: the same WebKit runtime can reach and display this image.
         let control = try await loadUnprotectedImage(at: address, server: server)
         control.stopLoading()
         let baseline = server.requests
@@ -48,8 +47,6 @@ struct HTMLFileWebViewTests {
             #expect(server.requests == baseline)
 
             try await checkInertLinks(in: webView, address: address, server: server, baseline: baseline)
-            // WebKit may speculatively open a socket before cancelling navigation.
-            // Count received HTTP bytes, not idle sockets, and allow late requests to surface.
             try await Task.sleep(for: .seconds(1))
             #expect(server.requests == baseline)
         }
@@ -208,7 +205,6 @@ struct HTMLFileWebViewTests {
     }
 
     private func evaluate(_ expression: String, in webView: WKWebView) async throws -> Any? {
-        // App-owned isolated-world inspection is allowed; page scripts remain disabled.
         try await webView.callJavaScript("return \(expression)", arguments: [:], in: .defaultClient)
     }
 

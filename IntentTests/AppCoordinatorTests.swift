@@ -6,11 +6,6 @@ import Synchronization
 import Testing
 import UIKit
 
-/// `AppCoordinator` takes its workspace store and connection explicitly (they
-/// come from the owning `BackendSession`). Navigation-only tests keep using
-/// the process-wide instances. Window model v2: a coordinator bound to a
-/// `backendID` drives a backend window; an unbound one drives a transient
-/// pairing window.
 extension AppCoordinator {
     @MainActor
     convenience init(
@@ -38,25 +33,12 @@ extension AppCoordinator {
 
 @Suite(.serialized)
 final class AppCoordinatorTests {
-    /// Per-test isolated persistence. Swift Testing creates a fresh suite
-    /// instance per test, so each test gets its own UserDefaults suite and
-    /// in-memory keychain — persisted navigation state written by one test
-    /// can never leak into another (intent-hq/monorepo#2677). The suite's
-    /// persistent domain is removed again in deinit so runs don't accumulate
-    /// UUID-named plists in the test host.
     let persistence: PersistenceManager
     private let suiteName: String
 
-    /// Backend identity for tests that bind the coordinator to a window
-    /// backend without needing a saved connection record. Sharing it across
-    /// tests is safe: each test's persistence uses its own UserDefaults suite.
     static let windowBackend = BackendID(UUID())
 
     init() throws {
-        // The coordinator under test uses the injected per-test persistence,
-        // but non-injected globals (e.g. ConnectionManager.shared's route
-        // refresh) can still reach PersistenceManager.shared — keep its
-        // keychain in-memory so SecItem is never hit in headless CI.
         _ = TestKeychainStorage.installed
         suiteName = "AppCoordinatorTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -77,7 +59,6 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onConnectionSuccess()
         if case .workspaceList = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .workspaceList, got \(coordinator.currentScreen)")
         }
@@ -114,7 +95,6 @@ final class AppCoordinatorTests {
         )
         coordinator.onLoadComplete()
         if case .connecting = coordinator.currentScreen {
-            // Normal cold-start routing remains in control until connection succeeds.
         } else {
             Issue.record("Expected .connecting before connection success, got \(coordinator.currentScreen)")
         }
@@ -179,8 +159,6 @@ final class AppCoordinatorTests {
         defer { resetConnectionState() }
         let first = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let second = persistence.upsertConnection(Self.makeConnection(port: 5252))
-        // Window model v2: a tap for a backend this window doesn't show is
-        // dropped — the multi-window tap route opens that backend's window.
         let coordinator = AppCoordinator(backendID: BackendID(first.id), persistence: persistence)
         coordinator.currentScreen = .connecting
         coordinator.handleNotificationSelection(
@@ -212,7 +190,6 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onRetryConnection()
         if case .connecting = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
         }
@@ -232,12 +209,6 @@ final class AppCoordinatorTests {
         )
     }
 
-    /// Regression (window model v2): pairing a different backend from a
-    /// BOUND window dials the new daemon over this window's live session
-    /// connection. After the retarget hook routes to the target's own
-    /// window, this window must drop the hijacked socket and the other
-    /// daemon's data and re-dial its own backend — not keep showing the
-    /// newly paired daemon's workspaces.
     @Test @MainActor func onPaired_boundWindow_redialsOwnBackendAfterRoutingOut() {
         let own = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let paired = persistence.upsertConnection(Self.makeConnection(port: 5252))
@@ -274,9 +245,6 @@ final class AppCoordinatorTests {
             Issue.record("Expected a re-dial of this window's own backend, got \(coordinator.currentScreen)")
         }
     }
-
-    /// A re-pair routed for this window's own backend must not trigger the
-    /// repair re-dial (no disconnect, screen untouched).
 }
 
 extension AppCoordinatorTests {
@@ -345,7 +313,6 @@ extension AppCoordinatorTests {
             persistence: persistence
         )
         coordinator.currentScreen = screen
-        // The real window root does nothing when retargeted to its existing ID.
         coordinator.retargetWindow = { _ in }
         let previousAttempt = coordinator.connectionAttemptId
         let paired = persistence.upsertConnection(StoredConnection(
@@ -376,9 +343,6 @@ extension AppCoordinatorTests {
         #expect(cached.tcAddress == "tc-test-refreshed")
     }
 
-    /// An unbound (pairing) window routes the pairing via the retarget hook
-    /// with no repair — the hook rebinds it in place (single-window) or
-    /// replaces it with the target's own window (multi-window).
     @Test @MainActor func onPaired_unboundWindow_retargetsWithoutRedial() {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let fake = FakeConnectionManager()
@@ -404,7 +368,6 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onOpenSettings()
         if case .settings = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .settings, got \(coordinator.currentScreen)")
         }
@@ -416,7 +379,6 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onLogOff()
         if case .pairing = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -426,7 +388,6 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSettingsBack()
         if case .workspaceList = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .workspaceList, got \(coordinator.currentScreen)")
         }
@@ -436,7 +397,6 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onReconnect()
         if case .pairing = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -445,7 +405,6 @@ extension AppCoordinatorTests {
     @Test @MainActor func initialScreen_isLoading() {
         let coordinator = AppCoordinator(persistence: persistence)
         if case .loading = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected initial screen to be .loading, got \(coordinator.currentScreen)")
         }

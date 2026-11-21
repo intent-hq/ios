@@ -1,7 +1,6 @@
 @testable import Intent
 import Testing
 
-/// Transitions of the shared live-subscription state used by the per-workspace stores.
 @MainActor
 struct LiveSubscriptionTests {
     @Test func idleHasNoIdAndIsNeitherLiveNorResnapshotting() {

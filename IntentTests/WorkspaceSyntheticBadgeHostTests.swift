@@ -101,10 +101,6 @@ private final class SyntheticBadgeHostSession<Content: View> {
             diagnostics: diagnostics
         )
         controller.safeAreaRegions = safeAreaRegions
-        // A detached window can lay out and deliver appearance callbacks while
-        // SwiftUI exposes no accessibility tree to the application. Foreground
-        // inactivity (for example during a system alert) stops event delivery,
-        // not the connected scene's ability to host this view's hierarchy.
         window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: width, height: height)
         self.callbackTimeout = callbackTimeout
@@ -166,8 +162,6 @@ private struct SyntheticBadgeHostCombinedError: Error, CustomStringConvertible {
     }
 }
 
-/// Hosts a SwiftUI view in a synthetic window for the rendered badge tests and
-/// for the accessibility-tree probe that gates them.
 @MainActor
 enum SyntheticBadgeHost {
     typealias LifecycleEvent = SyntheticBadgeHostLifecycleWaiter.Event
@@ -181,7 +175,6 @@ enum SyntheticBadgeHost {
     private static let probeHeight: CGFloat = 100
     private static let callbackTimeout: TimeInterval = 5
 
-    // Keep the existing lifecycle/error/cleanup order together while recording its boundaries.
     // swiftlint:disable:next function_body_length
     static func render<Content: View, Result>(
         _ content: Content,
@@ -261,10 +254,6 @@ enum SyntheticBadgeHost {
         }
     }
 
-    /// Whether a hosted SwiftUI view exposes its accessibility elements at all.
-    /// The simulator lane always enables accessibility (scripts/xcodebuild.sh), so
-    /// the probe is only consulted on a physical device; a simulator regression
-    /// must surface as a failing badge test, not a skip.
     static func publishesAccessibilityTree() async -> Bool {
         #if targetEnvironment(simulator)
             return true
@@ -292,9 +281,6 @@ enum SyntheticBadgeHost {
         func visit(_ object: NSObject) {
             guard visited.insert(ObjectIdentifier(object)).inserted else { return }
             if object !== view { elements.append(object) }
-            // ScrollView/Menu can publish intermediate SwiftUI accessibility
-            // containers which are NSObjects, not UIViews. Walk their children
-            // too; stopping at the first container hides the actual menu chips.
             var children = (object.accessibilityElements ?? []).compactMap { $0 as? NSObject }
             let count = object.accessibilityElementCount()
             if count != NSNotFound, count > 0 {
@@ -310,8 +296,6 @@ enum SyntheticBadgeHost {
         return elements
     }
 
-    /// SwiftUI's accessibility nodes are not `UIView`s, so read the identifier
-    /// through `UIAccessibilityIdentification` rather than a view cast.
     static func accessibilityIdentifier(of object: NSObject) -> String? {
         if let identified = object as? UIAccessibilityIdentification {
             return identified.accessibilityIdentifier

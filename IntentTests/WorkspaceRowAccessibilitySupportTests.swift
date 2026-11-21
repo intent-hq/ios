@@ -35,9 +35,6 @@ extension WorkspaceRowPresentationTests {
         let badges: [RenderedBadge]
     }
 
-    // Badges are located by their stable accessibility identifier; the spoken
-    // label is asserted separately so a copy change cannot masquerade as a
-    // missing element.
     func renderBadges(
         width: CGFloat,
         status: WorkspacePrPill.Status,

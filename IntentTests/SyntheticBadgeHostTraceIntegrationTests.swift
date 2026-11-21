@@ -41,7 +41,6 @@ extension SyntheticBadgeHostTests {
         await #expect(throws: SyntheticBadgeHostLifecycleWaiter.WaitError.timedOut(.didAppear)) {
             try await waiter.wait(for: .didAppear, timeout: 0.01, honoringCancellation: true) {}
         }
-        // Match the existing waiter control's direct callback delivery; the rendered host never synthesizes it.
         waiter.receive(.didAppear)
         try await waiter.wait(for: .didDisappear, timeout: 1, honoringCancellation: true) {
             waiter.receive(.didDisappear)

@@ -3,7 +3,6 @@ import Foundation
 import Testing
 import UIKit
 
-// Observed scroll offsets stay literal, with thousands grouped to compare nearby viewport positions.
 // swiftlint:disable no_magic_numbers number_separator
 
 extension ConversationTranscriptScrollPolicyTests {
@@ -40,8 +39,6 @@ extension ConversationTranscriptScrollPolicyTests {
         )
     }
 
-    /// A following viewport at the bottom with no realized end row is paged
-    /// up one viewport and followed back to the end (#338).
     @Test func blankViewportAtTheBottomIsPagedUpAndFollowedBack() {
         #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000)) == .continue(.recover(pageOffsetY: 1_600)))
         #expect(recovery(geometry(offsetY: 2_299.5, contentHeight: 3_000)) == .continue(.recover(pageOffsetY: 1_599.5)))
@@ -51,8 +48,6 @@ extension ConversationTranscriptScrollPolicyTests {
             == .continue(.recover(pageOffsetY: -59)))
     }
 
-    /// A first short rest inside the bottom band follows once; an unchanged
-    /// geometry after that escalates to paging up.
     @Test func shortRestInsideTheBandIsFollowedOnceThenPagedUp() {
         #expect(recovery(geometry(offsetY: 2_270, contentHeight: 3_000)) == .continue(.followToEnd))
         #expect(recovery(geometry(offsetY: 2_251, contentHeight: 3_000)) == .continue(.followToEnd))
@@ -86,7 +81,6 @@ extension ConversationTranscriptScrollPolicyTests {
         let initial = geometry(offsetY: 9_300, contentHeight: 10_000)
         #expect(recovery(initial, correctionsLeft: 3) == .continue(.recover(pageOffsetY: 8_600)))
 
-        // The end jump may move nowhere, or return to the same bad estimate.
         for offset in [CGFloat(8_600), 9_300, 9_600] {
             #expect(recovery(
                 geometry(offsetY: offset, contentHeight: offset + 700),
@@ -188,8 +182,6 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(recovery(geometry(offsetY: 300), isFollowing: true, correctionsSpent: 1) == .continue(.settling))
     }
 
-    /// The report of a transcript with one episode armed, resolved on
-    /// `outcome` (nil: still running) with the end row realized by default.
     private func recoveryReport(
         _ outcome: RecoveryTerminal?,
         corrections: Int = 0,
@@ -206,10 +198,6 @@ extension ConversationTranscriptScrollPolicyTests {
         )
     }
 
-    /// `recovered` needs a correction spent and the end row realized at the
-    /// finish; a `.notNeeded` that spent nothing is `noCorrectionNeeded`, one over
-    /// a still unrealized end row is `unverified` (neither recovered nor a
-    /// give-up: the budget was not spent and Go to End is not shown).
     @Test func recoveryReportLabelsRecoveredOnlyWithACorrectionAndTheEndRealized() {
         #expect(recoveryReport(.notNeeded, corrections: 1, endRealized: true).reason == .recovered)
         #expect(recoveryReport(.notNeeded, corrections: 3, endRealized: true).reason == .recovered)
@@ -227,9 +215,6 @@ extension ConversationTranscriptScrollPolicyTests {
         ))
     }
 
-    /// An abandoned episode is never `recovered`: a give-up is `gaveUp`, a
-    /// yield is `yieldedToUser`, and a cancelled task is `cancelled`
-    /// whatever terminal it reached, a `.notNeeded` included, or none.
     @Test func recoveryReportNeverLabelsAnAbandonedEpisodeRecovered() {
         for corrections in [0, 1, 3] {
             for endRealized in [false, true] {
@@ -248,9 +233,6 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(recoveryReport(.giveUp, corrections: 1, endRealized: true, cancelled: true).reason == .cancelled)
     }
 
-    /// No episode armed is `notAttempted` whatever else is handed; an armed
-    /// episode without a terminal (the loop is settling, following or
-    /// paging — only a terminal is ever handed) is `recovering`.
     @Test func recoveryReportDistinguishesNotAttemptedFromInFlight() {
         #expect(recoveryReport(nil, episodes: 0, endRealized: false).reason == .notAttempted)
         #expect(recoveryReport(nil, episodes: 0, endRealized: true).reason == .notAttempted)
@@ -261,9 +243,6 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(recoveryReport(nil, corrections: 1, endRealized: true).reason == .recovering)
     }
 
-    /// The summary names the reason with its evidence and reads next to the
-    /// forced follow's report once that follow has reported — on every
-    /// launch, `notAttempted` included — never on the pending report.
     @Test func recoveryReportSummaryIsAppendedOnlyAfterTheFollowReports() {
         let policy = ConversationTranscriptScrollPolicy.self
         let notAttempted = recoveryReport(nil, episodes: 0, endRealized: false)

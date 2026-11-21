@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// NoteStore against a bounded daemon (PROTOCOL §5.2 "Bounded note and
-/// comment reads", §6.9 "Paged snapshots").
 @MainActor
 struct NoteStorePagingTests {
     private struct PageError: Error {}
@@ -22,8 +20,6 @@ struct NoteStorePagingTests {
         range.map { note("note-\($0)") }
     }
 
-    /// Connected store with a `note.subscribe` handler registered as `sub-1`
-    /// and every connect-time `note.list` read already settled.
     private func liveStore() async throws -> (NoteStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -93,7 +89,6 @@ struct NoteStorePagingTests {
         #expect(store.snapshotFiller.isFilling)
         #expect(store.notes.isEmpty, "a partial snapshot must not replace the list")
 
-        // A delta during the walk is newer than any later page row.
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             seq: 1,
@@ -141,19 +136,15 @@ struct NoteStorePagingTests {
             subscriptionId: "sub-1", seq: 0, snapshot: Self.notes(1...200), nextToken: "t1"
         ))
 
-        // Three page attempts, then the resubscribe's baseline `note.list`.
         try await waitUntil("resubscribed for a fresh snapshot") {
             fake.paramsForMethod("note.subscribe").count == 1 && fake.paramsForMethod("note.list").count == 4
         }
         #expect(subscribes == 1)
-        // The resubscribe is not cancelled with the walk that triggered it.
         try await waitUntil("live handler re-registered") { fake.hasSubscriptionHandler(id: "sub-1") }
         #expect(fake.paramsForMethod("note.unsubscribe").count == 1)
-        // The partial first page is shown rather than nothing.
         #expect(store.notes.count == 200)
         #expect(store.snapshotFiller.failures == 1)
 
-        // The fresh snapshot pages through once the daemon recovers.
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
         fake.errorMap["note.list"] = nil
         fake.responseQueueMap["note.list"] = [["notes": Self.notes(201...205), "nextToken": NSNull()]]
@@ -196,7 +187,6 @@ struct NoteStorePagingTests {
         let store = NoteStore(connectionManager: fake)
         let content = String(repeating: "Größe 📝 line\n", count: 3)
         let total = content.utf8.count
-        // "Größe " is 8 bytes; cut after the first line (18 bytes) and after "Größe " on the second.
         let firstLine = "Größe 📝 line\n".utf8.count
         fake.responseQueueMap["note.get"] = [
             Self.cutNote(content, from: 0, to: firstLine, total: total),
@@ -273,7 +263,6 @@ struct NoteStorePagingTests {
         #expect(grafted.content == "abc\ndef\n")
         #expect(!grafted.contentTruncated)
         #expect(!grafted.needsFullContent)
-        // Optimistic edits keep the markers of the body they edit.
         #expect(cut.withContent("abd\n").contentTruncated)
     }
 }

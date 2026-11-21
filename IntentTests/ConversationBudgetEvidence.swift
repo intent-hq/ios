@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// Explicit received error fixture. Local cancellations/errors have no JSON
-/// response; a scripted daemon rejection does, and must stay in the ledger.
 nonisolated struct RPCFixtureRejection: LocalizedError, CustomNSError {
     let code: Int
     let message: String
@@ -14,10 +12,6 @@ nonisolated struct RPCFixtureRejection: LocalizedError, CustomNSError {
 }
 
 enum ConversationBudgetEvidence {
-    /// Opt-in artifact output from the SAME test body on native or portable
-    /// runners. Contains every frame, including deferred completions/cleanup.
-    /// Transport ids are already 0 in RPCTraffic; this is connection-boundary
-    /// JSON, not a socket capture or a device first-paint measurement.
     static func emit(_ name: String, _ traffic: RPCTraffic) throws {
         guard let directory = ProcessInfo.processInfo.environment["STARTUP_BUDGET_DIRECTORY"] else { return }
         let requests: [[String: Any]] = try traffic.requests.map { request in

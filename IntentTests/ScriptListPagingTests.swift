@@ -2,10 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// `script.list` full-view pages (protocol "Full-view pages", `boundedReads: 1`):
-/// a bounded host answers 100 definitions per page with `nextCursor`, absent
-/// on the last page; hosts without the capability reject `limit` / `cursor`
-/// on the full view, so the first request carries neither.
 @MainActor
 struct ScriptListPagingTests {
     private struct PageError: Error {}
@@ -103,7 +99,6 @@ struct ScriptListPagingTests {
         let saved: [String: Any] = [
             "id": "registered-dev", "workspaceId": "workspace", "name": "dev", "command": candidate.command, "mode": candidate.mode
         ]
-        // Later refreshes (after the launch) read the settled list.
         fixture.fake.responseMap["script.list"] = ["scripts": [fixture.definition(id: "verification"), saved]]
         fixture.fake.responseQueueMap["script.list"] = [
             ["scripts": Self.scripts(1...100), "nextCursor": "c1"],

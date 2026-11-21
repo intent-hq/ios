@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Valid persisted wire rows shared with the desktop source replay. Existing
-/// lifecycle fixtures deliberately keep their own distinct registration ids.
 @MainActor
 final class ConversationBudgetFixture {
     let startup = ConversationStartupFixture()

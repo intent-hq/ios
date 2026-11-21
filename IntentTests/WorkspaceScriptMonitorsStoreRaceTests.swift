@@ -175,8 +175,6 @@ extension WorkspaceScriptMonitorsStoreTests {
         try await fake.waitForPendingRequests("scriptMonitor.get")
         fake.responseMap["scriptMonitor.list"] = page([monitor(name: "Fresh summary")])
         await store.refresh(workspaceId: "ws-1")
-        // Invalidation cancels the superseded read; its cancellation must stay
-        // fenced rather than surfacing as a failed detail.
         await old.value
         #expect(store.detailSummary(selection: selected)?.scriptName == "Fresh summary")
         #expect(store.detailState(selection: selected) == .loading)

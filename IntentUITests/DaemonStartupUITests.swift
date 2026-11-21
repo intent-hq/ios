@@ -131,7 +131,6 @@ nonisolated final class DaemonStartupUITests: XCTestCase {
         return app
     }
 
-    /// A reconnect after entry is a read-only banner: expand it once to reach the progress details.
     @MainActor private func assertTitle(_ expected: String, app: XCUIApplication, line: UInt = #line) {
         let title = app.staticTexts["daemon-startup.title"]
         let banner = app.buttons["read-only-banner"]

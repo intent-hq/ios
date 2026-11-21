@@ -3,8 +3,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Contract checks against services/push-relay (README and test fixtures).
-/// Known-answer values were produced with Node's crypto, as the relay uses it.
 struct PushRelayContractTests {
     nonisolated private struct SoftwareSigner: RelaySigner {
         let key: P256.Signing.PrivateKey
@@ -21,7 +19,6 @@ struct PushRelayContractTests {
     private let signer: SoftwareSigner
 
     init() throws {
-        // Private scalar 0x01…0x20.
         signer = SoftwareSigner(key: try P256.Signing.PrivateKey(rawRepresentation: Data(UInt8(1)...UInt8(32))))
     }
 

@@ -3,7 +3,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Owns deferred UIKit/SwiftUI focus ordering; real keyboard entry is covered by QuestionWizardUITests.
 @MainActor
 struct ComposerFocusBindingTests {
     @Test(arguments: [false, true], [false, true])
@@ -20,7 +19,6 @@ struct ComposerFocusBindingTests {
         editor.responder = editing
 
         if renderQueuedFirst { coordinator.synchronizeFocus(in: editor) }
-        // UIKit has already changed focus, but its binding callback is deferred.
         if editing {
             coordinator.textViewDidBeginEditing(editor)
         } else {
@@ -81,7 +79,6 @@ struct ComposerFocusBindingTests {
     }
 
     private func drainFocusCallbacks() async {
-        // Focus work can enqueue its delegate callback; flush both queue turns without a timer.
         for _ in 0..<2 {
             await withCheckedContinuation { continuation in
                 DispatchQueue.main.async { continuation.resume() }
@@ -90,7 +87,6 @@ struct ComposerFocusBindingTests {
     }
 }
 
-/// A responder spy avoids requiring a key window for deterministic queue-order coverage.
 @MainActor
 private final class FocusTrackingTextView: KeyCommandTextView {
     var responder = false
@@ -99,7 +95,6 @@ private final class FocusTrackingTextView: KeyCommandTextView {
     override var isFirstResponder: Bool { responder }
 
     func clearRecordedFocusRequests() {
-        // UIKit construction can resign before a delegate is attached.
         focusRequests.removeAll()
     }
 

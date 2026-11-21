@@ -62,7 +62,6 @@ extension ConversationWatchedAgentsTests {
         watched.setVisible("child", visible: true, consumer: consumer)
         try await waitUntil("delayed child request") { fixture.connection.traffic(since: checkpoint).pendingCount == 1 }
         watched.releaseVisibility(consumer: consumer)
-        // Let the cancellation handler retire this interest before reappearance.
         for _ in 0..<20 { await Task.yield() }
         fixture.connection.suspendedResponse = nil
         watched.setVisible("child", visible: true, consumer: consumer)
@@ -175,7 +174,6 @@ extension ConversationWatchedAgentsTests {
         connection.resolvePending("agent.get", with: ["agent": ["id": "child", "workspaceId": "canonical", "name": "Child"]])
         let routed = try await route.value
         try await waitUntil("sent response accounted") { connection.traffic().pendingCount == 0 }
-        // Allow the shared owner to publish or reject the response after recording it.
         for _ in 0..<20 { await Task.yield() }
         #expect((commands.agentDetails.cached(agentId: "child") != nil) == survivingRoute)
         #expect((routed != nil) == survivingRoute)

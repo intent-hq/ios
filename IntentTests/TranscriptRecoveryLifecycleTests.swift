@@ -2,26 +2,6 @@ import CoreGraphics
 @testable import Intent
 import Testing
 
-/// Transition-level tests of the recovery lifecycle reducer: each event
-/// against each owner/fallback state it reads, with the contract's
-/// invariants asserted on every transition through `step` — and, in the
-/// `+Sequences` and `+EdgeSequences` files, each #350 handoff defect
-/// replayed as one deterministic event sequence through `LifecycleHarness`,
-/// which executes the effects against scripted geometry the way the view
-/// does.
-///
-/// Mutation checks (each must fail deterministically):
-/// - Removing the transfer discharge in `transition` (the
-///   `dischargeFallback` call in `followFinished` / `followCancelledByGesture`)
-///   fails `aGiveUpUnderAPendingAutomaticFollowIsShownWhenThatFollowIsDropped`
-///   and `aTransferredGiveUpIsDischargedOnceByYieldOrCancel`: the drain
-///   replays the edge as a raw re-pin (`rePins`) with Go to End hidden.
-/// - Removing the realization gate — the `isEndRealized` guard in
-///   `ConversationTranscriptScrollPolicy.scrolledAwayTransition`, or the
-///   `replayLiveEdge` the reducer's `endRealized` issues — fails
-///   `anAtBottomEdgeOverTheBlankKeepsGoToEndUntilTheMarkerRealizes`: the
-///   blank's at-bottom edge clears the flag early, or the realization never
-///   does.
 struct TranscriptRecoveryLifecycleTests {
     typealias Lifecycle = ConversationTranscriptRecoveryLifecycle
     typealias State = Lifecycle.State
@@ -71,22 +51,16 @@ struct TranscriptRecoveryLifecycleTests {
         State(visibility: .visible, owner: owner, armedRecovery: armed, fallback: fallback, isEndRealized: realized, nextTokenId: next)
     }
 
-    /// A pinned transcript at rest at the bottom, its end row realized.
     func makeHarness(realized: Bool = true, scrolledAway: Bool = false) -> LifecycleHarness {
         LifecycleHarness(state: State(visibility: .visible, isEndRealized: realized), userIsScrolledAway: scrolledAway, check: checkInvariants)
     }
 
-    /// Content 1 000 in a 700 container: offset 300 is the bottom, 260 is
-    /// 40 short (inside the band), 180 is 120 short.
     func geometry(offsetY: CGFloat, contentHeight: CGFloat = 1000) -> Geometry {
         Geometry(contentOffsetY: offsetY, contentHeight: contentHeight, containerHeight: 700, topInset: 0, bottomInset: 0)
     }
 
-    /// A viewport the geometry calls the bottom over a blank lazy stack.
     var blank: Geometry { geometry(offsetY: 2300, contentHeight: 3000) }
 
-    /// A recovery polling under a follow requested meanwhile times out over
-    /// the blank: the give-up is transferred to that follow.
     func transferredGiveUp(forced: Bool) -> LifecycleHarness {
         var harness = makeHarness()
         #expect(harness.send(.endDerealized) == [.startRecoveryTask(recovery1)])
@@ -126,7 +100,6 @@ struct TranscriptRecoveryLifecycleTests {
         #expect(state.armedRecovery == .polling(recovery1))
         #expect(state.owner == .idle)
         #expect(!state.isFollowing)
-        // A recovery already polling keeps its budget.
         #expect(step(&state, .endDerealized).isEmpty)
         #expect(state.armedRecovery == .polling(recovery1))
     }

@@ -87,7 +87,6 @@ nonisolated struct WorkspaceDiffRows: Sendable {
 }
 
 extension WorkspaceDiffRows {
-    /// Horizontal padding on every diff row (SwiftUI's default `.padding(.horizontal)` on iOS).
     static let horizontalPadding: CGFloat = 16
     private static let lineRowGaps: CGFloat = 3
 

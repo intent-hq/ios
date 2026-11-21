@@ -48,7 +48,6 @@ private enum MarqueeMotion {
     static let maximumDuration: Double = 3
     static let startDelay: Duration = .seconds(1)
     static let endPauseSeconds: Double = 1.5
-    // Lets the overlay mount at rest before its offset changes.
     static let overlayDelaySeconds: Double = 0.05
 }
 

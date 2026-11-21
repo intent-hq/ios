@@ -29,7 +29,6 @@ nonisolated struct IntentLogo: Shape {
         let scaleY = rect.height / Metrics.viewBoxSize
         let transform = CGAffineTransform(scaleX: scaleX, y: scaleY)
 
-        // Literal artwork coordinates preserve direct comparison with the source vector path.
         // swiftlint:disable no_magic_numbers
         path.move(to: CGPoint(x: 12, y: 15.82))
         path.addLine(to: CGPoint(x: 12, y: 23.76))

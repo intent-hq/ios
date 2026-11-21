@@ -13,7 +13,6 @@ struct QuestionAttachmentLifecycleTests {
         model.store.messages = [question]
         let view = Text("Conversation").modifier(QuestionAttachmentLifecycle(viewModel: model))
         try await SyntheticBadgeHost.render(view, width: 390, height: 200) { host, _ in
-            // Allocate after mounting to exercise observation before a pipeline exists.
             let attachments = model.questionAttachments(for: question.id)
             attachments.addImage(try #require(UIImage(systemName: "star")))
             attachments.addFiles([URL(fileURLWithPath: "/tmp/question-answer.txt")])
@@ -45,9 +44,6 @@ struct QuestionAttachmentLifecycleTests {
         }
     }
 
-    /// Negative window: the lifecycle must leave the selection alone, and
-    /// there is no event to await for something that should not happen, so
-    /// poll (with layout passes) through `expectNever`'s bounded window.
     private func expectNoRetirement(
         _ attachments: ConversationAttachmentPipeline,
         host: UIView,

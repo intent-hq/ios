@@ -63,7 +63,6 @@ struct AssistantLauncherLayoutTests {
 
     @Test func menuAndLauncherKeepTheSameTrailingEdgeAtNarrowWidths() {
         let layout = AssistantLauncherLayout.spatial
-        // HomeActionTiles supplies the original 24pt content inset itself.
         #expect(layout.tileExtraInset + 24 == layout.horizontalInset)
         for width: CGFloat in [320, 390, 700, 1400] {
             #expect(width - 2 * layout.horizontalInset >= layout.diameter)

@@ -50,9 +50,6 @@ struct ContextMentionChipView: View {
         }
     }
 
-    /// Chip label: the decoded title hard-truncated to ~30 characters (the
-    /// FE truncates via CSS max-width; a character cap is the SwiftUI-simple
-    /// equivalent).
     static func displayTitle(_ title: String) -> String {
         title.count > Constants.Conversation.ContextMention.titleMaximumLength
             ? String(title.prefix(Constants.Conversation.ContextMention.titleMaximumLength)) + "…"

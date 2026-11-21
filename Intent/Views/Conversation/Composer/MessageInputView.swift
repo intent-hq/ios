@@ -315,6 +315,7 @@ private extension MessageInputView {
 
 private extension MessageInputView {
     #if os(visionOS)
+
     // MARK: - visionOS dictation & suggested prompts
 
     private var dictationButton: some View {
@@ -449,7 +450,6 @@ private extension MessageInputView {
             isFocused = false
         }
 
-        // Defer to next run loop to let dictation finalize (if it was active)
         DispatchQueue.main.async {
             guard !viewModel.isUploadingFiles, !viewModel.isLoadingPhotos,
                   isConnectionReadyForSending, allowsSending else { return }

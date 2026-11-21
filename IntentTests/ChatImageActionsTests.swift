@@ -5,8 +5,6 @@ import UIKit
 
 @testable import Intent
 
-/// Covers the chat-image action menu helpers: info-row formatting and the
-/// image block's base64 payload decoding.
 struct ChatImageActionsTests {
     // MARK: - Dimensions formatting
 

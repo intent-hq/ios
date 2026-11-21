@@ -46,7 +46,6 @@ struct WKWebViewPageJavaScriptTests {
     @Test func runsInThePageWorld() async throws {
         let webView = WKWebView(frame: .zero)
         _ = try await webView.callPageJavaScript("window.intentWorldProbe = 'page';", arguments: [:])
-        // evaluateJavaScript(_:completionHandler:) always runs in the page world.
         let fromPage = await withCheckedContinuation { continuation in
             webView.evaluateJavaScript("window.intentWorldProbe") { value, _ in
                 continuation.resume(returning: value as? String)

@@ -31,8 +31,6 @@ struct IntentFileLinkTests {
     }
 
     @Test func leadingFileSegmentWinsOverWorkspaceReading() {
-        // `file` in the first slot is the short form even when the path's own
-        // first segment is also named `file`.
         let link = parse("intent://local/file/file/foo.png")
         #expect(link == IntentFileLink(workspaceId: nil, path: "file/foo.png"))
     }
@@ -67,7 +65,6 @@ struct IntentFileLinkTests {
     }
 
     @Test func percentEncodedTraversalIsRejected() {
-        // %2E%2E = "..", %2F = "/" smuggled into one segment.
         #expect(parse("intent://local/file/%2E%2E/secret.png") == nil)
         #expect(parse("intent://local/file/..%2Fsecret.png") == nil)
         #expect(parse("intent://local/file/a%2F..%2Fb.png") == nil)

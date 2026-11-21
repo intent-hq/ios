@@ -35,7 +35,6 @@ extension AppCoordinatorTests {
         #expect(coordinator.assistantAgentId == "chief-agent")
         #expect(coordinator.selectedWorkspaceId == nil)
         if case .workspaceList = coordinator.currentScreen {
-            // The workspace tab remains available when there is no previous selection.
         } else {
             Issue.record("Expected a workspace list behind the Assistant tab")
         }

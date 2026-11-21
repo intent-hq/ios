@@ -123,10 +123,6 @@ extension RootView {
             isNewRequest: isNewRequest,
             isRegularWidth: sizeClass == .regular
         ) {
-            // iPad NavigationStack rebuild race: when the workspace detail is
-            // rebuilt (different workspace) while presented, tear down first,
-            // then re-push on the next runloop tick so the rebuilt stack
-            // accepts the new destination without misfiring user-back handlers.
             navigation.conversationPhase = .repushing
             let pendingAgentId = agentId
             DispatchQueue.main.async {

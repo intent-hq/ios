@@ -203,8 +203,6 @@ extension ConnectionManagerTests {
         let disconnects = DisconnectCounter(manager)
         monitor.report(Self.cellularPath)
         #expect(manager.connectionState == .connected)
-        // #328 requires actual endpoint loss, not absence from a general route list.
-        // Park the replacement's admission so "reconnecting" holds while asserted.
         try await Self.awaitParkedReplacement(on: server) { manager.socketPathObservation?.pathChanged(Self.deadPath) }
         #expect(Self.isReconnecting(manager.connectionState))
         #expect(disconnects.count == 1)
@@ -294,8 +292,6 @@ extension ConnectionManagerTests {
         func close() { isClosed = true }
     }
 
-    // Exercise the real tunnel candidate/adoption path without contacting Tailcat:
-    // the local test server stands in for its loopback forwarder.
     nonisolated struct PathTunnelDialer: TunnelDialing {
         let localPort: Int
 
@@ -304,8 +300,6 @@ extension ConnectionManagerTests {
         }
     }
 
-    // Model known fixture types explicitly. These are injected
-    // monitor reports, not evidence of which reports a physical phone produces.
     private static func cellularVPNPath(_ interfaces: [String]) -> NetworkPathSnapshot {
         NetworkPathSnapshot(
             isSatisfied: true,
@@ -327,7 +321,6 @@ extension ConnectionManagerTests {
         )
     }
 
-    // A global path's preferred interface is not proof this serving socket died.
     @Test(arguments: PathSocketRoute.allCases)
     @MainActor func cellularVPNInterfaceOrderKeepsServingSocket(route: PathSocketRoute) async throws {
         try await Self.expectServingSocketSurvives(
@@ -392,7 +385,6 @@ extension ConnectionManagerTests {
             manager.readSocketPath = { _ in endpointObservation(socketPath) }
         }
         manager.tunnelDialer = PathTunnelDialer(localPort: server.port)
-        // Never advance: heartbeat cannot own a disconnect in this reproduction.
         manager.heartbeatClock = ManualHeartbeatClock()
         defer {
             manager.disconnect()
@@ -410,8 +402,6 @@ extension ConnectionManagerTests {
         #expect((originalTunnel != nil) == (route == .loopbackTunnel))
         #expect(manager.socketInterface == (socketPath.isOnPhysicalInterface ? socketPath.primaryInterface : nil))
 
-        // Repeat across any replacement monitor to reproduce the UI/reconnect/UI
-        // cycle, not just a single teardown. A reconnect must not hide a failure.
         for _ in 0..<pathChurnCycles {
             let monitor = try #require(monitors.monitors.last)
             monitor.report(before)
@@ -422,9 +412,6 @@ extension ConnectionManagerTests {
             #expect(disconnects.count == .zero, "Path reports alone must not create a reconnect cycle")
             #expect(monitor.cancelCount == 0)
 
-            // Keep collecting evidence on red: the unchanged server still answers
-            // after policy-driven recovery. Identity/count assertions forbid
-            // treating that replacement RPC as uninterrupted service.
             try await settle(timeout: pathChurnRecoveryTimeout) { manager.connectionState == .connected }
             #expect(try await manager.request("system.status") is [String: Any])
             #expect(manager.socket === originalSocket, "The RPC must use the original socket, not a replacement")
@@ -432,7 +419,6 @@ extension ConnectionManagerTests {
                 #expect(await !originalTunnel.isClosed, "Harmless reports must not close the serving tunnel")
             }
         }
-        // Host-route refresh also issues system.status after each connection.
         #expect(server.requestCount(method: "system.status") >= pathChurnCycles * 2)
         #expect(server.pingsReceived == 0)
         #expect(monitors.monitors.count == 1)

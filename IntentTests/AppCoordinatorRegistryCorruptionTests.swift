@@ -3,9 +3,6 @@ import Foundation
 import Testing
 
 extension AppCoordinatorTests {
-    /// An undecodable saved-connections blob must survive a scene-activation
-    /// merge without writes or routing side effects, and the coordinator must
-    /// expose the condition until the store becomes readable again.
     @Test @MainActor func refreshSyncedBackends_undecodableRegistryIsPreservedAndFlagged() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -32,7 +29,6 @@ extension AppCoordinatorTests {
         #expect(persistence.isConnectionRegistryUndecodable())
         #expect(!coordinator.pairingShowsSavedConnections)
         if case .loading = coordinator.currentScreen {
-            // pass — a skipped merge never routes
         } else {
             Issue.record("Expected .loading, got \(coordinator.currentScreen)")
         }

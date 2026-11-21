@@ -56,7 +56,6 @@ import Testing
         let primingCue = tracker.observe(universe: ["a", "b"], attention: ["a"])
         #expect(primingCue.isEmpty)
         #expect(tracker.primed)
-        // Same set after priming: still no cue.
         let repeatCue = tracker.observe(universe: ["a", "b"], attention: ["a"])
         #expect(repeatCue.isEmpty)
     }
@@ -66,7 +65,6 @@ import Testing
         _ = tracker.observe(universe: ["a", "b"], attention: [])
         let newCue = tracker.observe(universe: ["a", "b"], attention: ["b"])
         #expect(newCue == ["b"])
-        // Persisting attention does not re-cue.
         let persistingCue = tracker.observe(universe: ["a", "b"], attention: ["b"])
         #expect(persistingCue.isEmpty)
     }
@@ -86,14 +84,12 @@ import Testing
         var sounds = 0
         let center = WorkspaceAttentionCueCenter { sounds += 1 }
 
-        // Priming snapshot with pre-existing attention: silent.
         center.observe(workspaces: [
             makeWorkspace(id: "a", attention: "unread"),
             makeWorkspace(id: "b")
         ])
         #expect(sounds == 0)
 
-        // One batch with two new attention items: one sound.
         center.observe(workspaces: [
             makeWorkspace(id: "a", attention: "unread"),
             makeWorkspace(id: "b", displayStatus: "blocked"),
@@ -101,7 +97,6 @@ import Testing
         ])
         #expect(sounds == 1)
 
-        // Unchanged snapshot (idempotent re-observation): no extra sound.
         center.observe(workspaces: [
             makeWorkspace(id: "a", attention: "unread"),
             makeWorkspace(id: "b", displayStatus: "blocked"),
@@ -117,21 +112,17 @@ import Testing
             windowEmitsCueSound: true
         )
 
-        // Priming snapshot: silent, no event.
         center.observe(workspaces: [makeWorkspace(id: "a")])
         #expect(center.windowCueEvent == nil)
 
-        // New attention: publishes a window cue event, never the global sound.
         center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
         let first = center.windowCueEvent
         #expect(first != nil)
         #expect(sounds == 0)
 
-        // Idempotent re-observation: same event, no re-trigger.
         center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
         #expect(center.windowCueEvent == first)
 
-        // Cleared then raised again: a fresh event id re-triggers playback.
         center.observe(workspaces: [makeWorkspace(id: "a")])
         center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
         #expect(center.windowCueEvent != nil)
@@ -163,8 +154,6 @@ import Testing
     }
 
     @Test @MainActor func cueCenter_unreadFlipAfterAlertChimeIsSilent() {
-        // One agent:idle → alert chime plays, then the same completion
-        // flips the workspace to unread: exactly one audible trigger.
         var nowDate = Date(timeIntervalSinceReferenceDate: 0)
         let center = makeDedupCenter { nowDate }
         center.observe(workspaces: [makeWorkspace(id: "a")])
@@ -176,8 +165,6 @@ import Testing
     }
 
     @Test @MainActor func cueCenter_blockerTransitionAfterAlertChimeIsSilent() {
-        // A raised blocker also emits agent:idle, so the blocked
-        // transition coincides with an alert chime: one audible trigger.
         var nowDate = Date(timeIntervalSinceReferenceDate: 0)
         let center = makeDedupCenter { nowDate }
         center.observe(workspaces: [makeWorkspace(id: "a")])
@@ -189,8 +176,6 @@ import Testing
     }
 
     @Test @MainActor func cueCenter_recentCueSuppressesAlertChimeSameWorkspaceOnly() {
-        // Reverse arrival order: the attention flip is observed before the
-        // chime — the chime is suppressed, but only for that workspace.
         var nowDate = Date(timeIntervalSinceReferenceDate: 0)
         let center = makeDedupCenter { nowDate }
         center.observe(workspaces: [makeWorkspace(id: "a"), makeWorkspace(id: "b")])
@@ -206,8 +191,6 @@ import Testing
     }
 
     @Test @MainActor func cueCenter_pureAttentionTransitionStillSounds() {
-        // Attention raised with no coinciding alert (e.g. another
-        // workspace's chime, or attention without idle) still sounds.
         var nowDate = Date(timeIntervalSinceReferenceDate: 0)
         let center = makeDedupCenter { nowDate }
         center.observe(workspaces: [makeWorkspace(id: "a"), makeWorkspace(id: "b")])

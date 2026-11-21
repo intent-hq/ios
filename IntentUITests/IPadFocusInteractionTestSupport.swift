@@ -1,6 +1,5 @@
 import XCTest
 
-/// Tests delivered touch behavior; XCTest presence/hit points do not prove VoiceOver traversal.
 @MainActor
 struct IPadFocusBackgroundTap {
     private static let timeout: TimeInterval = 30
@@ -39,13 +38,10 @@ struct IPadFocusBackgroundTap {
         )
         XCTAssertTrue(try unchanged(), "Focus/context baseline must be valid before testing \(name)")
         try coordinate(in: app).tap()
-        // A real navigation action closes focus; a menu exposes its own controls.
-        // Observe actual state after delivery instead of trusting hidden elements' isHittable.
         let changed = waitUntil(timeout: Self.observationDuration) { (try? unchanged()) != true }
         XCTAssertFalse(changed, "Background \(name) changed focus or context after a coordinate tap")
     }
 
-    /// Called only after the acceptance wait failed. Never changes its saved result.
     func recordRestorationFailure(in app: XCUIApplication, name diagnosticName: String, activated: () -> Bool) {
         func attach(_ text: String, phase: String, to activity: any XCTActivity) {
             let attachment = XCTAttachment(string: text)
@@ -73,7 +69,6 @@ struct IPadFocusBackgroundTap {
                 attach("No gesture delivered: invalid restored point or action already active", phase: "outcome", to: activity)
                 return
             }
-            // Do not consult isHittable: its failed result is what this gesture diagnoses.
             let origin = window.coordinate(withNormalizedOffset: .zero)
             let coordinate = origin.withOffset(CGVector(
                 dx: point.x - window.frame.minX, dy: point.y - window.frame.minY

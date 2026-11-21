@@ -3,9 +3,6 @@ import Foundation
 import SwiftUI
 import Testing
 
-/// View-model-level tests for `WorkspaceRowView.derivePrIndicator` (the pure
-/// static composition of pullRequests + monitors → pill/"+N"; the SwiftUI
-/// body itself is not under test), mirroring MonitoredPrsRowTests style.
 @MainActor
 struct WorkspaceRowPrIndicatorTests {
     private func makeWorkspace(
@@ -100,7 +97,6 @@ struct WorkspaceRowPrIndicatorTests {
     }
 
     @Test func poolPrimaryWinsOverLegacyFields() {
-        // Legacy prStatus/prNumber must not override a non-empty pool.
         let workspace = makeWorkspace(
             prStatus: "Merged",
             prNumber: 99,
@@ -123,7 +119,6 @@ struct WorkspaceRowPrIndicatorTests {
     // MARK: - activePullRequest fallback pool (FE mapWorkspacePRs parity)
 
     @Test func activePullRequestOnlySeedsPoolAndBeatsLegacyFields() {
-        // Status comes from the active PR row, not the legacy fields.
         let workspace = makeWorkspace(
             prStatus: "Merged",
             prNumber: 99,
@@ -136,8 +131,6 @@ struct WorkspaceRowPrIndicatorTests {
     }
 
     @Test func activePullRequestSeedsPoolWhenPullRequestsIsEmptyArray() {
-        // Empty (not just absent) pullRequests also falls back, like the FE's
-        // `workspacePRs.length > 0` guard.
         let workspace = makeWorkspace(
             pullRequests: [],
             pullRequestsWereReported: true,
@@ -149,14 +142,12 @@ struct WorkspaceRowPrIndicatorTests {
     }
 
     @Test func activePullRequestMergesWithMonitorsForPrimaryAndCount() {
-        // Active PR (older open) wins the primary; the extra monitor counts,
-        // and the monitor duplicating the active PR does not.
         let workspace = makeWorkspace(
             activePullRequest: makePr(12, "Open", createdAt: "2026-08-01T00:00:00Z")
         )
         let monitors = [
-            makeMonitor(prNumber: 12, createdAt: "2026-08-05T00:00:00Z"), // duplicates primary
-            makeMonitor(prNumber: 34, createdAt: "2026-08-10T00:00:00Z") // other
+            makeMonitor(prNumber: 12, createdAt: "2026-08-05T00:00:00Z"),
+            makeMonitor(prNumber: 34, createdAt: "2026-08-10T00:00:00Z")
         ]
 
         let model = WorkspaceRowView.derivePrIndicator(workspace: workspace, monitors: monitors)
@@ -165,8 +156,6 @@ struct WorkspaceRowPrIndicatorTests {
     }
 
     @Test func nonEmptyPullRequestsIgnoresActivePullRequest() {
-        // An older-open active PR must NOT enter the pool when pullRequests
-        // is non-empty — exactly the FE precedence.
         let workspace = makeWorkspace(
             pullRequests: [makePr(20, "Open", createdAt: "2026-08-10T00:00:00Z")],
             activePullRequest: makePr(12, "Open", createdAt: "2026-08-01T00:00:00Z")
@@ -216,9 +205,9 @@ struct WorkspaceRowPrIndicatorTests {
             makePr(12, "Open", createdAt: "2026-08-01T00:00:00Z")
         ])
         let monitors = [
-            makeMonitor(prNumber: 12),                    // duplicates primary
-            makeMonitor(prNumber: 34),                    // other, same repo
-            makeMonitor(repo: "other/repo", prNumber: 12) // other, cross-repo
+            makeMonitor(prNumber: 12),
+            makeMonitor(prNumber: 34),
+            makeMonitor(repo: "other/repo", prNumber: 12)
         ]
 
         let model = WorkspaceRowView.derivePrIndicator(workspace: workspace, monitors: monitors)
@@ -227,9 +216,6 @@ struct WorkspaceRowPrIndicatorTests {
     }
 
     @Test func crossRepoPrimaryExcludesOnlyItsOwnMonitor() {
-        // The primary is a cross-repo monitor row: its exclusion must be
-        // repo-qualified via primaryCrossRepo, so the same-numbered
-        // workspace-repo monitor still counts.
         let workspace = makeWorkspace()
         let monitors = [
             makeMonitor(

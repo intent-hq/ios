@@ -42,10 +42,6 @@ extension ConversationTranscriptView {
             if scrollState.hasPendingViewportRestoration {
                 restoreRetainedViewport(proxy: proxy)
             }
-            // A prepend can leave the reader inside the prefetch band without
-            // crossing its Boolean geometry edge again. Wait for layout and
-            // retained-position restoration before measuring the new top;
-            // otherwise a fast response could drain pages against old frames.
             repeat {
                 try? await Task.sleep(for: .seconds(Layout.initialScrollDelay))
                 guard !Task.isCancelled else { return }

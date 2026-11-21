@@ -1,8 +1,5 @@
 import XCTest
 
-/// The workspace Share sheet against demo fixtures (DemoSharingFixtures):
-/// create a link anyone can use, then (reopened) one only a single GitHub
-/// account can use. Nobody is added without a link.
 nonisolated final class ShareWorkspaceUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let workspaceRow = "workspace.row.demo-ws-dashboard"

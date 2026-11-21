@@ -1,13 +1,5 @@
 import Foundation
 
-/// First-observer claim registry deduplicating window sound playback.
-/// Duplicate windows bound to the SAME backend (the rebound-window quirk)
-/// observe the same `FeedbackEvent`/`WindowCueEvent`, so each such window's
-/// emitter would fire for one event. The first emitter to observe an event
-/// id claims it and plays; later observers of the same id skip — exactly
-/// one audible playback per event regardless of how many windows share the
-/// backend. Windows on different backends observe distinct events (fresh
-/// ids), so they are unaffected.
 @MainActor
 final class WindowSoundClaimRegistry {
     static let shared = WindowSoundClaimRegistry()
@@ -65,10 +57,6 @@ struct WindowFeedbackSoundEmitter: View {
         emitter.playAudio(resource)
     }
 
-    /// Best-effort: anchors the app's intended spatial experience to this
-    /// window's scene so the sound localizes to it. Failures (or a not-yet
-    /// resolved scene id) are non-fatal — playback proceeds with whatever
-    /// anchoring is in effect.
     private func anchorAudioToThisScene() {
         guard let sceneID else { return }
         try? AVAudioSession.sharedInstance().setIntendedSpatialExperience(

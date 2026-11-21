@@ -19,7 +19,6 @@ struct ConversationIncrementalDeltaTests {
         try deliver(frames[1], to: live, raw: raw)
         expectText(live, "Hello café 🦊", thinking: "Plan café 🦊")
         try deliver(frames[0], to: live, raw: raw)
-        // An old snapshot without an echo cannot reset this registration's mode.
         try deliver(fixture.snapshot(encoding: .full), to: live, raw: raw)
         expectText(live, "Hello café 🦊", thinking: "Plan café 🦊")
         let coalesced = fixture.delta(seq: 3, updated: [
@@ -42,7 +41,6 @@ struct ConversationIncrementalDeltaTests {
         recovery["seq"] = 2
         try deliver(recovery, to: live, raw: raw)
         expectText(live, "Hello", thinking: "Plan")
-        // No echo: ignore fragment-only blocks instead of appending or erasing text.
         try deliver(fixture.growth(encoding: .incremental)[2], to: live, raw: raw)
         expectText(live, "Hello", thinking: "Plan")
         try deliver(textFrame(seq: 4, field: "text", text: "full replacement"), to: live, raw: raw)

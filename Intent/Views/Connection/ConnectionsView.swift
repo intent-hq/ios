@@ -66,9 +66,6 @@ enum ConnectionPairing {
         guard outcome.persisted else { throw PersistenceError.saveFailed }
         let stored = outcome.connection
         guard persistence.setActiveConnection(id: stored.id) else { throw PersistenceError.saveFailed }
-        // Re-trigger the post-connect route refresh now that the record exists:
-        // the refresh fired by connect() may have run before the upsert above
-        // and found no stored record to persist the daemon-reported IPs into.
         Task {
             guard (try? connection.validatePairingAdmission(receipt)) != nil else { return }
             await connection.refreshHostRoutes()
@@ -184,7 +181,6 @@ struct ConnectionsView: View {
             if connections.isEmpty {
                 Text("No saved connections. Add a connection below to get started.")
                     .interFont(Constants.Typography.bodyS)
-                    // No empty-state design reference: preserve its existing semantic light color.
                     .foregroundStyle(colorScheme == .dark
                         ? Constants.Pairing.mutedForeground(for: colorScheme) : Theme.mutedForeground(for: colorScheme))
                     .multilineTextAlignment(.center)

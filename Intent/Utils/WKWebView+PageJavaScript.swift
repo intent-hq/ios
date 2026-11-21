@@ -18,8 +18,6 @@ extension WKWebView {
         return result.value
     }
 
-    /// `@unchecked Sendable`: WebKit calls the completion handler on the main thread and the
-    /// awaiting caller is main-actor isolated, so the bridged value never leaves the main actor.
     nonisolated private struct JavaScriptResult: @unchecked Sendable {
         let value: Any?
     }

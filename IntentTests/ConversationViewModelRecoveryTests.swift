@@ -8,7 +8,6 @@ import UIKit
 extension ConversationViewModelTests {
     // MARK: - Marked question recovery (row outside the loaded page, Phase 2)
 
-    /// A loaded page that does NOT contain the marked row `a1`.
     private func offPageTranscript() -> [ConversationMessage] {
         [
             textMessage(role: .user, text: "later wake", id: "u9"),
@@ -137,8 +136,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func recoveryNotFoundStaysFailClosedUntilMarkerCleared() {
-        // Exhaustion ends the network retries, not marker authority: the
-        // composer stays withheld until the daemon clears/replaces the marker.
         let viewModel = makeVM()
         viewModel.store.messages = offPageTranscript()
         viewModel.store.pendingQuestionsMessageId = "a1"
@@ -158,8 +155,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func recoveryFailsClosedBeforeStoreSeekStarts() {
-        // Marker set, row not resident, store has not started a seek — still
-        // fail closed (the store issues the seek on its next reconcile).
         let viewModel = makeVM()
         viewModel.store.messages = offPageTranscript()
         viewModel.store.pendingQuestionsMessageId = "a1"
@@ -169,8 +164,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func recoveryLoadingFalseWhileInitialSnapshotInFlight() {
-        // The row may simply not have loaded yet: no fail-closed gate (and no
-        // placeholder) until the initial transcript snapshot has settled.
         let viewModel = makeVM()
         viewModel.store.messages = []
         viewModel.store.isLoading = true
@@ -202,8 +195,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func residentRowPreferredOverStaleRecoveredCopy() throws {
-        // The recovered copy is superseded once the row is in the transcript:
-        // the resident row (with its current content) drives the wizard.
         let viewModel = makeVM()
         let staleCopy = ConversationMessage(
             id: "a1",
@@ -227,9 +218,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func recoveredCopyForAnotherMarkerIdIsIgnored() {
-        // A recovery that settled for a previous marker id must not render
-        // under a newer marker (the store drops it on reconcile; the view
-        // model never trusts a mismatched id either).
         let viewModel = makeVM()
         viewModel.store.messages = offPageTranscript()
         viewModel.store.pendingQuestionsMessageId = "a2"
@@ -246,8 +234,6 @@ extension ConversationViewModelTests {
 
 extension ConversationViewModelTests {
     @Test func recoveredRowWithoutQuestionsStaysFailClosed() {
-        // Found, but the row carries no valid question set: nothing can
-        // render, so the composer stays withheld under marker authority.
         let viewModel = makeVM()
         viewModel.store.messages = offPageTranscript()
         viewModel.store.pendingQuestionsMessageId = "a1"
@@ -262,8 +248,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func recoveredSetRendersThroughStoreSeek() async throws {
-        // End to end through the store: the marker push names an off-page
-        // row, the seek recovers it, and the wizard renders from the copy.
         let viewModel = makeVM()
         let fake = FakeConnectionManager()
         let questionJSON = """
@@ -333,8 +317,6 @@ extension ConversationViewModelTests {
     #endif
 
     @Test func sendSuggestedPromptDoesNotAttachPendingImages() async throws {
-        // Regression: draft attachments must not silently ride a suggested
-        // prompt — the prompt sends text only.
         let (viewModel, fake) = makeFakeBackedVM()
         viewModel.addImage(try #require(UIImage(systemName: "star")))
 
@@ -346,8 +328,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func sendSuggestedPromptLeavesDraftIntact() async {
-        // Regression: a suggested-prompt send must not clear the persisted
-        // composer draft or the on-screen draft text.
         let (viewModel, _) = makeFakeBackedVM()
         viewModel.persistence.saveDraft(
             "half-typed draft",
@@ -367,8 +347,6 @@ extension ConversationViewModelTests {
     }
 
     @Test func sendMessageStillClearsDraftAndUsesExplicitImages() async throws {
-        // The normal composer path is unchanged: explicit images are sent and
-        // the persisted draft is cleared after a successful send.
         let (viewModel, fake) = makeFakeBackedVM()
         viewModel.persistence.saveDraft(
             "outgoing",

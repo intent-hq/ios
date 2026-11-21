@@ -6,7 +6,6 @@ import UIKit
 
 extension MarkdownTextViewTests {
     #if DEBUG
-    /// Layout owns readability; the UI suite separately owns gesture routing in the transcript.
     @MainActor
     @Test func wideTableKeepsReadableCellsAcrossWidthsAndTextSizes() async throws {
         for category in [DynamicTypeSize.large, .accessibility3, .accessibility5] {
@@ -28,7 +27,6 @@ extension MarkdownTextViewTests {
                         for: 1, compatibleWith: UITraitCollection(preferredContentSizeCategory: category.uiCategory)
                     )
                     print("TABLE width=\(width) category=\(category) setup=\(setup.accessibilityFrame) percentage=\(percentage.accessibilityFrame) description=\(description.accessibilityFrame)")
-                    // Single-word headers and short numeric values must fit on one line.
                     #expect(setup.accessibilityFrame.height < 30 * scale)
                     #expect(percentage.accessibilityFrame.height < 30 * scale)
                     #expect(time.accessibilityFrame.height < 30 * scale)

@@ -2,7 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// The Changes snapshot is one `LoadPhase`; a Load More failure is kept apart in `pageFailure`.
 @MainActor
 struct WorkspaceChangesLoadPhaseTests {
     private static let offline = NSError(
@@ -13,7 +12,6 @@ struct WorkspaceChangesLoadPhaseTests {
         let fake = FakeConnectionManager()
         fake.responseMap["gitRoot.list"] = ["gitRoots": [] as [[String: Any]]]
         fake.responseMap["file-tracking.getChanges"] = WorkspaceChangesFixture.snapshot([WorkspaceChangesFixture.change()])
-        // Git status confirms the tracked row; an empty status would drop it as stale.
         fake.responseMap["git.status"] = ["files": [["path": "src/main.swift", "status": "M", "staged": false]]]
         fake.responseMap["file-tracking.loadCommits"] = WorkspaceChangesFixture.page(["first"], nextToken: "page-2")
         return fake
@@ -76,8 +74,6 @@ struct WorkspaceChangesLoadPhaseTests {
         #expect(store.loadPhase.hasLoaded && store.errorMessage == nil && store.unstagedChanges.isEmpty)
     }
 
-    /// Event refreshes after a failure keep the message instead of flickering it,
-    /// and keep WorkspaceChangesView's reconnect gate (`errorMessage != nil`) open.
     @Test func anEventRefreshAfterAFailureKeepsTheMessageWhileItRuns() async throws {
         let fake = makeFake()
         fake.responseMap["events.subscribe"] = ["subscriptionId": "changes-subscription"]

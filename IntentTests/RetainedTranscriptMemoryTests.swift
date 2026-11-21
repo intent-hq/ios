@@ -2,17 +2,12 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Read-only mode keeps the last `ConversationStorePool.retainedConversationLimit`
-/// conversations in memory. This measures what that costs with long transcripts:
-/// the store-owned data model only (rows, blocks, search state), since the screens
-/// that render them are gone once a conversation is no longer open.
 @Suite(.serialized)
 @MainActor
 struct RetainedTranscriptMemoryTests {
     private static let messagesPerConversation = 2000
     private static let textLength = 1200
     private static let bytesPerMegabyte = 1 << 20
-    /// Generous ceiling for 10 retained 2,000-message transcripts; tightens if the data model slims down.
     private static let retainedCeilingMegabytes = 400
 
     private static func footprintBytes() -> Int {

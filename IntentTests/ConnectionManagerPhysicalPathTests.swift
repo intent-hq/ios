@@ -6,7 +6,6 @@ import Testing
 extension ConnectionManagerTests {
     @Test(arguments: [NWInterface.InterfaceType.wifi, .cellular, .wiredEthernet, .loopback, .other])
     func pathClassificationUsesInterfaceType(type: NWInterface.InterfaceType) {
-        // Deliberately misleading names: classification must use metadata, not prefixes.
         let path = NetworkPathSnapshot(
             isSatisfied: true,
             interfaces: [("utun-physical", type), ("en-virtual", .other), ("pdp-loopback", .loopback)]
@@ -61,12 +60,10 @@ extension ConnectionManagerTests {
         monitor.report(before)
         #expect(try await manager.request("system.status") is [String: Any])
         #expect(manager.socket === originalSocket)
-        // Park the replacement's admission so "reconnecting" holds while asserted.
         try await Self.awaitParkedReplacement(on: server) {
             monitor.report(after)
             guard !loopbackTunnel else { return }
             #expect(manager.connectionState == .connected)
-            // A system VPN's general underlay change is not endpoint loss by itself.
             manager.socketPathObservation?.viabilityChanged(false)
         }
         #expect(Self.isReconnecting(manager.connectionState))
@@ -158,8 +155,6 @@ extension ConnectionManagerTests {
         let manager = ConnectionManager()
         let monitors = FakePathMonitorFactory()
         let server = try await RecoveryWebSocketServer.start()
-        // A synthetic endpoint-specific physical path; no claim about the phone's
-        // actual interface type/name. Real RPCs establish that the socket serves.
         let endpointPath = NetworkPathSnapshot(
             isSatisfied: true, interfaces: [("endpoint-only", .wiredEthernet)]
         )
@@ -195,8 +190,6 @@ extension ConnectionManagerTests {
             #expect(manager.connectionState == .connected, "A satisfied general report cannot disprove endpoint service")
             #expect(disconnects.count == baselineDisconnects)
             #expect(monitor.cancelCount == 0)
-            // On RED, let adoption finish so the next cycle exercises its FIRST
-            // general report again. A replacement RPC does not establish continuity.
             try await Self.settle(timeout: Self.endpointRecoveryTimeout) { manager.connectionState == .connected }
             #expect(try await manager.request("system.status") is [String: Any])
             #expect(manager.socket === servingSocket)

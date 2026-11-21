@@ -318,7 +318,6 @@ extension ConversationColumnView {
         usesWorkspaceDesign && presentation != .iPad
     }
 
-    /// Mirrors the visible rows below the transcript.
     private var hasAccessoryRows: Bool {
         let showsMonitors = !usesWorkspaceDesign && !viewModel.showsLoadingState
             && (!viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil)

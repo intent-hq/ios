@@ -13,9 +13,6 @@ extension NoteStoreIntegrationTests {
         let fetch = Task { await store.fetchNote(noteId: "note-1", workspaceId: "ws-1") }
         try await fake.waitForPendingRequests("note.get")
 
-        // The consuming task is cancelled (screen dismissed) and the daemon's
-        // not-found answer resumes the request in the same MainActor turn,
-        // before the transport's cancellation cleanup task runs (ios#250).
         fetch.cancel()
         fake.failPending("note.get", with: NSError(
             domain: "WebSocket",
@@ -28,7 +25,6 @@ extension NoteStoreIntegrationTests {
 
         let result = await fetch.value
         if case .transientError = result {
-            // pass
         } else {
             Issue.record("A not-found racing cancellation must not report .notFound, got \(result)")
         }
@@ -58,8 +54,6 @@ extension NoteStoreIntegrationTests {
             ]
         }
 
-        // The list lands and publishes the slim spec row; the hydrating
-        // note.get stays in flight.
         fake.pendingMethods.insert("note.get")
         let fetch = Task { await store.fetchNotes(workspaceId: "ws-1") }
         try await fake.waitForPendingRequests("note.get")
@@ -72,9 +66,6 @@ extension NoteStoreIntegrationTests {
         } onChange: {
             changeCount.withLock { $0 += 1 }
         }
-        // Cancel and resolve back-to-back on the main actor: the fake's
-        // cancellation hop is asynchronous, so note.get resumes with the
-        // real body inside an already-cancelled fetch.
         fetch.cancel()
         fake.resolvePending("note.get", with: fullSpec())
         await fetch.value
@@ -84,7 +75,6 @@ extension NoteStoreIntegrationTests {
         #expect(store.note(byId: "spec")?.content.isEmpty == true)
         #expect(store.isLoading == false)
 
-        // A later, uncancelled fetch hydrates normally.
         fake.pendingMethods.remove("note.get")
         fake.responseMap["note.get"] = fullSpec()
         await store.fetchNotes(workspaceId: "ws-1")
@@ -95,9 +85,6 @@ extension NoteStoreIntegrationTests {
 
     // MARK: - noteChanges() stream (detail-view refresh)
 
-    /// Consumes `store.noteChanges()` the way `NoteDetailView.task` does,
-    /// counting elements. The stream is registered synchronously in `init`
-    /// so no event delivered afterwards can be missed.
     @MainActor
     private final class NoteChangesProbe {
         private(set) var fired = 0
@@ -114,7 +101,6 @@ extension NoteStoreIntegrationTests {
             }
         }
 
-        /// Mirrors SwiftUI cancelling the view's `.task` on disappearance.
         func cancel() async {
             consumer?.cancel()
             await consumer?.value
@@ -132,7 +118,6 @@ extension NoteStoreIntegrationTests {
             "event": ["type": "note:deleted", "workspaceId": "ws-1", "noteId": "note-1"]
         ])
 
-        // note:deleted must fire noteChanges so the detail view can re-validate.
         try await waitUntil("noteChanges element for note:deleted") { probe.fired == 1 }
         await probe.cancel()
     }
@@ -166,8 +151,6 @@ extension NoteStoreIntegrationTests {
             "event": ["type": "note:created", "workspaceId": "ws-1", "noteId": "note-2"]
         ])
 
-        // A new note changes list membership, but can never be the open
-        // note, so refreshNote is not needed.
         try await fake.waitForRequests("note.list")
         try await expectNever("noteChanges element for note:created") { probe.fired != 0 }
         await probe.cancel()
@@ -226,7 +209,6 @@ extension NoteStoreIntegrationTests {
         await probe.cancel()
 
         store = nil
-        // A subscribed-then-cancelled stream must not keep the store alive.
         try await waitUntil("store deallocation and event handler removal") {
             weakStore == nil && fake.eventHandlerCount == 0
         }
@@ -237,7 +219,6 @@ extension NoteStoreIntegrationTests {
         var store: NoteStore? = NoteStore(connectionManager: fake)
         let probe = try NoteChangesProbe(#require(store))
 
-        // The consumer's loop must end rather than await a store that is gone.
         store = nil
         try await waitUntil("deinit to finish live noteChanges() streams") { probe.finished }
         await probe.cancel()
@@ -262,8 +243,6 @@ extension NoteStoreIntegrationTests {
         #expect(store.hasLoaded == true)
         #expect(store.notes.count == 1)
 
-        // The deferred refresh after re-appearing for the same workspace
-        // returns the same list: no observed property may be invalidated.
         let changeCount = Mutex(0)
         withObservationTracking {
             _ = store.notes
@@ -277,7 +256,6 @@ extension NoteStoreIntegrationTests {
         #expect(changeCount.withLock { $0 } == 0)
         #expect(store.notes.count == 1)
 
-        // A genuinely different list must still publish.
         fake.responseMap["note.list"] = [
             "notes": [
                 [

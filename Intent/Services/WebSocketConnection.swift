@@ -60,7 +60,6 @@ actor WebSocketConnection {
     }
 
     // MARK: - Connection setup
-    // TLS verification needs the endpoint, credentials, result locks, and callback queue independently.
     nonisolated private static func makeParameters(
         host: String,
         certFingerprint: String?,
@@ -158,8 +157,6 @@ actor WebSocketConnection {
         ))
     }
 
-    // Teardown on cancellation needs the connection,
-    // lifecycle, and queue independently.
     // swiftlint:disable:next function_parameter_count
     nonisolated private static func awaitOpening(
         _ connection: NWConnection,
@@ -203,7 +200,6 @@ actor WebSocketConnection {
         }
     }
 
-    // The public entry point keeps its long-standing parameter list.
     // swiftlint:disable:next function_body_length
     nonisolated static func connect(
         host: String,

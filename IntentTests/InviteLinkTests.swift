@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// `intent://invite` links (workspace.invite.create) and the `/invite`
-/// endpoint's response contracts (protocol §5.48).
 struct InviteLinkTests {
     static let fingerprint = String(repeating: "ab", count: 32)
     static let tunnel = "tc1-example"
@@ -33,7 +31,6 @@ struct InviteLinkTests {
     }
 
     @Test func matchesSchemeAndHostCaseInsensitively() throws {
-        // ios#406: URI schemes and hosts are case-insensitive.
         let url = try #require(URL(string: "INTENT://Invite?port=5181&fp=\(Self.fingerprint)&inviteId=i&secret=s&tc=\(Self.tunnel)"))
         #expect(InviteLink.isInviteURL(url))
         #expect(InviteLink.parse(url) != nil)

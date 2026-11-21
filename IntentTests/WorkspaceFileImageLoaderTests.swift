@@ -3,13 +3,10 @@ import Foundation
 import Testing
 import UIKit
 
-/// Covers the `file.readChunk` fetch path: chunk assembly, malformed
-/// responses, the size cap, decode failure, and caching.
 @MainActor
 struct WorkspaceFileImageLoaderTests {
     private typealias LoadError = WorkspaceFileImageLoader.LoadError
 
-    /// A tiny valid PNG rendered at test time.
     private static func pngBytes() -> Data {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4))
         return renderer.pngData { ctx in
@@ -216,8 +213,6 @@ struct WorkspaceFileImageLoaderTests {
         #expect(first === second)
         #expect(fake.paramsForMethod("note.readAsset").count == 1)
 
-        // A replaced status image is a new content-addressed id: it must
-        // fetch again rather than serve the previous screenshot.
         let replaced = try await loader.assetImage(workspaceId: "ws-1", assetId: "c3-d4.png")
         #expect(replaced !== first)
         let params = fake.paramsForMethod("note.readAsset")
@@ -237,7 +232,6 @@ struct WorkspaceFileImageLoaderTests {
         }
         #expect(fake.paramsForMethod("note.readAsset").count == 1)
 
-        // A user-initiated retry clears the negative entry and refetches.
         fake.errorMap["note.readAsset"] = nil
         fake.responseMap["note.readAsset"] = Self.assetResponse(png)
         loader.forgetAssetFailure(workspaceId: "ws-1", assetId: "a1-b2.png")
@@ -247,8 +241,6 @@ struct WorkspaceFileImageLoaderTests {
     }
 
     @Test func assetAndFileCachesDoNotCollide() async throws {
-        // The same string as a file path and as an asset id are different
-        // resources; a cached file image must not answer an asset request.
         let png = Self.pngBytes()
         let fake = FakeConnectionManager()
         fake.responseMap["file.readChunk"] = Self.chunkResponse(png, size: png.count)

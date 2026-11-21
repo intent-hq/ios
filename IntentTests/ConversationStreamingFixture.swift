@@ -1,8 +1,5 @@
 import Foundation
 
-/// Matched protocol traces for the same content. No reducer lives in the
-/// fixture: tests feed these frames through SubscriptionPush and the store.
-/// Text and thinking use UTF-8 beyond ASCII to catch character/byte confusion.
 struct ConversationStreamingFixture {
     enum Encoding {
         case full

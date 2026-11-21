@@ -162,8 +162,6 @@ struct WorkspaceAgentLoadingTests {
         if background {
             await host.view.toggleAgentGroup(.background)
         } else {
-            // A live orphan parent arrives through another already-expanded
-            // parent scope while the orphan membership remains stale.
             await host.view.agentStore.loadAgentGroup(.delegated(parentId: "missing"), workspaceId: "ws-1")
         }
         await host.view.toggleAgentGroup(.delegated(parentId: "parent"))
@@ -176,7 +174,6 @@ struct WorkspaceAgentLoadingTests {
     }
 
     private final class Host {
-        /// The page currently hosted; a workspace switch replaces it.
         private(set) var view: WorkspaceDetailView
         private let session: BackendSession
         private let coordinator: AppCoordinator

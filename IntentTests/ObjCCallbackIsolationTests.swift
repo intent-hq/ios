@@ -1,42 +1,22 @@
 import Foundation
 import Testing
 
-/// The Intent target builds with SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor.
-/// Some SDK block parameters below are imported as plain non-Sendable
-/// function types, so a closure literal passed to them can be silently
-/// inferred MainActor-isolated (SE-0434 permits this — no compiler
-/// setting diagnoses it) and the process aborts with
-/// `_dispatch_assert_queue_fail` when the framework invokes the closure off
-/// the main thread. These crashes are not reliably reproduced on a simulator.
-/// Fixed instance: 09c22b6 (SpeechDictationController). This test is the
-/// registry of known thread-hopping callback APIs and the guard that keeps
-/// their closures explicitly `@Sendable`.
 struct ObjCCallbackIsolationTests {
-    /// Known thread-hopping ObjC callback APIs. A call site passes only if
-    /// its closure literal opens with `{ @Sendable` or the call is `await`-ed
-    /// (async overloads hop isolation correctly). The AVCapture* delegate
-    /// setters take delegate objects, not closures, so any use fails here by
-    /// design: audit the delegate's isolation, then teach this test the
-    /// audited pattern. Extend this table when adopting another ObjC API
-    /// whose callback runs off the main thread. Require explicit `@Sendable`
-    /// even in nonisolated helpers so moving a callback cannot inherit MainActor.
     private static let threadHoppingCallbackAPIs = [
-        "installTap(",                              // AVAudioNode — realtime audio thread
-        "recognitionTask(with",                     // SFSpeechRecognizer — Speech-owned queue
-        "SFSpeechRecognizer.requestAuthorization",  // arbitrary queue
-        "AVAudioApplication.requestRecordPermission",  // arbitrary queue
-        ".setSampleBufferDelegate(",                // AVCaptureVideoDataOutput
-        ".setMetadataObjectsDelegate(",             // AVCaptureMetadataOutput
-        ".addObserver(forName",                    // NotificationCenter — posting thread
-        ".pathUpdateHandler =",                    // Network — connection/monitor queue
-        ".viabilityUpdateHandler =",               // NWConnection — connection queue
-        ".stateUpdateHandler =",                   // NWConnection/NWListener — configured queue
-        "sec_protocol_options_set_verify_block(",  // Network TLS — supplied verification queue
-        ".completionWithItemsHandler ="            // UIActivityViewController — defensive isolation boundary
+        "installTap(",
+        "recognitionTask(with",
+        "SFSpeechRecognizer.requestAuthorization",
+        "AVAudioApplication.requestRecordPermission",
+        ".setSampleBufferDelegate(",
+        ".setMetadataObjectsDelegate(",
+        ".addObserver(forName",
+        ".pathUpdateHandler =",
+        ".viabilityUpdateHandler =",
+        ".stateUpdateHandler =",
+        "sec_protocol_options_set_verify_block(",
+        ".completionWithItemsHandler ="
     ]
 
-    /// How many lines below a match to search for the opening `{` of a
-    /// call whose closure starts on a later line.
     private static let closureLookaheadLines = 5
 
     @Test func threadHoppingCallbackClosuresAreExplicitlySendable() throws {
@@ -68,11 +48,6 @@ struct ObjCCallbackIsolationTests {
         )
     }
 
-    /// A match is safe when the call is `await`-ed, or the first closure
-    /// literal opening after the matched API name begins with `@Sendable`.
-    /// The `await` exemption only considers the matched call's own statement:
-    /// text after the last `;` before the match, so an earlier semicolon-
-    /// separated statement's `await` cannot mark the callback safe.
     private static func callSiteIsSafe(
         lines: [String],
         lineIndex: Int,

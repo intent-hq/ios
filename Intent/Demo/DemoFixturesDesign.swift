@@ -221,7 +221,6 @@ final class DemoDesignFixtures {
         )
     }
 
-    // Nil means this RPC owes no event; an empty event would still be dispatched.
     func event(for method: String, params: [String: Any]) -> [String: Any]? { // swiftlint:disable:this discouraged_optional_collection
         if params["agentId"] as? String == Self.agentId,
            ["agent.sendMessage", "agent.dismissQuestions"].contains(method) {

@@ -15,7 +15,6 @@ struct QRScannerTests {
         #expect(state.errorMessage == QRScannerSessionState.invalidCodeMessage)
         let autoClearID = try #require(state.errorAutoClearID)
 
-        // Stale timer token from an earlier scan must not clear the current error.
         state.clearError(matching: UUID())
         #expect(state.errorMessage != nil)
 
@@ -78,7 +77,6 @@ struct QRScannerTests {
         let duplicateAccept = deduplicator.accept(["code-1"])
         #expect(duplicateAccept == nil, "Immediate repeat of the same barcode is ignored")
 
-        // A different barcode is accepted immediately and supersedes the earlier expiry timer.
         let changedAccept = deduplicator.accept(["code-2"])
         #expect(changedAccept == "code-2")
         let staleExpire = deduplicator.expire(matching: "code-1")

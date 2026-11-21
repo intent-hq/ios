@@ -99,7 +99,6 @@ struct AgentSessionTests {
     // MARK: - notificationsMuted (PROTOCOL §5.5)
 
     @Test func parseNotificationsMutedTopLevel() {
-        // Served top-level on every AgentLite / AgentSession projection.
         let dict: [String: Any] = ["id": "agent-m1", "name": "Muted", "notificationsMuted": true]
         #expect(AgentSession.parseAgent(dict)?.notificationsMuted == true)
     }
@@ -132,7 +131,6 @@ struct AgentSessionTests {
     // MARK: - attention-request fields (PROTOCOL §5.5)
 
     @Test func parseAttentionFieldsTopLevel() {
-        // agent.getSession serves the fields top-level on the session.
         let dict: [String: Any] = [
             "id": "agent-4",
             "name": "Blocked Agent",
@@ -148,7 +146,6 @@ struct AgentSessionTests {
     }
 
     @Test func parseAttentionFieldsFromMetadata() {
-        // AgentLite (agent.list / agent.get) mirrors the fields under metadata.
         let dict: [String: Any] = [
             "id": "agent-5",
             "name": "Discussion Agent",
@@ -177,8 +174,6 @@ struct AgentSessionTests {
     }
 
     @Test func parseAttentionFieldsDoNotBlendSurfaces() {
-        // The trio is resolved from the single surface carrying the kind; a
-        // reason mirrored only on the other surface is not picked up.
         let dict: [String: Any] = [
             "id": "agent-6b",
             "name": "Mixed",
@@ -227,7 +222,6 @@ struct AgentSessionTests {
     }
 
     @Test func pendingAttentionRequestUnknownKindFallsBackToDiscussion() {
-        // Newer daemons may introduce kinds — still surface an indicator.
         let dict: [String: Any] = [
             "id": "agent-11",
             "name": "Future",
@@ -342,13 +336,10 @@ extension AgentSessionTests {
     }
 
     @Test func avatarStateAttentionSuppressedWhileTurnIsLive() {
-        // Mirrors cloudlands getAgentAttentionRequest: live-turn evidence hides
-        // a stale request until the turn ends.
         let streaming = makeAgent(status: "Active", isStreaming: true, attentionRequestKind: "blocker")
         #expect(AgentAvatarState.state(for: streaming) == .running)
         let responding = makeAgent(status: "Idle", isResponding: true, attentionRequestKind: "discussion")
         #expect(AgentAvatarState.state(for: responding) == .running)
-        // A bare activity status without evidence is not a live turn.
         let bareActive = makeAgent(status: "Active", attentionRequestKind: "blocker")
         #expect(AgentAvatarState.state(for: bareActive) == .attentionBlocker)
     }

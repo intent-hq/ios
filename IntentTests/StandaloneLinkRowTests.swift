@@ -3,8 +3,6 @@ import Testing
 
 @testable import Intent
 
-/// Chat draws a paragraph that is only one link as a full-width row. These
-/// cover which paragraphs qualify and that the rewrite keeps list context.
 @MainActor
 struct StandaloneLinkRowTests {
     private func rows(in markdown: String) throws -> [StandaloneLinkRow] {
@@ -45,8 +43,6 @@ struct StandaloneLinkRowTests {
         #expect(try rows(in: markdown).isEmpty)
     }
 
-    /// Foundation drops `imageURL` inside a link, so a linked image already
-    /// renders as its alt text; the row keeps that text rather than losing an image.
     @Test func linkedImageAltTextBecomesARow() throws {
         let rows = try rows(in: "[![Chart](intent://local/file/chart.png)](https://example.com)")
         #expect(rows == [StandaloneLinkRow(title: "Chart", url: try #require(URL(string: "https://example.com")))])
@@ -62,7 +58,6 @@ struct StandaloneLinkRowTests {
         #expect(after.components.map(\.identity) == before.components.map(\.identity))
         #expect(after.components.dropFirst().map(\.kind) == before.components.dropFirst().map(\.kind))
         #expect(String(rewritten.characters) == String(plain.characters))
-        // The plain parse is cached unchanged for notes and pull requests.
         #expect(try cache.attributedString(for: source) == plain)
     }
 

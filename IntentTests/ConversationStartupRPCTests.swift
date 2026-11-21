@@ -2,7 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Real session request budgets, including remaining watched-detail/catalog costs.
 @MainActor
 struct ConversationStartupRPCTests {
     private let currentQuietCounts = [
@@ -46,8 +45,6 @@ struct ConversationStartupRPCTests {
     @Test func warmWorkspaceReusesStatusAcrossConversationsAndWindows() async {
         let fixture = ConversationStartupFixture()
         defer { fixture.stop() }
-        // Suppress connected replay to isolate load() cost. The replay cases
-        // below include that work separately, in the same recorder.
         let first = fixture.makeViewModel()
         await first.load()
         for agentId in ["startup-second", ConversationStartupFixture.parentId] {
@@ -103,7 +100,6 @@ struct ConversationStartupRPCTests {
         fixture.parentMetadata["pendingProposals"] = [["proposalId": "proposal-1", "messageId": "proposal-message"]]
         await fixture.makeViewModel().load()
         let checkpoint = fixture.connection.checkpoint
-        // ConversationView supplies one ProposalActionStore to its cards.
         let proposal = fixture.makeProposalStore()
         for _ in 0..<5 {
             await proposal.loadIfNeeded()
@@ -132,7 +128,6 @@ struct ConversationStartupRPCTests {
             measurements.append(traffic)
             #expect(viewModel.store.watchedAgentIds == [ConversationStartupFixture.childId])
             #expect(traffic.calls("agent.list").isEmpty)
-            // Cold status adds four to the four core reads. No row is visible yet.
             #expect(traffic.requests.count == 8)
             #expect(traffic.calls("chat.subscribe").count == 1)
             #expect(traffic.pendingCount == 0 && traffic.failures.isEmpty)
@@ -162,8 +157,6 @@ struct ConversationStartupRPCTests {
             let checkpoint = fixture.connection.checkpoint
             let viewModel = fixture.makeViewModel()
             await viewModel.load()
-            // ConversationView's separate task calls this once metadata is
-            // known; it belongs to the opening total even after load returns.
             await viewModel.loadModelCatalogIfNeeded()
             let traffic = fixture.connection.traffic(since: checkpoint)
             print("Startup with catalogs (model reads \(expectedModelReads)): \(traffic.summary)")

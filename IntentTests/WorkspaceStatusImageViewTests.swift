@@ -4,9 +4,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Pure mapping behind the workspace status image (intent-hq/intent#3868):
-/// which workspaces render one, how the fetch is keyed so replacements and
-/// removals refresh, and the detail image's presentation.
 @MainActor
 struct WorkspaceStatusImageViewTests {
     private typealias Layout = WorkspaceStatusImageLayout
@@ -65,11 +62,6 @@ struct WorkspaceStatusImageViewTests {
 
     // MARK: - Hosted: a superseded fetch must not overwrite its replacement
 
-    /// The loader's fetch task outlives the SwiftUI `.task` that awaited it,
-    /// so when the asset id flips from A to B while A is in flight, A's
-    /// (cancelled) awaiter still receives A's image. It must not commit it:
-    /// the header would show the stale screenshot until B landed — or for
-    /// good, if B had already landed.
     @Test(
         .enabled(
             Comment(
@@ -96,7 +88,6 @@ struct WorkspaceStatusImageViewTests {
             Self.requestedAssets(fake) == ["asset-A.png", "asset-B.png"]
         }
 
-        // A resolves after it was superseded (oldest pending request first).
         let png = Self.pngBase64()
         fake.resolvePending(
             "note.readAsset",
@@ -146,9 +137,6 @@ struct WorkspaceStatusImageViewTests {
         }
     }
 
-    /// Hosts the detail-style view in a window so `.task(id:)` runs and
-    /// re-keys; `showsImage` reads the loaded image's accessibility element,
-    /// which only exists once an image has been committed.
     @MainActor
     private final class HostedImage {
         private let loader: WorkspaceFileImageLoader

@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Tests for the task-note metadata header's pure helpers: reverse dependency
-/// edge derivation, unmet-dependency highlight suppression, and assignee
-/// dedup/ordering (fe `NoteMetadataBar.svelte` parity).
 struct TaskMetadataHeaderTests {
     private func makeNote(
         id: String,
@@ -39,7 +36,6 @@ struct TaskMetadataHeaderTests {
             makeNote(id: "c", taskStatus: "not_started", dependsOn: ["other"]),
             makeNote(id: "plain")
         ]
-        // Sorted by id for stable order, matching the fe derivation.
         #expect(TaskMetadataHeaderView.dependedOnBy(noteId: "target", in: notes) == ["a", "b"])
     }
 

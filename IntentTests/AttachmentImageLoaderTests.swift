@@ -3,15 +3,10 @@ import Foundation
 import Testing
 import UIKit
 
-/// Covers the attachment-reference resolution path: `file.getAttachmentInfo`
-/// → workspace-relative path → `file.readChunk` bytes, plus path caching,
-/// the missing-file and malformed arms, uncached resolution failures, and
-/// the retry path clearing the byte-fetch negative cache.
 @MainActor
 struct AttachmentImageLoaderTests {
     private typealias LoadError = AttachmentImageLoader.LoadError
 
-    /// A tiny valid PNG rendered at test time.
     private static func pngBytes() -> Data {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4))
         return renderer.pngData { ctx in
@@ -100,8 +95,6 @@ struct AttachmentImageLoaderTests {
     }
 
     @Test func resolutionFailureIsNotCached() async throws {
-        // FE parity (attachment-image-url.ts): a transient resolution error
-        // retries on the next render pass.
         let png = Self.pngBytes()
         let fake = FakeConnectionManager()
         fake.errorMap["file.getAttachmentInfo"] = NSError(domain: "test", code: -1)
@@ -119,9 +112,6 @@ struct AttachmentImageLoaderTests {
     }
 
     @Test func retryClearsByteFetchNegativeCache() async throws {
-        // First load resolves the path but the byte fetch fails, which the
-        // file loader negatively caches for the session; retryImage clears
-        // that entry so the fetch genuinely re-runs.
         let png = Self.pngBytes()
         let fake = FakeConnectionManager()
         fake.responseMap["file.getAttachmentInfo"] = Self.infoResponse(path: ".intent/attachments/pic.png")
@@ -145,11 +135,6 @@ struct AttachmentImageLoaderTests {
         fake.responseMap["file.readChunk"] = Self.chunkResponse(png)
         let loader = Self.makeLoader(fake)
 
-        // Once the first read is suspended its resolution is in flight. The
-        // second load marks itself started and then, in the same main-actor
-        // job (same-actor calls do not suspend before the join's `await`),
-        // reaches the in-flight join — so observing the mark proves it joined
-        // before the read resolves.
         let firstLoad = Task { try await loader.image(workspaceId: "ws-1", attachmentId: "att-1") }
         try await fake.waitForPendingRequests("file.getAttachmentInfo")
         let secondStarted = StartMark()
@@ -159,8 +144,6 @@ struct AttachmentImageLoaderTests {
         }
         try await waitUntil("second load at its join point") { secondStarted.isSet }
         #expect(fake.paramsForMethod("file.getAttachmentInfo").count == 1)
-        // Answer any later read at once and resolve every suspended one, so a
-        // regression that skips the join fails the count below, not hangs.
         fake.pendingMethods = []
         fake.responseMap["file.getAttachmentInfo"] = Self.infoResponse(path: ".intent/attachments/pic.png")
         while fake.pendingRequestCount("file.getAttachmentInfo") > 0 {
@@ -177,7 +160,6 @@ struct AttachmentImageLoaderTests {
     }
 }
 
-/// Main-actor flag a spawned task sets as its first statement.
 @MainActor
 private final class StartMark {
     var isSet = false

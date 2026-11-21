@@ -54,7 +54,6 @@ extension ConnectionManagerTests {
         #expect(manager.startupState == nil)
         #expect(manager.currentPrincipal?.isOwner == true)
         #expect((manager.activeTunnel != nil) == tunnel)
-        // A subsequent daemon restart follows the same admission path.
         try server.setStartup(Self.startupSnapshot(phase: "finalizing", attempt: "boot-b"))
         server.dropConnections()
         try await waitUntil("reconnect finalization", timeout: .seconds(10)) {

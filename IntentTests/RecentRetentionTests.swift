@@ -96,12 +96,10 @@ struct RecentRetentionTests {
         await stores.scriptStore.refresh(workspaceId: "ws-1")
         try await waitUntil("note subscription registered") { fake.hasSubscriptionHandler(id: "note-sub-1") }
 
-        // Releasing one of two overlapping leases (e.g. iPad detail -> sidebar handoff) keeps observation live.
         stores.release(firstLease)
         #expect(fake.eventHandlerCount > baselineHandlers)
         #expect(fake.hasSubscriptionHandler(id: "note-sub-1"))
 
-        // Releasing the final lease detaches offscreen handlers/subscriptions while keeping cached rows.
         fake.clearRequestLog()
         stores.release(secondLease)
         try await waitUntil("unsubscribes sent") {
@@ -113,7 +111,6 @@ struct RecentRetentionTests {
         #expect(stores.noteStore.notes.map(\.id) == ["n-1"])
         #expect(stores.scriptStore.scripts(workspaceId: "ws-1").map(\.id) == ["s-1"])
 
-        // Offscreen events and reconnects must not trigger background RPC refetches.
         fake.clearRequestLog()
         fake.deliverEvent(method: "events.event", params: [
             "event": ["type": "agent:updated", "workspaceId": "ws-1", "data": ["agentId": "a-1"]]
@@ -127,7 +124,6 @@ struct RecentRetentionTests {
             fake.didCallMethod("agent.list") || fake.didCallMethod("note.list") || fake.didCallMethod("script.list")
         }
 
-        // Re-retaining on return restores observation cleanly.
         fake.responseMap["note.subscribe"] = ["subscriptionId": "note-sub-2"]
         stores.retain(UUID(), workspaceId: "ws-1")
         try await waitUntil("note subscription restored on return") { fake.hasSubscriptionHandler(id: "note-sub-2") }

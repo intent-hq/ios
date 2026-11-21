@@ -25,7 +25,6 @@ struct ToolbarEnvironmentTests {
         let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let previousKey = scene.keyWindow
         let window = UIWindow(windowScene: scene)
-        // Native bar-item hosts must not need the window's observable environment (#745).
         let host = UIHostingController(rootView: fixture)
         window.rootViewController = host
         window.makeKeyAndVisible()
@@ -47,7 +46,6 @@ struct ToolbarEnvironmentTests {
             if !hidden {
                 try await waitUntil("the menu button to be hosted in the visible navigation bar") {
                     guard let item = navigation.navigationBar.topItem else { return false }
-                    // SwiftUI uses item groups on newer iOS versions instead of the legacy array.
                     let buttons = (item.rightBarButtonItems ?? []) + item.trailingItemGroups.flatMap(\.barButtonItems)
                     return buttons.contains { button in
                         button.menu != nil || button.customView != nil

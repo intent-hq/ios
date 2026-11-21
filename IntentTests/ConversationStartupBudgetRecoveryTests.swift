@@ -59,8 +59,6 @@ extension ConversationStartupBudgetTests {
         try await waitUntil("late registration released") {
             connection.traffic().calls("chat.unsubscribe").count == 1 && connection.traffic().pendingCount == 0
         }
-        // An already-sent frame can arrive after close. It costs bytes even
-        // though its orphaned registration no longer has a local consumer.
         try connection.deliverNotification(params: [
             "subscriptionId": "budget-late-ack", "kind": "snapshot", "seq": 0,
             "snapshot": [
