@@ -359,9 +359,7 @@ These records came from the comment ratchet (`scripts/comment_budget.py`). They 
 | [0072](0072-deep-links-and-invites.md) | Deep links and workspace invites |
 | [0073](0073-screen-restoration-and-route-validation.md) | Screen restoration and route validation |
 | [0074](0074-ipad-shell-and-root-layout.md) | iPad shell navigation and root layout |
-| [0075](0075-dictation-merge-rules.md) | Dictation merge rules |
 | [0076](0076-daemon-event-classification.md) | Daemon event classification and wake labels |
-| [0077](0077-test-synchronization-and-fakes.md) | Test synchronization and connection fakes |
 | [0078](0078-github-repo-and-branch-caches.md) | GitHub repo and branch caches |
 | [0079](0079-note-store-cache-and-hydration.md) | Note store cache, hydration and not-found |
 | [0080](0080-diagnostic-history-privacy-and-storage.md) | Diagnostic history privacy, bounds and storage |
