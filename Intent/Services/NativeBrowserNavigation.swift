@@ -293,15 +293,7 @@ extension NativeBrowserNavigation {
             guard let self, generation == currentGeneration, connection.connectionState == .connected,
                   (connection as? any SessionConnectionManaging)?.currentPrincipal == principal else { throw BrowserTunnelError.closed }
             if needsReconciliation, !tabs.isEmpty {
-                let response = try await PagedReads.requestWholeReply(
-                    params: ["includeArchived": true, "limit": PagedReads.workspacePageLimit], field: "workspaces"
-                ) { params in
-                    guard self.generation == currentGeneration,
-                          (self.connection as? any SessionConnectionManaging)?.currentPrincipal == principal else {
-                        throw BrowserTunnelError.closed
-                    }
-                    return try await self.connection.request("workspace.list", params: params)
-                }
+                let response = try await workspacePages(generation: currentGeneration, principal: principal)
                 guard generation == currentGeneration,
                       (connection as? any SessionConnectionManaging)?.currentPrincipal == principal else { throw BrowserTunnelError.closed }
                 guard let result = response as? [String: Any], let rows = result["workspaces"] as? [[String: Any]] else {
@@ -324,6 +316,16 @@ extension NativeBrowserNavigation {
         }
         reportTask = task
         return task
+    }
+
+    private func workspacePages(generation currentGeneration: Int, principal: ConnectionPrincipal?) async throws -> Any {
+        try await PagedReads.requestWholeReply(
+            params: ["includeArchived": true, "limit": PagedReads.workspacePageLimit], field: "workspaces"
+        ) { params in
+            guard self.generation == currentGeneration,
+                  (self.connection as? any SessionConnectionManaging)?.currentPrincipal == principal else { throw BrowserTunnelError.closed }
+            return try await self.connection.request("workspace.list", params: params)
+        }
     }
 
     private func persist() {

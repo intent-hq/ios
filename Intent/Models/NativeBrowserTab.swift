@@ -14,8 +14,12 @@ struct NativeBrowserTab: Codable {
 
     var browser: WorkspaceBrowser {
         WorkspaceBrowser(
-            id: id, workspaceId: workspaceId, title: title, url: loadURL ?? requestedURL,
-            command: nil, navigationRequestID: loadRequestID
+            id: id,
+            workspaceId: workspaceId,
+            title: title,
+            url: loadURL ?? requestedURL,
+            command: nil,
+            navigationRequestID: loadRequestID
         )
     }
 

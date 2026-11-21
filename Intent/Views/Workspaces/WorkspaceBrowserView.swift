@@ -25,6 +25,10 @@ struct WorkspaceBrowserView: View {
         let id: UUID?
     }
 
+    private var requestedNavigation: RequestedNavigation {
+        RequestedNavigation(url: browser.url, id: browser.navigationRequestID)
+    }
+
     var body: some View {
         NavigationStack {
             browserContent
@@ -44,9 +48,7 @@ struct WorkspaceBrowserView: View {
             .toolbar(onClose == nil ? .automatic : .hidden, for: .navigationBar)
             .task(id: attachmentKey) { await attach() }
             .onAppear { addressInput = targetAddress ?? browser.url }
-            .onChange(of: RequestedNavigation(url: browser.url, id: browser.navigationRequestID)) { _, request in
-                updateRequestedURL(request.url)
-            }
+            .onChange(of: requestedNavigation) { _, request in updateRequestedURL(request.url) }
             .onChange(of: page.title) { _, title in onPageChange(page.address, title) }
             .onChange(of: page.address) { _, address in
                 onPageChange(address, page.title)
