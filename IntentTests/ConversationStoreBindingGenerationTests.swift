@@ -194,6 +194,8 @@ extension ConversationStoreLiveStateTests {
         )
     }
 
+    // MARK: - Structural binding guard (`whileBound`)
+
     @Test func whileBoundSuppressesResultOnlyWhenBoundAgentChanges() async {
         let fake = FakeConnectionManager()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]

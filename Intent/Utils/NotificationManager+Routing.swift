@@ -2,6 +2,8 @@ import Foundation
 import UserNotifications
 
 extension NotificationManager {
+    // MARK: - Selection handlers (per-backend windows)
+
     @discardableResult
     func registerAgentSelectionHandler(
         for backendID: BackendID,
@@ -112,6 +114,8 @@ extension NotificationManager {
         switchWindow(connectionId)
     }
 
+    // MARK: - Tap routing (spec decision 5)
+
     enum SelectionRoute: Equatable {
         case deliverToWindow
         case openSourceWindow
@@ -128,6 +132,8 @@ extension NotificationManager {
         if supportsMultipleWindows { return .openSourceWindow }
         return registeredBackends.isEmpty ? .holdForFirstWindow : .drop
     }
+
+    // MARK: - Presentation routing (per-backend windows)
 
     nonisolated static func windowPresentsAlert(
         source: BackendID,

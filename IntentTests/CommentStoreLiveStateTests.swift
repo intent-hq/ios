@@ -43,6 +43,8 @@ struct CommentStoreLiveStateTests {
         #expect(store.threads.map(\.threadId) == ["thread-observed"])
     }
 
+    // MARK: - Live-state subscription tests
+
     @Test func appliesSnapshot() async {
         let store = CommentStore(forTesting: true)
         let reconciler = DeltaReconciler<CommentThread>(

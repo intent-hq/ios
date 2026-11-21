@@ -42,6 +42,8 @@ struct BackgroundHooksRow: View {
         .opacity(Constants.Conversation.StatusStrip.contentOpacity)
     }
 
+    // MARK: - Chip
+
     private var retryButton: some View {
         Button {
             Task { await hookStore.refetch() }
@@ -136,6 +138,8 @@ struct BackgroundHooksRow: View {
         if name.count <= Layout.nameMaxLength { return name }
         return name.prefix(Layout.nameMaxLength) + "…"
     }
+
+    // MARK: - Display helpers (pure, unit-tested)
 
     static func detailLines(_ hook: BackgroundHook, now: Date = Date()) -> [String] {
         var lines = ["\(hook.name) — \(stateLabel(hook))"]

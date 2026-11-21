@@ -94,6 +94,8 @@ extension SpecialistInfo {
         }
     }
 
+    // MARK: - Connection observation
+
     private func observeConnection() {
         connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
@@ -318,6 +320,8 @@ extension SpecialistInfo {
             break
         }
     }
+
+    // MARK: - Event classification
 
     nonisolated static let handledChannels = ["agent:"]
 

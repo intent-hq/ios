@@ -67,6 +67,8 @@ enum DemoPullRequestFixtures {
         ]
     }
 
+    // MARK: - Detail
+
     private static func detailResponse(for method: String, params: [String: Any]) -> Any? {
         guard method.hasPrefix("github.pulls."), method != "github.pulls.search",
               let number = params["number"] as? Int,

@@ -10,6 +10,8 @@ struct ScriptListPagingTests {
         range.map { ["id": "script-\($0)", "workspaceId": "workspace", "name": "Script \($0)", "command": "make \($0)"] }
     }
 
+    // MARK: - PagedReads.requestAllScripts
+
     @Test func followsNextCursorUntilItIsAbsent() async throws {
         var sent: [[String: Any]] = []
         let replies: [[String: Any]] = [
@@ -58,6 +60,8 @@ struct ScriptListPagingTests {
             }
         }
     }
+
+    // MARK: - Callers
 
     @Test func scriptStoreListsDefinitionsFromEveryPage() async {
         let fixture = WorkspaceScriptFixture()

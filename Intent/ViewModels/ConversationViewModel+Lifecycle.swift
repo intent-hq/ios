@@ -63,6 +63,8 @@ extension ConversationViewModel {
         ))
     }
 
+    // MARK: - Seen-marker lifecycle
+
     func observeStreaming() {
         let observedStore = store
         previousIsStreaming = observedStore.isStreaming
@@ -138,6 +140,8 @@ extension ConversationViewModel {
         let workspaceId = self.workspaceId
         Task { await store.markSeen(agentId: agentId, workspaceId: workspaceId) }
     }
+
+    // MARK: - Agent metadata
 
     func stopAgent(agentId: String) async {
         do {

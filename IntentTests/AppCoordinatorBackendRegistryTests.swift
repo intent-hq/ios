@@ -26,6 +26,8 @@ extension AppCoordinatorTests {
         }
     }
 
+    // MARK: - Connection-failure saved-connection alternatives
+
     @Test func alternativeConnections_excludesActiveConnection() {
         let active = Self.makeConnection(port: 1)
         let other = Self.makeConnection(port: 2)
@@ -254,6 +256,8 @@ extension AppCoordinatorTests {
             "Flag must clear once no saved connections remain"
         )
     }
+
+    // MARK: - Backend removal marks pinned windows for auto-close (spec decision 2)
 
     @MainActor static func markOnlySessionRegistry() -> BackendSessionRegistry {
         BackendSessionRegistry { kind in

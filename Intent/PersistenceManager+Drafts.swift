@@ -1,6 +1,8 @@
 import Foundation
 
 extension PersistenceManager {
+    // MARK: - Draft Messages
+
     private static let draftPrefix = "draft_"
     private static let legacyDraftOwnerKey = "legacyDraftOwner"
 

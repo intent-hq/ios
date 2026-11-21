@@ -121,6 +121,8 @@ enum PrMonitorFlushMode {
         }
     }
 
+    // MARK: - Event folding
+
     struct FoldResult {
         let monitors: [MonitoredPr]
         let needsRefetch: Bool

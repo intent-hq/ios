@@ -33,6 +33,8 @@ struct WorkspaceDetailViewTests {
         }
     }
 
+    // MARK: - Session store routing (multi-window state split)
+
     @MainActor
     @Test(arguments: [WorkspaceTab.agents, .context, .changes, .unsupportedPersistedValue(42)])
     func savedTabIsSelectedBeforeWorkspaceAppears(tab: WorkspaceTab) throws {

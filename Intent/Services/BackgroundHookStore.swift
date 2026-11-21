@@ -92,6 +92,8 @@ import Observation
         }
     }
 
+    // MARK: - Event folding
+
     private static let terminalHookEvents: Set<String> = [
         "hook:dispatched",
         "hook:evicted",

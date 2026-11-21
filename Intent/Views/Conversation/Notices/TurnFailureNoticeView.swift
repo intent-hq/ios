@@ -64,6 +64,8 @@ struct TurnFailureNoticeView: View {
         )
     }
 
+    // MARK: - Summary
+
     private var summaryRow: some View {
         HStack(alignment: .top, spacing: Card.contentSpacing) {
             Image(.closeCircle)
@@ -118,6 +120,8 @@ struct TurnFailureNoticeView: View {
         Theme.foreground(for: colorScheme).opacity(contrast == .increased ? 1 : Card.turnFailureSecondaryOpacity)
     }
 
+    // MARK: - Link
+
     private func linkButton(_ url: URL) -> some View {
         let host = url.host(percentEncoded: false) ?? url.absoluteString
         return Button {
@@ -145,6 +149,8 @@ struct TurnFailureNoticeView: View {
         .accessibilityRemoveTraits(.isButton)
         .accessibilityIdentifier("turnFailure.link")
     }
+
+    // MARK: - Details
 
     private var detailsButton: some View {
         Button {

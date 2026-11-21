@@ -26,6 +26,8 @@ struct SpecialistPickerSelectionTests {
         ModelInfo(id: id, name: id, provider: provider, isDefault: isDefault)
     }
 
+    // MARK: - reconciledSpecialist (cached catalog → New Agent selection)
+
     @Test func reconciledSpecialistDefaultsToOrchestratorElseFirstInDaemonOrder() {
         let withOrchestrator = [
             makeCatalogSpecialist(id: "verifier", name: "Verifier"),
@@ -88,12 +90,16 @@ struct SpecialistPickerSelectionTests {
         #expect(SpecialistPickerView.reconciledSpecialist(current: nil, catalog: []) == nil)
     }
 
+    // MARK: - showsModelsLoading (cached catalog never spins; failed cold load settles)
+
     @Test func showsModelsLoadingOnlyWhileCatalogUncachedAndUnsettled() {
         #expect(SpecialistPickerView.showsModelsLoading(catalog: nil, settled: false))
         #expect(!SpecialistPickerView.showsModelsLoading(catalog: nil, settled: true))
         #expect(!SpecialistPickerView.showsModelsLoading(catalog: [], settled: false))
         #expect(!SpecialistPickerView.showsModelsLoading(catalog: [makeModel("sonnet4.5")], settled: false))
     }
+
+    // MARK: - SettledLoads (generation-gated sheet markers)
 
     @Test func settledLoadsPublishOnlyForTheGenerationTheLoadStartedIn() {
         var settled = SpecialistPickerView.SettledLoads()
@@ -115,6 +121,8 @@ struct SpecialistPickerSelectionTests {
         #expect(!settled.options)
         #expect(settled.modelProviders.isEmpty)
     }
+
+    // MARK: - noneSelectable (desktop-setup guidance state, monorepo#985)
 
     @Test func noneSelectableWhenAllProvidersSignedOut() {
         let providers = [
@@ -141,6 +149,8 @@ struct SpecialistPickerSelectionTests {
         ]
         #expect(!unknown.noneSelectable)
     }
+
+    // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
     private func isCreateDisabled(
         providers: [ProviderInfo],
@@ -196,6 +206,8 @@ struct SpecialistPickerSelectionTests {
         #expect(isCreateDisabled(providers: providers, isLoadingModels: true))
     }
 
+    // MARK: - daemonDefaultLabel (resolvedModel/resolvedProvider preview)
+
     @Test func daemonDefaultLabelNamesResolvedModelForMatchingProvider() {
         let specialist = makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie")
         #expect(SpecialistInfo.daemonDefaultLabel(for: specialist, providerId: "auggie") == "Default (sonnet4.5)")
@@ -210,6 +222,8 @@ struct SpecialistPickerSelectionTests {
         #expect(SpecialistInfo.daemonDefaultLabel(for: makeSpecialist(), providerId: "auggie") == "Provider default")
         #expect(SpecialistInfo.daemonDefaultLabel(for: nil, providerId: "auggie") == "Provider default")
     }
+
+    // MARK: - buildCreateAgentSelection
 
     @Test func omitsBothOnDaemonDefaultSelection() {
         let selection = SpecialistPickerView.buildCreateAgentSelection(

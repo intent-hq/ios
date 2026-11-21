@@ -8,6 +8,8 @@ struct ContextMentionTests {
         Data(json.utf8).base64EncodedString()
     }
 
+    // MARK: - Base64 JSON payloads
+
     @Test func base64JSONTokenWithUrl() {
         let token = base64(
             #"{"provider":"linear","identifier":"AU-123","title":"Fix crash","url":"https://linear.app/i/AU-123"}"#
@@ -51,6 +53,8 @@ struct ContextMentionTests {
         #expect(sharedMention.provider == "browser")
     }
 
+    // MARK: - Pipe-separated payloads
+
     @Test func pipeSeparatedToken() {
         let segments = ContextMention.segments(from: "@context[linear|AU-123|Fix crash]")
         #expect(segments == [
@@ -72,6 +76,8 @@ struct ContextMentionTests {
         #expect(mention.title == "#7")
     }
 
+    // MARK: - Malformed base64/JSON fallback
+
     @Test func malformedBase64FallsBackToPipeParsing() {
         let segments = ContextMention.segments(from: "@context[eyJ%%%not-base64]")
         #expect(segments == [
@@ -92,6 +98,8 @@ struct ContextMentionTests {
         #expect(mention.provider == token)
         #expect(mention.identifier.isEmpty)
     }
+
+    // MARK: - Interleaving
 
     @Test func tokenEmbeddedMidText() {
         let segments = ContextMention.segments(from: "look at @context[linear|AU-1|One] please")
@@ -135,6 +143,8 @@ struct ContextMentionTests {
         )))
     }
 
+    // MARK: - Clipboard/plain-text transformation
+
     @Test func replacingTokensWithTitlesDecodesBase64Token() {
         let token = base64(
             #"{"provider":"linear","identifier":"AU-123","title":"Fix crash","url":"https://linear.app/i/AU-123"}"#
@@ -156,6 +166,8 @@ struct ContextMentionTests {
         let text = "no mentions here, not even @context without brackets"
         #expect(ContextMention.replacingTokensWithTitles(in: text) == text)
     }
+
+    // MARK: - User text rows (MessageView display transformation)
 
     @Test func userTextRowsSplitsTextAroundChip() {
         let rows = MessageView.userTextRows("look at @context[linear|AU-1|One] please")
@@ -192,6 +204,8 @@ struct ContextMentionTests {
         #expect(String(rendered[link.range].characters) == "#1029")
         #expect(link.underlineStyle == .single)
     }
+
+    // MARK: - Chip presentation
 
     @Test func chipDisplayTitleTruncatesLongTitles() {
         let long = String(repeating: "a", count: 40)

@@ -63,6 +63,8 @@ struct NoteListView: View {
     }
 }
 
+// MARK: - Tree Node View (recursive)
+
 struct NoteTreeNodeView: View {
     let note: Note
     let noteStore: NoteStore
@@ -133,6 +135,8 @@ struct NoteTreeNodeView: View {
         }
     }
 }
+
+// MARK: - Note Row View
 
 struct NoteRowView: View {
     let note: Note

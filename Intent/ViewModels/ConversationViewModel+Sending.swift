@@ -192,6 +192,8 @@ extension ConversationViewModel {
         agentName = AgentSession.displayName(for: newName)
     }
 
+    // MARK: - Attachments
+
     func addImage(_ image: UIImage) { attachmentPipeline.addImage(image) }
     func pasteImages() { attachmentPipeline.pasteImages() }
     func removeImage(at index: Int) { attachmentPipeline.removeImage(at: index) }

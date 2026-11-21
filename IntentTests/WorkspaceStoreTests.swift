@@ -6,6 +6,8 @@ import Testing
 
 @MainActor
 struct WorkspaceStoreAgentParsingTests {
+    // MARK: - Agent summary parsing within parseWorkspace
+
     @Test func parseWorkspaceWithFullAgentSummary() {
         let dict: [String: Any] = [
             "id": "ws-agent-1",
@@ -138,6 +140,8 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(workspace?.agentSummaryAgents.count == 1)
     }
 
+    // MARK: - WorkspaceAgentInfo Codable round-trip
+
     @Test func agentInfoCodableRoundTrip() throws {
         let agent = WorkspaceAgentInfo(
             id: "agent-rt",
@@ -170,6 +174,8 @@ struct WorkspaceStoreAgentParsingTests {
         #expect(decoded.lastActivity == nil)
     }
 }
+
+// MARK: - lastActivity mirrors intentd (no client-side bumping)
 
 @MainActor
 struct WorkspaceStoreLastActivityTests {
@@ -210,6 +216,8 @@ struct WorkspaceStoreLastActivityTests {
             ] as [String: Any]
         ]
     }
+
+    // MARK: - workspace:updated { changes.lastActivity } patches the row in place
 
     @Test func workspaceUpdatedDeltaPatchesLastActivityInPlace() {
         let store = WorkspaceStore(forTesting: true)
@@ -265,6 +273,8 @@ struct WorkspaceStoreLastActivityTests {
         #expect(store.workspaces[0].lastActivity == "2026-03-01T10:00:00Z")
     }
 
+    // MARK: - Fetched rows are published exactly as received
+
     @Test func fetchedRowsAreNotOverriddenByEarlierDelta() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
@@ -284,6 +294,8 @@ struct WorkspaceStoreLastActivityTests {
         #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
     }
 }
+
+// MARK: - The virtual Chief of Staff workspace never reaches the list
 
 @MainActor
 struct WorkspaceStoreChiefFilterTests {

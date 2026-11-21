@@ -3,6 +3,8 @@ import SwiftUI
 import Testing
 
 extension CreateWorkspaceParamsTests {
+    // MARK: - pickerSpecialists (cached catalog → picker list)
+
     private func makeCatalogSpecialist(
         id: String,
         name: String,
@@ -26,6 +28,8 @@ extension CreateWorkspaceParamsTests {
         )
         #expect(CreationSelectionPolicy.workspacePickerSpecialists([]).isEmpty)
     }
+
+    // MARK: - preselectedSpecialist
 
     @Test func preselectedSpecialistDefaultsToOrchestratorElseFirst() {
         let withOrchestrator = [
@@ -134,6 +138,8 @@ extension CreateWorkspaceParamsTests {
         #expect(CreationSelectionPolicy.preselectedWorkspaceSpecialist(current: nil, catalog: []) == nil)
     }
 
+    // MARK: - showsOptionsLoading (cached reopen never spins; warm-before-load clears)
+
     @Test func showsOptionsLoadingOnlyWhileColdOrStoreLoading() {
         #expect(
             CreateWorkspaceView.showsOptionsLoading(
@@ -195,6 +201,8 @@ extension CreateWorkspaceParamsTests {
             )
         )
     }
+
+    // MARK: - showsModelCatalogLoading (Create waits for the first catalog; warm catalog is instant)
 
     @Test func modelCatalogLoadingGatesCreateUntilFirstCatalogSettles() {
         #expect(CreateWorkspaceView.showsModelCatalogLoading(catalogCached: false, settled: false))

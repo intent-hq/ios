@@ -10,6 +10,8 @@ extension ConnectionManager {
         localRequestError(code: notConnectedErrorCode, message: "Not connected", classification: .notConnected)
     }
 
+    // MARK: - Public API
+
     static let defaultRequestTimeout: TimeInterval = 10
 
     func request(
@@ -266,6 +268,8 @@ extension ConnectionManager {
         eventHandlers[id] = handler
         return id
     }
+
+    // MARK: - Subscription Push Routing
 
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
         subscriptionRouter.register(id: id, handler: handler)

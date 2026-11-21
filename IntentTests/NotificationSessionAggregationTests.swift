@@ -4,6 +4,8 @@ import Testing
 import UIKit
 import UserNotifications
 
+// MARK: - Cross-session aggregation
+
 @Suite("NotificationManager cross-session aggregation", .serialized)
 @MainActor
 final class NotificationSessionAggregationTests {
@@ -114,6 +116,8 @@ final class NotificationSessionAggregationTests {
         for _ in 0..<20 { await Task.yield() }
     }
 
+    // MARK: - Observer lifecycle
+
     @Test func attachRegistersOneHandlerAndDetachRemovesIt() {
         let (manager, _) = makeManager(defaultConnection: FakeConnectionManager())
         let backendID = BackendID(UUID())
@@ -147,6 +151,8 @@ final class NotificationSessionAggregationTests {
             "A transient pairing session has no backend to observe"
         )
     }
+
+    // MARK: - Backend-session alerts
 
     @Test func idleEventPresentsToastTaggedWithSourceBackend() async throws {
         let defaultFake = FakeConnectionManager()
@@ -237,6 +243,8 @@ final class NotificationSessionAggregationTests {
         #expect(manager.currentToast == nil)
         #expect(center.requests.isEmpty)
     }
+
+    // MARK: - Alert-chime / attention-cue dedup (visionOS double chime)
 
     private func makeCueWorkspace(id: String, attention: String? = nil) -> Workspace {
         Workspace(

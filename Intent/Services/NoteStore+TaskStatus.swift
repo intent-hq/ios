@@ -1,6 +1,8 @@
 import Foundation
 
 extension NoteStore {
+    // MARK: - Task status writes
+
     private func rollback(_ original: Note) {
         if let idx = notes.firstIndex(where: { $0.id == original.id }) {
             notes[idx] = original

@@ -110,6 +110,8 @@ struct NotificationManagerTests {
         )
     }
 
+    // MARK: - shouldSuppressIdleAlert
+
     @Test func coordinatorWaitingOnChildrenSuppresses() {
         let agents = [makeAgent(id: "coord", isWaitingForOtherAgents: true, waitingForAgentIds: ["child"])]
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "coord", agents: agents) == true)
@@ -197,6 +199,8 @@ struct NotificationManagerTests {
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "gone", agents: agents) == false)
     }
 
+    // MARK: - shouldSkipIdleEventFastPath
+
     @Test func backgroundEventFlagSkips() {
         #expect(NotificationManager.shouldSkipIdleEventFastPath(["isBackground": true]) == true)
     }
@@ -225,6 +229,8 @@ struct NotificationManagerTests {
         #expect(NotificationManager.shouldSkipIdleEventFastPath(["agentId": "a", "isBackground": false]) == false)
     }
 }
+
+// MARK: - Notification chime synthesis
 
 @Suite("NotificationChime synthesis")
 struct NotificationChimeTests {

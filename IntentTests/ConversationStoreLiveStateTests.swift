@@ -61,6 +61,8 @@ struct ConversationStoreLiveStateTests {
         return entity
     }
 
+    // MARK: - Snapshot application
+
     @Test func loadingStageTracksConnectionAndIgnoresAckAfterReset() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -165,6 +167,8 @@ struct ConversationStoreLiveStateTests {
         #expect(store.totalMessageCount == 1)
     }
 
+    // MARK: - Mid-turn hydration
+
     @Test func midTurnSnapshotShowsPartialAndStreaming() {
         let (store, _) = makeStore()
 
@@ -212,6 +216,8 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isStreaming == true)
     }
 
+    // MARK: - Growing-text delta sequence
+
     @Test func growingTextDeltasAccumulateFullText() {
         let (store, _) = makeStore()
 
@@ -246,6 +252,8 @@ struct ConversationStoreLiveStateTests {
         #expect(assistant.contentBlocks.first?.resolvedText == "Let me check the logs.")
         #expect(store.isStreaming == true)
     }
+
+    // MARK: - Tool blocks
 }
 
 extension ConversationStoreLiveStateTests {
@@ -287,6 +295,8 @@ extension ConversationStoreLiveStateTests {
         #expect(blocks[2].resolvedToolUseId == "call-1")
     }
 
+    // MARK: - Terminal frame
+
     @Test func terminalFrameClearsStreamingAndHonorsRemovedIds() {
         let (store, _) = makeStore()
 
@@ -325,6 +335,8 @@ extension ConversationStoreLiveStateTests {
         #expect(blocks[0].resolvedText == "Partial + final.")
         #expect(store.isStreaming == false)
     }
+
+    // MARK: - Gap detection
 
     @Test func gapLeavesTranscriptUntouched() {
         let (store, _) = makeStore()

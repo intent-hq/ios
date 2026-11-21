@@ -18,6 +18,8 @@ extension ConnectionManager {
         case current(localIps: LocalIPsResult, tcAddress: String?)
     }
 
+    // MARK: - Host route refresh
+
     func scheduleHostRoutesRefresh() {
         Task { await self.refreshHostRoutes() }
     }

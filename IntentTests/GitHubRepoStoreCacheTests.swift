@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 extension GitHubRepoStoreTests {
+    // MARK: - loadIfNeeded (session cache, stale-while-revalidate)
+
     @Test func coldLoadIssuesAllReadsAndMarksLoaded() async {
         let (store, fake) = await makeLoadedStore()
         #expect(store.hasCheckedAuth)
@@ -275,6 +277,8 @@ extension GitHubRepoStoreTests {
         #expect(store.ownRepos.map(\.name) == ["fresh"])
         #expect(fake.paramsForMethod("github.repos.list").count == 1)
     }
+
+    // MARK: - Reconnect
 
     @Test func reconnectAfterFailedColdLoadClearsPartialCacheAndRetries() async throws {
         let fake = FakeConnectionManager()

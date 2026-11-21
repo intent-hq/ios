@@ -1,6 +1,8 @@
 import Foundation
 
 extension PersistenceManager {
+    // MARK: - Agent history (global, across connections)
+
     private static let agentHistoryKey = "agentHistory"
 
     func loadAgentHistory() -> [AgentHistoryEntry] {

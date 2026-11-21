@@ -55,6 +55,8 @@ extension WebSocketConnection {
         }
     }
 
+    // MARK: - Raw stream I/O
+
     nonisolated static func read(_ connection: NWConnection, host: String) async throws -> Data? {
         try await withCheckedThrowingContinuation { continuation in
             connection.receive(minimumIncompleteLength: 1, maximumLength: readChunkSize) { content, _, isComplete, error in

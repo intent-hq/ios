@@ -12,6 +12,8 @@ extension ConversationStore {
         let seen: Int
     }
 
+    // MARK: - Metadata reconciliation
+
     func fetchAgentStreamingState(
         agentId: String,
         raiseOnly: Bool = false,
@@ -113,6 +115,8 @@ extension ConversationStore {
         }
     }
 
+    // MARK: - Binding
+
     func bindAgent(_ agentId: String?) {
         if let bound = self.agentId, bound != agentId {
             cancelBootstrap()
@@ -122,6 +126,8 @@ extension ConversationStore {
         }
         self.agentId = agentId
     }
+
+    // MARK: - Marked question recovery (aroundMessageId seek, PROTOCOL §5.5)
 
     func reconcilePendingQuestionRecovery() {
         guard case .set(let markedId) = PendingQuestionSet.MarkerState(pendingQuestionsMessageId),
@@ -245,6 +251,8 @@ extension ConversationStore {
             message: message
         )
     }
+
+    // MARK: - Slim block hydration (agent.getMessageBlock, PROTOCOL §5.5)
 
     static func hydratedBlockKey(messageId: String, blockId: String) -> String {
         ConversationLiveTranscript.hydratedBlockKey(

@@ -12,6 +12,8 @@ struct ModelsTests {
         #expect(decoded.hosts == ["192.168.1.1"])
     }
 
+    // MARK: - Workspace.pullRequests (PROTOCOL §5.1 / §7.6)
+
     @Test func workspaceDecodesPullRequests() throws {
         let json = Data("""
         {
@@ -66,6 +68,8 @@ struct ModelsTests {
         #expect(workspace.pullRequests.count == 1)
         #expect(workspace.pullRequests.first?.status == "SomeFutureStatus")
     }
+
+    // MARK: - Workspace.activePullRequest (PROTOCOL §5.1 / §7.6)
 
     @Test func workspaceDecodesActivePullRequest() throws {
         let json = Data("""

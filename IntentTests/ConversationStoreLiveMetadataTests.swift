@@ -1,6 +1,8 @@
 @testable import Intent
 import Testing
 
+// MARK: - Row metadata on live entities (PROTOCOL 07 §7.1)
+
 extension ConversationStoreLiveStateTests {
     private static let a2aText = "[MESSAGE FROM AGENT Coordinator (agent-1)]\n\nDo the thing"
 

@@ -63,6 +63,8 @@ struct SessionCacheBoundsMeasurementTests {
         func unregisterSubscriptionHandler(id _: String) {}
     }
 
+    // MARK: - Key shapes (deterministic, production-length)
+
     nonisolated private static func syntheticId(_ high: Int, _ low: Int) -> String {
         String(format: "%08X-0000-4000-8000-%012X", high, low)
     }
@@ -96,6 +98,8 @@ struct SessionCacheBoundsMeasurementTests {
         }
         return response
     }
+
+    // MARK: - Retained-bytes model
 
     nonisolated private static func heapBytes(of string: String) -> Int {
         let count = string.utf8.count
@@ -135,6 +139,8 @@ struct SessionCacheBoundsMeasurementTests {
         }
         return "\(bytes) B"
     }
+
+    // MARK: - Session driver
 
     private struct Measurement {
         let cache: String
@@ -212,6 +218,8 @@ struct SessionCacheBoundsMeasurementTests {
         }
     }
 
+    // MARK: - Estimator sensitivity
+
     @Test func overReservedCollectionsBreachFootprintGuards() {
         let keys = (0 ..< Self.realistic.workspaces).flatMap { workspace in
             (0 ..< Self.realistic.keysPerWorkspace).map { Self.filePath(workspace, $0) }
@@ -236,6 +244,8 @@ struct SessionCacheBoundsMeasurementTests {
         #expect(Self.retainedBytes(of: overReservedDictionary) / dictionary.count > Self.maxBytesPerEntry)
         #expect(Self.retainedBytes(of: overReservedDictionary) >= Self.realisticRetainedCeiling)
     }
+
+    // MARK: - Per-cache scripted sessions
 
     @Test func workspaceFileNegativeCacheGrowthAndFootprint() async {
         for profile in [Self.realistic, Self.stress] {

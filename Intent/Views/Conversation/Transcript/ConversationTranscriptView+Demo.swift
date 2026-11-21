@@ -29,6 +29,8 @@ extension ConversationTranscriptView {
             )
     }
 
+    // MARK: - Demo-only controlled end derealization (#338)
+
     var isDemoEndWithdrawn: Bool {
         #if DEBUG
         demoWithdrawnEnd != nil

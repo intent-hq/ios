@@ -9,6 +9,8 @@ import UIKit
 @MainActor
 @Suite(.serialized)
 struct WorkspaceActionMenuDepthTests {
+    // MARK: - Raised attention rows while the menu is open
+
     @Test func closedMenuKeepsAttentionRowsRaised() {
         let presentation = WorkspaceAttentionCuePresentation.resolve(needsInput: true, actionMenuOpen: false)
         #expect(presentation == .raised)
@@ -63,6 +65,8 @@ struct WorkspaceActionMenuDepthTests {
         #expect(WorkspaceAttentionCuePresentation.resolve(for: other, actionMenuOpen: false) == .raised)
     }
 
+    // MARK: - Action cards come forward
+
     @Test func actionCardsSitInFrontOfEveryRaisedRow() throws {
         let layout = try Self.source("Intent/DesignSystem/Layout.swift")
         let declaration = try #require(layout.components(separatedBy: "static let attentionCueZOffset: CGFloat = ").dropFirst().first)
@@ -78,6 +82,8 @@ struct WorkspaceActionMenuDepthTests {
         #expect(WorkspaceActionMenuDepth.usesGlass(reduceTransparency: false))
         #expect(!WorkspaceActionMenuDepth.usesGlass(reduceTransparency: true))
     }
+
+    // MARK: - The open menu covers the floating composer (hosted)
 
     @Test func openMenuCoversTheWindowChatComposerAndDismissalRestoresIt() async throws {
         let coverage = ComposerCoverage()
@@ -159,6 +165,8 @@ struct WorkspaceActionMenuDepthTests {
         try await Self.waitUntil("unmounting releases coverage") { coverage.isForemost(depth: 0) }
     }
 
+    // MARK: - Source wiring
+
     @Test func launcherSharesItsOpenStateWithRowsAndTheComposer() throws {
         let launcher = try Self.source("Intent/Views/Workspaces/WorkspaceActionLauncher.swift")
         #expect(launcher.contains(".environment(\\.workspaceActionMenuOpen, isOpen)"))
@@ -213,6 +221,8 @@ struct WorkspaceActionMenuDepthTests {
             .components(separatedBy: "#else")[0]
         #expect(liftVision.contains(".offset(z: WorkspaceActionMenuDepth.tileZOffset)"))
     }
+
+    // MARK: - Fixtures
 
     @Observable final class MenuState {
         var isOpen = false

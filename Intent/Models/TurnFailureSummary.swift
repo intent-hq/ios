@@ -52,6 +52,8 @@ extension AttentionNotice {
     }
 }
 
+// MARK: - Parsing
+
 nonisolated private extension TurnFailureSummary {
     static func peelWrappers(_ reason: String) -> String {
         var text = Substring(reason.trimmingCharacters(in: .whitespacesAndNewlines))

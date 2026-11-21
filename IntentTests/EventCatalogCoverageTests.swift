@@ -10,6 +10,8 @@ private struct EventCatalogDiscriminator: Decodable {
 }
 
 struct EventCatalogCoverageTests {
+    // MARK: - Golden
+
     private struct Golden: Decodable {
         let version: Int
         let types: [String]
@@ -44,6 +46,8 @@ struct EventCatalogCoverageTests {
             #expect(!discriminator.values.isEmpty, "\(type): discriminator has no values")
         }
     }
+
+    // MARK: - Store tables
 
     private struct StoreTables {
         let name: String

@@ -30,6 +30,8 @@ extension NoteStoreIntegrationTests {
         }
     }
 
+    // MARK: - Slim note.list projection (PROTOCOL §5.2 projection: "slim")
+
     @Test func cancelledFetchDoesNotPublishHydratedSpecBody() async throws {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -81,6 +83,8 @@ extension NoteStoreIntegrationTests {
         #expect(store.note(byId: "spec")?.isContentStale == false)
     }
 
+    // MARK: - noteChanges() stream (detail-view refresh)
+
     @MainActor
     private final class NoteChangesProbe {
         private(set) var fired = 0
@@ -117,6 +121,8 @@ extension NoteStoreIntegrationTests {
         try await waitUntil("noteChanges element for note:deleted") { probe.fired == 1 }
         await probe.cancel()
     }
+
+    // MARK: - Event allowlist (non-live fallback)
 
     @Test func allowlistedNoteEventRefetchesAndFiresNoteChangesWhenNotLive() async throws {
         let fake = FakeConnectionManager()
@@ -168,6 +174,8 @@ extension NoteStoreIntegrationTests {
         await probe.cancel()
     }
 
+    // MARK: - noteChanges() teardown (ios#250)
+
     @Test func cancelledNoteChangesConsumerStopsReceivingEvents() async throws {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -215,6 +223,10 @@ extension NoteStoreIntegrationTests {
         try await waitUntil("deinit to finish live noteChanges() streams") { probe.finished }
         await probe.cancel()
     }
+
+    // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
+
+    // MARK: - Identical refetch stays quiet (no re-render underneath swipe-back)
 
     @Test func identicalRefetchDoesNotReassignNotes() async {
         let fake = FakeConnectionManager()

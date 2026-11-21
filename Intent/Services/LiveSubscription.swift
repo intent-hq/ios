@@ -48,6 +48,8 @@ enum LiveSubscription: Equatable {
         return Self.settled(id: newId, feed: nextFeed)
     }
 
+    // MARK: - Transitions
+
     mutating func acknowledge(_ newId: String) -> String? {
         let previous = id
         self = replacing(id: newId)

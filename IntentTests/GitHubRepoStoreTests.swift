@@ -52,6 +52,8 @@ struct GitHubRepoStoreTests {
         try await waitUntil(description, sourceLocation: sourceLocation, condition)
     }
 
+    // MARK: - Model parsing
+
     @Test func parsesFullRepo() throws {
         let repo = try #require(GitHubRepo.parseRepo(makeRepoDict()))
         #expect(repo.owner == "intent-hq")
@@ -77,6 +79,8 @@ struct GitHubRepoStoreTests {
         #expect(GitHubRepo.parseRepo(["owner": "o", "name": ""]) == nil)
     }
 
+    // MARK: - Query rewrite
+
     @Test func rewritesOwnerSlashNameQuery() {
         #expect(GitHubRepoStore.rewriteSearchQuery("intent-hq/intentd") == "intentd user:intent-hq")
         #expect(GitHubRepoStore.rewriteSearchQuery("  intent-hq/intentd  ") == "intentd user:intent-hq")
@@ -93,6 +97,8 @@ struct GitHubRepoStoreTests {
         #expect(GitHubRepoStore.rewriteSearchQuery("").isEmpty)
         #expect(GitHubRepoStore.rewriteSearchQuery("   ").isEmpty)
     }
+
+    // MARK: - Auth status
 
     @Test func fetchAuthStatusReadsIsConfigured() async {
         let fake = FakeConnectionManager()
@@ -118,6 +124,8 @@ struct GitHubRepoStoreTests {
         #expect(store.isConfigured == true)
         #expect(store.lastError == "socket closed")
     }
+
+    // MARK: - fetchRecentRepos
 
     @Test func fetchRecentReposMapsOwnedEntriesInMRUOrder() async {
         let fake = FakeConnectionManager()
@@ -161,6 +169,8 @@ struct GitHubRepoStoreTests {
         await store.fetchRecentRepos()
         #expect(store.recentRepos == [existing])
     }
+
+    // MARK: - fetchOwnRepos (single page)
 
     @Test func fetchOwnReposIssuesExactlyOneRequestWithLimit() async {
         let fake = FakeConnectionManager()
@@ -206,6 +216,8 @@ struct GitHubRepoStoreTests {
 }
 
 extension GitHubRepoStoreTests {
+    // MARK: - searchRepos
+
     @Test func searchReposSendsRewrittenQuery() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
@@ -289,6 +301,8 @@ extension GitHubRepoStoreTests {
         #expect(!store.isLoading)
     }
 
+    // MARK: - fetchDefaultBranch
+
     @Test func fetchDefaultBranchReadsRepoGet() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
@@ -316,6 +330,8 @@ extension GitHubRepoStoreTests {
         let branch = await store.fetchDefaultBranch(owner: "o", repo: "r")
         #expect(branch == nil)
     }
+
+    // MARK: - fetchRemoteBranches (single page)
 
     @Test func fetchRemoteBranchesIssuesExactlyOneRequestWithLimit() async throws {
         let fake = FakeConnectionManager()

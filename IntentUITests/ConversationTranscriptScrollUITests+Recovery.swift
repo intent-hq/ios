@@ -2,6 +2,8 @@ import XCTest
 
 // swiftlint:disable function_body_length no_magic_numbers
 
+// MARK: - Per-launch recovery evidence
+
 extension ConversationTranscriptScrollUITests {
     @MainActor
     func testHooksRowLandingRightAfterColdEntryKeepsLastMessageOnScreen() throws {

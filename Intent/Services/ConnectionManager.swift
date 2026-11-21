@@ -172,6 +172,8 @@ extension ConnectionManager {
         certMismatchesSubject.eraseToAnyPublisher()
     }
 
+    // MARK: - Connection lifecycle
+
     func retryConnection() {
         guard connectionState != .connected, connectionState != .connecting,
               !certMismatchDetected, !hosts.isEmpty || tcAddress != nil,

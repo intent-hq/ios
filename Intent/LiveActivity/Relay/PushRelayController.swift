@@ -58,6 +58,8 @@ final class PushRelayController {
         }
     }
 
+    // MARK: - Sessions
+
     func attach(_ session: BackendSession) {
         guard let connectionId = session.backendID?.connectionID else { return }
         sessions[connectionId] = session
@@ -79,6 +81,8 @@ final class PushRelayController {
             Task { await unlink(connectionId: backendID.connectionID) }
         }
     }
+
+    // MARK: - Tokens and preferences
 
     func deviceTokenChanged(_ token: Data) {
         pushToken = token.hexString
@@ -132,6 +136,8 @@ final class PushRelayController {
         }
     }
 
+    // MARK: - Live Activity tokens
+
     private func observeActivity(id: String) {
         guard observedActivities.insert(id).inserted else { return }
         Task { [weak self] in
@@ -167,6 +173,8 @@ final class PushRelayController {
             }
         }
     }
+
+    // MARK: - Linking
 
     private func linkIfNeeded(_ connectionId: UUID) {
         guard let session = sessions[connectionId],
@@ -227,6 +235,8 @@ final class PushRelayController {
         if forgotten { await retryPendingUnlinks() }
     }
 
+    // MARK: - Launch and foreground
+
     private func becameActive() {
         declined = []
         if let saved = PersistenceManager.shared.loadConnectionsWithOutcome().connections {
@@ -258,6 +268,8 @@ final class PushRelayController {
         }
     }
 
+    // MARK: - Relay client
+
     private func makeClient() -> RelayClient? {
         guard let relayURL = state.relayURL else { return nil }
         return try? makeClient(baseURL: relayURL)
@@ -268,6 +280,8 @@ final class PushRelayController {
         guard let key else { throw RelayDeviceKey.LoadError.keyCreationFailed }
         return RelayClient(baseURL: baseURL, signer: key)
     }
+
+    // MARK: - ActivityKit streams
 
     nonisolated private static func pushToStartTokens(_ handle: @MainActor @Sendable (Data) -> Void) async {
         for await token in Activity<AgentActivityAttributes>.pushToStartTokenUpdates {
@@ -308,6 +322,8 @@ final class PushRelayController {
         }
     }
 }
+
+// MARK: - Unlinking
 
 extension PushRelayController {
     private func serialized<T: Sendable>(_ operation: @escaping @MainActor () async throws -> T) async throws -> T {

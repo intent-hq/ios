@@ -51,6 +51,8 @@ class PersistenceManager {
 }
 
 extension PersistenceManager {
+    // MARK: - Connections
+
     func loadConnections() -> [StoredConnection] {
         loadConnectionsWithOutcome().connections ?? []
     }
@@ -65,10 +67,14 @@ extension PersistenceManager {
         readConnectionsLocked().error == .malformed
     }
 
+    // MARK: - Pairing (compatibility shims over the connections API)
+
     @discardableResult
     func upsertConnection(_ connection: StoredConnection) -> StoredConnection {
         upsertConnectionWithOutcome(connection).connection
     }
+
+    // MARK: - Keychain
 
     @discardableResult
     func upsertConnectionWithOutcome(

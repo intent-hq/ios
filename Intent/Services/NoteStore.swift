@@ -47,6 +47,8 @@ import Observation
         }
     }
 
+    // MARK: - Connection observation
+
     func observeConnection(dropInitialState: Bool = false) {
         let observationID = UUID()
         connectionObservationID = observationID
@@ -88,6 +90,8 @@ import Observation
             await subscribeLiveState(workspaceId: workspaceId, generation: generation)
         }
     }
+
+    // MARK: - Fetch
 
     func prepareForWorkspaceChange(to workspaceId: String) {
         guard self.workspaceId != workspaceId else { return }

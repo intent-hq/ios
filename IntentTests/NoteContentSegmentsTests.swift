@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 struct NoteContentSegmentsTests {
+    // MARK: - segments(for:)
+
     @Test func plainMarkdownIsOneSegment() {
         let content = "# Title\n\nSome paragraph text."
         #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
@@ -129,6 +131,8 @@ struct NoteContentSegmentsTests {
         #expect(line.marker == "x")
         #expect(line.text == "Done")
     }
+
+    // MARK: - replacingCheckboxMarker
 
     @Test func rewritesMarkerForEachStatus() {
         let content = "intro\n- [ ] Task"

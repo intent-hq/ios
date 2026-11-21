@@ -9,6 +9,8 @@ import Testing
 struct AgentStoreTests {
     static let debounceSlack: Duration = .milliseconds(200)
 
+    // MARK: - hasLoaded gating (empty state waits for first completed load)
+
     @Test func hasLoadedFalseUntilFirstFetchSucceeds() async throws {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
@@ -143,6 +145,8 @@ struct AgentStoreTests {
         #expect(store.agents.isEmpty)
     }
 
+    // MARK: - Identical refetch stays quiet (no re-render underneath swipe-back)
+
     @Test func identicalRefetchDoesNotReassignAgents() async {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
@@ -178,6 +182,8 @@ struct AgentStoreTests {
         #expect(changeCount.withLock { $0 } == 1)
         #expect(store.agents.map(\.id) == ["agent-1", "agent-2"])
     }
+
+    // MARK: - Cancelled refetch (view disappeared under the deferred refresh)
 
     private func makeLoadedStore() async -> (FakeConnectionManager, AgentStore) {
         let fake = FakeConnectionManager()
@@ -269,6 +275,8 @@ struct AgentStoreTests {
         #expect(store.agents.map(\.id) == ["agent-1", "agent-2"])
     }
 
+    // MARK: - Refetch on connect (mirrors NoteStore.onConnected)
+
     @Test func refetchesOnConnectWithWorkspaceContext() async throws {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
@@ -310,6 +318,8 @@ struct AgentStoreTests {
         #expect(store.hasLoaded == false)
     }
 
+    // MARK: - Notification mute round-trip (agent.update)
+
     @Test func setNotificationsMutedSendsUpdateAndAppliesResultRow() async throws {
         let (fake, store) = await makeLoadedStore()
         #expect(store.agents.first?.notificationsMuted == false)
@@ -345,6 +355,8 @@ struct AgentStoreTests {
         #expect(store.agents.first?.notificationsMuted == false)
     }
 }
+
+// MARK: - Event allowlist (streaming firehose must not refetch the list)
 
 extension AgentStoreTests {
     private func deliverAgentEvent(_ fake: FakeConnectionManager, type: String) {

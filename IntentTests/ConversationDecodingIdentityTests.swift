@@ -2,6 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
+// MARK: - Unified decoding + stable block identity (ios#257)
+
 struct ConversationDecodingIdentityTests {
     private let row: [String: Any] = [
         "id": "msg-1",

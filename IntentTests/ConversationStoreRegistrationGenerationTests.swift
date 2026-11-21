@@ -4,6 +4,8 @@ import Testing
 
 // swiftlint:disable no_magic_numbers
 
+// MARK: - Registration generation (recovery and replies outliving their registration)
+
 extension ConversationStoreLiveStateTests {
     private var agentARow: [String: Any] {
         [
@@ -237,6 +239,8 @@ extension ConversationStoreLiveStateTests {
         expectAgentBTranscriptIntact(store)
     }
 }
+
+// MARK: - Releasing the acked registration on unbind (rebind, reset, deinit)
 
 extension ConversationStoreLiveStateTests {
     private func seedAgentAWithUnsubscribeParked() async -> (ConversationStore, FakeConnectionManager) {

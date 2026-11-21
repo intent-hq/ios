@@ -91,6 +91,8 @@ struct PullRequestDetailView: View {
     }
 }
 
+// MARK: - Heading
+
 private extension PullRequestDetailView {
     var heading: some View {
         VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
@@ -139,6 +141,8 @@ private extension PullRequestDetailView {
         .accessibilityIdentifier("pullRequest.menu")
     }
 }
+
+// MARK: - Summary
 
 private extension PullRequestDetailView {
     var summary: some View {
@@ -255,6 +259,8 @@ private extension PullRequestDetailView {
     }
 }
 
+// MARK: - Rows
+
 private extension PullRequestDetailView {
     enum Accessory: Equatable {
         case chevron
@@ -316,6 +322,8 @@ private extension PullRequestDetailView {
         }
     }
 }
+
+// MARK: - Code
 
 private extension PullRequestDetailView {
     @ViewBuilder var code: some View {
@@ -410,6 +418,8 @@ private extension PullRequestDetailView {
         .accessibilityIdentifier("pullRequest.file.\(file.filename)")
     }
 }
+
+// MARK: - Shared
 
 private extension PullRequestDetailView {
     func muted(_ text: String) -> some View {

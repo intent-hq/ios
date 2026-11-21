@@ -57,6 +57,8 @@ struct DictationTranscriptTests {
         #expect(transcript.merged(with: "mid") == "🙂 mid tail")
     }
 
+    // MARK: - Stop reasons
+
     @Test func deliberateStopsAcceptFinalResult() {
         #expect(DictationStopReason.userTapped.acceptsFinalResult)
         #expect(DictationStopReason.recognizerFinished.acceptsFinalResult)
@@ -69,6 +71,8 @@ struct DictationTranscriptTests {
         #expect(!DictationStopReason.recognitionError.acceptsFinalResult)
         #expect(!DictationStopReason.textEdited.acceptsFinalResult)
     }
+
+    // MARK: - Session merge state (typing during dictation)
 
     @Test func sessionMergesWhileTextUntouched() {
         var session = DictationSession(baseText: "note:", insertionOffset: 5)
@@ -92,6 +96,8 @@ struct DictationTranscriptTests {
         var empty = DictationSession(baseText: "", insertionOffset: nil)
         #expect(empty.apply(transcription: "hi", to: "") == .merged("hi"))
     }
+
+    // MARK: - Segment commits (pause/reset)
 
     @Test func pauseResetAppendsInsteadOfReplacing() {
         var session = DictationSession(baseText: "", insertionOffset: 0)
@@ -148,6 +154,8 @@ struct DictationTranscriptTests {
         #expect(session.apply(transcription: "world", to: "hello!") == .diverged)
     }
 
+    // MARK: - Stop actions (stop-after-stop window)
+
     @Test func activeSessionStopsFollowReason() {
         #expect(DictationStopAction.action(for: .userTapped, phase: .recording) == .finish)
         #expect(DictationStopAction.action(for: .send, phase: .recording) == .cancelAndSever)
@@ -160,6 +168,8 @@ struct DictationTranscriptTests {
         #expect(DictationStopAction.action(for: .userTapped, phase: .idle) == .ignore)
         #expect(DictationStopAction.action(for: .recognizerFinished, phase: .idle) == .ignore)
     }
+
+    // MARK: - Start window (authorization race)
 
     @Test func stopDuringStartWindowCancelsPendingStart() throws {
         for reason: DictationStopReason in [.userTapped, .viewDisappeared, .sceneInactive, .send] {

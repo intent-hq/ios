@@ -20,6 +20,8 @@ struct TranscriptRecoveryLifecycleTests {
     let staleFollow = FollowToken(id: 99)
     let staleRecovery = RecoveryToken(id: 99)
 
+    // MARK: - Fixtures
+
     func followOwner(of state: State) -> FollowToken? {
         if case .follow(let token, _) = state.owner { return token }
         return nil
@@ -76,6 +78,8 @@ struct TranscriptRecoveryLifecycleTests {
         #expect(!harness.userIsScrolledAway)
         return harness
     }
+
+    // MARK: - End row
 
     @Test func freshStateIsInactiveIdleAndUnrealized() {
         let fresh = State()

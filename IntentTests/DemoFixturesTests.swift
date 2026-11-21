@@ -21,6 +21,8 @@ struct DemoFixturesTests {
         #expect((monitors["monitors"] as? [[String: Any]])?.isEmpty == true)
     }
 
+    // MARK: - Launch-argument gating
+
     @Test func demoModeInactiveWithoutArguments() {
         #expect(!DemoMode.demoDataRequested(by: []))
         #expect(!DemoMode.demoDataRequested(by: ["/path/to/Intent"]))
@@ -41,6 +43,8 @@ struct DemoFixturesTests {
         #expect(!DemoMode.isEnabled)
         #expect(!DemoMode.pretendPaired)
     }
+
+    // MARK: - Fixture shape: parses through the real store parsers
 
     @Test func demoSendAcknowledgementKeepsOptimisticMessageAndThinking() async throws {
         let connection = FakeConnectionManager()
@@ -143,6 +147,8 @@ struct DemoFixturesTests {
             message.contentBlocks.contains { $0.resolvedText?.isEmpty == false }
         })
     }
+
+    // MARK: - Per-agent conversation routing
 
     private func conversationMessages(agentId: String?) throws -> (items: [[String: Any]], total: Int) {
         var params: [String: Any] = [:]
@@ -446,6 +452,8 @@ struct DemoFixturesTests {
 }
 
 extension DemoFixturesTests {
+    // MARK: - Delayed hooks row for the long conversation
+
     private func hooks(workspaceId: String?) throws -> [BackgroundHook] {
         var params: [String: Any] = [:]
         if let workspaceId {
@@ -564,6 +572,8 @@ extension DemoFixturesTests {
         ) == nil)
     }
 
+    // MARK: - Controlled end derealization (intent-hq/ios#338)
+
     @Test func endDerealizationTriggerFileComesFromTheLaunchArgumentOnly() {
         #expect(DemoFixtures.endDerealizationTriggerFile(from: ["--demo-data"]) == nil)
         #expect(DemoFixtures.endDerealizationTriggerFile(from: ["--demo-end-derealization-trigger-file="]) == nil)
@@ -631,6 +641,8 @@ extension DemoFixturesTests {
         #expect(restore(.hold, offset: 1001, interacting: true))
         #expect(restore(.hold, offset: 400, interacting: true))
     }
+
+    // MARK: - Slim-truncated tool rows near the end of the long conversation
 
     @Test func blockHydrationGateComesFromTheLaunchArguments() {
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-data"])

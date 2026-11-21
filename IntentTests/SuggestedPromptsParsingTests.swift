@@ -2,7 +2,11 @@ import Foundation
 @testable import Intent
 import Testing
 
+// MARK: - SuggestedPrompts Tests
+
 struct SuggestedPromptsTests {
+    // MARK: - Valid formats
+
     @Test func parsesPlainPrompts() {
         let text = "Done!\n<!-- suggested-prompts\nRun the tests\nShip it\n-->"
         #expect(SuggestedPrompts.parse(text) == ["Run the tests", "Ship it"])
@@ -76,6 +80,8 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.stripBlocks(from: text) == text)
     }
 
+    // MARK: - Malformed blocks
+
     @Test func ignoresOpenerInsideFencedCodeRegion() {
         let text = """
         Here is the convention:
@@ -141,6 +147,8 @@ struct SuggestedPromptsTests {
 }
 
 extension SuggestedPromptsTests {
+    // MARK: - Fence bookkeeping
+
     @Test func mismatchedFenceCharDoesNotCloseFence() {
         let text = """
         ```markdown
@@ -170,6 +178,8 @@ extension SuggestedPromptsTests {
         #expect(SuggestedPrompts.parse(text) == ["Run the tests"])
     }
 
+    // MARK: - Body-text rejection
+
     @Test func rejectsBlockContainingHeading() {
         let text = "<!-- suggested-prompts\n## Summary\nRun tests\n-->"
         #expect(SuggestedPrompts.parse(text).isEmpty)
@@ -188,6 +198,8 @@ extension SuggestedPromptsTests {
     @Test func rejectsEmptyBlock() {
         #expect(SuggestedPrompts.parse("<!-- suggested-prompts\n\n-->").isEmpty)
     }
+
+    // MARK: - Last block wins
 
     @Test func lastWellFormedBlockWins() {
         let text = """
@@ -228,6 +240,8 @@ extension SuggestedPromptsTests {
         #expect(SuggestedPrompts.parse(text) == ["Real prompt"])
     }
 
+    // MARK: - Caps
+
     @Test func capsAtFourPrompts() {
         let lines = (1...10).map { "Prompt \($0)" }.joined(separator: "\n")
         let prompts = SuggestedPrompts.parse("<!-- suggested-prompts\n\(lines)\n-->")
@@ -252,6 +266,8 @@ extension SuggestedPromptsTests {
         let atLimit = String(repeating: "x", count: SuggestedPrompts.maxPromptLength)
         #expect(SuggestedPrompts.parse("<!-- suggested-prompts\n\(atLimit)\n-->") == [atLimit])
     }
+
+    // MARK: - Stripping
 
     @Test func stripsWellFormedBlock() {
         let text = "Done!\n<!-- suggested-prompts\nRun tests\n-->"
@@ -283,6 +299,8 @@ extension SuggestedPromptsTests {
         #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
         #expect(SuggestedPrompts.parse(text).isEmpty)
     }
+
+    // MARK: - Message-level scan (parse(contentBlocks:))
 
     private func texts(_ blocks: [ContentBlock]) -> [String?] {
         blocks.map { $0.type == .text ? $0.resolvedText : nil }

@@ -98,6 +98,8 @@ extension ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "buf-chat-race")
     }
 
+    // MARK: - Host route merge (post-connect refresh)
+
     @Test @MainActor func mergeHostsAppendsNewReportedIps() {
         let merged = ConnectionManager.mergeHosts(
             existing: ["192.168.1.10"],
@@ -170,6 +172,8 @@ extension ConnectionManagerTests {
         #expect(persisted == ["nat.example.com", "192.168.1.10", "10.0.0.5"])
     }
 
+    // MARK: - localIps parsing (system.status)
+
     @Test @MainActor func localIpsParsedFromSystemStatusResult() {
         let result: [String: Any] = [
             "version": "1.2.3",
@@ -229,6 +233,8 @@ extension ConnectionManagerTests {
         ) == .current(localIps: .value(["10.0.0.5"]), tcAddress: "tc-current"))
     }
 
+    // MARK: - tcAddress parsing (system.status)
+
     @Test @MainActor func tcAddressParsedFromSystemStatusResult() {
         let result: [String: Any] = [
             "version": "1.2.3",
@@ -263,6 +269,8 @@ extension ConnectionManagerTests {
         )
         #expect(manager.tcAddress == nil)
     }
+
+    // MARK: - Tunnel race candidate
 
     nonisolated final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
         let localPort: Int

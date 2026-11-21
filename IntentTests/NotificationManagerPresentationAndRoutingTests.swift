@@ -5,6 +5,8 @@ import UIKit
 import UserNotifications
 
 extension NotificationManagerTests {
+    // MARK: - App-state presentation
+
     @Test @MainActor func inactiveAppPostsSystemNotificationWithoutFeedbackOrToast() {
         var feedbackCount = 0
         let (manager, center) = makeNotificationManager(state: .inactive) {
@@ -216,6 +218,8 @@ extension NotificationManagerTests {
         #expect(manager.currentToast?.agentId == "agent-1")
         #expect(center.requests.isEmpty)
     }
+
+    // MARK: - Tap routing and delivered cleanup
 
     private func makeResponse(connectionId: UUID) -> LocalNotificationService.Response {
         LocalNotificationService.response(

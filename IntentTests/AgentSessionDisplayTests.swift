@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 extension AgentSessionTests {
+    // MARK: - displayMessage
+
     @Test func displayMessagePrefersDigest() {
         let agent = makeAgent(digest: "digest text", lastAgentResponse: "response text")
         #expect(agent.displayMessage == "digest text")
@@ -72,6 +74,8 @@ extension AgentSessionTests {
         #expect(agent.displayMessage == "Real content")
     }
 
+    // MARK: - displayMessage lastMessageRole precedence (PROTOCOL §5.5)
+
     @Test func displayMessagePrefersUserFirstLineWhenUserIsNewest() {
         let agent = makeAgent(
             digest: "old digest",
@@ -135,6 +139,8 @@ extension AgentSessionTests {
         #expect(agent.displayMessage == "response text")
     }
 
+    // MARK: - applyingPreview role flip
+
     @Test func applyingPreviewFlipsRoleToAssistant() {
         let agent = makeAgent(
             lastUserMessage: "Do the thing",
@@ -173,6 +179,8 @@ extension AgentSessionTests {
         #expect(updated.displayMessage == "Do the thing")
     }
 
+    // MARK: - isActive
+
     @Test func isActiveForRespondingStatus() {
         let agent = makeAgent(status: "responding")
         #expect(agent.isActive == true)
@@ -207,6 +215,8 @@ extension AgentSessionTests {
         let agent = makeAgent(status: "completed")
         #expect(agent.isActive == false)
     }
+
+    // MARK: - pending-question markers (PROTOCOL §5.5)
 
     @Test func parsePendingQuestionMarkersFromMetadata() {
         let dict: [String: Any] = [

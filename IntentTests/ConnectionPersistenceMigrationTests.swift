@@ -21,6 +21,8 @@ extension ConnectionPersistenceTests {
         PairedServer(hosts: hosts, port: port, name: name, pairedAt: Date())
     }
 
+    // MARK: - updateConnectionDisplayName
+
     @Test func updateConnectionDisplayNameReplacesNamePreservingRecord() {
         resetMigrationState()
         defer { resetMigrationState() }
@@ -84,6 +86,8 @@ extension ConnectionPersistenceTests {
         #expect(loaded.first { $0.id == secondConnection.id }?.server.hosts == ["b.local"])
     }
 
+    // MARK: - Delete
+
     @Test func deleteRemovesConnectionAndClearsActivePointer() {
         resetMigrationState()
         defer { resetMigrationState() }
@@ -100,6 +104,8 @@ extension ConnectionPersistenceTests {
         migrationPersistenceManager.deleteConnection(id: firstConnection.id)
         #expect(migrationPersistenceManager.activeConnection()?.id == secondConnection.id)
     }
+
+    // MARK: - Active pointer
 
     @Test func activeConnectionRoundTrip() {
         resetMigrationState()
@@ -132,6 +138,8 @@ extension ConnectionPersistenceTests {
             #expect(touched >= before)
         }
     }
+
+    // MARK: - Launch-seed fallback (window model v2)
 
     @Test func lastUsedConnectionPrefersLastUsedPointer() {
         resetMigrationState()
@@ -170,6 +178,8 @@ extension ConnectionPersistenceTests {
 
         #expect(migrationPersistenceManager.lastUsedConnection() == nil)
     }
+
+    // MARK: - Migration
 
     @Test func migratesLegacyKeychainPairing() throws {
         resetMigrationState()
@@ -232,6 +242,8 @@ extension ConnectionPersistenceTests {
         migrationPersistenceManager.deleteConnection(id: first[0].id)
         #expect(migrationPersistenceManager.loadConnections().isEmpty)
     }
+
+    // MARK: - Synced-registry merge
 
     private func syncedRecord(
         host: String = "10.0.0.1",
@@ -339,6 +351,8 @@ extension ConnectionPersistenceTests {
         #expect(!outcome.changed)
         #expect(migrationPersistenceManager.loadConnections() == before)
     }
+
+    // MARK: - Compatibility shims
 
     @Test func pairingShimsRoundTripOverConnectionsAPI() {
         resetMigrationState()

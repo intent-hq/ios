@@ -5,6 +5,8 @@ import Testing
 
 @Suite(.serialized)
 struct PersistenceManagerTests {
+    // MARK: - MainActor serialization smoke test
+
     @Test func serializedMainActorSavesMaintainDataIntegrity() async {
         let prefix = "test-ws-concurrent-\(UUID().uuidString)"
         let iterations = 100

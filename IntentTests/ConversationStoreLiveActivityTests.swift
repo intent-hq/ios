@@ -62,6 +62,8 @@ extension ConversationStoreLiveStateTests {
         #expect(display.subject == "main.rs")
     }
 
+    // MARK: - User-row deltas (intentd#747)
+
     @Test func userRowDeltaAppendsUserMessage() throws {
         let (store, _) = makeStore()
 
@@ -200,6 +202,8 @@ extension ConversationStoreLiveStateTests {
 
         #expect(store.isStreaming == true)
     }
+
+    // MARK: - Enriched agent:stream:activity preview payload (watched agents)
 
     private func makeWatchedAgent(
         id: String,

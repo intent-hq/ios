@@ -144,6 +144,8 @@ extension ConversationTranscriptRecoveryLifecycle {
         }
     }
 
+    // MARK: - Per-event transitions
+
     private static func viewAppeared(_ state: inout State, _ effects: inout [Effect]) {
         guard !state.isVisible else { return }
         state.visibility = .visible
@@ -310,6 +312,8 @@ extension ConversationTranscriptRecoveryLifecycle {
             effects.append(.replayLiveEdge(.live))
         }
     }
+
+    // MARK: - Shared steps
 
     private static func showDeferredGiveUp(_ effects: inout [Effect]) {
         effects.append(.log("[SCROLL] End recovery gave up and the follow it deferred to did not execute; showing Go to End"))

@@ -5,6 +5,8 @@ import Testing
 
 @MainActor
 struct ConversationStoreTests {
+    // MARK: - Helpers
+
     func makeAgent(
         id: String = "agent-1",
         name: String = "Test",
@@ -38,6 +40,8 @@ struct ConversationStoreTests {
         )
     }
 
+    // MARK: - reset clears all relevant state
+
     @Test func resetClearsAllState() {
         let store = ConversationStore()
         store.watchedAgents.append(makeAgent(id: "watched"))
@@ -49,6 +53,8 @@ struct ConversationStoreTests {
         #expect(store.isWaitingForAgents == false)
         #expect(store.messages.isEmpty)
     }
+
+    // MARK: - Retained attempts (ordinary sends are not idempotent)
 
     @Test func lastFailedSendStartsNil() {
         let store = ConversationStore()
@@ -171,6 +177,8 @@ struct ConversationStoreTests {
         #expect(originalPayload == retriedPayload)
     }
 
+    // MARK: - rollbackFailedSend (failed send must not supersede pending questions)
+
     @Test func rollbackFailedSendRemovesOptimisticMessageAndThinking() async {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
@@ -205,6 +213,8 @@ struct ConversationStoreTests {
         #expect(store.messages.count == 1)
         #expect(store.isStreaming)
     }
+
+    // MARK: - sendMessage messageMetadata threading (intent-hq/monorepo#1789)
 }
 
 extension ConversationStoreTests {
@@ -239,6 +249,8 @@ extension ConversationStoreTests {
         let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
         #expect(sent.params["messageMetadata"] == nil, "plain sends stay untagged")
     }
+
+    // MARK: - agentNotFound (missing-agent fallback)
 
     @Test func subscribeLiveChatNotFoundRaisesAgentNotFound() async {
         let fake = FakeConnectionManager()

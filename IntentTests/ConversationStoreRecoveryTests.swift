@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 extension ConversationStoreTests {
+    // MARK: - Marked question recovery (aroundMessageId seek, Phase 2)
+
     private func questionRow(id: String) -> [String: Any] {
         [
             "id": id,

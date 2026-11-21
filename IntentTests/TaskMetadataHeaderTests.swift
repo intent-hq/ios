@@ -26,6 +26,8 @@ struct TaskMetadataHeaderTests {
         )
     }
 
+    // MARK: - dependedOnBy derivation
+
     @Test func dependedOnByFindsReverseEdges() {
         let notes = [
             makeNote(id: "target", taskStatus: "in_progress"),
@@ -66,6 +68,8 @@ struct TaskMetadataHeaderTests {
         #expect(TaskMetadataHeaderView.dependedOnBy(noteId: "target", in: notes).isEmpty)
     }
 
+    // MARK: - Unmet-dependency highlight
+
     @Test func unmetHighlightShownForUnmetDep() {
         let note = makeNote(
             id: "t",
@@ -86,6 +90,8 @@ struct TaskMetadataHeaderTests {
         )
         #expect(TaskMetadataHeaderView.showsUnmetDependency("b", note: note) == false)
     }
+
+    // MARK: - Assignee dedup and ordering
 
     @Test func sortedAssigneeIdsDedupsAndSortsByCreation() {
         let created: [String: Date] = [

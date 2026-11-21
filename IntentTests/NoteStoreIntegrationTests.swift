@@ -5,6 +5,8 @@ import Testing
 
 @MainActor
 struct NoteStoreIntegrationTests {
+    // MARK: - subscribeOnConnect
+
     @Test func subscribeOnConnect() async throws {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -38,6 +40,8 @@ struct NoteStoreIntegrationTests {
 
         #expect(store.notes.count == 1)
     }
+
+    // MARK: - contiguousDeltaAdvancesState
 
     @Test func contiguousDeltaAdvancesState() async throws {
         let fake = FakeConnectionManager()
@@ -76,6 +80,8 @@ struct NoteStoreIntegrationTests {
 
         #expect(store.notes.count == 2)
     }
+
+    // MARK: - gapTriggersResnapshotWithBaselineRefetch
 
     @Test func gapTriggersResnapshotWithBaselineRefetch() async throws {
         let fake = FakeConnectionManager()
@@ -117,6 +123,8 @@ struct NoteStoreIntegrationTests {
         #expect(fake.didCallMethod("note.list"))
     }
 
+    // MARK: - connectionLossClearsLiveThenReconnectResubscribes
+
     @Test func connectionLossClearsLiveThenReconnectResubscribes() async throws {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -152,6 +160,8 @@ struct NoteStoreIntegrationTests {
         #expect(fake.didCallMethod("note.list"))
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
+
+    // MARK: - legacyEventSuppressedWhileLive
 
     @Test func legacyEventSuppressedWhileLive() async throws {
         let fake = FakeConnectionManager()
@@ -190,6 +200,8 @@ struct NoteStoreIntegrationTests {
             fake.didCallMethod("note.list")
         }
     }
+
+    // MARK: - crossIdPushIsolation
 
     @Test func crossIdPushIsolation() async throws {
         let fake = FakeConnectionManager()

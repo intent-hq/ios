@@ -111,6 +111,8 @@ class FakeConnectionManager: SessionConnectionManaging {
         let timestamp: Date
     }
 
+    // MARK: - Published State
+
     private let _connectionState = CurrentValueSubject<ConnectionState, Never>(.disconnected)
     var connectionState: ConnectionState {
         get { _connectionState.value }
@@ -146,6 +148,8 @@ class FakeConnectionManager: SessionConnectionManaging {
         }
         return principal
     }
+
+    // MARK: - Session Connection Surface
 
     private let _certMismatchDetected = CurrentValueSubject<Bool, Never>(false)
     var certMismatchDetected: Bool {
@@ -250,6 +254,8 @@ class FakeConnectionManager: SessionConnectionManaging {
         lastConnectedPrincipal = nil
     }
 
+    // MARK: - Request/Response Mocking
+
     var responseMap: [String: Any] = [
         "client.hello": ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": [String: Int]()]],
         "principal.me": ["id": "test-owner", "isAdministrator": true]
@@ -333,6 +339,8 @@ class FakeConnectionManager: SessionConnectionManaging {
         return response
     }
 
+    // MARK: - Legacy Event Handlers
+
     private var eventHandlers: [UUID: (String, Any) -> Void] = [:]
 
     @discardableResult
@@ -355,6 +363,8 @@ class FakeConnectionManager: SessionConnectionManaging {
             handler(method, params)
         }
     }
+
+    // MARK: - Subscription Push Routing
 
     private var subscriptionHandlers: [String: @MainActor (SubscriptionPush) -> Void] = [:]
 
@@ -399,6 +409,8 @@ class FakeConnectionManager: SessionConnectionManaging {
             handler(push)
         }
     }
+
+    // MARK: - Test Helpers
 
     func clearRequestLog() {
         requestLog.removeAll()

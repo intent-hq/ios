@@ -4,6 +4,8 @@ import Foundation
 import Testing
 
 extension NoteStoreIntegrationTests {
+    // MARK: - fetchNote classification
+
     @Test func fetchNoteFoundReturnsNote() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -141,6 +143,8 @@ extension NoteStoreIntegrationTests {
 }
 
 extension NoteStoreIntegrationTests {
+    // MARK: - Slim note.list projection (PROTOCOL §5.2 projection: "slim")
+
     @Test func fetchNotesRequestsSlimProjection() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)

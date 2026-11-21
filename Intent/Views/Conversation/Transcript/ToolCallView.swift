@@ -43,14 +43,20 @@ struct ToolCallView: View {
         toolResult?.resolvedErrorOutcome.isFailure == true
     }
 
+    // MARK: - Tool Classification
+
     private var classified: ToolClassifier.ToolDisplay {
         ToolClassifier.classify(name: toolName, input: block.input)
     }
+
+    // MARK: - Border Color (status indicator)
 
     private var borderColor: Color {
         if toolResult == nil { return Color.blue }
         return hasError ? Theme.destructive(for: colorScheme) : Color.green.opacity(Layout.successBorderOpacity)
     }
+
+    // MARK: - Body
 
     var body: some View {
         VStack(alignment: .leading, spacing: workspaceDesign ? Design.Transcript.toolRowSpacing : 0) {

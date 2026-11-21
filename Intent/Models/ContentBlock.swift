@@ -228,6 +228,8 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         inputTruncation.isTruncated || outputTruncation.isTruncated || dataTruncation.isTruncated
     }
 
+    // MARK: - Convenience initializer for programmatic creation
+
     init(
         id: String,
         type: ContentBlockType,

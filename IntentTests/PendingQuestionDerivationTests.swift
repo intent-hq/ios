@@ -16,6 +16,8 @@ private func questionBlock(text: String, mimeType: String = kQuestionMime) -> Co
     ContentBlock(type: .resource, resource: ResourceContents(uri: "intent-question://q", mimeType: mimeType, text: text))
 }
 
+// MARK: - Pending derivation (FE `derivePendingQuestions` parity)
+
 struct PendingQuestionDerivationTests {
     private func assistant(
         blocks: [ContentBlock],
@@ -152,6 +154,8 @@ struct PendingQuestionDerivationTests {
 }
 
 extension PendingQuestionDerivationTests {
+    // MARK: - Dismissal marker (FE `wizard-gate.ts` parity)
+
     @Test func nilWhenDismissalMarkerMatches() {
         let messages = [assistant(blocks: [questionBlock(text: questionJSON())], id: "a1")]
         #expect(PendingQuestionSet.derive(
@@ -180,6 +184,8 @@ extension PendingQuestionDerivationTests {
         ))
         #expect(set.messageId == "a1")
     }
+
+    // MARK: - Pending marker (FE `classifyPendingQuestionMarker` / marker authority parity)
 
     @Test func markerSetPendsWhileTurnActive() throws {
         let messages = [user(), questionAssistant(id: "a1")]

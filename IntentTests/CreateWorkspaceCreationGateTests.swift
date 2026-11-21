@@ -3,6 +3,8 @@ import SwiftUI
 import Testing
 
 extension CreateWorkspaceParamsTests {
+    // MARK: - Create gate sequencing (per selected provider + store generation)
+
     @MainActor
     private func catalogGate(
         _ providerId: String,
@@ -141,6 +143,8 @@ extension CreateWorkspaceParamsTests {
         #expect(catalogGate("auggie", store: store, settled: settled))
     }
 
+    // MARK: - preselectedProvider
+
     @Test func preselectedProviderPrefersSelectableAuggieThenFirstSelectable() {
         let providers = [
             makeProvider(id: "codex", authenticated: .signedIn),
@@ -219,6 +223,8 @@ extension CreateWorkspaceParamsTests {
         #expect(CreationSelectionPolicy.preselectedProvider(current: nil, providers: []) == nil)
     }
 
+    // MARK: - reconciledModel (explicit model vs. the displayed catalog)
+
     @Test func reconciledModelKeepsAndRebindsWhileStillListedForSameProvider() {
         let refreshed = [
             makeModel(id: "sonnet4.5", provider: "auggie"),
@@ -252,6 +258,8 @@ extension CreateWorkspaceParamsTests {
         #expect(CreationSelectionPolicy.reconciledModel(current: pickedOnCodex, models: auggieCatalog) == nil)
         #expect(CreationSelectionPolicy.reconciledModel(current: pickedOnCodex, models: codexCatalog) == pickedOnCodex)
     }
+
+    // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
     @Test(arguments: [WorkspaceProviderOptions.State.idle, .loading])
     func pendingWorkspacePolicyKeepsDraftSelection(state: WorkspaceProviderOptions.State) {

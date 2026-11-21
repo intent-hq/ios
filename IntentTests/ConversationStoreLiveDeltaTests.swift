@@ -30,6 +30,8 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages[0].timestamp == "2026-06-27T01:00:05.000Z")
     }
 
+    // MARK: - Firehose gating while chat channel is live
+
     @Test func firehoseActivityIgnoredWhenChatLive() {
         let (store, _) = makeStore()
 
@@ -130,6 +132,8 @@ extension ConversationStoreLiveStateTests {
         #expect(store.isStreaming == true)
     }
 
+    // MARK: - Stale-seq tolerance
+
     @Test func staleSeqDeltaIgnoredWithoutResubscribe() async throws {
         let (store, fake) = makeStore()
 
@@ -218,6 +222,8 @@ extension ConversationStoreLiveStateTests {
             fake.didCallMethod("chat.unsubscribe")
         }
     }
+
+    // MARK: - Mid-turn tool title classification (STAB: generic spanner fallback)
 
     @Test func midTurnFileReadToolWithAcpTitleOnlyClassifiesAsRead() throws {
         let (store, _) = makeStore()

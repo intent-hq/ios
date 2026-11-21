@@ -5,6 +5,8 @@ import Testing
 nonisolated struct ShapeIsolationTests {
     private static let tolerance: CGFloat = 0.01
 
+    // MARK: - IntentLogo
+
     @Test func intentLogoScalesWithItsRect() {
         let smallPath = IntentLogo().path(in: CGRect(x: 0, y: 0, width: 24, height: 24))
         let largePath = IntentLogo().path(in: CGRect(x: 0, y: 0, width: 48, height: 48))

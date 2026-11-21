@@ -2,6 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
+// MARK: - Event-notification wake attribution (agent wakes)
+
 struct EventWakeAttributionTests {
     @Test func extractsFromValidMetadata() {
         let attribution = EventWakeAttribution.from([

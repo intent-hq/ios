@@ -145,6 +145,8 @@ struct WorkspaceFileImageLoaderTests {
         #expect(fake.paramsForMethod("file.readChunk").count == 1)
     }
 
+    // MARK: - Workspace assets (`note.readAsset`)
+
     private static func assetResponse(_ bytes: Data, assetId: String = "a1-b2.png") -> [String: Any] {
         [
             "assetId": assetId, "mimeType": "image/png",

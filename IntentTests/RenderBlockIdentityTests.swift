@@ -166,6 +166,8 @@ struct BlockBodyEquatableTests {
         }
     }
 
+    // MARK: ContentBlockBody
+
     @Test func blockBodyIgnoresClosureIdentity() {
         let block = textBlock("b1", "Hello")
         let first = blockBody(block)
@@ -241,6 +243,8 @@ struct BlockBodyEquatableTests {
         #expect(body != blockBody(changedAttachment))
     }
 
+    // MARK: ResponseGroupBody
+
     @Test func groupBodyIgnoresClosureIdentity() {
         let group = ResponseGroup(id: "g", name: "Setup", children: [textBlock("b1", "reading"), toolUse("u1")])
         let first = groupBody(group)
@@ -276,6 +280,8 @@ struct BlockBodyEquatableTests {
         #expect(groupBody(group) != groupBody(group, hydratingBlockIds: ["u1"]))
         #expect(groupBody(group, hydratingBlockIds: ["u1"]) != groupBody(group, hydratingBlockIds: ["r1"]))
     }
+
+    // MARK: Tail-only streaming delta
 
     @Test func tailOnlyStreamingDeltaLeavesEarlierBodiesEqual() {
         let before = [

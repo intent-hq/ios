@@ -69,6 +69,8 @@ final class BackendSessionRegistryTests {
         }
     }
 
+    // MARK: - Backend session create / reuse
+
     @Test func attachCreatesSessionOnFirstRequest() {
         let registry = makeRegistry()
         let id = BackendID(UUID())
@@ -106,6 +108,8 @@ final class BackendSessionRegistryTests {
         #expect(sessionA.workspaceStore !== sessionB.workspaceStore)
         #expect(Set(registry.liveBackendIDs) == [firstBackendID, secondBackendID])
     }
+
+    // MARK: - Teardown
 
     @Test func detachBelowLastKeepsSessionAlive() {
         let registry = makeRegistry()
@@ -171,6 +175,8 @@ final class BackendSessionRegistryTests {
         #expect(createdConnections[1].disconnectCallCount == 0)
     }
 
+    // MARK: - Pairing sessions
+
     @Test func pairingSessionsAreFreshAndUnregistered() {
         let registry = makeRegistry()
 
@@ -198,6 +204,8 @@ final class BackendSessionRegistryTests {
             "A pairing session has no backend for aggregators to observe"
         )
     }
+
+    // MARK: - Session lifecycle callbacks
 
     @Test func attachInvokesOnSessionCreatedOncePerSession() {
         let registry = makeRegistry()
@@ -238,6 +246,8 @@ final class BackendSessionRegistryTests {
 }
 
 extension BackendSessionRegistryTests {
+    // MARK: - Per-window coordinators (spec decision 1b)
+
     @Test func coordinatorsOverOneSessionNavigateIndependently() {
         let registry = makeRegistry()
         let session = registry.attach(BackendID(UUID()))
@@ -354,6 +364,8 @@ extension BackendSessionRegistryTests {
         #expect(!session.claimScreenRestoration())
     }
 
+    // MARK: - Removed backends (spec decision 2)
+
     @Test func markBackendRemovedIsObservableAndIdempotent() {
         let registry = makeRegistry()
         let id = BackendID(UUID())
@@ -406,6 +418,8 @@ extension BackendSessionRegistryTests {
         #expect(createdConnections[0].disconnectCallCount == 1)
     }
 
+    // MARK: - Live composition
+
     @Test func liveSessionsGetFreshIsolatedInstances() {
         let id = BackendID(UUID())
         let session = BackendSessionRegistry.makeLiveSession(backendID: id)
@@ -428,6 +442,8 @@ extension BackendSessionRegistryTests {
         #expect(!session.claimScreenRestoration())
     }
 }
+
+// MARK: - BackendID
 
 struct BackendIDTests {
     @Test func wrapsStoredConnectionID() {

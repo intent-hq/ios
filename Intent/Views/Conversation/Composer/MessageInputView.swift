@@ -316,6 +316,8 @@ private extension MessageInputView {
 private extension MessageInputView {
     #if os(visionOS)
 
+    // MARK: - visionOS dictation & suggested prompts
+
     private var dictationButton: some View {
         Button {
             toggleDictation()
@@ -434,6 +436,8 @@ private extension MessageInputView {
 }
 
 private extension MessageInputView {
+    // MARK: - Actions
+
     private func sendCurrentMessage() {
         guard isConnectionReadyForSending, allowsSending else { return }
         #if os(visionOS)

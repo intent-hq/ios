@@ -162,6 +162,8 @@ extension ConversationStoreTests {
         #expect(store.dismissedQuestionsMessageId == nil)
     }
 
+    // MARK: - Pending-questions marker (PROTOCOL §5.5 pendingQuestionsMessageId)
+
     @Test func pendingMarkerStartsNil() {
         let store = ConversationStore()
         #expect(store.pendingQuestionsMessageId == nil)

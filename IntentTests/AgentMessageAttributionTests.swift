@@ -1,6 +1,8 @@
 @testable import Intent
 import Testing
 
+// MARK: - Agent-to-agent message attribution
+
 struct AgentMessageAttributionTests {
     @Test func extractsFromValidMetadata() {
         let attribution = AgentMessageAttribution.from([
@@ -113,6 +115,8 @@ struct AgentMessageAttributionTests {
         #expect(plain.agentMessageAttribution == nil)
     }
 }
+
+// MARK: - Chief messages and the daemon sender header
 
 struct AgentMessageSenderHeaderTests {
     private func attribution(name: String?, id: String = "agent-1") -> AgentMessageAttribution? {

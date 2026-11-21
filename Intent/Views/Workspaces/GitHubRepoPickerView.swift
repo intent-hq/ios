@@ -60,6 +60,8 @@ struct GitHubRepoPickerView: View {
         }
     }
 
+    // MARK: - Subviews
+
     private var newRepositoryButton: some View {
         Button(action: onCreateRepository) {
             Image(.addIcon)
@@ -150,6 +152,8 @@ struct GitHubRepoPickerView: View {
                 .interFont(Constants.Typography.bodyS)
         }
     }
+
+    // MARK: - Debounced search
 
     private func scheduleSearch(for text: String) {
         searchTask?.cancel()

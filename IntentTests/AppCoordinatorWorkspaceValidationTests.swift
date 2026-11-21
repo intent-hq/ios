@@ -7,6 +7,8 @@ import Testing
 import UIKit
 
 extension AppCoordinatorTests {
+    // MARK: - Missing workspace handling
+
     @Test @MainActor func archivedWorkspaceStaysOpenUntilArchivesAreHidden() async throws {
         let workspaceId = "archived-workspace"
         let store = WorkspaceStore(forTesting: true)
@@ -91,6 +93,8 @@ extension AppCoordinatorTests {
         }
     }
 
+    // MARK: - iPhone note navigation regression tests
+
     @Test @MainActor func testNoteNavigationFromWorkspace_staysInWorkspace() {
         let wsId = "test-coord-note-nav-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
@@ -139,6 +143,8 @@ extension AppCoordinatorTests {
         coordinator.onSelectNote("note-reg-3", workspaceId: wsId, noteTitle: "Preserve WS Note")
         #expect(coordinator.selectedWorkspaceId == wsId, "selectedWorkspaceId must not become nil after onSelectNote (regression: SwiftUI popped the stack)")
     }
+
+    // MARK: - iPad back button after agent auto-restore regression tests
 
     @Test @MainActor func shouldRepushConversation_falseWhenUserNavigatedBack() {
         let repush = RootView.shouldRepushConversation(
@@ -209,6 +215,8 @@ extension AppCoordinatorTests {
         }
     }
 
+    // MARK: - Fetch-driven workspace validation (lastUpdated race)
+
     static func makeWorkspace(
         id: String,
         status: String? = nil,
@@ -237,6 +245,8 @@ extension AppCoordinatorTests {
         )
     }
 
+    // MARK: - Screen predicates for bounded waits
+
     static func isWorkspaceList(_ screen: AppScreen) -> Bool {
         if case .workspaceList = screen { return true }
         return false
@@ -256,6 +266,8 @@ extension AppCoordinatorTests {
         if case let .noteDetail(nId, wId, _) = screen { return nId == noteId && wId == workspaceId }
         return false
     }
+
+    // MARK: - workspace.markSeen on open
 
     @Test @MainActor func onSelectWorkspace_callsMarkSeenAndClearsUnreadLocally() async throws {
         let wsId = "test-coord-markseen-\(UUID().uuidString)"

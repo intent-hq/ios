@@ -119,6 +119,8 @@ struct AttachmentUploadServiceTests {
         #expect(stoppedURLs.withLock { $0 } == [file])
     }
 
+    // MARK: - Single-shot path
+
     @Test func smallDataPlacesSingleShot() async throws {
         let payload = Data("hello".utf8)
         let fake = FakeConnectionManager()
@@ -199,6 +201,8 @@ struct AttachmentUploadServiceTests {
 }
 
 extension AttachmentUploadServiceTests {
+    // MARK: - Chunked path
+
     @Test func dataAboveSingleShotCapUsesChunkedSession() async throws {
         let size = AttachmentUploadService.maxSingleShotBytes + 1
         var payload = Data(count: size)
@@ -299,6 +303,8 @@ extension AttachmentUploadServiceTests {
         #expect(assembled == payload)
     }
 
+    // MARK: - Abort on failure
+
     @Test func chunkFailureAbortsSessionBestEffort() async {
         let payload = Data((0..<10).map { UInt8($0) })
         let fake = FakeConnectionManager()
@@ -379,6 +385,8 @@ extension AttachmentUploadServiceTests {
         #expect(!fake.didCallMethod("file.attachmentUpload.abort"))
     }
 
+    // MARK: - SHA-256
+
     @Test func sha256MatchesKnownVector() throws {
         let expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         let abc = Data("abc".utf8)
@@ -395,6 +403,8 @@ extension AttachmentUploadServiceTests {
         #expect(try AttachmentUploadService.sha256Hex(fileURL: url)
             == AttachmentUploadService.sha256Hex(of: payload))
     }
+
+    // MARK: - 1 GiB cap
 
     @Test func overCapFileIsRejectedBeforeAnyRpc() async throws {
         let url = try Self.tempFile(Data(), name: "huge.bin")

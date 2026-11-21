@@ -240,6 +240,8 @@ extension AppCoordinator {
         }
     }
 
+    // MARK: - Screen Persistence
+
     private func saveCurrentScreen() {
         guard restoresLastScreen else { return }
         let saved: PersistenceManager.SavedScreen

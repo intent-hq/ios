@@ -17,6 +17,8 @@ struct IntentNoteLinkParsingTests {
         parse(string)?.workspaceId
     }
 
+    // MARK: - Short forms
+
     @Test func shortFormNoteLinkParses() {
         #expect(parsedId("intent://local/note/abc-123") == "abc-123")
     }
@@ -29,6 +31,8 @@ struct IntentNoteLinkParsingTests {
         #expect(parsedWorkspaceId("intent://local/note/abc-123") == nil)
         #expect(parsedWorkspaceId("intent://local/task/def-456") == nil)
     }
+
+    // MARK: - Canonical workspace-qualified long forms
 
     @Test func longFormNoteLinkParses() {
         #expect(parsedId("intent://local/my-workspace/note/abc-123") == "abc-123")
@@ -48,6 +52,8 @@ struct IntentNoteLinkParsingTests {
         #expect(link?.id == "task")
         #expect(link?.workspaceId == nil)
     }
+
+    // MARK: - Non-matching URLs
 
     @Test func httpsUrlIsRejected() {
         #expect(parse("https://example.com/note/abc") == nil)

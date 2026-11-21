@@ -5,6 +5,8 @@ import Testing
 
 @MainActor
 struct FloatingComposerPolicyTests {
+    // MARK: - Host selection
+
     @Test func visionOSFloatsTheComposer() {
         #expect(ComposerHost.forPlatform(isVisionOS: true) == .floatingOrnament)
     }
@@ -12,6 +14,8 @@ struct FloatingComposerPolicyTests {
     @Test func iOSKeepsTheInlineComposer() {
         #expect(ComposerHost.forPlatform(isVisionOS: false) == .inline)
     }
+
+    // MARK: - Presentation
 
     @Test func presentsForTheActiveLoadedChat() {
         #expect(FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: true) == .shown)
@@ -34,6 +38,8 @@ struct FloatingComposerPolicyTests {
     @Test func hidesWhenTheQuestionSlotOwnsTheComposer() {
         #expect(FloatingComposerPolicy.presentation(isActiveChat: true, isForemost: true, showsLoadingState: false, composerVisible: false) == .withdrawn)
     }
+
+    // MARK: - Modal coverage (ComposerCoverage)
 
     @Test func windowChatIsForemostWithNoModalOpen() {
         #expect(ComposerCoverage().isForemost(depth: 0))
@@ -74,6 +80,8 @@ struct FloatingComposerPolicyTests {
         #expect(!coverage.isForemost(depth: 0))
     }
 
+    // MARK: - Width follows the window
+
     @Test func unmeasuredColumnUsesIdealWidth() {
         #expect(FloatingComposerPolicy.width(forColumnWidth: 0) == nil)
         #expect(FloatingComposerPolicy.width(forColumnWidth: -10) == nil)
@@ -103,6 +111,8 @@ struct FloatingComposerPolicyTests {
         let column = FloatingComposerPolicy.minimumWidth - 40
         #expect(FloatingComposerPolicy.width(forColumnWidth: column) == column)
     }
+
+    // MARK: - Launcher avoidance
 
     @Test func inlineHostReportsQuestionTopOnlyWhenItReplacesTheComposer() {
         let replaced = FloatingComposerPolicy.questionRegionLauncherTop(
@@ -197,6 +207,8 @@ struct FloatingComposerPolicyTests {
         #expect(transcript.components(separatedBy: ".padding(.bottom, Layout.bottomAnchorPadding)").count - 1 == 2)
         #expect(!transcript.contains("bottomClearance"))
     }
+
+    // MARK: - Source wiring (visionOS branches cannot run in the iOS test host)
 
     @Test func visionOSColumnHostsOneComposerInAGlassOrnament() throws {
         let column = try Self.source("Intent/Views/Conversation/Transcript/ConversationColumnView.swift")

@@ -52,6 +52,8 @@ struct ContentBlockTests {
         #expect(!block.isSlimTruncated)
     }
 
+    // MARK: Slim projection flags (PROTOCOL §5.5)
+
     @Test func decodeSlimTruncatedToolUseBlock() throws {
         let json = #"{"type":"tool_use","name":"write_file","input":{"path":"foo.txt"},"inputTruncated":true,"inputBytes":900000}"#
         let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
@@ -136,6 +138,8 @@ struct ContentBlockTests {
         #expect(block.resolvedMetadata["kind"]?.stringValue == "a")
     }
 }
+
+// MARK: - AttentionNotice Tests
 
 struct AttentionNoticeTests {
     private func systemMessage(blocks: [[String: Any]], role: String = "system") -> ConversationMessage? {
@@ -228,6 +232,8 @@ struct AttentionNoticeTests {
         #expect(msg.attentionNotice == AttentionNotice(kind: .discussionRequest, reason: "Reason"))
     }
 }
+
+// MARK: - ModelChangeNotice Tests (FE `model-change-notice.ts` parity)
 
 struct ModelChangeNoticeTests {
     private let noticeText = "Model changed from claude-4 to gpt-5."

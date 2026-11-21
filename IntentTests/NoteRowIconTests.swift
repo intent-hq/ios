@@ -29,6 +29,8 @@ struct NoteRowIconTests {
         "- [ ] [Task \(id)](intent://local/task/\(id))"
     }
 
+    // MARK: - Branch selection
+
     @Test func taskNoteGetsItsMetadataStatusIcon() {
         let note = makeNote(id: "t1", taskStatus: "in_progress")
         #expect(NoteRowIcon.kind(for: note, notes: []) == .taskStatus(.inProgress))
@@ -76,6 +78,8 @@ struct NoteRowIconTests {
         let note = makeNote(id: "n1", content: link("a"))
         #expect(NoteRowIcon.kind(for: note, notes: notes) == .document)
     }
+
+    // MARK: - Children-derived status (fe hasChildrenStatus)
 
     @Test func parentTaskNoteWithAllChildrenCompleteShowsComplete() {
         let parent = makeNote(id: "p", taskStatus: "in_progress")

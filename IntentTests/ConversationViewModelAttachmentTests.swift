@@ -6,6 +6,8 @@ import Testing
 import UIKit
 
 extension ConversationViewModelTests {
+    // MARK: - Image placement (attachment references, monorepo#3338)
+
     @Test(arguments: [false, true])
     func assistantImagesReachSendAndQueueWithoutWorkspacePlacement(queue: Bool) async throws {
         let (viewModel, fake) = makeFakeBackedVM(workspaceId: Workspace.chiefWorkspaceId)
@@ -250,6 +252,8 @@ extension ConversationViewModelTests {
 }
 
 extension ConversationViewModelTests {
+    // MARK: - File placement (send-time uploads)
+
     @Test func sendMessagePlacesFilesAndBuildsFileBlocks() async throws {
         let (viewModel, fake) = makeFakeBackedVM()
         fake.responseMap["file.placeAttachment"] = [
@@ -396,6 +400,8 @@ extension ConversationViewModelTests {
         }
         return UIImage(cgImage: try #require(context.makeImage()))
     }
+
+    // MARK: - Image handling
 
     @Test func addImageAppendsToPendingImages() throws {
         let viewModel = makeVM()

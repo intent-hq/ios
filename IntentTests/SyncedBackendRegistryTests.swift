@@ -33,6 +33,8 @@ private let kLivePayload = """
     "someFutureField": {"nested": true}}
     """
 
+// MARK: - Payload parsing
+
 struct SyncedBackendPayloadTests {
     @Test func parsesLivePayloadAndToleratesUnknownFields() {
         let parsed = SyncedBackendPayload.parse(kLivePayload)
@@ -163,6 +165,8 @@ struct SyncedBackendPayloadTests {
         #expect(SyncedBackendPayload.parse(payload) == .invalid)
     }
 }
+
+// MARK: - Registry list
 
 struct SyncedBackendRegistryTests {
     private func registry(_ keychain: FakeSyncedKeychain, group: String? = "T.dev.intentapp.backends")
@@ -385,6 +389,8 @@ struct SyncedBackendRegistryTests {
         }
         #expect(records.map(\.label) == ["Dead"])
     }
+
+    // MARK: - Tombstone TTL
 
     @Test func expiredTombstoneIsSkippedAndStopsHidingOlderLiveRecords() {
         let ttl = SyncedBackendRecord.tombstoneTTLMs

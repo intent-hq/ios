@@ -31,6 +31,8 @@ import Testing
         )
     }
 
+    // MARK: - workspaceNeedsInput
+
     @Test func needsInput_attentionStatusesAndUnreadFlag() {
         #expect(workspaceNeedsInput(makeWorkspace(id: "1", displayStatus: "blocked")))
         #expect(workspaceNeedsInput(makeWorkspace(id: "2", displayStatus: "needs_attention")))
@@ -39,6 +41,8 @@ import Testing
         #expect(!workspaceNeedsInput(makeWorkspace(id: "5", attention: "review_required")))
         #expect(!workspaceNeedsInput(makeWorkspace(id: "6")))
     }
+
+    // MARK: - WorkspaceAttentionCueTracker
 
     @Test func tracker_emptyUniverseNeverPrimes() {
         var tracker = WorkspaceAttentionCueTracker()
@@ -73,6 +77,8 @@ import Testing
         let raisedAgainCue = tracker.observe(universe: ["a"], attention: ["a"])
         #expect(raisedAgainCue == ["a"])
     }
+
+    // MARK: - WorkspaceAttentionCueCenter
 
     @Test @MainActor func cueCenter_soundsOncePerNewAttentionBatch() {
         var sounds = 0
@@ -135,6 +141,8 @@ import Testing
         #expect(sounds == 1)
         #expect(center.windowCueEvent == nil)
     }
+
+    // MARK: - Alert-chime / attention-cue dedup (visionOS double chime)
 
     private func makeDedupCenter(now: @escaping () -> Date)
         -> WorkspaceAttentionCueCenter {

@@ -73,6 +73,8 @@ struct MonitoredPrStoreTests {
         ]
     }
 
+    // MARK: - Model parsing
+
     @Test func parsesFullProtocolSample() throws {
         let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict()))
         #expect(monitor.monitorId == "prm-1")

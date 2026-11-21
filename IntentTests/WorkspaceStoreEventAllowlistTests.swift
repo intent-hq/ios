@@ -2,6 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
+// MARK: - Event allowlist (non-live fallback)
+
 @MainActor
 struct WorkspaceStoreEventAllowlistTests {
     private func makeWorkspace(id: String, lastActivity: String?) -> Workspace {

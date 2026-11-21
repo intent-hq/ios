@@ -22,6 +22,7 @@ extension ConnectionManager {
         return max(previousAttempt + initialReconnectAttempt, minimumBackedOffReconnectAttempt)
     }
 
+    // MARK: - Host Racing
     typealias WonHostRace = (
         winner: RacedConnection,
         drain: Task<[HostCertMismatch], Never>?
@@ -395,6 +396,7 @@ extension ConnectionManager {
         return false
     }
 
+    // MARK: - Network path monitoring
     func startPathMonitor() {
         stopPathMonitor()
         pathMonitorID += 1

@@ -5,6 +5,8 @@ import UIKit
 import UserNotifications
 
 extension NotificationManagerTests {
+    // MARK: - Multi-window tap routing (spec decision 5)
+
     @Test func routeDeliversToRegisteredSourceWindow() {
         #expect(NotificationManager.selectionRoute(
             source: Self.pinnedBackend,
@@ -46,6 +48,8 @@ extension NotificationManagerTests {
             supportsMultipleWindows: false
         ) == .drop)
     }
+
+    // MARK: - Presentation routing (per-backend windows)
 
     @Test func singleWindowRendersEveryToast() {
         #expect(NotificationManager.windowPresentsAlert(
@@ -176,6 +180,8 @@ extension NotificationManagerTests {
         #expect(feedbackCount == 1)
         #expect(manager.currentToast == nil)
     }
+
+    // MARK: - Window-emitted feedback sound (visionOS spatial audio)
 
     @Test @MainActor func windowEmittingAlertPublishesEventInsteadOfGlobalFeedback() {
         var feedbackCount = 0

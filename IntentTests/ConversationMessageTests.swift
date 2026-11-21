@@ -2,6 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
+// MARK: - AnyCodable Tests
+
 struct AnyCodableTests {
     private func isArrayValue(_ match: AnyCodableArrayMatch) -> Bool {
         if case .value = match { true } else { false }
@@ -92,6 +94,8 @@ struct AnyCodableTests {
         #expect(str.isNull == false)
     }
 }
+
+// MARK: - ContentBlock Tests
 
 struct QuestionsDismissedNoticeTests {
     private let noticeText = "User dismissed your 2 questions without answering."
@@ -194,6 +198,8 @@ struct QuestionsDismissedNoticeTests {
         #expect(msg.questionsDismissedNotice?.dismissedQuestionsMessageId == "a1")
     }
 }
+
+// MARK: - ConversationMessage Tests
 
 struct ConversationMessageTests {
     @Test func parseMessageFull() {
@@ -326,6 +332,8 @@ struct ConversationMessageTests {
     }
 }
 
+// MARK: - QueuedMessage Tests
+
 struct QueuedMessageTests {
     @Test func initAndCodable() throws {
         let msg = QueuedMessage(id: "q-1", content: "hello", queuedAt: "2025-01-01T00:00:00Z", position: 0)
@@ -393,6 +401,8 @@ struct QueuedMessageTests {
         #expect(decoded.messageMetadata["type"]?.stringValue == "agent_message")
         #expect(decoded.messageMetadata["fromAgentId"]?.stringValue == "agent-2")
     }
+
+    // MARK: isUserMessage predicate (shared with FE, see spec Background)
 
     private func queued(metadata: [String: AnyCodable] = [:]) -> QueuedMessage {
         QueuedMessage(

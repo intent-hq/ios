@@ -3,6 +3,8 @@ import Testing
 import UIKit
 
 struct ComposerSubmitPolicyTests {
+    // MARK: - visionOS: hardware-keyboard gated
+
     @Test func visionOSSubmitsWithHardwareKeyboard() {
         #expect(ComposerSubmitPolicy.returnSubmits(
             isVisionOS: true,
@@ -31,6 +33,8 @@ struct ComposerSubmitPolicyTests {
             hasHardwareKeyboard: false
         ))
     }
+
+    // MARK: - iOS: idiom gated, keyboard state irrelevant
 
     @Test func padAlwaysSubmits() {
         #expect(ComposerSubmitPolicy.returnSubmits(

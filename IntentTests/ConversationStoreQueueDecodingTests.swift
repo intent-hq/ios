@@ -9,6 +9,8 @@ private enum NestedImageQueueFixture {
 }
 
 extension ConversationStoreIntegrationTests {
+    // MARK: - Queue snapshot decoding (ios#252)
+
     @Test func fetchQueueKeepsValidSiblingsWhenOneElementIsMalformed() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)

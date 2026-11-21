@@ -195,6 +195,8 @@ extension ConversationLiveTranscript {
         resetBackoff()
     }
 
+    // MARK: - Snapshot wait, timeout and backoff retry
+
     func awaitSnapshot() async {
         guard snapshotPending, !Task.isCancelled else { return }
         let interval = ConversationTrace.begin("ChatSnapshotWait", traceContext)
@@ -274,6 +276,8 @@ extension ConversationLiveTranscript {
         nextRetryDelay = nil
         subscriptionAttempt = 0
     }
+
+    // MARK: - Releasing registrations
 
     private func releaseCurrentSubscription() async {
         guard let subscriptionId = chatSubscriptionId else { return }

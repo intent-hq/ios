@@ -2,6 +2,8 @@ import Combine
 import Foundation
 
 extension NoteStore {
+    // MARK: - Live-state subscription
+
     func subscribeLiveState(workspaceId: String, generation: Int) async {
         noteReconciler = DeltaReconciler<Note>(
             getId: { dict in dict["id"] as? String },
@@ -41,6 +43,8 @@ extension NoteStore {
             AppLog.notes.warning("[NoteStore] note.subscribe failed: \(error), falling back to legacy")
         }
     }
+
+    // MARK: - Event subscription
 
     func startObservingEvents(workspaceId: String? = nil) {
         if let workspaceId {

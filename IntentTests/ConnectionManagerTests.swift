@@ -56,6 +56,8 @@ struct ConnectionManagerTests {
         ) == 5)
     }
 
+    // MARK: - Event handlers
+
     @Test @MainActor func onEventRegistersHandler() {
         let manager = ConnectionManager.shared
         let initialCount = manager.eventHandlers.count
@@ -82,6 +84,8 @@ struct ConnectionManagerTests {
         #expect(receivedParams != nil)
         manager.removeEventHandler(id: handlerId)
     }
+
+    // MARK: - Message dispatch (response routing)
 
     @Test @MainActor func dispatchResponseResolvesCorrectContinuation() async throws {
         let manager = ConnectionManager.shared
@@ -116,6 +120,8 @@ struct ConnectionManagerTests {
             Issue.record("Expected error but got success")
         }
     }
+
+    // MARK: - Request timeout (per-call override)
 
     @Test @MainActor func defaultRequestTimeoutIsTenSeconds() {
         #expect(ConnectionManager.defaultRequestTimeout == 10)
@@ -259,6 +265,8 @@ extension ConnectionManagerTests {
         ) { manager.pendingRequests[id] != nil }
     }
 
+    // MARK: - failAllPending
+
     @Test @MainActor func failAllPendingClearsRequests() async throws {
         let manager = ConnectionManager.shared
 
@@ -331,6 +339,8 @@ extension ConnectionManagerTests {
             Issue.record("Expected error but got success")
         }
     }
+
+    // MARK: - NSError.isEntityNotFound helper
 
     @Test func isEntityNotFoundRequiresDomainCodeAndDataCode() {
         let notFound = NSError(

@@ -5,6 +5,8 @@ import Testing
 
 @Suite(.serialized)
 struct WorkspaceListViewModelTests {
+    // MARK: - Helpers
+
     private func makeWorkspace(
         id: String = "1",
         title: String = "Test",
@@ -58,6 +60,8 @@ struct WorkspaceListViewModelTests {
         WorkspaceStore.shared.setLoading(false)
     }
 
+    // MARK: - Observation forwarding
+
     @Test @MainActor func storeChangesInvalidateObservedProperties() async {
         let viewModel = setUp([])
         defer { tearDown() }
@@ -83,6 +87,8 @@ struct WorkspaceListViewModelTests {
         #expect(viewModel.workspaces.map(\.id) == ["updated"])
         #expect(viewModel.isLoading)
     }
+
+    // MARK: - filteredWorkspaces
 
     @Test func displayStatusWireValuesRemainExactAndCaseSensitive() {
         #expect(WorkspaceDisplayStatus(wireValue: "PR_OPEN") == nil)
@@ -237,6 +243,8 @@ struct WorkspaceListViewModelTests {
         #expect(viewModel.filteredWorkspaces.map(\.id) == ["fractional", "whole", "earlierFractional"])
     }
 
+    // MARK: - groupedByRepo
+
     @Test @MainActor func groupedByRepo_groupsByOwnerAndName() {
         let workspaces = [
             makeWorkspace(id: "1", title: "A", repositoryOwner: "acme", repositoryName: "app"),
@@ -292,6 +300,8 @@ struct WorkspaceListViewModelTests {
         #expect(groups.map(\.0) == ["zeta/late", "acme/app", "mid/unstamped"])
         #expect(groups[1].1.map(\.id) == ["a-mid", "a-old"])
     }
+
+    // MARK: - groupedByStatus
 
     @Test @MainActor func groupedByStatus_groupsAndSortsBySortOrder() {
         let workspaces = [

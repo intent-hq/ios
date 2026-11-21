@@ -87,6 +87,8 @@ struct Question: Equatable, Identifiable, Decodable {
         self.multiSelect = multiSelect
     }
 
+    // MARK: - Parsing helpers
+
     static func isQuestionResourceBlock(_ block: ContentBlock) -> Bool {
         block.type == .resource && block.resource?.mimeType == resourceMimeType
     }

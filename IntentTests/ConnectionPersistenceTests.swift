@@ -107,6 +107,8 @@ struct ConnectionPersistenceTests {
         PairedServer(hosts: hosts, port: port, name: name, pairedAt: Date())
     }
 
+    // MARK: - Load / upsert
+
     @Test func loadConnectionsIsEmptyByDefault() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -305,6 +307,8 @@ struct ConnectionPersistenceTests {
             == ["Mac.local", "[2001:DB8::1]", "Other.local"])
     }
 
+    // MARK: - updateConnectionHosts
+
     @Test func updateConnectionHostsGrowsHostSetWithoutDuplicating() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -370,6 +374,8 @@ struct ConnectionPersistenceTests {
 
         #expect(persistenceManager.loadConnections().first?.server.tcAddress == "tc-abc123")
     }
+
+    // MARK: - updateConnectionTcAddress
 
     @Test func updateConnectionTcAddressSetsAndReplaces() {
         resetConnectionState()

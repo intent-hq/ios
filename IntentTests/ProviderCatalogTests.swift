@@ -4,6 +4,8 @@ import Testing
 
 @MainActor
 struct ProviderCatalogTests {
+    // MARK: - fetchProviders (host.providerAuthStatus)
+
     @Test func fetchProvidersParsesTriStateAuthenticated() async {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
@@ -53,6 +55,8 @@ struct ProviderCatalogTests {
         #expect(ProviderInfo(id: "grok", authenticated: .unknown).displayName == "Grok")
     }
 
+    // MARK: - fetchModels (models.list)
+
     @Test func fetchModelsSendsProviderIdAndParsesModels() async {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
@@ -94,6 +98,8 @@ struct ProviderCatalogTests {
         fake.errorMap["models.list"] = NSError(domain: "test", code: -1)
         #expect(await store.fetchModels(providerId: "grok").isEmpty)
     }
+
+    // MARK: - createAgent provider/model params (agent.create)
 
     private func configureCreateAgent(_ fake: FakeConnectionManager) {
         fake.responseMap["agent.create"] = [

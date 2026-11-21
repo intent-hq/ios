@@ -75,6 +75,8 @@ extension AppCoordinatorTests {
         #expect(!coordinator.choosesBackendInPlace)
     }
 
+    // MARK: - Deep-link URL routing (intent://)
+
     @Test @MainActor func handleIncomingURL_pairURL_presentsConfirmation() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -246,6 +248,8 @@ extension AppCoordinatorTests {
             Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
         }
     }
+
+    // MARK: - Synced backend registry merge
 
     static func syncedRegistry(payloads: [String]) -> SyncedBackendRegistry {
         let rows: [[String: Any]] = payloads.enumerated().map { index, payload in

@@ -157,6 +157,8 @@ enum DemoFixtures {
             .map { URL(fileURLWithPath: $0) }
     }
 
+    // MARK: - Controlled end derealization (intent-hq/ios#338)
+
     static let configuredEndDerealizationTriggerFile = endDerealizationTriggerFile(
         from: LaunchOptions.current.arguments
     )

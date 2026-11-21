@@ -21,6 +21,8 @@ struct DeepLinkRequest: Identifiable, Equatable {
 }
 
 extension AppCoordinator {
+    // MARK: - Deep links (intent:// URLs)
+
     func handleIncomingURL(_ url: URL) {
         let target: DeepLinkRequest.Target
         if let payload = PairingPayload.parse(url.absoluteString) {

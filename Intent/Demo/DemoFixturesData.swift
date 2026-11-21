@@ -4,6 +4,8 @@ import Foundation
 extension DemoFixtures {
     // swiftlint:disable no_magic_numbers
 
+    // MARK: - Workspaces
+
     static var workspaces: [[String: Any]] {
         if LaunchOptions.current.contains("--demo-empty-workspaces") { return [] }
         guard LaunchOptions.current.contains("--demo-long-workspace-list") else { return baseWorkspaces }
@@ -163,6 +165,8 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
+    // MARK: - Notes
+
     static var notes: [[String: Any]] {
         [
             [
@@ -269,6 +273,8 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
+    // MARK: - Agents
+
     static var agents: [[String: Any]] {
         [
             [
@@ -384,6 +390,8 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
+    // MARK: - Conversation
+
     static var conversationMessages: [[String: Any]] {
         [
             [
@@ -456,6 +464,8 @@ extension DemoFixtures {
 }
 
 extension DemoFixtures {
+    // MARK: - Tasks
+
     static var tasks: [[String: Any]] {
         [
             [

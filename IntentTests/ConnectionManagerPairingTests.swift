@@ -6,6 +6,8 @@ import os
 import Testing
 
 extension ConnectionManagerTests {
+    // MARK: - Pairing over a live connection (monorepo#4185)
+
     private static func unusedLoopbackPort() async throws -> Int {
         let server = try await LoopbackWebSocketServer.start()
         let port = server.port

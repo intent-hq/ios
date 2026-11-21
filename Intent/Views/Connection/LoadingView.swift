@@ -17,6 +17,8 @@ struct LoadingView: View {
     }
 }
 
+// MARK: - Intent Logo Shape
+
 nonisolated struct IntentLogo: Shape {
     private typealias Metrics = Constants.IntentLogo
 

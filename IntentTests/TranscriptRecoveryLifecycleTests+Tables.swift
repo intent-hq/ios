@@ -3,6 +3,8 @@ import CoreGraphics
 import Testing
 
 extension TranscriptRecoveryLifecycleTests {
+    // MARK: - Identity
+
     @Test func staleTokensChangeNothing() {
         let states = [
             State(visibility: .visible),
@@ -58,6 +60,8 @@ extension TranscriptRecoveryLifecycleTests {
         ])
         #expect(state.nextTokenId == 5)
     }
+
+    // MARK: - Tables
 
     private var terminalStates: [State] {
         var states: [State] = []

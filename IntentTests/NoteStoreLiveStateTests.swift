@@ -82,6 +82,8 @@ struct NoteStoreLiveStateTests {
         #expect(fake.requestLog.filter { $0.method == "note.subscribe" }.count == 1)
     }
 
+    // MARK: - Snapshot tests
+
     @Test func appliesSnapshot() {
         let params: [String: Any] = [
             "subscriptionId": "sub-notes-123",

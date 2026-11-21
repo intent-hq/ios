@@ -135,6 +135,8 @@ struct ImageLightboxView: View {
         .accessibilityLabel("Close image")
     }
 
+    // MARK: - Gestures
+
     private var doubleTapGesture: some Gesture {
         TapGesture(count: 2).onEnded {
             withAnimation(.spring(duration: Constants.Conversation.ImageLightbox.springAnimationDuration)) {

@@ -84,6 +84,8 @@ nonisolated final class RelayDeviceKey: RelaySigner, @unchecked Sendable {
         }
     }
 
+    // MARK: - Keychain
+
     private static var baseQuery: [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,

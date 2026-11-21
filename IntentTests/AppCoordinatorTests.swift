@@ -53,6 +53,8 @@ final class AppCoordinatorTests {
         UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     }
 
+    // MARK: - Navigation transitions
+
     @Test @MainActor func onConnectionSuccess_setsWorkspaceList() {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onConnectionSuccess()

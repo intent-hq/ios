@@ -50,6 +50,8 @@ struct TaskStorePagingTests {
         return (store, fake)
     }
 
+    // MARK: - One-shot task.list
+
     @Test func fetchAllAsksForTheWholeList() async {
         let fake = FakeConnectionManager()
         let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
@@ -97,6 +99,8 @@ struct TaskStorePagingTests {
 
         #expect(store.tasks.count == 2, "a partial list must not replace the whole one")
     }
+
+    // MARK: - Paged task.subscribe snapshot
 
     @Test func pagedSnapshotPublishesOnceWholeWithDeltasOnTop() async throws {
         let (store, fake) = try await liveStore()

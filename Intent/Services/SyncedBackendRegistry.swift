@@ -1,6 +1,8 @@
 import Foundation
 import Security
 
+// MARK: - Payload codec (v1 wire contract)
+
 struct SyncedBackendRecord: Equatable, Sendable {
     var label: String
     var host: String
@@ -117,6 +119,8 @@ enum SyncedBackendPayload {
     }
 }
 
+// MARK: - Keychain list seam
+
 enum SyncedKeychainListOutcome {
     case failure(OSStatus)
     case notFound
@@ -139,6 +143,8 @@ struct SecItemSyncedKeychain: SyncedKeychainListing {
         return .rows(rows)
     }
 }
+
+// MARK: - Registry
 
 enum SyncedBackendRegistryList: Equatable {
     case available([SyncedBackendRecord])

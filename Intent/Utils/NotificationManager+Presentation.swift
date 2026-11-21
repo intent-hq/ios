@@ -2,6 +2,8 @@ import Foundation
 import SwiftUI
 
 extension NotificationManager {
+    // MARK: - Window visibility (connection-scoped)
+
     func conversationOpened(agentId: String, connectionId: UUID) {
         openAgentIds[connectionId, default: [:]][agentId, default: 0] += 1
         localNotificationService.removeDeliveredNotifications(
@@ -38,6 +40,8 @@ extension NotificationManager {
     private func isWorkspaceOpen(_ workspaceId: String, connectionId: UUID) -> Bool {
         (openWorkspaceIds[connectionId]?[workspaceId] ?? 0) > 0
     }
+
+    // MARK: - Alert presentation
 
     func presentIdleAlert(agentId: String, workspaceId: String, agentName: String) {
         guard let connectionId = activeConnectionId() else { return }

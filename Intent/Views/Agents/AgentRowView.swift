@@ -252,6 +252,8 @@ struct AgentRowView: View {
     }
 }
 
+// MARK: - Collapsible Headers
+
 struct DelegatedAgentsRow: View {
     let agents: [AgentSession]
     var totalCount: Int?

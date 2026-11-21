@@ -25,6 +25,8 @@ final class BackendSessionRegistry {
         self.makeSession = makeSession
     }
 
+    // MARK: - Backend sessions
+
     func markConnectionSelected(_ id: BackendID) {
         pendingConnectionSelections.insert(id)
     }
@@ -73,9 +75,13 @@ final class BackendSessionRegistry {
         Array(sessions.keys)
     }
 
+    // MARK: - Pairing sessions
+
     func makePairingSession() -> BackendSession {
         makeSession(nil)
     }
+
+    // MARK: - Removed backends (spec decision 2)
 
     func isBackendRemoved(_ id: BackendID) -> Bool {
         removedBackendIDs.contains(id)
@@ -96,6 +102,8 @@ final class BackendSessionRegistry {
         guard !ids.isEmpty else { return }
         removedBackendIDs.subtract(ids)
     }
+
+    // MARK: - Live composition
 
     static func makeLiveSession(backendID: BackendID?) -> BackendSession {
         let connection = ConnectionManager()

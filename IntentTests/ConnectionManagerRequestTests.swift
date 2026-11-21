@@ -249,6 +249,8 @@ extension ConnectionManagerTests {
         #expect(error.localizedDescription.contains("de:ad:be:ef"))
     }
 
+    // MARK: - Host race certificate mismatch collection
+
     private actor FakeRaceConnection: HostRacingConnection {
         nonisolated let host: String
 
@@ -451,6 +453,8 @@ extension ConnectionManagerTests {
         #expect(manager.certMismatches.isEmpty)
     }
 
+    // MARK: - Synced-registry credential adoption
+
     @Test @MainActor func updateCachedCredentialsReplacesReconnectFields() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
@@ -465,6 +469,8 @@ extension ConnectionManagerTests {
         #expect(manager.token == "tok-rotated")
         #expect(manager.certFingerprint == "ff:ee")
     }
+
+    // MARK: - Invalid message handling
 
     @Test @MainActor func dispatchInvalidJsonDoesNotCrash() {
         let manager = ConnectionManager.shared

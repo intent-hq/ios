@@ -4,6 +4,8 @@ import Testing
 
 @Suite("AgentSession parsing and display")
 struct AgentSessionTests {
+    // MARK: - parseAgent
+
     @Test func parseCompleteAgent() {
         let dict: [String: Any] = [
             "id": "agent-1",
@@ -94,6 +96,8 @@ struct AgentSessionTests {
         #expect(agent?.name == name)
     }
 
+    // MARK: - notificationsMuted (PROTOCOL §5.5)
+
     @Test func parseNotificationsMutedTopLevel() {
         let dict: [String: Any] = ["id": "agent-m1", "name": "Muted", "notificationsMuted": true]
         #expect(AgentSession.parseAgent(dict)?.notificationsMuted == true)
@@ -123,6 +127,8 @@ struct AgentSessionTests {
         let agent = AgentSession.parseAgent(dict)
         #expect(agent?.applyingPreview(lastAgentResponse: "Hi", digest: nil).notificationsMuted == true)
     }
+
+    // MARK: - attention-request fields (PROTOCOL §5.5)
 
     @Test func parseAttentionFieldsTopLevel() {
         let dict: [String: Any] = [
@@ -178,6 +184,8 @@ struct AgentSessionTests {
         #expect(agent?.attentionRequestKind == "blocker")
         #expect(agent?.attentionRequestReason == nil)
     }
+
+    // MARK: - pendingAttentionRequest derivation
 
     @Test func pendingAttentionRequestNilWhenNoKind() {
         let dict: [String: Any] = ["id": "agent-8", "name": "Idle"]
@@ -261,6 +269,8 @@ extension AgentSessionTests {
     @Test func parseEmptyDictReturnsNil() {
         #expect(AgentSession.parseAgent([:]) == nil)
     }
+
+    // MARK: - AgentAvatarState precedence (mirrors avatar-state.test.ts)
 
     @Test func avatarStateIdleByDefault() {
         #expect(AgentAvatarState.state(for: makeAgent(status: "Idle")) == .idle)
@@ -364,6 +374,8 @@ extension AgentSessionTests {
         #expect(AgentAvatarState.attentionBlocker.accessibilityLabel == "Blocker reported")
         #expect(AgentAvatarState.running.accessibilityLabel == "Running")
     }
+
+    // MARK: - Helpers
 
     func makeAgent(
         status: String = "Idle",

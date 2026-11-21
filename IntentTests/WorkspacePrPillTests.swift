@@ -62,6 +62,8 @@ struct WorkspacePrPillTests {
         )
     }
 
+    // MARK: - selectPrimaryPr
+
     @Test func oldestOpenPrWinsOverNewerOpenAndMerged() {
         let prs = [
             pill(30, .merged, updatedAt: "2026-08-15T00:00:00Z"),
@@ -132,6 +134,8 @@ struct WorkspacePrPillTests {
         #expect(WorkspacePrPill.selectPrimaryPr([]) == nil)
     }
 
+    // MARK: - mergeMonitoredPRs
+
     @Test func monitorDuplicatingWorkspacePrDoesNotAppend() {
         let base = [pill(12, .open, createdAt: "2026-08-01T00:00:00Z")]
         let merged = WorkspacePrPill.mergeMonitoredPRs(
@@ -195,6 +199,8 @@ struct WorkspacePrPillTests {
         #expect(merged.count == 1)
     }
 
+    // MARK: - monitorDisplayStatus
+
     @Test func monitorStatusFollowsSnapshotState() {
         #expect(WorkspacePrPill.monitorDisplayStatus(
             makeMonitor(snapshot: makeSnapshot(state: "Merged"))
@@ -217,6 +223,8 @@ struct WorkspacePrPillTests {
 }
 
 extension WorkspacePrPillTests {
+    // MARK: - countOtherMonitors
+
     @Test func monitorMatchingPrimaryIsExcludedFromCount() {
         let monitors = [
             makeMonitor(repo: "octo/repo", prNumber: 12),
@@ -293,6 +301,8 @@ extension WorkspacePrPillTests {
         #expect(count == 1)
     }
 
+    // MARK: - Status wire mapping
+
     @Test func wireStatusMapsToDisplayBuckets() {
         #expect(WorkspacePrPill.Status(wire: "Open") == .open)
         #expect(WorkspacePrPill.Status(wire: "Merged") == .merged)
@@ -318,6 +328,8 @@ extension WorkspacePrPillTests {
         #expect(row.crossRepo == nil)
         #expect(!row.monitorOnly)
     }
+
+    // MARK: - End-to-end pill derivation
 
     @Test func monitoredMergedPrLosesToOlderOpenWorkspacePr() {
         let base = [

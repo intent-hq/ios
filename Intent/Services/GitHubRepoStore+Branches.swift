@@ -1,6 +1,8 @@
 import Foundation
 
 extension GitHubRepoStore {
+    // MARK: - Branches
+
     func branchState(owner: String, repo: String) -> GitHubBranchLoadState {
         branchStates[Self.branchKey(owner: owner, repo: repo)] ?? GitHubBranchLoadState()
     }
@@ -109,6 +111,8 @@ extension GitHubRepoStore {
         let result = try await connectionManager.request("github.branches.list", params: params)
         return (result as? [String: Any])?["branches"] as? [String] ?? []
     }
+
+    // MARK: - Query rewrite
 
     static func rewriteSearchQuery(_ input: String) -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)

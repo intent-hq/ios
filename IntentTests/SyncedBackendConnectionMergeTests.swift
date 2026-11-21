@@ -68,6 +68,8 @@ struct SyncedBackendConnectionMergeTests {
         )
     }
 
+    // MARK: - New records
+
     @Test func newRecordIsAddedWithTokenFingerprintAndClock() {
         let result = SyncedBackendConnectionMerge.merge(records: [record()], into: [])
         #expect(result.connections.count == 1)
@@ -249,6 +251,8 @@ struct SyncedBackendConnectionMergeTests {
         withHostname.hostname = "mac-studio.local"
         #expect(SyncedBackendConnectionMerge.displayName(for: withHostname) == "mac-studio.local")
     }
+
+    // MARK: - LWW updates
 
     @Test func newerRecordOverwritesRotatedTokenAndFields() {
         let existing = local(syncUpdatedAt: 100)

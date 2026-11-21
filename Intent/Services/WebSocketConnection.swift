@@ -59,6 +59,7 @@ actor WebSocketConnection {
         Self.close(connection, lifecycle: lifecycle, code: WebSocketCloseCode.goingAway, queue: queue)
     }
 
+    // MARK: - Connection setup
     nonisolated private static func makeParameters(
         host: String,
         certFingerprint: String?,
@@ -280,6 +281,8 @@ actor WebSocketConnection {
 }
 
 extension WebSocketConnection {
+    // MARK: - Messaging
+
     func receive() async throws -> URLSessionWebSocketTask.Message {
         let connection = connection
         let lifecycle = lifecycle

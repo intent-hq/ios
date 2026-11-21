@@ -189,6 +189,7 @@ extension AttachmentUploadService {
         )
     }
 
+    // MARK: - Placement (nonisolated: hashing and disk reads stay off the
     @concurrent
     nonisolated private static func place(
         context: PlacementContext,
@@ -346,6 +347,8 @@ extension AttachmentUploadService {
             uploadedAt: dict["uploadedAt"] as? String
         )
     }
+
+    // MARK: - Hashing & file metadata
 
     nonisolated static func sha256Hex(of data: Data) -> String {
         hexString(SHA256.hash(data: data))

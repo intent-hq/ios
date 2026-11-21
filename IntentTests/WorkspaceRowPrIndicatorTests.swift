@@ -82,6 +82,8 @@ struct WorkspaceRowPrIndicatorTests {
         )
     }
 
+    // MARK: - Pool primary chosen
+
     @Test func poolPrimaryIsOldestOpenAcrossPullRequestsAndMonitors() {
         let workspace = makeWorkspace(pullRequests: [
             makePr(20, "Open", createdAt: "2026-08-10T00:00:00Z"),
@@ -113,6 +115,8 @@ struct WorkspaceRowPrIndicatorTests {
         #expect(model.pill == .init(status: .open, number: 7))
         #expect(model.otherMonitorCount == 0)
     }
+
+    // MARK: - activePullRequest fallback pool (FE mapWorkspacePRs parity)
 
     @Test func activePullRequestOnlySeedsPoolAndBeatsLegacyFields() {
         let workspace = makeWorkspace(
@@ -161,6 +165,8 @@ struct WorkspaceRowPrIndicatorTests {
         #expect(model.pill == .init(status: .open, number: 20))
     }
 
+    // MARK: - Legacy fallback path
+
     @Test func emptyPoolFallsBackToLegacyPrStatusAndNumber() {
         let workspace = makeWorkspace(prStatus: "Merged", prNumber: 42)
 
@@ -191,6 +197,8 @@ struct WorkspaceRowPrIndicatorTests {
         #expect(model.pill == nil)
         #expect(model.otherMonitorCount == 0)
     }
+
+    // MARK: - "+N" count
 
     @Test func otherMonitorsBeyondPrimaryAreCounted() {
         let workspace = makeWorkspace(pullRequests: [
@@ -248,6 +256,8 @@ struct WorkspaceRowPrIndicatorTests {
         let model = WorkspaceRowView.derivePrIndicator(workspace: workspace, monitors: monitors)
         #expect(model.pill == .init(status: .merged, number: 8))
     }
+
+    // MARK: - Legacy pill status / color mapping
 
     @Test func legacyPillStatusMapsOnlyKnownWireStrings() {
         #expect(WorkspaceRowView.legacyPillStatus("Merged") == .merged)

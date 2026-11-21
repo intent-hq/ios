@@ -27,6 +27,8 @@ struct TranscriptDecodingMeasurementTests {
         }
     }
 
+    // MARK: - Payloads
+
     private static func assistantRow(turn: Int) -> [String: Any] {
         let output = String(repeating: toolOutputLine, count: toolOutputLineCount)
         return [
@@ -76,6 +78,8 @@ struct TranscriptDecodingMeasurementTests {
         }
     }
 
+    // MARK: - Timing
+
     private static func median(of samples: [Duration]) -> Duration {
         samples.sorted()[samples.count / 2]
     }
@@ -96,6 +100,8 @@ struct TranscriptDecodingMeasurementTests {
         )
         print("[ios#258] \(measurement.markdownRow)")
     }
+
+    // MARK: - Tests
 
     @Test(arguments: [10, 100, 500])
     func snapshotPageDecodesIdenticallyPerRowAndBatched(turns: Int) {

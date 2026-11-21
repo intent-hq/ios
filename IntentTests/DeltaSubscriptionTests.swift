@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 struct DeltaSubscriptionTests {
+    // MARK: - SubscriptionPush parsing
+
     @Test func parseSnapshotPush() {
         let params: [String: Any] = [
             "subscriptionId": "sub-123",
@@ -317,6 +319,8 @@ extension DeltaSubscriptionTests {
         #expect(decoded.map(\.textDelta) == ["", nil, nil])
         #expect(decoded.map(\.block) == entities.compactMap { SubscriptionPush.ChatBlockEntity(entity: $0)?.block })
     }
+
+    // MARK: - DeltaReconciler
 
     @Test func reconcilerSnapshot() {
         let reconciler = DeltaReconciler<[String: Any]>(

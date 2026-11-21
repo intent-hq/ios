@@ -130,6 +130,8 @@ extension AppCoordinatorTests {
         }
     }
 
+    // MARK: - Missing agent handling (conversation fallback)
+
     @Test @MainActor func handleMissingAgent_navigatesToWorkspaceDetail() {
         let wsId = "test-coord-missing-agent-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
@@ -197,6 +199,8 @@ extension AppCoordinatorTests {
             Issue.record("handleMissingAgent for another agent must not navigate, got \(coordinator.currentScreen)")
         }
     }
+
+    // MARK: - Missing note handling
 
     @Test @MainActor func handleMissingNote_navigatesToWorkspaceDetail() {
         let wsId = "test-coord-missing-note-\(UUID().uuidString)"
@@ -267,6 +271,8 @@ extension AppCoordinatorTests {
             Issue.record("handleMissingNote for another note must not navigate, got \(coordinator.currentScreen)")
         }
     }
+
+    // MARK: - Note validation on cold-start restore
 
     @Test @MainActor func restoreLastScreen_restoredNoteMissing_fallsBackToDetail() async throws {
         let wsId = "test-coord-restore-dead-note-\(UUID().uuidString)"

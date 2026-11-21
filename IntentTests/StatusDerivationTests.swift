@@ -33,6 +33,8 @@ struct StatusDerivationTests {
         )
     }
 
+    // MARK: - Wire value mapping
+
     @Test func wireValueMapping() {
         #expect(WorkspaceDisplayStatus(wireValue: "failed") == .failed)
         #expect(WorkspaceDisplayStatus(wireValue: "blocked") == .blocked)
@@ -48,6 +50,8 @@ struct StatusDerivationTests {
         #expect(WorkspaceDisplayStatus(wireValue: "pr_merged") == .prMerged)
         #expect(WorkspaceDisplayStatus(wireValue: "some_future_status") == nil)
     }
+
+    // MARK: - Resolution (BE-owned value only)
 
     @Test func resolveUsesBackendValue() {
         let workspace = makeWorkspace(displayStatus: "in_progress", prStatus: "Merged")
@@ -100,6 +104,8 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: workspace) == .idle)
     }
 
+    // MARK: - Unread attention flag (blue dot)
+
     @Test func unreadAttentionFlag() {
         #expect(hasUnreadAttention(makeWorkspace(attention: "unread")))
         #expect(!hasUnreadAttention(makeWorkspace(attention: "none")))
@@ -112,6 +118,8 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: workspace) == .complete)
         #expect(hasUnreadAttention(workspace))
     }
+
+    // MARK: - Waiting flag (grey dot, protocol 6.17)
 
     @Test func waitingDotShownWhenOnlyWaiting() {
         #expect(showsWaitingDot(makeWorkspace(waiting: true)))
@@ -153,6 +161,8 @@ struct StatusDerivationTests {
         #expect(!hasUnreadAttention(makeWorkspace(waiting: true)))
     }
 
+    // MARK: - Labels
+
     @Test func statusLabels() {
         #expect(WorkspaceDisplayStatus.failed.label == "Failed")
         #expect(WorkspaceDisplayStatus.blocked.label == "Blocked")
@@ -167,6 +177,8 @@ struct StatusDerivationTests {
         #expect(WorkspaceDisplayStatus.prMerged.label == "PR Merged")
         #expect(WorkspaceDisplayStatus.unknown.label == "Unknown")
     }
+
+    // MARK: - Sort order
 
     @Test func sortOrderOrdering() {
         let ordered: [WorkspaceDisplayStatus] = [

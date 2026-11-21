@@ -13,6 +13,8 @@ struct ConversationStoreIntegrationTests {
         Issue.record("Timed out waiting for \(description)")
     }
 
+    // MARK: - First-open transcript (chat.subscribe seq-0 snapshot only)
+
     @Test(arguments: [0, 3, 50])
     func firstOpenAwaitsTheSnapshotAndNeverFetchesAPage(messageCount: Int) async throws {
         let fake = FakeConnectionManager()
@@ -213,6 +215,8 @@ extension ConversationStoreIntegrationTests {
         }
     }
 
+    // MARK: - contiguousDeltaAdvancesState
+
     @Test func contiguousDeltaAdvancesState() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -256,6 +260,8 @@ extension ConversationStoreIntegrationTests {
         #expect(store.messages.count == 2)
         #expect(store.messages[1].contentBlocks.first?.resolvedText == "World")
     }
+
+    // MARK: - gapTriggersResnapshot
 
     @Test func gapTriggersResnapshot() async throws {
         let fake = FakeConnectionManager()
@@ -313,6 +319,8 @@ extension ConversationStoreIntegrationTests {
         #expect(store.messages.map(\.id) == ["msg-1", "msg-2"])
     }
 
+    // MARK: - connectionLossClearsLiveThenReconnectResubscribes
+
     @Test func connectionLossClearsLiveThenReconnectResubscribes() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -360,6 +368,8 @@ extension ConversationStoreIntegrationTests {
         #expect(!fake.didCallMethod("agent.getConversation"))
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
+
+    // MARK: - Agent Subscriptions with Top-Level actorIds
 
     @Test func parsesTopLevelActorIdsFromSubscriptions() async {
         let fake = FakeConnectionManager()
@@ -449,6 +459,8 @@ extension ConversationStoreIntegrationTests {
         #expect(store.delegationGroupStatus?.completed == 0)
         #expect(store.delegationGroupStatus?.total == 2)
     }
+
+    // MARK: - Send queued message now (agent.sendQueuedMessageNow)
 
     @Test func sendQueuedMessageNowMakesSingleRPCAndPreservesRest() async throws {
         let fake = FakeConnectionManager()
@@ -583,6 +595,8 @@ extension ConversationStoreIntegrationTests {
         #expect(store.queuedMessages.map(\.id) == ["q-1"])
     }
 
+    // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
+
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()
         #expect(fake.eventHandlerCount == 0)
@@ -685,6 +699,8 @@ extension ConversationStoreIntegrationTests {
         #expect(fake.paramsForMethod("agent.getSubscriptions").count == 1)
     }
 }
+
+// MARK: - Recovery ownership and the bounded snapshot wait
 
 extension ConversationStoreIntegrationTests {
     private func emptyDelta(subscriptionId: String, seq: Int) -> SubscriptionPush {

@@ -7,6 +7,8 @@ import UIKit
 
 @MainActor
 struct IntentFileAttachmentLoaderTests {
+    // MARK: - URL routing
+
     private func route(_ string: String) -> MarkdownImageRoute {
         guard let url = URL(string: string) else {
             Issue.record("Expected a valid fixture URL: \(string)")
@@ -57,6 +59,8 @@ struct IntentFileAttachmentLoaderTests {
     @Test func schemelessRelativeURLRoutesToFallback() {
         #expect(route("images/pic.png") == .fallback)
     }
+
+    // MARK: - Intent-file fetcher injection
 
     @MainActor private final class FileImageFetchLog {
         var entries: [(workspaceId: String, path: String)] = []
@@ -209,6 +213,8 @@ struct IntentFileAttachmentLoaderTests {
         #expect(fileLoader.failedKeys.isEmpty)
     }
 
+    // MARK: - Remote attachment path
+
     private static let remoteURL = URL(string: "https://example.com/pic.png")!
 
     @Test func loadedRemoteImageYieldsLightboxCapableAttachment() async {
@@ -312,6 +318,8 @@ struct IntentFileAttachmentLoaderTests {
         #expect(fallbackCalls == 1)
         #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "from-fallback")
     }
+
+    // MARK: - Thumbnail sizing
 
     @Test func mediaCardSizeIsFixedSquare() {
         let side = SquareImageThumbnail.transcriptSide

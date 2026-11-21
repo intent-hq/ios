@@ -43,6 +43,8 @@ import Observation
         }
     }
 
+    // MARK: - Connection observation
+
     private func observeConnection() {
         connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
@@ -65,6 +67,8 @@ import Observation
             await subscribeToNote(workspaceId: wsId, noteId: noteId)
         }
     }
+
+    // MARK: - Public API
 
     func subscribeToNote(workspaceId: String, noteId: String) async {
         if currentNoteId != noteId {
@@ -104,6 +108,8 @@ import Observation
         currentNoteId = nil
         threads = []
     }
+
+    // MARK: - Subscription
 
     private func subscribeLiveState(workspaceId: String, noteId: String, generation: Int) async {
         commentReconciler = DeltaReconciler<CommentThread>(
@@ -155,6 +161,8 @@ import Observation
             AppLog.comments.error("[CommentStore] comment.unsubscribe failed: \(error)")
         }
     }
+
+    // MARK: - Event handling
 
     func handleEvent(_ method: String, params: Any) {
         if let push = SubscriptionPush.parse(method: method, params: params) {

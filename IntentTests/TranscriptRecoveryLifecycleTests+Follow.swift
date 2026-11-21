@@ -3,6 +3,8 @@ import CoreGraphics
 import Testing
 
 extension TranscriptRecoveryLifecycleTests {
+    // MARK: - followRequested
+
     @Test(arguments: [false, true]) func followRequestedFromIdleStartsAFollow(forced: Bool) {
         var state = State(visibility: .visible)
         #expect(step(&state, .followRequested(forced: forced)) == [.startFollowTask(follow1, forced: forced)])
@@ -69,6 +71,8 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(state.armedRecovery == nil)
     }
 
+    // MARK: - followDue
+
     @Test(arguments: [false, true]) func followDueThatExecutesScrollsToEnd(forced: Bool) {
         var state = makeState(owner: .follow(follow1, forced: forced), armed: .polling(recovery2))
         let before = state
@@ -89,6 +93,8 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(logs(effects) == ["[SCROLL] Forced follow yielded to the user's gesture"])
         #expect(state.owner == .follow(follow1, forced: true))
     }
+
+    // MARK: - followFinished
 
     @Test func executedAutomaticFollowReplaysTheEdgeItSwallowed() {
         var state = makeState(owner: .follow(follow1, forced: false), realized: true)

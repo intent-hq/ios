@@ -2,6 +2,8 @@ import Foundation
 import SwiftUI
 
 extension ConversationStore {
+    // MARK: - Streaming subscription
+
     @discardableResult
     func bindStreaming(agentId: String, workspaceId: String?) -> Int {
         if streamingEventsActive, self.agentId == agentId, self.workspaceId == workspaceId {
@@ -41,6 +43,8 @@ extension ConversationStore {
         liveTranscript.resumeSnapshotWaiters()
         clearPendingQuestionRecovery()
     }
+
+    // MARK: - Live chat subscription
 
     func subscribeLiveChat(agentId: String, workspaceId: String? = nil) async {
         bindAgent(agentId)

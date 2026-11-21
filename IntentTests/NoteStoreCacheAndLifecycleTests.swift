@@ -173,6 +173,8 @@ extension NoteStoreIntegrationTests {
 }
 
 extension NoteStoreIntegrationTests {
+    // MARK: - note:deleted event triggers onNoteChanged
+
     @Test func noteDeletedEventTriggersOnNoteChanged() async throws {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -187,6 +189,8 @@ extension NoteStoreIntegrationTests {
         ])
         try await waitUntil("onNoteChanged") { called }
     }
+
+    // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
 
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()
@@ -208,6 +212,8 @@ extension NoteStoreIntegrationTests {
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
     }
+
+    // MARK: - hasLoaded gating (empty state waits for first completed load)
 
     @Test func hasLoadedFalseUntilFirstFetchSucceeds() async throws {
         let fake = FakeConnectionManager()

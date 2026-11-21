@@ -65,6 +65,8 @@ struct ConnectionFailureViewTests {
         ))
     }
 
+    // MARK: - Auto-retry decision
+
     @Test func shouldAutoRetryOnlyForOrdinaryAutomaticFailures() {
         #expect(ConnectionFailureView.shouldAutoRetry(
             retryPolicy: .automaticConnection,
@@ -91,6 +93,8 @@ struct ConnectionFailureViewTests {
         #expect(ConnectionFailureView.retryBackoff(attempt: 5) == .seconds(30))
         #expect(ConnectionFailureView.retryBackoff(attempt: 10) == .seconds(30))
     }
+
+    // MARK: - Auto-retry dial target (window model v2)
 
     private static func makeConnection(port: Int) -> StoredConnection {
         StoredConnection(

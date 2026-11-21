@@ -9,6 +9,8 @@ struct LaunchPhaseTimelineTests {
         var started = false
     }
 
+    // MARK: - Cancellation
+
     @Test func cancelledDelayLeavesLaterStageUnreached() async throws {
         let probe = Probe()
         let task = Task {
@@ -62,6 +64,8 @@ struct LaunchPhaseTimelineTests {
         let result = await task.result
         #expect(throws: CancellationError.self) { try result.get() }
     }
+
+    // MARK: - Ordinary timeline
 
     @Test func delayCompletesWhenNotCancelled() async throws {
         let start = ContinuousClock.now

@@ -2,6 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
+// MARK: - Turn boundaries landing during the initial load
+
 extension ConversationStoreTests {
     @Test func turnBoundaryDuringInitialLoadRefreshesTheMarkerWithoutReplay() async throws {
         let fake = FakeConnectionManager()

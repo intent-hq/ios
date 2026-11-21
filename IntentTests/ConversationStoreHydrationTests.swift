@@ -41,6 +41,8 @@ extension ConversationStoreIntegrationTests {
         try await waitUntil("chat.subscribe handler registration") { fake.hasSubscriptionHandler(id: "sub-1") }
     }
 
+    // MARK: - Slim projection (PROTOCOL §5.5) + block hydration
+
     @Test func subscribeLiveChatRequestsSlimProjection() async {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)

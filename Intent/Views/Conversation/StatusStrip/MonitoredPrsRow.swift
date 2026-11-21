@@ -96,6 +96,8 @@ struct MonitoredPrsRow: View {
         .accessibilityIdentifier("monitoredPr.retry")
     }
 
+    // MARK: - Chip
+
     @ViewBuilder
     private func monitorChip(_ monitor: MonitoredPr) -> some View {
         Menu {
@@ -193,6 +195,8 @@ struct MonitoredPrsRow: View {
               let name = workspace.repositoryName else { return nil }
         return "\(owner)/\(name)"
     }
+
+    // MARK: - Display helpers (pure, unit-tested)
 
     static func chipLabel(_ monitor: MonitoredPr, workspaceRepo: String?) -> String {
         let number = "#\(monitor.prNumber)"

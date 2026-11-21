@@ -64,6 +64,8 @@ extension ConversationViewModel {
         await store.stopStreaming(agentId: agentId)
     }
 
+    // MARK: - Queue management
+
     func editQueuedMessage(messageId: String, content: String) async {
         do {
             try await store.editQueuedMessage(agentId: agentId, messageId: messageId, content: content)

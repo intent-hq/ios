@@ -6,6 +6,8 @@ import os
 import Testing
 
 extension ConnectionManagerTests {
+    // MARK: - Subscription Push Routing
+
     @Test @MainActor func registerSubscriptionHandlerStoresHandler() {
         let manager = ConnectionManager.shared
         var receivedPush: SubscriptionPush?
@@ -214,6 +216,8 @@ extension ConnectionManagerTests {
         manager.removeEventHandler(id: handlerId)
         manager.unregisterSubscriptionHandler(id: "test-sub-6")
     }
+
+    // MARK: - Unrouted push buffering (dropped seq-0 snapshot race)
 
     @Test @MainActor func bufferedPushesReplayedInOrderOnRegistration() {
         let manager = ConnectionManager.shared

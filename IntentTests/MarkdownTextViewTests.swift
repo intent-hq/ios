@@ -103,6 +103,8 @@ struct MarkdownTextViewTests {
         #expect(replaced(text) == text)
     }
 
+    // MARK: - Attachment tap routing
+
     @Test func tappedIntentFileImageAttachmentYieldsItsImage() {
         let image = UIImage()
         let attachment = AnyAttachment(IntentFileImageAttachment(image: image, altText: "alt"))

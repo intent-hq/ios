@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 extension ModelsTests {
+    // MARK: - SpecialistInfo wire decoding (specialist.list)
+
     @Test func specialistInfoWireDecodesResolvedFields() throws {
         let info = SpecialistInfo(wire: [
             "id": "implementor",
@@ -146,6 +148,8 @@ extension ModelsTests {
 }
 
 extension ModelsTests {
+    // MARK: - TaskDisplayStatus (PROTOCOL §5.4 task-status vocabulary)
+
     @Test func taskDisplayStatusParsesFullVocabulary() {
         #expect(TaskDisplayStatus(wire: "not_started") == .notStarted)
         #expect(TaskDisplayStatus(wire: "waiting") == .waiting)
@@ -292,6 +296,8 @@ extension ModelsTests {
         #expect(restatused?.unmetDependsOn == ["dep-a"])
         #expect(restatused?.estimatedEffort == "30m")
     }
+
+    // MARK: - Slim note.list projection (PROTOCOL §5.2 projection: "slim")
 
     @Test func noteParsesSlimProjectionFields() {
         let note = Note.parseNote([

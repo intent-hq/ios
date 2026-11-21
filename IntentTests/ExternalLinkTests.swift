@@ -9,6 +9,8 @@ struct ExternalLinkTests {
         "Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift"
     ]
 
+    // MARK: - Accepted: absolute http/https with a host
+
     @Test(arguments: [
         "https://github.com/octo/repo/pull/12",
         "http://example.com",
@@ -27,6 +29,8 @@ struct ExternalLinkTests {
         let url = ExternalLink.url(from: "https://example.com/a/b?x=1#y")
         #expect(url?.absoluteString == "https://example.com/a/b?x=1#y")
     }
+
+    // MARK: - Rejected: unsafe, non-web, or malformed
 
     @Test(arguments: [
         "javascript:alert(1)",
@@ -65,6 +69,8 @@ struct ExternalLinkTests {
     @Test func rejectsNil() {
         #expect(ExternalLink.url(from: nil) == nil)
     }
+
+    // MARK: - Call sites route through the shared helper
 
     @Test func externalLinkCallSitesUseTheSharedAllowlist() throws {
         let inputs = try TestBundleInputs.current()

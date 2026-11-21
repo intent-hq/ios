@@ -10,6 +10,8 @@ struct CommentStoreIntegrationTests {
         try await fake.waitForRequests("comment.subscribe", count: 2)
     }
 
+    // MARK: - subscribeOnConnect
+
     @Test func subscribeOnConnect() async throws {
         let fake = FakeConnectionManager()
         let store = CommentStore(connectionManager: fake)
@@ -21,6 +23,8 @@ struct CommentStoreIntegrationTests {
         #expect(fake.didCallMethod("comment.subscribe"))
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
     }
+
+    // MARK: - contiguousDeltaAdvancesState
 
     @Test func contiguousDeltaAdvancesState() async throws {
         let fake = FakeConnectionManager()
@@ -74,6 +78,8 @@ struct CommentStoreIntegrationTests {
         #expect(store.threads.count == 2)
     }
 
+    // MARK: - gapTriggersResnapshot
+
     @Test func gapTriggersResnapshot() async throws {
         let fake = FakeConnectionManager()
         let store = CommentStore(connectionManager: fake)
@@ -122,6 +128,8 @@ struct CommentStoreIntegrationTests {
         #expect(!fake.hasSubscriptionHandler(id: "sub-A"))
     }
 
+    // MARK: - connectionLossClearsLiveThenReconnectResubscribes
+
     @Test func connectionLossClearsLiveThenReconnectResubscribes() async throws {
         let fake = FakeConnectionManager()
         let store = CommentStore(connectionManager: fake)
@@ -160,6 +168,8 @@ struct CommentStoreIntegrationTests {
         #expect(fake.didCallMethod("comment.subscribe"))
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
+
+    // MARK: - crossIdPushIsolation
 
     @Test func crossIdPushIsolation() async throws {
         let fake = FakeConnectionManager()
@@ -200,6 +210,8 @@ struct CommentStoreIntegrationTests {
         #expect(store.threads[0].id == "t1")
         #expect(!fake.hasSubscriptionHandler(id: "sub-B"))
     }
+
+    // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
 
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()

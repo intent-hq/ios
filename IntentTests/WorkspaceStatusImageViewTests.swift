@@ -60,6 +60,8 @@ struct WorkspaceStatusImageViewTests {
         #expect(Layout.accessibilityLabel == "Workspace status image")
     }
 
+    // MARK: - Hosted: a superseded fetch must not overwrite its replacement
+
     @Test(
         .enabled(
             Comment(

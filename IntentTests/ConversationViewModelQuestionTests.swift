@@ -6,6 +6,8 @@ import Testing
 import UIKit
 
 extension ConversationViewModelTests {
+    // MARK: - Agent Q&A pending questions (wizard glue)
+
     @Test func pendingQuestionsDerivedFromLastAssistant() throws {
         let viewModel = makeVM()
         viewModel.store.messages = [
@@ -279,6 +281,8 @@ extension ConversationViewModelTests {
         #expect(viewModel.isStreaming == false)
         #expect(viewModel.pendingQuestions != nil, "questions re-pend after failure")
     }
+
+    // MARK: - Sticky wizard on the daemon marker (PROTOCOL §5.5 pendingQuestionsMessageId)
 
     @Test func pendingQuestionsStaysWhileStreamingWhenMarkerNamesQuestionRow() throws {
         let viewModel = makeVM()

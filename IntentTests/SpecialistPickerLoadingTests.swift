@@ -12,6 +12,8 @@ extension SpecialistPickerSelectionTests {
         let settled: SpecialistPickerView.SettledLoads
     }
 
+    // MARK: - Loading states against the session store (cached vs. cold path)
+
     private func configureStoreResponses(_ fake: FakeConnectionManager) {
         fake.responseMap["specialist.list"] = [
             "specialists": [

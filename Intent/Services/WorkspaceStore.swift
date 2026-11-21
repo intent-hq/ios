@@ -49,6 +49,8 @@ import Observation
         }
     }
 
+    // MARK: - Connection observation
+
     private func observeConnection() {
         connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
@@ -71,6 +73,8 @@ import Observation
         subscribeToEvents()
         await subscribeLiveState(generation: liveSubscriptionGeneration)
     }
+
+    // MARK: - Fetch
 
     func fetchIfNeeded() async {
         guard lastUpdated == nil || fetchNeedsRefresh else { return }
@@ -171,6 +175,8 @@ import Observation
         workspaces = parsed
     }
 
+    // MARK: - Upsert
+
     func addOrUpdate(_ workspace: Workspace) {
         guard workspace.id != Workspace.chiefWorkspaceId else { return }
         if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
@@ -199,6 +205,8 @@ import Observation
 }
 
 extension WorkspaceStore {
+    // MARK: - Event subscription
+
     private func subscribeToEvents() {
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)

@@ -6,6 +6,8 @@ import Testing
 
 @MainActor
 struct FakeConnectionManagerTests {
+    // MARK: - Connection State
+
     @Test func connectionStatePublisher() {
         let fake = FakeConnectionManager()
         var states: [ConnectionState] = []
@@ -62,6 +64,8 @@ struct FakeConnectionManagerTests {
         #expect(fake.updateCachedCredentialsLog.first?.certFingerprint == "cached-cert")
         #expect(fake.updateCachedCredentialsLog.first?.tcAddress == "cached-tailnet.example")
     }
+
+    // MARK: - Request/Response Mocking
 
     @Test func requestReturnsConfiguredResponse() async throws {
         let fake = FakeConnectionManager()
@@ -122,6 +126,8 @@ struct FakeConnectionManagerTests {
         #expect(!fake.didCallMethod("method3"))
     }
 
+    // MARK: - Legacy Event Handlers
+
     @Test func legacyEventHandlerRegistration() {
         let fake = FakeConnectionManager()
 
@@ -142,6 +148,8 @@ struct FakeConnectionManagerTests {
         fake.deliverEvent(method: "note.deleted", params: ["noteId": "note-2"])
         #expect(receivedEvents.count == 1)
     }
+
+    // MARK: - Subscription Push Routing
 
     @Test func subscriptionHandlerRegistrationAndDelivery() {
         let fake = FakeConnectionManager()
@@ -190,6 +198,8 @@ struct FakeConnectionManagerTests {
         #expect(receivedA.count == 1)
         #expect(receivedB.count == 1)
     }
+
+    // MARK: - Bounded condition waits (ios#261)
 
     private static let shortTimeoutMilliseconds = 20
 

@@ -43,6 +43,8 @@ struct BackgroundHookStoreTests {
         return dict
     }
 
+    // MARK: - Model parsing
+
     @Test func parsesFullHook() throws {
         let hook = try #require(BackgroundHook.parseHook(makeHookDict()))
         #expect(hook.hookId == "hook-1")
@@ -90,6 +92,8 @@ struct BackgroundHookStoreTests {
         #expect(BackgroundHook.parseHook(makeHookDict(state: "someFutureState")) == nil)
     }
 
+    // MARK: - Detail lines (BackgroundHooksRow pure helpers)
+
     @Test func detailLinesShowTimingRelativeToNow() throws {
         let hook = try #require(BackgroundHook.parseHook(makeHookDict()))
         let now = try #require(ISO8601DateFormatter.lenientDate(from: "2026-07-31T10:05:15Z"))
@@ -123,6 +127,8 @@ struct BackgroundHookStoreTests {
         #expect(DurationFormat.compact(2 * 86_400 + 3 * 3600) == "2d 3h")
         #expect(DurationFormat.compact(86_400 + 30 * 60) == "1d")
     }
+
+    // MARK: - Fold
 
     @Test func foldRunStartedSetsRunning() throws {
         let hook = try #require(BackgroundHook.parseHook(makeHookDict()))
@@ -197,6 +203,8 @@ struct BackgroundHookStoreTests {
 }
 
 extension BackgroundHookStoreTests {
+    // MARK: - Store integration (subscribe / events / RPC / reconnect)
+
     private func makeSubscribedStore(
         _ fake: FakeConnectionManager,
         hooks: [[String: Any]] = []
@@ -402,6 +410,8 @@ extension BackgroundHookStoreTests {
         #expect(store.hooks.isEmpty)
         #expect(fake.paramsForMethod("hook.list").count == 1)
     }
+
+    // MARK: - deinit removes event handler (monorepo#2211)
 
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()

@@ -28,6 +28,8 @@ struct AgentListPagingTests {
         return rows.compactMap { $0["id"] as? String }
     }
 
+    // MARK: - requestWholeReply
+
     @Test func wholeReplyJoinsEveryPageUnderTheFirstEnvelope() async throws {
         var sent: [[String: Any]] = []
         let replies = [
@@ -117,6 +119,8 @@ struct AgentListPagingTests {
         #expect(calls == PagedReads.maxPages)
     }
 
+    // MARK: - requestAgentList
+
     @Test func agentListRepeatsTheVariantOnEveryPage() async throws {
         let fake = FakeConnectionManager()
         fake.responseQueueMap["agent.list"] = [
@@ -143,6 +147,8 @@ struct AgentListPagingTests {
         }
         #expect(fake.paramsForMethod("agent.list").count == 1)
     }
+
+    // MARK: - AgentStore
 
     @Test func agentStoreTopLevelReadPublishesEveryPage() async {
         let fake = FakeConnectionManager()
@@ -246,6 +252,8 @@ struct AgentListPagingTests {
         #expect(sent.allSatisfy { $0["nextToken"] == nil })
         #expect(store.agents.map(\.id).sorted() == ["agent-5", "agent-6"])
     }
+
+    // MARK: - AssistantStore
 
     @Test func assistantThreadsComeFromEveryPage() async {
         let fake = FakeConnectionManager()

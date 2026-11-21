@@ -70,6 +70,8 @@ final class InviteJoinModel {
         run = nil
     }
 
+    // MARK: - Flow
+
     private func join() async {
         var transport: (any InviteTransport)?
         do {

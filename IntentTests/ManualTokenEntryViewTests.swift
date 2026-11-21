@@ -25,6 +25,8 @@ struct ManualTokenEntryViewTests {
         #expect(outcome == .abort(message: ProbeResult.noCertificate.abortMessage))
     }
 
+    // MARK: - Failure stage and cause (ios#233): each failure names the
+
     @Test @MainActor func everyFailureStageAbortsWithADistinctMessage() {
         let refused = FailureCause(domain: .posix, code: POSIXErrorCode.ECONNREFUSED.rawValue)
         let tls = FailureCause(domain: .tls, code: -9836)
@@ -164,6 +166,8 @@ struct ManualTokenEntryViewTests {
 }
 
 extension ManualTokenEntryViewTests {
+    // MARK: - Trust fingerprint extraction (the capture path of the probe's
+
     private static let fixtureCertDERBase64 = """
     MIIBrTCCAVOgAwIBAgIUR7S/oedy6Qg4laIDRfAbIuYBqn8wCgYIKoZIzj0EAwIw\
     LDEqMCgGA1UEAwwhQ2VydEZpbmdlcnByaW50UHJvYmUgVGVzdCBGaXh0dXJlMB4X\
@@ -199,6 +203,8 @@ extension ManualTokenEntryViewTests {
         #expect(CertFingerprintProbe.fingerprint(fromServerTrust: trust)
             == WebSocketConnection.fingerprint(ofCertificate: der))
     }
+
+    // MARK: - Live TLS handshake (regression for the verify-block MainActor
 
     nonisolated private static let fixtureIdentityP12Base64 = """
     MIIDwgIBAzCCA4gGCSqGSIb3DQEHAaCCA3kEggN1MIIDcTCCAmcGCSqGSIb3DQEH\

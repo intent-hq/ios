@@ -8,6 +8,8 @@ struct IntentFileLinkTests {
         return IntentFileLink.parse(url)
     }
 
+    // MARK: - parse: accepted forms
+
     @Test func shortFormParsesPathWithoutWorkspace() {
         let link = parse("intent://local/file/foo.png")
         #expect(link == IntentFileLink(workspaceId: nil, path: "foo.png"))
@@ -33,6 +35,8 @@ struct IntentFileLinkTests {
         #expect(link == IntentFileLink(workspaceId: nil, path: "file/foo.png"))
     }
 
+    // MARK: - parse: rejected forms
+
     @Test func noteAndTaskLinksAreNotFileLinks() {
         #expect(parse("intent://local/note/abc-123") == nil)
         #expect(parse("intent://local/task/abc-123") == nil)
@@ -50,6 +54,8 @@ struct IntentFileLinkTests {
         #expect(parse("intent://local/ws-1/file") == nil)
         #expect(parse("intent://local") == nil)
     }
+
+    // MARK: - parse: traversal-shaped paths (desktop parser parity)
 
     @Test func dotDotAndDotSegmentsAreRejected() {
         #expect(parse("intent://local/file/../secret.png") == nil)
@@ -73,6 +79,8 @@ struct IntentFileLinkTests {
     @Test func backslashSegmentsAreRejected() {
         #expect(parse("intent://local/file/a%5Cb.png") == nil)
     }
+
+    // MARK: - isImage allowlist
 
     @Test func allowlistedImageExtensionsAreImages() {
         for ext in ["png", "jpg", "jpeg", "gif", "webp"] {

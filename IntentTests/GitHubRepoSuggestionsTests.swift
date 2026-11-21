@@ -7,6 +7,8 @@ struct GitHubRepoSuggestionsTests {
         GitHubRepo(owner: owner, name: name, htmlUrl: nil, defaultBranch: nil, updatedAt: nil)
     }
 
+    // MARK: - Prefix filtering
+
     @Test func emptyQueryKeepsAllReposInOrder() {
         let repos = [repo("intent-hq", "intentd"), repo("intent-hq", "ios"), repo("panghy", "tools")]
         #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "") == repos)
@@ -32,6 +34,8 @@ struct GitHubRepoSuggestionsTests {
         let repos = [repo("intent-hq", "intentd")]
         #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "  intentd  ") == repos)
     }
+
+    // MARK: - Merged sections
 
     @Test func mergedPinsRecentsAboveOwnReposDeduped() {
         let recents = [repo("intent-hq", "monorepo"), repo("intent-hq", "intentd")]

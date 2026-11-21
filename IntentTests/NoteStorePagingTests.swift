@@ -33,6 +33,8 @@ struct NoteStorePagingTests {
         return (store, fake)
     }
 
+    // MARK: - note.list walk
+
     @Test func fetchNotesReadsEveryPage() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -67,6 +69,8 @@ struct NoteStorePagingTests {
         #expect(store.notes.isEmpty)
         #expect(!store.hasLoaded)
     }
+
+    // MARK: - Paged note.subscribe snapshot
 
     @Test func subscribeAsksForTheMaximumPage() async throws {
         let (_, fake) = try await liveStore()
@@ -158,6 +162,8 @@ struct NoteStorePagingTests {
         #expect(!store.snapshotFiller.isFilling)
         #expect(!fake.paramsForMethod("note.list").contains { $0["nextToken"] != nil })
     }
+
+    // MARK: - Large notes
 
     private static func cutNote(_ content: String, from offset: Int, to end: Int, total: Int, rev: Int = 4) -> [String: Any] {
         let bytes = Array(content.utf8)

@@ -8,6 +8,8 @@ struct PagedReadsTests {
 
     private static let noSleep: PagedReads.Sleep = { _ in }
 
+    // MARK: - requestAllPages
+
     @Test func requestAllPagesFollowsTokensAcrossPages() async throws {
         var sent: [[String: Any]] = []
         let replies: [[String: Any]] = [
@@ -108,6 +110,8 @@ struct PagedReadsTests {
             }
         }
     }
+
+    // MARK: - fillSnapshot
 
     private static func source(_ requestPage: @escaping @MainActor (String) async throws -> Any) -> PagedReads.PageSource {
         PagedReads.PageSource(field: "notes", requestPage: requestPage)

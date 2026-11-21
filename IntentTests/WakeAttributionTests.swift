@@ -2,6 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
+// MARK: - Hook wake attribution (PROTOCOL §5.40)
+
 struct HookWakeAttributionTests {
     @Test func extractsFromValidMetadata() {
         let attribution = HookWakeAttribution.from([
@@ -199,6 +201,8 @@ struct HookWakeAttributionTests {
         #expect(plain.hookWakeAttribution == nil)
     }
 }
+
+// MARK: - PR-monitor wake attribution (PROTOCOL §5.42)
 
 struct PrMonitorWakeAttributionTests {
     private func meta(_ extra: [String: AnyCodable] = [:]) -> [String: AnyCodable] {

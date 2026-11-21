@@ -279,10 +279,14 @@ extension MonitoredPrsRowTests {
         )
     }
 
+    // MARK: - Chip label
+
     @Test func chipLabelUnknownWorkspaceRepoFallsBackToBareNumber() {
         let monitor = makeMonitor(repo: "other/repo")
         #expect(MonitoredPrsRow.chipLabel(monitor, workspaceRepo: nil) == "#12")
     }
+
+    // MARK: - PR URL
 
     @Test func prUrlPrefersWireUrl() {
         let monitor = makeMonitor(url: "https://example.com/pr/12")
@@ -293,6 +297,8 @@ extension MonitoredPrsRowTests {
         let monitor = makeMonitor(url: nil)
         #expect(MonitoredPrsRow.prUrl(monitor) == "https://github.com/octo/repo/pull/12")
     }
+
+    // MARK: - Checks summary
 
     @Test func checksSummaryNilWithoutSnapshotOrChecks() {
         #expect(MonitoredPrsRow.checksSummary(makeMonitor()) == nil)
@@ -314,6 +320,8 @@ extension MonitoredPrsRowTests {
         ))
         #expect(MonitoredPrsRow.checksSummary(passing) == "4/4 passing")
     }
+
+    // MARK: - Approvals / threads summaries
 
     @Test func approvalsSummaryIncludesNeededWhenKnown() {
         let known = makeMonitor(snapshot: makeSnapshot(
@@ -346,6 +354,8 @@ extension MonitoredPrsRowTests {
         let many = makeMonitor(snapshot: makeSnapshot(threads: .init(unresolved: 3)))
         #expect(MonitoredPrsRow.threadsSummary(many) == "3 unresolved threads")
     }
+
+    // MARK: - Pending / detail lines
 
     @Test func pendingSummaryPluralizes() {
         #expect(MonitoredPrsRow.pendingSummary(makeMonitor()) == "No pending changes")
@@ -386,6 +396,8 @@ extension MonitoredPrsRowTests {
         let lines = MonitoredPrsRow.detailLines(monitor)
         #expect(lines == ["octo/repo#12", "No pending changes"])
     }
+
+    // MARK: - Merge summary / last change
 
     @Test func mergeSummaryPrefersBlockedReasonOverMergeable() {
         #expect(MonitoredPrsRow.mergeSummary(makeMonitor()) == nil)

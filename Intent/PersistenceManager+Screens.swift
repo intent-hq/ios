@@ -1,6 +1,8 @@
 import Foundation
 
 extension PersistenceManager {
+    // MARK: - Last Viewed Screen (keyed per backend)
+
     private static let lastScreensKey = "lastScreens"
     private static let lastScreenKey = "lastScreen"
     private static let lastWorkspaceIdKey = "lastWorkspaceId"
@@ -97,6 +99,8 @@ extension PersistenceManager {
     func loadCollapsedGroups(for mode: ViewMode) -> Set<String> {
         Set(defaults.stringArray(forKey: Self.collapsedGroupsKey(for: mode)) ?? [])
     }
+
+    // MARK: - Per-Workspace Tab
 
     private static let workspaceTabsKey = "workspaceTabs"
 

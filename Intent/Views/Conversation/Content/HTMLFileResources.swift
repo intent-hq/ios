@@ -261,6 +261,8 @@ final class HTMLFileResourceHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
+    // MARK: - Page byte budget
+
     private func reserve() async -> Admission {
         if waiters.isEmpty, let admission = admit() { return admission }
         let id = nextWaiterID

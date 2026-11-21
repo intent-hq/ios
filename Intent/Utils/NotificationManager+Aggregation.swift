@@ -12,6 +12,8 @@ extension NotificationManager {
         let connectionId: UUID
     }
 
+    // MARK: - Cross-session aggregation
+
     func attachSessionObserver(for session: BackendSession) {
         guard let backendID = session.backendID else { return }
         guard observedSessions[backendID] == nil else { return }

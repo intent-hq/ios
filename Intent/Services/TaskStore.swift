@@ -60,6 +60,8 @@ import Observation
         await subscribeLiveState(generation: generation)
     }
 
+    // MARK: - Fetch
+
     func fetchAll() async {
         await _fetchAll()
     }
@@ -89,6 +91,8 @@ import Observation
             AppLog.tasks.error("[TaskStore] Failed to fetch tasks: \(error)")
         }
     }
+
+    // MARK: - Event subscription
 
     private func subscribeToEvents() {
         if let handlerId = eventHandlerId {
@@ -181,6 +185,8 @@ import Observation
             ) {}
         }
     }
+
+    // MARK: - Event classification
 
     nonisolated static let handledChannels = ["task:"]
 

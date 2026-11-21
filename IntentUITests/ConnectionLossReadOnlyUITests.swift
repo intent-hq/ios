@@ -259,6 +259,8 @@ extension ConnectionLossUITests {
         capture(app, named: "read-only-questions")
     }
 
+    // MARK: - Helpers
+
     @MainActor @discardableResult
     func assertBanner(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
         let banner = app.buttons[LossFixture.bannerIdentifier]

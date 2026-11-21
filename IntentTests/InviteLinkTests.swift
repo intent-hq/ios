@@ -10,6 +10,8 @@ struct InviteLinkTests {
         try #require(URL(string: "intent://\(host)?\(query)"))
     }
 
+    // MARK: - Link parsing
+
     @Test func parsesTunnelOnlyLink() throws {
         let link = try #require(InviteLink.parse(try Self.url("v=1&port=5181&fp=\(Self.fingerprint)&inviteId=inv-1&secret=s3cret&tc=\(Self.tunnel)")))
         #expect(link.scope == .workspace)
@@ -65,6 +67,8 @@ struct InviteLinkTests {
         let url = try Self.url("port=5181&fp=\(Self.fingerprint)&inviteId=i&secret=s&tc=\(Self.tunnel)")
         #expect(UnopenableLink.reason(for: url) == nil)
     }
+
+    // MARK: - /invite responses
 
     static let workspacePreview: [String: Any] = [
         "workspaceId": "ws-1", "workspaceTitle": "Billing revamp", "hostname": "studio",

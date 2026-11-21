@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 extension GitHubRepoStoreTests {
+    // MARK: - fetchCachedBranches (github.branches.listCached)
+
     @Test func fetchCachedBranchesReadsListCached() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
@@ -49,6 +51,8 @@ extension GitHubRepoStoreTests {
         #expect(listing == nil)
         #expect(store.lastError == nil)
     }
+
+    // MARK: - loadBranchListing (per-session branch cache)
 
     @Test func loadBranchListingCachesAuthoritativeListing() async throws {
         let fake = FakeConnectionManager()
@@ -210,6 +214,8 @@ extension GitHubRepoStoreTests {
         #expect(store.cachedBranchListing(owner: "o", repo: "r") == nil)
     }
 
+    // MARK: - Reconnect (connection lifecycle, not manual invalidate)
+
     @Test func reconnectDuringColdBranchLoadClearsStateAndDropsOldCompletion() async throws {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
@@ -323,6 +329,8 @@ extension GitHubRepoStoreTests {
         await secondWarm.value
         #expect(fake.paramsForMethod("repo.warmCache").count == 2)
     }
+
+    // MARK: - warmRepoCache (repo.warmCache)
 
     @Test func warmRepoCacheSendsGithubUrlOncePerRepo() async throws {
         let fake = FakeConnectionManager()

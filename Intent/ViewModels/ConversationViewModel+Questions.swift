@@ -1,6 +1,8 @@
 import Foundation
 
 extension ConversationViewModel {
+    // MARK: - Agent Q&A pending questions
+
     func questionAttachments(for messageId: String) -> ConversationAttachmentPipeline {
         if let pipeline = questionAttachmentPipelines[messageId] { return pipeline }
         for supersededId in Array(questionAttachmentPipelines.keys) {
@@ -154,6 +156,8 @@ extension ConversationViewModel {
             dismissQuestionsError = DiagnosticErrorOwnership.alertMessage(for: error)
         }
     }
+
+    // MARK: - Suggested prompts parsing
 
     var suggestedPrompts: [String] {
         guard pendingQuestions == nil, !isPendingQuestionRecoveryLoading else { return [] }

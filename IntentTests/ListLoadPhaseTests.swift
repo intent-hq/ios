@@ -8,6 +8,8 @@ struct ListLoadPhaseTests {
         domain: "WebSocket", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
     )
 
+    // MARK: - LoadPhase
+
     @Test func phaseKeepsTheLastSuccessThroughARefreshAndItsFailure() {
         let loadedAt = Date(timeIntervalSince1970: 1)
         let idle = LoadPhase.idle
@@ -56,6 +58,8 @@ struct ListLoadPhaseTests {
         #expect(LoadPhase.loading(lastLoadedAt: loadedAt).failingDuringRead(message) == afterRefresh)
         #expect(LoadPhase.failed(message).beginning() == .loading(lastLoadedAt: nil), "plain beginning still drops it")
     }
+
+    // MARK: - NoteStore
 
     private func note(_ id: String) -> [String: Any] {
         ["id": id, "title": id, "content": "", "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
@@ -124,6 +128,8 @@ struct ListLoadPhaseTests {
         #expect(store.hasLoaded && store.loadPhase.failureMessage == nil)
     }
 
+    // MARK: - AgentStore
+
     @Test func agentsMoveFromNotStartedToFailedAndRetryToLoaded() async throws {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
@@ -156,6 +162,8 @@ struct ListLoadPhaseTests {
         await store._fetchAgents(workspaceId: "ws-1")
         #expect(store.loadPhase.lastLoadedAt == loadedAt, "a failed refresh keeps the empty state")
     }
+
+    // MARK: - WorkspaceStore
 
     @Test func workspacesMoveFromLoadingToLoadedOrEmpty() async throws {
         let fake = FakeConnectionManager()
@@ -209,6 +217,8 @@ struct ListLoadPhaseTests {
         store.forgetPublishedWorkspaces()
         #expect(store.loadPhase == .idle)
     }
+
+    // MARK: - Workspace list view model
 
     @Test func workspaceListReportsAFailureOnlyWhileNothingIsShown() async {
         let fake = FakeConnectionManager()

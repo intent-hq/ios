@@ -5,6 +5,8 @@ import Synchronization
 import Testing
 
 extension ConversationViewModelTests {
+    // MARK: - Missing-agent detection at load
+
     private static let shortSnapshotTimeoutMilliseconds = 50
     private static let shortSnapshotTimeout: Duration = .milliseconds(shortSnapshotTimeoutMilliseconds)
 
@@ -284,6 +286,8 @@ extension ConversationViewModelTests {
         #expect(viewModel.loadingStage == .receiving)
         #expect(stageChanges.withLock { $0 } == 1, "the forwarded stage invalidates the loading view")
     }
+
+    // MARK: - The chat channel is the transcript's only source
 
     @Test func transcriptLifecycleReadsOnlyChatSubscribeSnapshots() async throws {
         let (viewModel, fake) = makeLoadableVM()

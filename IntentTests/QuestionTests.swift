@@ -2,6 +2,8 @@ import Foundation
 @testable import Intent
 import Testing
 
+// MARK: - Shared fixtures
+
 private let kQuestionMime = "application/vnd.intent.question+json"
 
 private func questionJSON(
@@ -31,6 +33,8 @@ private func questionBlock(text: String, mimeType: String = kQuestionMime) -> Co
 private func parseQuestion(_ json: String) -> Question? {
     try? JSONDecoder().decode(Question.self, from: Data(json.utf8))
 }
+
+// MARK: - Resource block decoding
 
 struct ResourceBlockDecodingTests {
     @Test func decodesResourceBlock() throws {
@@ -76,6 +80,8 @@ struct ResourceBlockDecodingTests {
         #expect(Question.question(from: blocks[1])?.header == "Auth method")
     }
 }
+
+// MARK: - Question payload validation (FE `isQuestion` parity)
 
 struct QuestionValidationTests {
     @Test func decodesFullPayload() throws {
@@ -175,6 +181,8 @@ struct QuestionValidationTests {
     }
 }
 
+// MARK: - Parsing helpers (MIME-only strip + question(from:))
+
 struct QuestionParsingHelperTests {
     @Test func isQuestionResourceBlockIsMimeOnly() {
         #expect(Question.isQuestionResourceBlock(questionBlock(text: "garbage")))
@@ -231,6 +239,8 @@ struct QuestionParsingHelperTests {
         #expect(Question.question(from: block) == nil)
     }
 }
+
+// MARK: - Marker recovery exclusivity (visionOS composerVisible invariant)
 
 struct PendingQuestionRecoveryExclusivityTests {
     private let markedId = "a-marked"
@@ -309,6 +319,8 @@ struct PendingQuestionRecoveryExclusivityTests {
     }
 }
 
+// MARK: - Answer flattening (FE `answer-message.ts` parity)
+
 struct AnswerFlatteningTests {
     private let question = Question(
         attachmentId: "tar-0123456789ab",
@@ -380,6 +392,8 @@ struct AnswerFlatteningTests {
     }
 }
 
+// MARK: - Free-text field auto-grow clamp
+
 struct QuestionStepFreeTextHeightTests {
     private let insets = Constants.Conversation.Composer.textContainerInset * 2
     private let lineHeight: CGFloat = 20
@@ -401,6 +415,8 @@ struct QuestionStepFreeTextHeightTests {
         #expect(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount == 6)
     }
 }
+
+// MARK: - Wizard footer Next button visibility
 
 struct QuestionWizardShowsNextTests {
     @Test func intermediateSingleSelectWithoutFreeTextHidesNext() {

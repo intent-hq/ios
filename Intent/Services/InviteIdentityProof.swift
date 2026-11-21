@@ -114,6 +114,8 @@ enum InviteIdentityProof {
         }
     }
 
+    // MARK: - Account reads
+
     private static func collaborationAccount(for pin: InvitePin, on daemon: any InviteOwnDaemon) async throws -> InviteAccount? {
         var wanted: (provider: String, host: String) = ("github", InviteIdentity.githubHost)
         if case .pinned(let identity) = pin {
@@ -194,6 +196,8 @@ enum InviteIdentityProof {
             return [:]
         }
     }
+
+    // MARK: - Helpers
 
     private static func target(provider: String, host: String) -> [String: Any] {
         provider == "github" ? ["provider": provider] : ["provider": provider, "host": host]

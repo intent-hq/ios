@@ -28,6 +28,8 @@ struct TaskStoreIntegrationTests {
         #expect(store.tasks.count == 1)
     }
 
+    // MARK: - subscribeOnConnect
+
     @Test func subscribeOnConnect() async throws {
         let fake = FakeConnectionManager()
         let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
@@ -57,6 +59,8 @@ struct TaskStoreIntegrationTests {
 
         #expect(store.tasks.count == 1)
     }
+
+    // MARK: - contiguousDeltaAdvancesState
 
     @Test func contiguousDeltaAdvancesState() async throws {
         let fake = FakeConnectionManager()
@@ -90,6 +94,8 @@ struct TaskStoreIntegrationTests {
 
         #expect(store.tasks.count == 2)
     }
+
+    // MARK: - gapTriggersResnapshotWithBaselineRefetch
 
     @Test func gapTriggersResnapshotWithBaselineRefetch() async throws {
         let fake = FakeConnectionManager()
@@ -127,6 +133,8 @@ struct TaskStoreIntegrationTests {
         withExtendedLifetime(store) {}
     }
 
+    // MARK: - connectionLossClearsLiveThenReconnectResubscribes
+
     @Test func connectionLossClearsLiveThenReconnectResubscribes() async throws {
         let fake = FakeConnectionManager()
         let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
@@ -159,6 +167,8 @@ struct TaskStoreIntegrationTests {
         #expect(fake.didCallMethod("task.list"))
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
+
+    // MARK: - legacyEventSuppressedWhileLive
 
     @Test func legacyEventSuppressedWhileLive() async throws {
         let fake = FakeConnectionManager()
@@ -195,6 +205,8 @@ struct TaskStoreIntegrationTests {
         }
     }
 
+    // MARK: - crossIdPushIsolation
+
     @Test func crossIdPushIsolation() async throws {
         let fake = FakeConnectionManager()
         let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
@@ -228,6 +240,8 @@ struct TaskStoreIntegrationTests {
         #expect(!fake.hasSubscriptionHandler(id: "sub-B"))
     }
 
+    // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
+
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()
         var store: TaskStore? = TaskStore(workspaceId: "ws-1", connectionManager: fake)
@@ -249,6 +263,8 @@ struct TaskStoreIntegrationTests {
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
     }
+
+    // MARK: - Event allowlist (non-live fallback)
 
     private func taskEvent(_ type: String, workspaceId: String = "ws-1") -> [String: Any] {
         ["event": ["type": type, "workspaceId": workspaceId, "noteId": "task-1"] as [String: Any]]

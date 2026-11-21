@@ -21,9 +21,13 @@ extension AppCoordinatorTests {
         #expect(changeCount.withLock { $0 } == 1)
     }
 
+    // MARK: - Per-workspace navigation state restoration
+
     func cleanupLastScreen() {
         persistence.clearLastScreen(for: Self.windowBackend.connectionID)
     }
+
+    // MARK: - Connection routing
 
     func resetConnectionState() {
         let persistenceManager = persistence
@@ -235,6 +239,8 @@ extension AppCoordinatorTests {
 }
 
 extension AppCoordinatorTests {
+    // MARK: - Window-scoped Settings / Log Off (spec lifecycle decision 2a)
+
     @Test @MainActor func windowConnection_showsBoundBackendNotLastUsed() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -345,6 +351,8 @@ extension AppCoordinatorTests {
         #expect(!coordinator.pairingShowsSavedConnections)
     }
 
+    // MARK: - Removed backend window close fallback (spec decision 2)
+
     @Test func removedWindowCloseDismissesWhenOtherWindowsExist() {
         #expect(RemovedWindowCloseAction.forWindowCounts(
             connectedWindowScenes: 2,
@@ -390,6 +398,8 @@ extension AppCoordinatorTests {
             "With a window on another backend surviving, every removed-backend window dismisses"
         )
     }
+
+    // MARK: - Window retarget policy (window model v2)
 
     @Test func retargetRouteSwitchesBoundWindowInPlaceOnIPad() {
         #expect(

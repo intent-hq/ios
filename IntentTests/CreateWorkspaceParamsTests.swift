@@ -50,6 +50,8 @@ struct CreateWorkspaceParamsTests {
         )
     }
 
+    // MARK: - agentId regression (agent IDs are server-assigned)
+
     @Test func initialAgentOmitsAgentId() throws {
         let params = buildParams(specialist: makeSpecialist(), model: makeModel(), message: "Do the thing")
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
@@ -62,6 +64,8 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["agentId"] == nil)
         #expect(initialAgent["prompt"] as? String == "Just a prompt")
     }
+
+    // MARK: - Base params (githubUrl-based cache-hydrated creation)
 
     @Test func baseParamsAlwaysPresent() {
         let params = buildParams()
@@ -90,6 +94,8 @@ struct CreateWorkspaceParamsTests {
         let params = buildParams(message: "   \n  ")
         #expect(params["initialAgent"] == nil)
     }
+
+    // MARK: - Optional message (creation without a prompt, matching cloudlands-fe)
 
     @Test func promptOmittedWithSpecialistAndEmptyMessage() throws {
         let params = buildParams(specialist: makeSpecialist(), message: "")
@@ -136,6 +142,8 @@ struct CreateWorkspaceParamsTests {
         #expect(CreateWorkspaceView.usesExpandedFormLayout(for: .accessibility5))
     }
 
+    // MARK: - Specialist / prompt / model behavior
+
     @Test func specialistIdAndTrimmedPromptCarried() throws {
         let params = buildParams(specialist: makeSpecialist(id: "verifier"), message: "  Review the diff  ")
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
@@ -170,6 +178,8 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["model"] as? String == "opus4.6")
     }
 
+    // MARK: - Reasoning contract (protocol §5.1 / §5.30)
+
     @Test(arguments: [false, true])
     func autoReasoningOmitsOverrideAndPreservesModelDefault(explicitModel: Bool) throws {
         let params = buildParams(
@@ -197,6 +207,8 @@ struct CreateWorkspaceParamsTests {
         ])
         #expect(params["idempotencyKey"] as? String == "key-123")
     }
+
+    // MARK: - Provider emission/omission
 
     @Test func enabledAuggieOverridesDifferentSpecialistProvider() throws {
         let params = buildParams(

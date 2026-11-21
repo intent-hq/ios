@@ -7,6 +7,8 @@ import UIKit
 
 @MainActor
 struct ConversationViewModelTests {
+    // MARK: - Helpers
+
     func makeVM(workspaceId: String = "test-ws") -> ConversationViewModel {
         let connection = FakeConnectionManager()
         let suiteName = "ConversationViewModelTests.\(UUID().uuidString)"
@@ -68,6 +70,8 @@ struct ConversationViewModelTests {
         )
     }
 
+    // MARK: - Transcript membership & observation
+
     @Test func transcriptMembershipTracksMutationsAndReset() {
         let viewModel = makeVM()
         viewModel.store.messages = [textMessage(role: .assistant, text: "First", id: "first")]
@@ -110,6 +114,8 @@ struct ConversationViewModelTests {
         #expect(changes.withLock { $0 } == 2)
         #expect(viewModel.filteredMessageIDs == ["other"])
     }
+
+    // MARK: - queuedMessages display filter
 
     func queuedEntry(
         id: String,
@@ -185,6 +191,8 @@ struct ConversationViewModelTests {
         ]
         #expect(viewModel.queuedMessages.isEmpty)
     }
+
+    // MARK: - suggestedPrompts
 
     @Test func suggestedPromptsParsesSinglePrompt() {
         let viewModel = makeVM()

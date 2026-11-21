@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 extension MonitoredPrStoreTests {
+    // MARK: - Fold
+
     @Test func foldRegisteredSetsActive() throws {
         let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict(state: "completed")))
         let result = MonitoredPrStore.foldMonitorEvent(
@@ -133,6 +135,8 @@ extension MonitoredPrStoreTests {
 }
 
 extension MonitoredPrStoreTests {
+    // MARK: - Store integration (subscribe / events / RPC / reconnect)
+
     private func makeSubscribedStore(
         _ fake: FakeConnectionManager,
         monitors: [[String: Any]] = []
@@ -365,6 +369,8 @@ extension MonitoredPrStoreTests {
         #expect(store.monitors.isEmpty)
         #expect(fake.paramsForMethod("prMonitor.list").count == 1)
     }
+
+    // MARK: - deinit removes event handler (monorepo#2211)
 
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()

@@ -4,6 +4,8 @@ import Observation
 import Synchronization
 import Testing
 
+// MARK: - Unread attention flag tests
+
 @MainActor
 struct WorkspaceStoreAttentionTests {
     private func makeWorkspace(id: String, attention: String?) -> Workspace {
@@ -72,6 +74,8 @@ struct WorkspaceStoreAttentionTests {
         )
     }
 }
+
+// MARK: - Waiting flag tests (protocol 6.17)
 
 @MainActor
 struct WorkspaceStoreWaitingTests {
@@ -206,6 +210,8 @@ struct WorkspaceStoreWaitingTests {
     }
 }
 
+// MARK: - Fetch publish-order regression tests
+
 @MainActor
 struct WorkspaceStorePublishOrderTests {
     @Test func publishFetchedWorkspaces_observerSeesLastUpdatedAtInvalidation() throws {
@@ -248,6 +254,8 @@ struct WorkspaceStorePublishOrderTests {
         #expect(store.lastUpdated != nil)
     }
 }
+
+// MARK: - Per-connection routing
 
 @MainActor
 struct WorkspaceStoreConnectionRoutingTests {

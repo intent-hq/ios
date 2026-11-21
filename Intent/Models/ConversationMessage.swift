@@ -61,6 +61,8 @@ nonisolated struct ToolCall: Identifiable, Codable, Equatable {
         timestamp = try? container.decode(String.self, forKey: .timestamp)
     }
 
+    // MARK: - Convenience initializer
+
     init(
         id: String,
         name: String,
@@ -342,6 +344,8 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         self.metadata = metadata
         self.metadataWasProvided = metadataWasProvided || !metadata.isEmpty
     }
+
+    // MARK: - Parsing from dictionary (JSON-RPC response)
 
     static func parseMessage(_ dict: [String: Any]) -> Self? {
         guard JSONSerialization.isValidJSONObject(dict),

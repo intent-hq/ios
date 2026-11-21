@@ -315,6 +315,8 @@ private enum ScannerAvailability {
     case unavailable
 }
 
+// MARK: - Camera Preview
+
 struct QRCameraPreview: UIViewControllerRepresentable {
     let onCodeScanned: (String) -> Void
     let onUnavailable: () -> Void

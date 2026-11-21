@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - Sidebar selection
+
 extension WorkspaceDetailView {
     func resetAgentWorkspace(to workspaceId: String) {
         if agentStore.workspaceId != workspaceId { viewModel.reset() }

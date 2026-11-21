@@ -79,6 +79,8 @@ struct TaskMetadataHeaderView: View {
         }
     }
 
+    // MARK: - Rows
+
     private func row(_ label: String, @ViewBuilder content: () -> some View) -> some View {
         HStack(alignment: .top, spacing: Constants.Notes.Metadata.rowSpacing) {
             Text(label)

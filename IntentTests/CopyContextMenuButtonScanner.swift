@@ -62,6 +62,8 @@ enum CopyContextMenuButtonScanner {
         return SwiftSourceLexer.text(bytes[...])
     }
 
+    // MARK: - Marker reachability
+
     private static func reachesMarker(_ text: String, helpers: Set<String>) -> Bool {
         text.contains(marker) || helpers.contains { references(text, name: $0) }
     }
@@ -149,6 +151,8 @@ enum CopyContextMenuButtonScanner {
         }
         return modifiers
     }
+
+    // MARK: - Button calls
 
     private static let buttonName = Array("Button".utf8)
     private static let moduleQualifier = Array("SwiftUI.".utf8)

@@ -38,6 +38,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         )
     }
 
+    // MARK: - Agent lifecycle events never bump lastActivity locally
     @Test(arguments: kAgentLifecycleEventTypes)
     func agentLifecycleEventLeavesLastActivityUntouched(eventType: String) {
         let store = WorkspaceStore(forTesting: true)
@@ -64,6 +65,8 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces.isEmpty)
     }
 
+    // MARK: - Unknown agent events are logged but don't update state
+
     @Test func unknownAgentEventLeavesLastActivityUntouched() {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-07-17T10:00:00Z")]
@@ -77,6 +80,8 @@ struct WorkspaceStoreAgentLifecycleTests {
 
         #expect(store.workspaces[0].lastActivity == "2026-07-17T10:00:00Z")
     }
+
+    // MARK: - Subscription.push race condition prevention
 
     @Test func snapshotPushBeforeSubscriptionIdReturnsIsProcessed() async {
         let store = WorkspaceStore(forTesting: true)
@@ -100,6 +105,8 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces[0].id == "ws-1")
         #expect(store.workspaces[0].title == "Test Workspace")
     }
+
+    // MARK: - addOrUpdate dedupe (workspace.create response vs subscription delta race, #1066)
 
     private func makeLiveStore(snapshot: [[String: Any]]) async -> WorkspaceStore {
         let store = WorkspaceStore(forTesting: true)

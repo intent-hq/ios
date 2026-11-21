@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 struct PairingPayloadTests {
+    // MARK: - Canonical daemon dialect (intentd pair)
+
     @Test func parsesCanonicalIntentdPairURI() {
         let payload = PairingPayload.parse(
             "intent://pair?v=1&host=192.168.1.10,10.0.0.5&port=5181&fp=aa:bb:cc:dd&token=abab1234"
@@ -21,6 +23,8 @@ struct PairingPayloadTests {
         #expect(payload?.certFingerprint == "de:ad:be:ef")
     }
 
+    // MARK: - Legacy desktop dialect
+
     @Test func parsesLegacyCertFingerprintParam() {
         let payload = PairingPayload.parse(
             "intent://pair?token=tok&host=192.168.1.42&port=5181&path=/ws&certFingerprint=01:02:03"
@@ -32,12 +36,16 @@ struct PairingPayloadTests {
         #expect(payload?.certFingerprint == "01:02:03")
     }
 
+    // MARK: - Precedence: fp= (canonical) wins over certFingerprint= (legacy)
+
     @Test func fpWinsWhenBothFingerprintParamsPresent() {
         let payload = PairingPayload.parse(
             "intent://pair?host=h&port=1&token=t&certFingerprint=11:11&fp=22:22"
         )
         #expect(payload?.certFingerprint == "22:22")
     }
+
+    // MARK: - No fingerprint
 
     @Test func parsesPayloadWithoutFingerprint() {
         let payload = PairingPayload.parse("intent://pair?host=h1&port=5181&token=t")
@@ -65,6 +73,8 @@ struct PairingPayloadTests {
         )
     }
 
+    // MARK: - Tolerated / ignored params
+
     @Test func toleratesVersionPathAndUnknownParams() {
         let payload = PairingPayload.parse(
             "intent://pair?v=1&path=/ws&future=x&host=h&port=5181&fp=aa&token=t"
@@ -72,6 +82,8 @@ struct PairingPayloadTests {
         #expect(payload != nil)
         #expect(payload?.certFingerprint == "aa")
     }
+
+    // MARK: - Tailcat tunnel address (tc=)
 
     @Test func parsesTcParamAsTunnelAddress() {
         let payload = PairingPayload.parse(
@@ -96,12 +108,16 @@ struct PairingPayloadTests {
         #expect(payload.tcAddress == nil)
     }
 
+    // MARK: - Multi-host list
+
     @Test func splitsMultiHostList() {
         let payload = PairingPayload.parse(
             "intent://pair?host=192.168.1.10,10.0.0.5,172.16.0.2&port=5181&fp=aa&token=t"
         )
         #expect(payload?.hosts == ["192.168.1.10", "10.0.0.5", "172.16.0.2"])
     }
+
+    // MARK: - Percent-encoded values
 
     @Test func decodesPercentEncodedValues() {
         let payload = PairingPayload.parse(
@@ -111,6 +127,8 @@ struct PairingPayloadTests {
         #expect(payload?.certFingerprint == "AA:BB:CC")
         #expect(payload?.token == "ab+cd==")
     }
+
+    // MARK: - Malformed payloads
 
     @Test func rejectsMalformedPayloads() {
         #expect(PairingPayload.parse("https://pair?host=h&port=1&token=t") == nil)
@@ -122,6 +140,8 @@ struct PairingPayloadTests {
         #expect(PairingPayload.parse("intent://pair?host=&port=1&token=t") == nil)
         #expect(PairingPayload.parse("not a uri") == nil)
     }
+
+    // MARK: - Display truncation
 
     @Test func truncatesLongTcAddressToTenCharsPlusEllipsis() {
         let shown = TcAddressDisplay.truncated("tc-abcdefghijklmnop")

@@ -3,6 +3,8 @@ import Foundation
 import Testing
 
 extension SyncedBackendConnectionMergeTests {
+    // MARK: - Tombstones
+
     @Test func tombstoneRemovesFingerprintMatch() {
         let existing = local()
         let result = SyncedBackendConnectionMerge.merge(
@@ -78,6 +80,8 @@ extension SyncedBackendConnectionMergeTests {
         #expect(!result.changed)
         #expect(result.connections == [existing])
     }
+
+    // MARK: - Absence and matching rules
 
     @Test func absenceFromRegistryNeverRemovesLocals() {
         let existing = local()

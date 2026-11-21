@@ -49,6 +49,8 @@ extension ConversationViewModelTests {
         #expect(vm.currentModelId == "opus")
     }
 
+    // MARK: - Model display name (conversation menu)
+
     @Test func modelDisplayNameResolvesNameFromCatalog() {
         let catalog = [
             ModelInfo(id: "sonnet4.5", name: "Sonnet 4.5 (balanced)", provider: "auggie"),

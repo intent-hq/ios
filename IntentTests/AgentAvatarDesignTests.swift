@@ -3,6 +3,8 @@ import SwiftUI
 import Testing
 
 struct AgentAvatarDesignTests {
+    // MARK: - Builtin specialist mapping
+
     @Test func mapsBuiltinSpecialistsToTheirDesigns() {
         let expected: [String: AgentAvatarDesign] = [
             "coordinator": .coordinator,
@@ -26,6 +28,8 @@ struct AgentAvatarDesignTests {
                 == AgentAvatarDesign.design(agentId: "agent-b", specialist: "implementor")
         )
     }
+
+    // MARK: - Icon resolution (PROTOCOL §5.11)
 
     @Test func iconResolvesAheadOfSpecialistMapAndFallback() {
         for icon in AgentAvatarDesign.builtinDesigns {
@@ -71,6 +75,8 @@ struct AgentAvatarDesignTests {
             #expect(!AgentAvatarDesign.isBuiltinDesign(value))
         }
     }
+
+    // MARK: - Fallback selection
 
     @Test func unknownSpecialistUsesFallbackDesign() {
         let design = AgentAvatarDesign.design(agentId: "agent-x", specialist: "quantum-entangler")
@@ -118,6 +124,8 @@ struct AgentAvatarDesignTests {
             )
         }
     }
+
+    // MARK: - Glyph geometry
 
     @Test func everyDesignHasGlyphGeometryWithinArtBounds() {
         let limit = CGRect(x: -2, y: -2, width: 20, height: 20)

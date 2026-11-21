@@ -12,6 +12,8 @@ extension ConversationViewModelTests {
     private static let millisecondsPerSecond = 1000.0
     private static let markSeenPollDelayNanoseconds: UInt64 = 5_000_000
 
+    // MARK: - Image attachment state regression tests
+
     @Test func regressionCaptureImagesThenClearBeforeSend() async throws {
         let viewModel = makeVM()
         let img1 = try #require(UIImage(systemName: "star"))
@@ -32,6 +34,8 @@ extension ConversationViewModelTests {
         #expect(viewModel.imagePlacementError != nil)
         #expect(viewModel.pendingImages.count == 2, "captured images restored on failed placement")
     }
+
+    // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
 
     private func makeSeenVM(debounce: Duration = ConversationViewModelTests.defaultMarkSeenDebounce)
         -> (viewModel: ConversationViewModel, fake: FakeConnectionManager) {
@@ -239,6 +243,8 @@ extension ConversationViewModelTests {
 
         try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
+
+    // MARK: - Pending files
 
     private func makeTempFile(name: String, bytes: Int) throws -> URL {
         let dir = FileManager.default.temporaryDirectory

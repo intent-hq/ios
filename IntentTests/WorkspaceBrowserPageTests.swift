@@ -112,6 +112,8 @@ struct WorkspaceBrowserPageTests {
         #expect(!page.isLoading)
     }
 
+    // MARK: - LoadPhase
+
     private func openedPage() async throws -> (WorkspaceBrowserPage, WKWebView) {
         let page = WorkspaceBrowserPage()
         let proxy = BrowserPageTestProxy()

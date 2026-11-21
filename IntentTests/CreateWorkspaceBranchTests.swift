@@ -3,6 +3,8 @@ import SwiftUI
 import Testing
 
 extension CreateWorkspaceParamsTests {
+    // MARK: - preselectedBranch
+
     @Test func preselectedBranchKeepsStillValidSelection() {
         #expect(
             CreateWorkspaceView.preselectedBranch(
@@ -47,6 +49,8 @@ extension CreateWorkspaceParamsTests {
         )
     }
 
+    // MARK: - orderedBranches (default pinned first)
+
     @Test func orderedBranchesPinsDefaultFirstAndDedupes() {
         #expect(
             CreateWorkspaceView.orderedBranches(
@@ -88,6 +92,8 @@ extension CreateWorkspaceParamsTests {
             ) == ["b", "a"]
         )
     }
+
+    // MARK: - displayedBranches
 
     @Test func displayedBranchesEmptyQueryShowsDefaultFirst() {
         #expect(

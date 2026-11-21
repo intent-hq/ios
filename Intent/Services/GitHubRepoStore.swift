@@ -77,6 +77,8 @@ enum GitHubRepoSearchOutcome {
             }
     }
 
+    // MARK: - Cache
+
     func loadIfNeeded(force: Bool = false) async {
         guard force || !hasLoaded else {
             startLoad(silent: true)
@@ -137,6 +139,8 @@ enum GitHubRepoSearchOutcome {
         await loadIfNeeded()
     }
 
+    // MARK: - Auth
+
     @discardableResult
     // swiftlint:disable:next discouraged_optional_boolean
     func fetchAuthStatus() async -> Bool? {
@@ -158,6 +162,8 @@ enum GitHubRepoSearchOutcome {
             return nil
         }
     }
+
+    // MARK: - Repos
 
     func fetchRecentRepos() async {
         await fetchRecentRepos(generation: loadGeneration)

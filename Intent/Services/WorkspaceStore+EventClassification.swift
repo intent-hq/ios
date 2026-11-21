@@ -1,6 +1,8 @@
 import Foundation
 
 extension WorkspaceStore {
+    // MARK: - Event classification
+
     nonisolated static func removedWorkspaceId(type: String, workspaceId: String?, data: [String: Any]) -> String? {
         let id = (data["workspaceId"] as? String) ?? workspaceId
         switch type {

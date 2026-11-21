@@ -73,6 +73,8 @@ nonisolated struct AnyCodable: Codable, Equatable, @unchecked Sendable {
         return lhsData == rhsData
     }
 
+    // MARK: - Convenience accessors
+
     var stringValue: String? { value as? String }
     var intValue: Int? { value as? Int }
     var doubleValue: Double? { value as? Double }

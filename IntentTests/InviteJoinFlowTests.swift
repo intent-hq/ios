@@ -71,6 +71,8 @@ struct InviteJoinFlowTests {
         return false
     }
 
+    // MARK: - Tests
+
     @Test func ownerOfTheHostOpensItWithoutJoining() async throws {
         let transport = FakeInviteTransport(responses: ["invite.inspect": .success(Self.preview)])
         let owned = Self.connection(Self.hostFingerprint, role: .owner, token: "owner", name: "studio")

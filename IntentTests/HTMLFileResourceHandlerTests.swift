@@ -22,6 +22,8 @@ struct HTMLFileResourceHandlerTests {
 
     private func settle(until condition: () -> Bool) async { await HTMLFileResourceTestSupport.settle(until: condition) }
 
+    // MARK: - Limits
+
     @Test func handlerServesTypedResponsesAndRejectsBeforeFetching() async throws {
         let png = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).pngData { _ in }
         var fetched: [String] = []
@@ -77,6 +79,8 @@ struct HTMLFileResourceHandlerTests {
         #expect(await load("a.png", with: handler, base: base) == .failure(.pageBudgetExhausted))
         #expect(limits == Array(repeating: chunk, count: fullLoads))
     }
+
+    // MARK: - Concurrency and cancellation
 
     @Test func concurrentLoadsReserveThePageBudgetBeforeFetching() async throws {
         let gate = FetchGate()

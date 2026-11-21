@@ -6,6 +6,8 @@ import Testing
 import UIKit
 
 extension ConversationViewModelTests {
+    // MARK: - Marked question recovery (row outside the loaded page, Phase 2)
+
     private func offPageTranscript() -> [ConversationMessage] {
         [
             textMessage(role: .user, text: "later wake", id: "u9"),
@@ -297,6 +299,8 @@ extension ConversationViewModelTests {
         #expect(set.questions.map(\.attachmentId) == ["tar-0123456789ab"])
         #expect(viewModel.isPendingQuestionRecoveryLoading == false)
     }
+
+    // MARK: - Suggested-prompt send (draft retention)
 
     #if DEBUG
     @Test func imageResponsePromptsSendExactDisplayedText() async throws {

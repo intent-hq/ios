@@ -62,6 +62,8 @@ struct CreationOptionsStoreTests {
             + store.modelCatalogs.keys.sorted().map { store.modelCatalogs[$0]?.latestReadTask }
     }
 
+    // MARK: - Cold load
+
     @Test func coldLoadIssuesBothReadsAndMarksLoaded() async {
         let (store, fake) = await makeLoadedStore()
         #expect(fake.paramsForMethod("specialist.list").count == 1)
@@ -132,6 +134,8 @@ struct CreationOptionsStoreTests {
         #expect(store.specialists.map(\.id) == ["implementor"])
         #expect(store.hasLoaded)
     }
+
+    // MARK: - Stale-while-revalidate
 
     @Test func secondLoadIfNeededKeepsDataAndRevalidatesSilently() async throws {
         let (store, fake) = await makeLoadedStore()
@@ -225,6 +229,8 @@ struct CreationOptionsStoreTests {
 }
 
 extension CreationOptionsStoreTests {
+    // MARK: - Invalidate
+
     @Test func invalidateEmptiesListsAndResetsHasLoaded() async {
         let (store, _) = await makeLoadedStore()
         await store.loadModelsIfNeeded(providerId: "auggie")
@@ -315,6 +321,8 @@ extension CreationOptionsStoreTests {
         #expect(store.isLoading == false)
         #expect(fake.paramsForMethod("specialist.list").count == 1)
     }
+
+    // MARK: - Reconnect
 
     @Test func reconnectRevalidatesAnOpenPickerAndKeepsLastGoodLabels() async throws {
         let (store, fake) = await makeLoadedStore()

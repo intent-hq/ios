@@ -3,6 +3,8 @@ import CoreGraphics
 import Testing
 
 extension TranscriptRecoveryLifecycleTests {
+    // MARK: - followCancelledByGesture
+
     @Test func gestureCancelsAForcedFollowAndLatchesTheTakeover() {
         var state = makeState(owner: .follow(follow1, forced: true), realized: true)
         let effects = step(&state, .followCancelledByGesture)
@@ -56,6 +58,8 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(state.fallback == .none)
     }
 
+    // MARK: - explicitClaim
+
     @Test func explicitClaimCancelsTheRecoveryOnly() {
         var armedUnderFollow = makeState(owner: .follow(follow1, forced: true), armed: .polling(recovery2), fallback: .transferred(follow: follow1))
         #expect(step(&armedUnderFollow, .explicitClaim) == [.cancelRecoveryTask(recovery2)])
@@ -79,6 +83,8 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(step(&idle, .explicitClaim).isEmpty)
         #expect(idle == before)
     }
+
+    // MARK: - recoveryStep / recoveryPagedUp
 
     @Test func settlingStepIsSilent() {
         var armed = makeState(armed: .polling(recovery1))
@@ -146,6 +152,8 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(step(&stale, .recoveryPagedUp(recovery2, mayFollowBack: false)).isEmpty)
         #expect(stale == staleBefore)
     }
+
+    // MARK: - recoveryFinished
 
     @Test func giveUpWithNoFollowShowsGoToEnd() {
         var state = makeState(owner: .recovery(recovery1), realized: false)
