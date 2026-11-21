@@ -57,6 +57,10 @@ The stack's bottom padding lives on the `scroll-bottom` marker. So
 content, not a point 12 points (`bottomAnchorPadding`) above it that a landing
 judged against `followLandingTolerance` could never reach.
 
+The transcript keeps no launcher-tall padding under the last row. The
+workspace action launcher floats over it, and follow landings still reach the
+true end.
+
 The marker's realization is the end-row signal that the unrealized-end
 recovery reads (#338). The lazy stack shows and hides the marker as it
 realizes and drops it. Realizing while scrolled away replays the live edge.

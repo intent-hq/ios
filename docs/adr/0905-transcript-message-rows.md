@@ -41,6 +41,13 @@ per-block ordinal, and the name. Re-parsing identical input yields the same
 identity, so streaming deltas do not reset the expansion state of a group that
 is already on screen.
 
+Render block ids from `groupContentBlocks` are deterministic too. A synthetic
+segment id is the source block id plus the segment index. A still-open group
+and the later closed group get the same id from the opening tag, the first
+segment reuses the source block id, and a block without tags keeps its raw id
+when a tag streams into it. Streaming never tears down a rendered row's view
+state.
+
 ### 3. Message-derived values are computed once in `init`
 
 Applies to: `AssistantMessageView.init`, `UserMessageView.init`
@@ -121,7 +128,9 @@ disclosure state is owned by the row so its body tracks the state.
 Applies to: `UserMessageView.userDisplayText(_:)`, `UserMessageView.usesTrimmedMessageText`
 
 User text is parsed as inline Markdown only, so typed line breaks and list
-markers stay as written. Links keep the text color and read as links by
+markers stay as written. A user row renders text first, then image and video
+attachments as thumbnails, then file attachments as chips, whatever the block
+order in the payload (`MessageBlockPartitioning.partitionUserBlocks`). Links keep the text color and read as links by
 underline, as in replies (#904).
 
 A plain bubble measures its existing padding from the cap top to the final

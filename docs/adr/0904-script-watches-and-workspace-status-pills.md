@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
-- Applies to: `MonitoredScriptsRow` (`Intent/Views/Conversation/StatusStrip/MonitoredScriptsRow.swift`), `ScriptWatchPills` (`Intent/Views/Conversation/StatusStrip/ScriptWatchPills.swift`), `ScriptMonitorClock`, `EnvironmentValues.scriptMonitorPresentationDate` (`Intent/Views/Conversation/StatusStrip/ScriptMonitorClock.swift`), `ScriptMonitorPresentation` (`Intent/Views/Conversation/StatusStrip/ScriptMonitorPresentation.swift`), `ScriptMonitorDetailView` (`Intent/Views/Conversation/StatusStrip/ScriptMonitorDetailView.swift`), `WorkspaceStatusPill`, `MarqueeText`, `MarqueeMotion`, `WorkspaceStatusPillsLayout` (`Intent/Views/Conversation/StatusStrip/WorkspaceStatusPill.swift`)
+- Applies to: `WorkspaceStatusPillsRow`, `MonitoredScriptsRow` (`Intent/Views/Conversation/StatusStrip/MonitoredScriptsRow.swift`), `ScriptWatchPills` (`Intent/Views/Conversation/StatusStrip/ScriptWatchPills.swift`), `ScriptMonitorClock`, `EnvironmentValues.scriptMonitorPresentationDate` (`Intent/Views/Conversation/StatusStrip/ScriptMonitorClock.swift`), `ScriptMonitorPresentation` (`Intent/Views/Conversation/StatusStrip/ScriptMonitorPresentation.swift`), `ScriptMonitorDetailView` (`Intent/Views/Conversation/StatusStrip/ScriptMonitorDetailView.swift`), `WorkspaceStatusPill`, `MarqueeText`, `MarqueeMotion`, `WorkspaceStatusPillsLayout` (`Intent/Views/Conversation/StatusStrip/WorkspaceStatusPill.swift`)
 
 ## Context
 
@@ -57,7 +57,8 @@ Applies to: `WorkspaceStatusPill`, `WorkspaceStatusPillsLayout`
 The capsule is shared by the status pills above the workspace composer. Pills
 hug their content so several can share one row. The layout gives every pill an
 equal width limit, which keeps short pills compact. The pills stack when their
-minimum widths cannot fit.
+minimum widths cannot fit. `WorkspaceStatusPillsRow` shows PR monitors first,
+then script watches.
 
 ### 7. Marquee text scrolls once
 

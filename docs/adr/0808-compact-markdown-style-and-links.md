@@ -101,7 +101,9 @@ a user message: a provider icon and the truncated decoded title on a muted
 rounded background. It is the iOS counterpart of cloudlands-fe's
 `ContextChip.svelte`. Chips whose `url` passes the `ExternalLink` http/https
 allowlist open it in the browser. Chips without one, or with a rejected
-scheme, are static.
+scheme, are static. The title is cut at
+`Constants.Conversation.ContextMention.titleMaximumLength` characters, where
+the FE uses a CSS max width.
 
 `iconName(for:)` follows the FE's provider-to-icon mapping: github to a
 pull-request symbol, linear to a ticket, sentry to a bug, and browser,

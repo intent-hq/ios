@@ -23,13 +23,15 @@ workspace.
 1. `path` is the location of `file`, workspace-relative or absolute. Relative
    subresources resolve against it.
 2. `initialLoadURL` is the one navigation the page allows: its own initial
-   load. It is cleared once allowed.
+   load. It is cleared once allowed. The Mermaid page applies the same rule
+   to its own page URL.
 3. The page prefix (CSP, DNS prefetch off, viewport) precedes all untrusted
    markup, including any attacker-supplied CSP or `<base>`. Inline styling,
    data images and the report's own relative images, stylesheets and fonts
    work. Scripts, frames, forms and every other load are denied.
 4. `HTMLLinkPreviewView` fails closed. It never mounts untrusted HTML without
-   its resource blocker (`HTMLFileWebView.blockingRules()`).
+   its resource blocker (`HTMLFileWebView.blockingRules()`), a content rule
+   list that blocks `http(s):` and `file:` loads.
 
 ### 2. WebKit only calls the async navigation delegate method
 
@@ -119,3 +121,10 @@ bytes alone have spent the page budget, or the request cap is hit.
    fetching.
 4. WebKit raises an exception if a stopped task receives anything, so a load
    delivers only while its task is still registered and not cancelled.
+
+## Consequences
+
+- A report that needs scripts or remote assets does not render them. This is
+  intended.
+- A new subresource type needs a `Kind`, a byte signature check and a CSP
+  change together.

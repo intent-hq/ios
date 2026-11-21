@@ -151,3 +151,17 @@ and interactive. Before this, the Assistant sheet over a chat showed two.
    unmounting it, uncovers the chats. This coverage is temporary: covered
    composers hide (no input, focus or accessibility) but keep drafts, pending
    attachments and in-flight imports, and return on withdrawal.
+
+### 10. Source tests pin the visionOS wiring
+
+Applies to: `FloatingComposerPolicyTests`
+
+visionOS branches cannot run in the iOS test host, so the tests check the
+wiring in source. There are exactly two `MessageInputView` construction sites:
+the inline host, gated off on visionOS, and the ornament host. Every modal that
+can open over a chat registers as a covering layer.
+
+## Consequences
+
+A new modal surface on visionOS must call `coversConversationComposers()`, or
+two composers show.

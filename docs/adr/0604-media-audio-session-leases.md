@@ -45,3 +45,5 @@ Applies to: `MediaAudioSession.configure()`
    other apps' audio and respects the silent switch.
 3. Callers configure only while at least one lease is held, so one of the
    purposes always applies.
+4. Deactivating `AVAudioSession` does not reset its category. Each consumer
+   sets its own category before activation, also after a different use.

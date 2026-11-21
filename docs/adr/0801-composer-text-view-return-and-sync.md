@@ -110,3 +110,8 @@ the focus after those writes, not the render snapshot that preceded them. If
 UIKit changes focus before the deferred block runs, that newer transition wins,
 even when its binding write is still queued behind the block (ios#799).
 `nativeFocusRevision` detects this.
+
+## Consequences
+
+Code that writes composer text or focus from SwiftUI must go through this
+deferred sync, not set the text view directly.

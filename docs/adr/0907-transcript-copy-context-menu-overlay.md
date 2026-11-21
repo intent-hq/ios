@@ -3,7 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `CopyContextMenuOverlay`, `CopyContextMenuOverlay.OverlayView`, `CopyContextMenuOverlay.Coordinator`, `CopyContextMenuPassthroughMarker`, `View.copyContextMenuPassthrough()`, `UIView.textInputDescendant(containing:with:excluding:)`, `UIView.passthroughMarkerDescendant(containing:with:excluding:)`, `UprightPreviewTransform` (`Intent/Views/Conversation/Transcript/CopyContextMenuOverlay.swift`), `MessageCopyContextMenu` (`Intent/Views/Conversation/Transcript/MessageCopyContextMenu.swift`)
-- Related issues: ios#140, ios#344, intent-hq/monorepo#3441
+- Related issues: ios#140, ios#212, ios#344, ios#369, ios#982, intent-hq/monorepo#3441
 
 ## Context
 
@@ -47,6 +47,9 @@ changed the row subtree's structure and discarded its local state
 Applies to: `CopyContextMenuOverlay.isEnabled`, `CopyContextMenuOverlay.updateUIView(_:context:)`
 
 `isEnabled` comes from `MessageCopyContextMenu.shouldEnableCopyInteraction`.
+It attaches the interaction once the message has settled and has text.
+Image-only rows, the thinking phase and streaming rows stay inert. The overlay
+itself is always applied, so the row subtree never changes structural identity.
 While it is false, the interaction is removed and the overlay is invisible to
 hit-testing. Removing the interaction can tear down a live menu without its
 `willEndFor` completion ever running. So `updateUIView` releases the retained
@@ -179,3 +182,35 @@ spread across ancestors.
    singular transform, such as an ancestor that scales through about 0 during
    an animation, would invert into an enormous correction for a frame, so it
    counts as degenerate too. Realistic inputs are flips with |det| = 1.
+
+### 10. A lexical policy scan guards passthrough markers
+
+Applies to: `CopyContextMenuButtonScanner`, `CopyContextMenuPassthroughPolicyTests`
+
+The overlay cannot tell a SwiftUI Button from plain text, because a Button has
+no UIKit view. Markers were missed several times (ios#212, ios#344, ios#369,
+ios#982), so the scan is the guard.
+
+1. The scan is lexical (`SwiftSourceLexer`): comments, strings and regex
+   literals are blanked, then brackets are matched. A file whose literals or
+   brackets do not pair up is reported as unreliable (`Scan.isReliable`), not
+   trusted.
+2. A Button passes when its label (the `label:` argument or closure, or the
+   trailing closure of `Button(action:)`) reaches the marker, directly or
+   through a same-file `func`, `var` or `struct`. A helper name counts only
+   when every same-file declaration with that name is marked. A marker on the
+   action, on a nested Button, or on the Button's modifier chain does not
+   count, because the Button must be the marker's SwiftUI ancestor.
+3. The one exception is `.buttonStyle(IntentButtonStyle(passesThroughCopyMenu:
+   true))` with a literal `true`, as the nearest `buttonStyle` on the Button's
+   own chain; that style puts the marker inside the Button.
+4. Buttons inside menus, dialogs, toolbars and presented or pushed screens are
+   skipped (`detachedContainers`): they never render under a row's overlay.
+5. Files whose Buttons never render in a `MessageCopyContextMenu` row are
+   listed with their exact count of unmarked Buttons, so a new Button in them
+   still fails.
+
+## Consequences
+
+A new tappable control in a transcript row needs a passthrough marker, or the
+overlay swallows its taps.

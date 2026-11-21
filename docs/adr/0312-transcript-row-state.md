@@ -27,5 +27,7 @@ Applies to: `MessageBlockPartitioning.pairToolResults(_:)`
 
 `tool_result` blocks are keyed by the id of the `tool_use` block they answer.
 They are matched on `resolvedToolUseId` or `toolCallId`, and the first match
-wins. The pairing is computed once per message, so each block row receives
-only its own result value instead of the whole block array.
+wins. The pairing is computed once per message over the whole raw block list,
+not per render row, so each block row receives only its own result value
+instead of the whole block array. A `tool_use` inside a response group still
+finds a `tool_result` that lands after the closing tag.

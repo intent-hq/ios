@@ -83,6 +83,9 @@ Retirement is not disappearance. Streaming and a collapsed card keep the
 drafts. `QuestionAttachmentLifecycle` discards a pipeline only when its
 message id is in `retiredQuestionAttachmentMessageIds`.
 
+`QuestionAttachmentTray` identifies image previews by index, as the composer
+does, so the same image can be attached twice.
+
 ### 8. Rules for retiring a question set's attachments
 
 Applies to: `ConversationViewModel.retiredQuestionAttachmentMessageIds`

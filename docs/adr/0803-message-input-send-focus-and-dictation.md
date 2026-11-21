@@ -87,3 +87,8 @@ Applies to: `MessageInputView.suggestedPromptChipsRow`
 Suggested prompts show as large chips directly above the field, sized for gaze
 targeting (at least 60 pt). The transcript's inline prompt list is disabled on
 visionOS in favor of these.
+
+## Consequences
+
+A new submit path must check connection and upload state again at the point
+where it consumes the draft.

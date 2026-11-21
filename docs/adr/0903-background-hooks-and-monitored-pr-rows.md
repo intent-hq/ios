@@ -58,7 +58,9 @@ The row is rendered above the background-hooks row when both exist. It has one
 chip per `active` monitor.
 
 1. The label is `#<number>`. It is prefixed with `<owner/repo>: ` only when the
-   monitor's repo differs from the workspace repo.
+   monitor's repo differs from the workspace repo
+   (`chipLabel(_:workspaceRepo:)`). When the workspace repo is unknown, the
+   label is the bare number.
 2. An amber dot shows while changes are pending the debounce emit.
 3. Tapping a chip opens a menu. Its header shows the last-refresh detail: title,
    repo#number, checks, approvals, and threads summary, mergeable or blocked

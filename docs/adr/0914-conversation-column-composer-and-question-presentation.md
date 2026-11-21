@@ -3,6 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `ConversationColumnView`, `ConversationHeaderBackdrop`, `ConversationBackground` (`Intent/Views/Conversation/Transcript/ConversationColumnView.swift`), `ConversationView` (`Intent/Views/Conversation/Transcript/ConversationView.swift`)
+- Related issues: intent-hq/monorepo#1800, intent-hq/monorepo#3338
 
 ## Context
 
@@ -94,3 +95,21 @@ Applies to: `ConversationView.dismissQuestionsErrorPresented`
 The presented-or-not `Binding` for the dismiss-questions failure alert is
 hoisted out of the `body` expression into its own property, so the type checker
 does not have to solve the `Binding` construction inline.
+
+### 9. Conversation screen rules
+
+Applies to: `ConversationView`, `ConversationViewContent`
+
+1. The screen keeps its modifier layers in order: column, chrome,
+   presentation, lifecycle. The column keeps its identity, and so its scroll
+   state, across width changes.
+2. Entry never marks the conversation seen. The unread divider stays until the
+   user leaves or the turn finishes.
+3. A failed image or file placement restores the draft and keeps the pending
+   attachments (intent-hq/monorepo#3338). A failed question dismissal keeps
+   its error text stable while the wizard restores its pending marker
+   (intent-hq/monorepo#1800).
+4. When the agent no longer exists (not found at load, or deleted elsewhere),
+   the screen goes back to the workspace's agent list
+   (`handleAgentNotFoundIfNeeded`). A delete started on this screen already
+   dismisses it, so it suppresses that fallback.

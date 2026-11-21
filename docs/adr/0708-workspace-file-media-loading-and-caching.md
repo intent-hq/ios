@@ -63,7 +63,8 @@ Applies to: `WorkspaceFileImageLoader.chunkLength`, `pdfChunkLength`, `maxFileBy
    temporary files have a separate count bound.
 6. `cacheFileCountLimit` (8): eight downloads bound the cache-owned temporary
    files per backend session. Attachments and viewers may retain evicted files
-   until they release them.
+   until they release them. Workspace videos and saved-asset media share this
+   one bound, even when their posters use little memory.
 
 ### 4. Cache keys and the temporary-file FIFO
 

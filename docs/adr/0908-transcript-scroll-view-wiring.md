@@ -154,6 +154,11 @@ Applies to: `ConversationTranscriptView.preserveHistoryPosition()`
 observable rows change. Request-time frames may be stale if the reader kept
 scrolling. Post-await frames may already describe the newly inserted history.
 
+After a prepend, the view waits for layout and retained-position restoration
+before it measures the new top. A prepend can leave the reader in the prefetch
+band without a new edge, and a fast reply could otherwise load pages against
+old frames.
+
 ### 11. The gesture probe samples UIKit flags on demand
 
 Applies to: `TranscriptGestureAccessibilityView`
@@ -162,3 +167,10 @@ The probe is demo-only accessibility diagnostics, sampled when XCTest queries
 the value. UIKit interaction flags are not Observation dependencies. Caching
 them in a SwiftUI body can leave an active report after deceleration has
 ended.
+
+### 12. Keyboard geometry logs read only geometry and timing
+
+Applies to: `ConversationTranscriptView.logKeyboardGeometry(_:notification:)`
+
+The log reads only the keyboard frame and animation timing keys, never the
+whole notification payload.
