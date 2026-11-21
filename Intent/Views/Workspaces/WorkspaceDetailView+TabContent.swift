@@ -23,7 +23,7 @@ extension WorkspaceDetailView {
     var tabContent: some View {
         if currentTab == .agents {
             if showsAgentLoading {
-                ProgressView { Text("Loading agents...").interFont(Constants.Typography.bodyS) }
+                ProgressView { Text("Loading agents…").interFont(Constants.Typography.bodyS) }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .availableWhenReconnected(isMissing: true)
                 .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)

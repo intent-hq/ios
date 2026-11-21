@@ -47,7 +47,7 @@ struct WorkspaceQuestionPendingBanner: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("The agent's questions will be dismissed without answering. This cannot be undone.")
+            Text("The agent’s questions will be dismissed without answering. This cannot be undone.")
         }
     }
 }

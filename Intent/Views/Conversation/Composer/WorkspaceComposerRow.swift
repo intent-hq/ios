@@ -154,7 +154,7 @@ struct WorkspaceAttachmentMenu: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(IntentContentButtonStyle())
-        .accessibilityLabel("Add attachment")
+        .accessibilityLabel("Add Attachment")
         .accessibilityIdentifier("composer.attachment")
     }
 }
@@ -189,7 +189,7 @@ private struct WorkspaceComposerAction: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(IntentContentButtonStyle())
-        .accessibilityLabel(isStop ? "Stop response" : "Send message")
+        .accessibilityLabel(isStop ? "Stop response" : "Send Message")
         .accessibilityIdentifier(isStop ? "composer.stop" : "composer.send")
     }
 }

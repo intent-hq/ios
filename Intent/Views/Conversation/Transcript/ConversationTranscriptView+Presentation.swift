@@ -252,7 +252,7 @@ extension ConversationTranscriptView {
     @ViewBuilder
     private var thinkingIndicatorView: some View {
         if usesWorkspaceDesign {
-            WorkspaceThinkingLabel(title: "Thinking...", showsDisclosure: false)
+            WorkspaceThinkingLabel(title: "Thinking…", showsDisclosure: false)
                 .padding(.vertical, Layout.thinkingIndicatorVerticalPadding)
         } else {
             legacyThinkingIndicatorView
@@ -264,7 +264,7 @@ extension ConversationTranscriptView {
             ProgressView()
                 .scaleEffect(Layout.thinkingIndicatorScale)
                 .frame(width: Layout.thinkingIndicatorSide, height: Layout.thinkingIndicatorSide)
-            Text("Thinking...")
+            Text("Thinking…")
                 .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: transcriptColorScheme))
         }

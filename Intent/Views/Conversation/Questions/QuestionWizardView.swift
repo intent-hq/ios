@@ -173,8 +173,8 @@ struct QuestionWizardView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(
-                "The agent's questions will be dismissed completely without "
-                    + "answering. This is permanent — they won't come back, "
+                "The agent’s questions will be dismissed completely without "
+                    + "answering. This is permanent — they won’t come back, "
                     + "even after a reload."
             )
         }

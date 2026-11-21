@@ -70,13 +70,13 @@ enum CertFingerprintProbe {
             case .invalidPort:
                 "Invalid port number. Enter a port between 1 and 65535."
             case .noHosts:
-                "No host address to probe. Enter the desktop app's host or Tailcat address."
+                "No host address to probe. Enter the desktop app’s host or Tailcat address."
             case .unreachable(let cause):
                 "Could not reach the server (\(cause)). Check the host and port, make sure the desktop app is running, and try again."
             case .timeout:
                 "Timed out waiting for the server to respond. Check the host and port, make sure the desktop app is running, and try again."
             case .tlsFailed(let cause):
-                "Reached the server, but the TLS handshake failed (\(cause)). Make sure the port is the desktop app's secure connection port."
+                "Reached the server, but the TLS handshake failed (\(cause)). Make sure the port is the desktop app’s secure connection port."
             case .noCertificate, .fingerprint:
                 "The TLS handshake completed, but the server presented no certificate to verify. Pairing requires a pinned certificate, so the connection was aborted."
             case .cancelled:

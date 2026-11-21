@@ -45,14 +45,14 @@ struct InviteJoinView: View {
                 title: "Confirm Your Account on Your Mac",
                 message: "To join, Intent needs to confirm your GitHub or GitLab account, and it does that through your own Mac. "
                     + "Open this link on your Mac, or pair this iPhone with your Mac and try again. "
-                    + "Once you've joined on your Mac, the workspace appears here too.",
+                    + "Once you’ve joined on your Mac, the workspace appears here too.",
                 link: link.url,
                 retry: nil
             )
         case let .needsSignIn(providerName, macName):
             InviteJoinMessageView(
                 title: "Sign In to \(providerName)",
-                message: "\(macName) isn't signed in to \(providerName). Sign in to \(providerName) in Intent on that Mac, then try again.",
+                message: "\(macName) isn’t signed in to \(providerName). Sign in to \(providerName) in Intent on that Mac, then try again.",
                 link: nil
             ) { model?.start() }
         case .failed(let problem):
@@ -127,7 +127,7 @@ private struct InviteJoinConfirmView: View {
                 .listRowInsets(EdgeInsets())
                 .accessibilityIdentifier("invite-join-button")
             } footer: {
-                Text("Only join if you trust the person who shared this link. They'll see your account name.")
+                Text("Only join if you trust the person who shared this link. They’ll see your account name.")
                     .interFont(Constants.Typography.subtextXXS)
             }
         }
@@ -136,10 +136,10 @@ private struct InviteJoinConfirmView: View {
     private var explanation: String {
         switch confirmation.method {
         case .existingAccess:
-            return "You'll join with the access this device already has for \(confirmation.hostName)."
+            return "You’ll join with the access this device already has for \(confirmation.hostName)."
         case let .proveOnMac(macName, providerName):
             let proof = providerName == "GitHub" ? "a secret gist" : "a snippet"
-            return "To confirm you're @\(confirmation.login) on \(providerName), Intent on \(macName) will briefly publish \(proof) "
+            return "To confirm you’re @\(confirmation.login) on \(providerName), Intent on \(macName) will briefly publish \(proof) "
                 + "for the host to check, then delete it."
         }
     }

@@ -81,10 +81,10 @@ struct TerminalKeyBar: View {
 
     private var arrowKeys: some View {
         HStack(spacing: TerminalAppearance.groupSpacing) {
-            arrow(.left, image: .arrowLeft, label: "Left arrow")
-            arrow(.up, image: .arrowUp, label: "Up arrow")
-            arrow(.down, image: .arrowDown, label: "Down arrow")
-            arrow(.right, image: .arrowRight, label: "Right arrow")
+            arrow(.left, image: .arrowLeft, label: "Left Arrow")
+            arrow(.up, image: .arrowUp, label: "Up Arrow")
+            arrow(.down, image: .arrowDown, label: "Down Arrow")
+            arrow(.right, image: .arrowRight, label: "Right Arrow")
         }
         .padding(.horizontal, TerminalAppearance.groupInset)
         .modifier(TerminalControlSurface())

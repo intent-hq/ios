@@ -43,7 +43,7 @@ struct LogOffConfirmationSheet: View {
             .foregroundStyle(SettingsStyle.foreground(for: colorScheme))
             .accessibilityAddTraits(.isHeader)
             .accessibilityIdentifier("log-off.title")
-            Text("Are you sure? You'll need to pair again to reconnect.")
+            Text("Are you sure? You’ll need to pair again to reconnect.")
                 .interFont(Constants.Typography.bodyS)
                 .foregroundStyle(SettingsStyle.sectionForeground(for: colorScheme, contrast: contrast))
                 .fixedSize(horizontal: false, vertical: true)

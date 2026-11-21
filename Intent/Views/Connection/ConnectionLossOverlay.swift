@@ -72,9 +72,9 @@ struct ConnectionLossOverlay: View {
     private var messages: some View {
         let message = ConnectionNetworkMessage(status: networkStatus)
         let title: LocalizedStringResource = if let machineName {
-            "Can't reconnect to \(machineName)"
+            "Can’t reconnect to \(machineName)"
         } else {
-            "Can't reconnect"
+            "Can’t reconnect"
         }
         return VStack(spacing: Constants.Root.reconnectPanelSpacing) {
             VStack(spacing: Layout.copySpacing) {
@@ -122,7 +122,7 @@ struct ConnectionLossOverlay: View {
             .background(.white, in: .rect(cornerRadius: Constants.Root.reconnectPanelCornerRadius))
         }
         .buttonStyle(IntentContentButtonStyle())
-        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityHint("Return to your saved machines without removing this connection.")
         .accessibilityIdentifier("connection-loss.home")
     }
 

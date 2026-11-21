@@ -15,7 +15,7 @@ struct IPadNavigationRail: View {
         ScrollView {
             VStack(spacing: IPadShellLayout.railSpacing) {
                 if !isSidebarVisible {
-                    railButton(asset: .collapseLeft, label: "Show sidebar", identifier: "ipad.sidebar.expand", action: onExpand)
+                    railButton(asset: .collapseLeft, label: "Show Sidebar", identifier: "ipad.sidebar.expand", action: onExpand)
                 }
                 destination(.assistant, asset: .dandelion, label: "Assistant")
                     .disabled(!canUseAssistant)

@@ -176,13 +176,13 @@ extension ConnectionLossUITests {
 
         composer.tap()
         composer.typeText("Ask later")
-        let send = app.buttons["Send message"].firstMatch
+        let send = app.buttons["Send Message"].firstMatch
         XCTAssertFalse(send.isEnabled, "Send")
         send.tap()
         XCTAssertTrue(app.descendants(matching: .any)["read-only.hint"].waitForExistence(timeout: LossFixture.timeout), "A tap explains why")
         capture(app, named: "read-only-send-hint")
         app.coordinate(withNormalizedOffset: LossFixture.readOnlyTapPoint).tap()
-        XCTAssertTrue(app.buttons["Add attachment"].firstMatch.isEnabled, "Attach (R1.13)")
+        XCTAssertTrue(app.buttons["Add Attachment"].firstMatch.isEnabled, "Attach (R1.13)")
         tap(app.buttons["conversation.actions.open"], in: app)
         for identifier in ["conversation.actions.model", "conversation.actions.rename", "conversation.actions.delete"] {
             let item = app.buttons[identifier]
@@ -274,7 +274,7 @@ extension ConnectionLossUITests {
     @MainActor
     func assertStoppedTitle(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         let title = app.staticTexts.matching(NSPredicate(
-            format: "identifier == %@ AND label MATCHES %@", "connection-loss.status", "Can't reconnect( to Demo Mac)?"
+            format: "identifier == %@ AND label MATCHES %@", "connection-loss.status", "Can’t reconnect( to Demo Mac)?"
         )).firstMatch
         XCTAssertTrue(title.waitForExistence(timeout: LossFixture.timeout), file: file, line: line)
     }

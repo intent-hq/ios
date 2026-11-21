@@ -11,7 +11,7 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
         static let chartLabel = "Daily active users chart"
         static let stylesheetNote = "Styled by assets/report.css"
         static let minimumChartHeight: CGFloat = 80
-        static let alertTitle = "Can't Open Link"
+        static let alertTitle = "Can’t Open Link"
         static let timeout: TimeInterval = 15
         static let launchTimeout: TimeInterval = 30
         static let maximumScrolls = 3

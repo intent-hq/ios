@@ -37,7 +37,7 @@ struct SpecialistStepView: View {
     private var specialistContent: some View {
         if isLoadingSpecialists {
             ProgressView {
-                Text("Loading specialists...").interFont(Constants.Typography.bodyS)
+                Text("Loading specialists…").interFont(Constants.Typography.bodyS)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         } else if specialists.isEmpty {

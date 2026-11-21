@@ -155,7 +155,7 @@ struct ProposalCardView: View {
 
     @ViewBuilder
     private func actionButtonContent(_ store: ProposalActionStore) -> some View {
-        Button("Not now") {
+        Button("Not Now") {
             confirmingDismiss = true
         }
         .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))

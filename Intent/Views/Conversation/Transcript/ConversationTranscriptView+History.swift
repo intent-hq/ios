@@ -4,7 +4,7 @@ extension ConversationTranscriptView {
     @ViewBuilder
     func olderMessagesRow(proxy: ScrollViewProxy) -> some View {
         if viewModel.olderMessagesError != nil {
-            Button("Couldn't load earlier messages — Retry") {
+            Button("Couldn’t load earlier messages — Retry") {
                 requestOlderMessages(proxy: proxy)
             }
             .buttonStyle(IntentContentButtonStyle())

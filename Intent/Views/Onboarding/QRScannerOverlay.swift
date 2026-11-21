@@ -75,7 +75,7 @@ struct QRScannerOverlay: View {
                         .scaledToFit()
                         .frame(width: Constants.QRScanner.hintIconSize, height: Constants.QRScanner.hintIconSize)
                         .accessibilityHidden(true)
-                    Text("Find QR code in Settings -> Mobile\nin the Intent desktop app")
+                    Text("Find the QR code in Settings > Mobile\nin the Intent desktop app")
                         .interFont(Constants.Typography.bodyXS)
                 }
             }

@@ -10,6 +10,7 @@ struct SettingsSection<Content: View>: View {
         VStack(alignment: .leading, spacing: SettingsStyle.sectionHeaderSpacing) {
             Text(title)
                 .interFont(Constants.Typography.eyebrow)
+                .textCase(.uppercase)
                 .foregroundStyle(SettingsStyle.sectionForeground(for: colorScheme, contrast: contrast))
                 .accessibilityAddTraits(.isHeader)
             content

@@ -123,7 +123,7 @@ struct QRScannerView: View {
         NavigationStack {
             Color.black
                 .overlay {
-                    Text("Camera scanning isn't available — use manual token entry instead")
+                    Text("Camera scanning isn’t available — use manual token entry instead")
                         .interFont(Constants.Typography.bodyS)
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
@@ -181,7 +181,7 @@ struct QRScannerView: View {
             }
             Button("Trust & Connect") { trustPendingFingerprint() }
         } message: {
-            Text("The server's TLS certificate fingerprint is:\n\n\(scannerState.probedFingerprint ?? "")\n\nDo you trust this server?")
+            Text("The server’s TLS certificate fingerprint is:\n\n\(scannerState.probedFingerprint ?? "")\n\nDo you trust this server?")
         }
         .onDisappear { connectTask?.cancel() }
         .accessibilityAction(.escape, cancel)
@@ -209,7 +209,7 @@ struct QRScannerView: View {
             case .unavailable:
                 Color.black
                     .overlay {
-                        Text("Camera scanning isn't available — use manual token entry instead")
+                        Text("Camera scanning isn’t available — use manual token entry instead")
                             .interFont(Constants.Typography.bodyS)
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.center)

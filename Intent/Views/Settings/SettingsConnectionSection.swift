@@ -7,7 +7,7 @@ struct SettingsConnectionSection: View {
     let onDisconnect: () -> Void
 
     var body: some View {
-        SettingsSection(title: "CONNECTION") {
+        SettingsSection(title: "Connection") {
             VStack(spacing: 0) {
                 if let machineName {
                     machineRow(machineName)

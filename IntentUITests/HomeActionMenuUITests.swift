@@ -119,7 +119,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         var composer = app.textViews["composer.textView"]
         XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
         let rail = app.buttons["ipad.rail.workspaces"]
-        let send = app.buttons["Send message"]
+        let send = app.buttons["Send Message"]
         XCTAssertTrue(rail.isHittable)
         XCTAssertFalse(app.buttons["intent.menu.open"].exists)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad expanded workspace conversation")
@@ -155,7 +155,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, draft)
         XCUIDevice.shared.orientation = .portrait
-        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").waitForSingleHittableElement(timeout: Self.timeout).isEnabled)
+        XCTAssertTrue(try app.buttons.matching(identifier: "Send Message").waitForSingleHittableElement(timeout: Self.timeout).isEnabled)
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad portrait conversation with draft")
         try verifySendAndBack(in: app, draft: draft)
@@ -163,7 +163,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
 
     @MainActor
     private func verifySendAndBack(in app: XCUIApplication, draft: String) throws {
-        try app.buttons.matching(identifier: "Send message").singleHittableElement().tap()
+        try app.buttons.matching(identifier: "Send Message").singleHittableElement().tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", draft))
             .firstMatch.waitForExistence(timeout: Self.timeout))
         let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()

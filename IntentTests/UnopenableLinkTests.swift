@@ -46,12 +46,12 @@ struct UnopenableLinkTests {
         let url = try #require(URL(string: "reports/report.html"))
         let link = UnopenableLink(url: url, reason: .unsupportedLocation)
         #expect(link.target == "reports/report.html")
-        #expect(link.message == "This link can't be opened on this device.\n\nreports/report.html")
+        #expect(link.message == "This link can’t be opened on this device.\n\nreports/report.html")
     }
 
     @Test func browserFailureExplainsTheError() throws {
         let url = try #require(URL(string: "http://user@localhost:3000"))
         let link = UnopenableLink(url: url, reason: .browserFailed("Bad address."))
-        #expect(link.message == "The in-app browser couldn't open this link. Bad address.\n\nhttp://user@localhost:3000")
+        #expect(link.message == "The in-app browser couldn’t open this link. Bad address.\n\nhttp://user@localhost:3000")
     }
 }

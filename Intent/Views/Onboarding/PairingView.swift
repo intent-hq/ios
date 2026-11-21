@@ -111,7 +111,7 @@ struct PairingView: View {
                 PairingOptionButton(
                     icon: .connectQR,
                     title: "Scan QR Code",
-                    subtitle: "Go to Settings -> Mobile in the desktop app",
+                    subtitle: "Go to Settings > Mobile in the desktop app",
                     isProminent: true,
                     colorScheme: colorScheme
                 ) { showQRScanner = true }

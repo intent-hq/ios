@@ -156,7 +156,7 @@ private struct ConversationViewContent: View {
                 Button("Cancel", role: .cancel) {}
             }
             .alert(
-                "Couldn't Dismiss Questions",
+                "Couldn’t Dismiss Questions",
                 isPresented: dismissQuestionsErrorPresented,
                 presenting: viewModel.dismissQuestionsError
             ) { _ in
@@ -165,7 +165,7 @@ private struct ConversationViewContent: View {
                 Text("The questions were not dismissed and are still pending. " + detail)
             }
             .alert(
-                "Couldn't Send Images",
+                "Couldn’t Send Images",
                 isPresented: imagePlacementErrorPresented,
                 presenting: viewModel.imagePlacementError
             ) { _ in
@@ -174,7 +174,7 @@ private struct ConversationViewContent: View {
                 Text("The message was not sent. " + detail)
             }
             .alert(
-                "Couldn't Send Files",
+                "Couldn’t Send Files",
                 isPresented: filePlacementErrorPresented,
                 presenting: viewModel.filePlacementError
             ) { _ in

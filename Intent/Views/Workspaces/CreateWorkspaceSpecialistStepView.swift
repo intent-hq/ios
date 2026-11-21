@@ -41,7 +41,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             VStack(spacing: 0) {
                 if isLoadingSpecialists {
                     ProgressView {
-                        Text("Loading...").interFont(Constants.Typography.bodyS)
+                        Text("Loading…").interFont(Constants.Typography.bodyS)
                     }
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -149,8 +149,9 @@ struct CreateWorkspaceSpecialistStepView: View {
     }
 
     private var agentHeading: some View {
-        Text("AGENT")
+        Text("Agent")
             .interFont(Constants.Typography.eyebrow)
+            .textCase(.uppercase)
             .tracking(CreateWorkspaceFormStyle.agentHeadingTracking)
             .dynamicTypeSize(.large...)
             .foregroundStyle(CreateWorkspaceFormStyle.secondary(for: colorScheme, contrast: contrast))

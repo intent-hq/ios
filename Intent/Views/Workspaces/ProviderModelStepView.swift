@@ -49,7 +49,7 @@ struct ProviderModelStepView: View {
     private var providerContent: some View {
         if isLoadingProviders {
             ProgressView {
-                Text("Loading providers...").interFont(Constants.Typography.bodyS)
+                Text("Loading providers…").interFont(Constants.Typography.bodyS)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         } else if let providerGuidance {
@@ -125,7 +125,7 @@ struct ProviderModelStepView: View {
             if isLoadingModels {
                 modelLoadingIndicator
             } else if models.isEmpty {
-                Text("The provider's default model will be used.")
+                Text("The provider’s default model will be used.")
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .listRowBackground(Theme.card(for: colorScheme))
@@ -140,7 +140,7 @@ struct ProviderModelStepView: View {
     private var modelLoadingIndicator: some View {
         HStack(spacing: Constants.ModalPicker.modelLoadingSpacing) {
             ProgressView().controlSize(.small)
-            Text("Loading models...")
+            Text("Loading models…")
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
@@ -165,7 +165,7 @@ struct ProviderModelStepView: View {
             Color.black.opacity(Constants.ModalPicker.loadingOverlayOpacity).ignoresSafeArea()
             VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
                 ProgressView()
-                Text("Creating agent...")
+                Text("Creating agent…")
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }

@@ -20,7 +20,7 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
             ("Open the signed-in preview", .message)
         ]
         static let firstParagraph = "Here are the project notes."
-        static let alertTitle = "Can't Open Link"
+        static let alertTitle = "Can’t Open Link"
         static let minimumRowHeight: CGFloat = 44
         static let frameTolerance: CGFloat = 0.01
         static let minimumRowWidthFraction: CGFloat = 0.8

@@ -487,7 +487,7 @@ private struct PendingQuestionRecoveryPlaceholder: View {
         HStack(spacing: Layout.contentSpacing) {
             ProgressView()
                 .controlSize(.small)
-            Text("Loading questions...")
+            Text("Loading questions…")
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }

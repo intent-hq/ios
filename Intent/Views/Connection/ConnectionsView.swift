@@ -110,7 +110,7 @@ struct ConnectionsView: View {
         } message: { connection in
             Text(connection.id == windowConnectionId
                 ? "This is the current connection. Removing it will disconnect you."
-                : "This removes the saved connection. You'll need to pair again to reconnect.")
+                : "This removes the saved connection. You’ll need to pair again to reconnect.")
         }
         .alert("Couldn’t Remove Connection", isPresented: $showDeleteError) {
             Button("OK", role: .cancel) {}

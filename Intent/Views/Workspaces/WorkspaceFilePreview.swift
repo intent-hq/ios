@@ -133,7 +133,7 @@ extension WorkspaceFilePreview {
             switch self {
             case .tooLarge: "File too large"
             case .unsupported: "Preview not supported"
-            case .damaged: "Can't display file"
+            case .damaged: "Can’t display file"
             case .unexpectedResponse, .unavailable: "File unavailable"
             }
         }
@@ -146,9 +146,9 @@ extension WorkspaceFilePreview {
             case .unsupported:
                 return "This file type cannot be previewed on this device."
             case .damaged:
-                return "This file couldn't be displayed. It may be damaged."
+                return "This file couldn’t be displayed. It may be damaged."
             case .unexpectedResponse:
-                return "The file couldn't be loaded. The server sent an unexpected response."
+                return "The file couldn’t be loaded. The server sent an unexpected response."
             case .unavailable:
                 return "Could not preview this file. Check your connection and try again."
             }

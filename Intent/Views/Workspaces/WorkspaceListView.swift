@@ -435,7 +435,7 @@ private extension WorkspaceListView {
             }
         } else if viewModel.isLoading, viewModel.workspaces.isEmpty {
             ProgressView {
-                Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+                Text("Loading workspaces…").interFont(Constants.Typography.bodyS)
             }
             .frame(maxWidth: .infinity, minHeight: Constants.WorkspaceList.emptyStateHeight)
         } else if !viewModel.filteredWorkspaces.isEmpty {

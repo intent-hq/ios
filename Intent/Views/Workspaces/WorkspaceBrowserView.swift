@@ -212,7 +212,7 @@ struct WorkspaceBrowserView: View {
         } description: {
             Text(message).interFont(Constants.Typography.bodyS)
         } actions: {
-            Button("Try again") { retry = UUID() }
+            Button("Retry") { retry = UUID() }
                 .buttonStyle(IntentButtonStyle(variant: .secondary))
                 .disabled(!isConnected)
         }
