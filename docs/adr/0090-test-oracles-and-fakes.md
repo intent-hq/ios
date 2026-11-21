@@ -12,7 +12,7 @@ Store tests spawn async work and race fakes against each other. Fixed `Task.slee
 
 1. **Expected values come from the reference implementation.**
    1. Parity fixtures are computed with the desktop JavaScript, not with the Swift code under test. Example: the fallback avatar designs come from `stringToSeededRandom(agentId).pick(fallbackAgentAvatarDesigns)` in cloudlands-fe `hash.ts` and `avatar-design.ts`, and cover all six designs.
-   2. The avatar fixtures include seeds where the JavaScript float64 LCG step loses low bits ([ADR 0083](0083-desktop-parity-ports.md)), so a switch to exact integer math fails them.
+   2. The avatar fixtures include seeds where the JavaScript float64 LCG step loses low bits ([ADR 1307](1307-desktop-parity-formatting-and-parsing.md)), so a switch to exact integer math fails them.
    3. Wire tests use literal byte vectors, ports and encoded URLs from the protocol (for example PROTOCOL §1.4 for browser tunnel frames). Do not replace them with values computed by the code under test.
    4. Hash tests use published vectors (NIST FIPS 180-2 `"abc"` for SHA-256).
 2. **Contract fixtures are exact.** `BackendKeychainFixtures` is an offline, exact-byte copy of the monorepo backend-keychain contract. CI also compares it with the canonical Git revision. `BackendKeychainConformanceSupport` projects the real production values; it does not normalize routes or identities.
