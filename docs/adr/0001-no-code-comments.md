@@ -1,4 +1,4 @@
-# 0001. No code comments; decisions live in ADRs
+# ADR-0001: No code comments; decisions live in ADRs
 
 **Status:** Accepted, 2026-11-20
 
