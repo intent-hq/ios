@@ -8,7 +8,7 @@
   `PairingPayload` (`Intent/Utils/PairingPayload.swift`),
   `WorkspaceAssetLink` (`Intent/Utils/WorkspaceAssetLink.swift`),
   `TcAddressDisplay` (`Intent/Utils/TcAddressDisplay.swift`)
-- Related issues: ios#406
+- Related issues: ios#262, ios#320, ios#373, ios#406
 
 ## Context
 
@@ -24,11 +24,18 @@ Applies to: `ExternalLink`, `ExternalLink.url(from:)`
 
 `ExternalLink` is the supported contract for backend-supplied external links:
 the strings that context-mention chips and PR-monitor chips hand to `openURL`.
-Only absolute `http`/`https` URLs with a host are opened. `javascript:`, `file:`,
+Only absolute `http`/`https` URLs with a host are opened; schemes compare
+case-insensitively. `javascript:`, `file:`,
 `tel:`, custom app schemes, scheme-less and malformed strings all resolve to nil,
 so a daemon-supplied string can never drive the system into a non-web handler.
 There is deliberately no app-link (`intent://`) passthrough: neither call site
-has a documented need for one.
+has a documented need for one. A new link scheme gets its own parser and
+allowlist; `ExternalLink` stays web-only.
+
+Every view that hands a daemon-supplied string to `openURL` goes through
+`ExternalLink`, never a bare `URL(string:)` (ios#262). `ExternalLinkTests` scans
+the call sites from the sources packaged into the test bundle, never the
+checkout (ios#320, ios#373).
 
 ### 2. Workspace file links follow the desktop grammar
 
@@ -115,6 +122,10 @@ values are normalized to nil.
 The first non-empty fingerprint wins, canonical `fp=` first, so an empty `fp=`
 falls back to a non-empty legacy `certFingerprint=`. Empty values are normalized
 to nil so callers take the cert-probe path instead of pinning an empty string.
+`v=` and `path=` are ignored.
+
+Dropping the legacy dialect, or invite links that carry `host=`, needs a
+decision that old QR codes and links no longer work.
 
 ### 7. Asset links have one identity
 

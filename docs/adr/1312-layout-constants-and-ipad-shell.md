@@ -38,6 +38,8 @@ Applies to: `Constants.WorkspaceRow.attentionCueZOffset`, `attentionCueScale`,
 
 The visionOS attention cue is a single-step z-lift and scale on rows that need
 input, plus a brighter status chip. There is no continuous animation (HIG).
+`WorkspaceActionMenuDepthTests` reads `attentionCueZOffset` from source, so
+action cards stay in front of raised rows.
 
 ### 4. visionOS window corner and confirmation sheets
 

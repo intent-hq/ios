@@ -19,7 +19,9 @@ same avatar on iOS and desktop.
 Applies to: `AgentAvatarDesign` cases
 
 The `CaseIterable` order mirrors the desktop avatar catalog and is behaviorally
-significant, so `sorted_enum_cases` is disabled for the cases.
+significant: it changes which fallback design an agent gets. So
+`sorted_enum_cases` is disabled for the cases. A desktop catalog change needs
+the same change here.
 
 ### 2. Built-in designs and lookups mirror avatar-design.ts
 

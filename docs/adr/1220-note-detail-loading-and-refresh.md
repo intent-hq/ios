@@ -89,7 +89,8 @@ navigation to that workspace; nil falls back to the current one.
 `intent://local/{workspaceId}/task/{id}` and
 `intent://local/{workspaceId}/note/{id}`. Long forms carry the embedded
 workspace id. Short forms return nil for it, and callers fall back to the
-current workspace.
+current workspace. A resource word in the first slot is always the short form,
+even when the next segment is also a resource word.
 
 ### 8. Truncation notice
 

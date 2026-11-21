@@ -12,7 +12,8 @@
 
 Several small helpers port desktop (cloudlands-fe) logic so that iOS shows the
 same values and order as the desktop app. They must keep matching the FE
-behavior.
+behavior, quirks included, or the two clients disagree: a desktop change to one
+of these functions needs the same change here.
 
 ## Decisions
 

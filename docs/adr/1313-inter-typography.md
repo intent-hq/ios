@@ -21,6 +21,10 @@ fonts. Use `interFont` on SwiftUI text for Bold Text support. Unsupported
 scripts and emoji use the platform's glyph fallback; Inter does not cover every
 Unicode character.
 
+Figma tracking is a percent of point size. Native line boxes include leading
+that Figma trims: keep the visible text gap, and never force Figma's trimmed
+line-box heights on native text.
+
 ### 2. Token mapping
 
 | Style | Figma token | Size/weight | Scaling role and use |

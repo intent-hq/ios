@@ -9,7 +9,10 @@
 ## Context
 
 Custom-styled buttons do not get the system's visionOS gaze highlight or hit
-target sizes. These helpers add them on visionOS and leave iOS unchanged.
+target sizes. These helpers add them on visionOS and leave iOS unchanged; every
+gaze helper is a no-op off visionOS, which `WorkspaceControlGazeTests` checks. A
+new custom-styled control on visionOS needs a gaze helper, or it shows no hover
+feedback.
 
 ## Decisions
 
@@ -56,3 +59,13 @@ Applies to: `View.visionButtonHover(isEnabled:)`, `View.visionHoverShape(_:)`,
   highlight itself, so `IntentContentButtonStyle` does not stack a second one.
 - `visionSegmentSpacing` leaves room between the individual gaze highlights
   without changing iOS.
+
+### 4. Transcript-row buttons pass through the copy overlay
+
+Applies to: `IntentButtonStyle.passesThroughCopyMenu`
+
+In a transcript row, every `IntentButtonStyle` button sets
+`passesThroughCopyMenu`, which puts a rectangular passthrough marker behind the
+whole pill, so taps on its padding reach the button inside the row's copy
+overlay (ADR-0907). Taps in the corners outside the rounded pill reach neither
+the button nor Copy. `CopyContextMenuPassthroughPolicyTests` enforces this.

@@ -110,10 +110,14 @@ builds the `Authorization: IntentProof <JWS>` value from the relay contract
 (`services/push-relay/README.md`): a compact JWS that binds method, path, body
 hash, time and a single-use id.
 
+`PushRelayContractTests` checks this contract against `services/push-relay`
+(README and test fixtures). Its known-answer values come from Node's crypto, as
+the relay uses it, not from the Swift code under test.
+
 ### 10. Link state and the trusted relay
 
 Applies to: `RelayLink.connectionId`, `RelayLinkState`, `RelayLinkState.trustedRelayHost`,
-`RelayLinkState.load(from:)`, `RelayLinkState.init(from:)`
+`RelayLinkState.isTrustedRelay(_:)`, `RelayLinkState.load(from:)`, `RelayLinkState.init(from:)`
 
 `RelayLinkState` is what the phone knows about its relay registration and the
 decisions that follow from it. It is persisted as JSON in `UserDefaults`.
@@ -123,9 +127,12 @@ machine.
 `push.intentapp.dev` is the only relay the phone sends its push tokens to. A
 machine names the relay in `push.createLink`, so any other origin is refused: a
 hostile machine could otherwise collect the tokens and push through the real
-relay. Links saved before the relay check, or to any other relay, are dropped on
+relay. The URL must be exactly `https://push.intentapp.dev`: no port, user, path,
+query or fragment (`isTrustedRelay(_:)`). A self-hosted relay therefore needs an
+app change. Links saved before the relay check, or to any other relay, are dropped on
 load, so no further tokens go there and honest machines can link again. State
-saved before `pendingUnlinks` existed still decodes.
+saved before `pendingUnlinks` existed still decodes. Old state stays on devices,
+so removing a stored field needs a decode fallback.
 
 ### 11. Link state rules
 

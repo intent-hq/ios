@@ -37,6 +37,9 @@ than a rounded percentage. Examples:
 - The Saved palette in `Constants.Connections` stays directly comparable with
   the design export.
 
+A design change starts in Figma and copies the exported values; constants are
+not tuned by eye.
+
 ### 2. Pairing colors are connection-scoped
 
 Applies to: `Constants.Pairing` colors
@@ -44,6 +47,11 @@ Applies to: `Constants.Pairing` colors
 Connect and Manual colors come from full-frame Figma modes: dark 3051:54405,
 light 3051:54203. They stay connection-scoped; the app's global `Theme` is
 unchanged.
+
+The same rule holds for every redesigned area (`Constants.Pairing`,
+`Constants.Conversation.Design.Palette`, `IPadShellStyle`, `ConnectionSheet`):
+it gets its own scoped palette and reuses shipped colors instead of editing a
+shared palette, so a redesign of one screen never changes another.
 
 ### 3. The backdrop is requested by the presenter
 
@@ -76,3 +84,6 @@ measured, scalable content.
 `Connections.initialSheetHeight` comes from Saved frame 3051:54118. The shared
 sheet replaces this two-card estimate with measured content; neither the row
 count nor the text height is capped.
+
+In general, Figma heights are visual baselines, never caps on text: Dynamic Type
+and platform hit targets win.

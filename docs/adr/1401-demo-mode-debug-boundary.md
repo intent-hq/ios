@@ -53,3 +53,19 @@ Applies to: `DemoStartupConnection`
 Debug UI tests seed a saved pinned loopback route, then use the production
 `ConnectionManager` and the connecting and recovery views. Demo fixtures serve
 only post-admission data. No progress state or connected flag is injected.
+
+### 6. Demo fixtures act at the wire, and extra scenarios are opt-in
+
+Applies to: `DemoMode`, `DemoConnectionTransport`, `DemoDesignScenario`
+
+Fixtures return ordinary RPC payloads, chat snapshots and events into the
+normal handlers; they never set store or view state. A store or view behavior
+can be tested in demo mode only if it is reachable from the wire.
+
+Each extra scenario (history pages, inline images, PDF, text and HTML reports,
+startup transcript, browser scripts, failures) needs its own launch argument.
+Without it, the ordinary demo and the App Store screenshots stay unchanged. A
+new scenario adds a launch argument; it never changes the default fixtures.
+
+Tests synchronize on evidence (trigger files, persistent records), never on
+guessed sleeps, because a fixed delay cannot account for a loaded simulator.

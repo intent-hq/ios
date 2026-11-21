@@ -100,7 +100,8 @@ directories.
 
 Applies to: `DiagnosticWriter.loadIfNeeded()`
 
-When storage cannot be read, the writer retries on a later batch if storage
+When storage cannot be read, the writer sets `DiagnosticLoss.storageUnavailable`
+and retries on a later batch if storage
 becomes available. It does not turn unreadable history into an empty replacement
 before a safe read.
 
@@ -110,7 +111,10 @@ Applies to: `DiagnosticWriter.expire(at:)`
 
 Records age by their first occurrence: expired occurrences cannot be subtracted
 from a summary without keeping every timestamp. A clock rollback purges future
-records instead of extending their retention indefinitely.
+records instead of extending their retention indefinitely. Retention can
+therefore drop an event family early when its first occurrence expires. Purging
+a future record after a rollback rotates `historyRevision` by itself, even when
+no worker ran at the future time.
 
 ### 11. Eviction invalidates older reviews only
 
@@ -126,8 +130,9 @@ Applies to: `DiagnosticStorage`, `DiagnosticFileStorage`
 
 Only the writer actor calls this synchronous file API. The injectable boundary
 is for storage-failure tests, not for event producers. Only the bounded ZIP is
-written: no duplicate loose report files. The file protection policy is applied
-to pre-existing directories too, and diagnostics are never synced.
+written: no duplicate loose report files. `DiagnosticFileStorage` applies
+`completeUntilFirstUserAuthentication` protection to new and pre-existing
+directories, and excludes diagnostics from sync.
 
 ### 13. The ZIP encoder is deliberately minimal
 
@@ -146,6 +151,11 @@ The fixed fields are:
 - Central directory: "version made by" is `version20` (DOS, version 2.0); extra
   length, comment length, disk number and internal attributes are 0; external
   attributes are 0 (not a symlink).
+
+`DiagnosticZIPTestReader` is an independent, strict stored-ZIP reader. It walks
+the central directory, follows each local-header offset, and checks CRC with its
+own bitwise code, not the writer's table, so a shared bug cannot hide. Real Files
+and system-share interoperability stays a separate runtime check.
 
 ### 14. Preview shows the original bytes off the UI actor
 

@@ -23,7 +23,9 @@ content. These types define what an event may contain and who records a failure.
 Applies to: `DiagnosticEvent`
 
 The channel is intentionally separate from `AppLog`. No message, identifier,
-path, dictionary or foreign error can be supplied to a persisted event.
+path, dictionary or foreign error can be supplied to a persisted event. A new
+diagnostic field needs a closed type and a review of `DiagnosticEvent`;
+`DiagnosticCoverageTests` checks that the schema has no free-form fields.
 
 ### 2. Only consecutive repetition is summarized
 
@@ -110,7 +112,7 @@ catch.
 
 ### 11. Connection loss does not raise an alert
 
-Applies to: `DiagnosticErrorOwnership.isConnectionLoss(_:)`
+Applies to: `DiagnosticErrorOwnership.isConnectionLoss(_:)`, `DiagnosticErrorOwnership.alertMessage(for:)`
 
 A request that failed only because the Mac connection dropped (or was not up)
 is a connection loss. Read-only mode covers these, so they never raise an alert.

@@ -62,7 +62,8 @@ below.
 
 ### 5. The app drives the activity until a machine links to the relay
 
-Applies to: `AgentLiveActivityController`, `AgentLiveActivityController.setRelayDriven(_:)`
+Applies to: `AgentLiveActivityController`, `AgentLiveActivityController.setRelayDriven(_:)`,
+`AgentLiveActivityController.staleAfter`
 
 The controller keeps one Live Activity in step with running agents on every live
 backend. The app drives every update, so the activity is current while the app
@@ -73,6 +74,12 @@ controller only ends activities when the switch turns off.
 The relay starts its own activity with push tokens, so an app-started one ends
 when the first machine links. The app adopts the relay's activity when the last
 machine unlinks.
+
+There is only ever one writer, because two writers on one activity make the card
+flicker and show old content. With no linked machine, an app-driven card is
+marked stale after `staleAfter` (30 minutes) without an update. Code that writes
+the activity checks `isRelayDriven` first. A relay outage freezes the card for
+linked machines; the stale date still applies.
 
 ### 6. Preference and dismissal
 
