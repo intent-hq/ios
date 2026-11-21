@@ -82,6 +82,11 @@ phase before the fetch task starts. The workspace id advances now, not when the
 fetch starts, so an in-flight response for the old workspace already fails the
 stale-response guard in `_fetchAgents`.
 
+A switch to the same workspace is a no-op, so a view that reappears does not
+flash the loading state. A refetch that returns an identical list does not
+assign `agents`; otherwise the list rebuilds under the swipe-back pop
+transition.
+
 ### 8. Event-driven fetches are debounced; first loads are not
 
 Applies to: `AgentStore.fetchAgents(workspaceId:)`, `AgentStore.createAgent(...)`
@@ -127,7 +132,8 @@ read walks all `agent.list` pages of its variant. A failed page fails the read,
 so a partial list never replaces a whole one. Per-scope request tickets stop an
 older read from winning a race. The epoch also protects a workspace A → B → A
 navigation. A cancelled read publishes nothing, because a disappearing view must
-not publish a late response, and a cancelled group stays retryable.
+not publish a late response, and a cancelled group stays retryable. A later
+read after a cancelled one still publishes.
 
 ### 12. Legacy daemons return every active row in the initial read
 

@@ -76,3 +76,18 @@ threshold matches the list's existing at-bottom detection (distance <= 50,
 A `nil` distance (scroll view not found yet) is unknown, not bottom. The scroll
 targeted a divider with unread rows below it, so follow is disabled rather than
 risking a later follow that pulls the user off it.
+
+### 5. The seen marker moves only on proof of looking
+
+Applies to: `ConversationViewModel.conversationAppeared()`,
+`ConversationViewModel.conversationDisappeared()`, `agent.markSeen` callers in
+`ConversationViewModel`
+
+Entry never marks seen, so the divider anchor survives. A finished turn marks
+seen after a short debounce, only while the conversation is on screen and the
+app is active. A send marks seen only when it succeeds, as on the desktop:
+composing is proof of looking, but a failed send delivered nothing.
+`conversationDisappeared()` marks seen at once and cancels the debounce, so a
+row that lands later is not marked. Every trigger goes through the store's
+dedupe against the current marker.
+

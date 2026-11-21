@@ -32,8 +32,8 @@ The paths differ only in the identity that an id-less block falls back to.
 `ConversationMessage.init(from:)` is the one message decoder (ios#257).
 `parseMessage` routes through it, so the dictionary and `Codable` paths cannot
 drift. Array fields are lenient per element: a malformed entry is dropped and
-its siblings are kept. Id-less blocks take the daemon's `{messageId}:{index}`
-identity.
+its siblings are kept. A message row without a string `id` is dropped. Id-less
+blocks take the daemon's `{messageId}:{index}` identity.
 
 ### 2. Id-less blocks get a deterministic fallback id, never a fresh UUID
 

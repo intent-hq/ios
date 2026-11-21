@@ -81,3 +81,14 @@ only when `pendingSyncUpdatedAt` is `nil`.
 After a route patch, the import clock is left alone. The patched row may
 contain newer shared credentials or labels that still need to reach the live
 cache.
+
+### 6. Owner records publish only for a verified owner
+
+Applies to: `PersistenceManager.preparePublication`,
+`PersistenceManager.savePairing(server:token:)`
+
+An owner record is published only for an owner that the connection verified.
+The legacy `savePairing(server:token:)` path stores no principal, so it has no
+publication authority. A verified pairing still publishes when its first route
+refresh learns no route.
+

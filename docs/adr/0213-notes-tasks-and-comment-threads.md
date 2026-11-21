@@ -28,7 +28,8 @@ projection of the `dependsOn` entries that are not yet complete.
 ### 2. Slim and truncated rows
 
 Applies to: `Note.contentPreview`, `Note.contentLength`, `Note.contentTruncated`,
-`Note.contentBytes`, `Note.isContentStale`, `Note.preview`
+`Note.contentBytes`, `Note.isContentStale`, `Note.needsFullContent`,
+`Note.preview`
 
 `contentPreview` and `contentLength` are the slim `note.list` projection fields
 (PROTOCOL §5.2 `projection: "slim"`). Slim rows omit `content` and carry the
@@ -44,6 +45,9 @@ UTF-8 size.
 the daemon reported a non-empty content length, but the local row has no
 content. Full rows (no `contentLength`) and genuinely empty notes
 (`contentLength == 0`) are never stale.
+
+`needsFullContent` is true for both slim and cut rows. On a slim row, full
+`content` still wins when the row carries it.
 
 `preview` falls back to the daemon's `contentPreview` (first 500 characters)
 because slim rows carry no `content`. That is enough for a one-line excerpt.

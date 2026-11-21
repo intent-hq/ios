@@ -6,7 +6,7 @@
   (`Intent/Models/GitHubRepo.swift`), `GitHubRepoSuggestions`
   (`Intent/Models/GitHubRepoSuggestions.swift`), `MonitoredPr`,
   `MonitoredPrSnapshot` (`Intent/Models/MonitoredPr.swift`), `PullRequestDetail`,
-  `PullRequestReviewer`, `WorkspaceDiffBuilder.hunks(patch:)`
+  `PullRequestCheck`, `PullRequestReviewer`, `WorkspaceDiffBuilder.hunks(patch:)`
   (`Intent/Models/PullRequestDetail.swift`), `PullRequestListItem`,
   `PullRequestListRepository` (`Intent/Models/PullRequestListItem.swift`),
   `WorkspacePrPill` (`Intent/Models/WorkspacePrPill.swift`),
@@ -113,7 +113,7 @@ Applies to: `PullRequestListItem.id`, `linkedWorkspaces(_:)`, `init(githubURL:)`
 - A github.com pull request link is titled by its number until details load.
 - `associated(with:monitors:)` returns the workspace's detected pool and active
   PR, including PRs in its git roots, plus agent-monitored PRs in any
-  repository.
+  repository, deduplicated by repository and number, newest-updated first.
 - `groupedByProject` keeps the incoming newest-first order, so the most
   recently updated project leads. Titles name the owner only when two groups
   share a repository name.
@@ -122,8 +122,12 @@ Applies to: `PullRequestListItem.id`, `linkedWorkspaces(_:)`, `init(githubURL:)`
 
 ### 6. Pull request detail rules
 
-Applies to: `PullRequestReviewer.rows(reviews:requested:)`,
+Applies to: `PullRequestCheck.summary(_:)`,
+`PullRequestReviewer.rows(reviews:requested:)`,
 `WorkspaceDiffBuilder.hunks(patch:)`
+
+The collapsed checks row leads with the worst outcome ("2 Failed"), then
+pending, then the passed count.
 
 The reviews wire list is oldest first, so `rows` keeps the latest review per
 author, then appends requested reviewers who have not reviewed yet. A GitHub
@@ -148,7 +152,8 @@ Applies to: `WorkspacePrPill`
 PR pill helpers in `sidebar-changes-utils.ts` (`toPRDisplayStatus`,
 `monitorDisplayStatus`, `mergeMonitoredPRs`, `selectPrimaryPr`,
 `countOtherMonitors`, `compareMissingLast`), so iOS picks the identical primary
-PR and "+N" count. It has no networking or view concerns.
+PR and "+N" count. It has no networking or view concerns. A web change to
+these helpers needs the same change here.
 
 - `Status` is the web `PRDisplayStatus`: the four pill buckets.
   `Status.init(wire:)` is `toPRDisplayStatus`: it maps the raw wire

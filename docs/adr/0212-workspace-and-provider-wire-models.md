@@ -79,3 +79,18 @@ because probes can fail transiently.
 `noneSelectable` is true when the daemon returned providers but none can be
 selected (all signed out). In that state the pickers show desktop-setup
 guidance instead of an empty-value menu (monorepo#985).
+
+### 6. Wire models decode leniently and keep open vocabularies as raw strings
+
+Applies to: `Workspace`, `ModelInfo`, `ProviderInfo`, and the other daemon wire
+models in `Intent/Models.swift` and `Intent/Models/`
+
+Daemons of many versions talk to the app: newer ones add fields and enum
+values, older ones omit them. A model decodes the fields it needs and makes the
+rest optional. The caller drops a row that lacks its required fields (for
+example with `compactMap`) instead of failing the whole response. When the
+daemon can add values later, the model keeps the raw wire string (as
+`displayStatus`, `attention`, and `prStatus` do) and the presentation layer
+maps it. An unknown value then shows as a fallback, not as a decode failure,
+and presentation code must handle every optional field and unknown string.
+

@@ -67,6 +67,8 @@ Applies to: `PersistenceManager.refreshInvitedSessions(authenticate:)`
 
 All reads and removal folding happen before authentication and writes. The
 caller supplies isolated connections. No owner-side socket is borrowed.
+A guest never requests the owner-only `host.status` method during an invited
+route refresh.
 
 ### 7. After authentication, only the credential just checked is installed
 
@@ -86,6 +88,11 @@ Applies to: `PersistenceManager.applyInvitedRemovalFloors()`
 Suppressed ids are returned even when the credential save fails. Windows must
 stop serving a person once their removal has been observed.
 
+Durable local removal evidence beats both v1 and v2 records, also when a later
+cloud snapshot loses the removal and brings back a still-valid old credential.
+A removed connection stays removed on every device until the person
+deliberately pairs it again.
+
 ### 9. Legacy v1 migration reserves sources and authenticates before choosing winners
 
 Applies to: `PersistenceManager.migrateInvited(snapshot:authenticate:)`,
@@ -101,6 +108,10 @@ ordering cannot turn a missing-person deletion into C." It did not define "C".
 
 Retirement of a legacy alias is installed only after the winning candidate is
 persisted and published by the ordinary invited pass.
+
+After the migration completes, a frozen v1 writer can still overwrite the
+shared alias. Neither its newer clock nor another claimed person reopens the
+migration.
 
 ### 10. Pre-v2 credentials are classified late and keep their pairing clock
 

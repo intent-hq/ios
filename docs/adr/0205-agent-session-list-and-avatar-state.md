@@ -105,6 +105,7 @@ Applies to: `AgentAvatarState.state(for:)` and its private helpers
 
 The state mirrors cloudlands-fe `getAvatarState`
 (`agent-avatar/avatar-state.ts`) so both clients color an agent the same way.
+A change to `avatar-state.ts` needs the same change here.
 Precedence, highest first: completed (unless a turn is running) > failed >
 question > attention (blocker or discussion, unless a turn is live) > waiting >
 running > idle.

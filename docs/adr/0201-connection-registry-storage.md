@@ -5,9 +5,10 @@
 - Applies to: `PersistenceManager` (`Intent/PersistenceManager.swift`),
   `ConnectionRegistryReadError`, `ConnectionRegistryReadResult`
   (`Intent/ConnectionRegistryReadResult.swift`), `KeychainStorage`
+  (`Intent/PersistenceKeychainStorage.swift`), `SecItemKeychainStorage`
   (`Intent/PersistenceKeychainStorage.swift`), `PairedServer`, `StoredConnection`
   (`Intent/Models.swift`)
-- Related issues: ios#341
+- Related issues: ios#263, ios#341
 
 ## Context
 
@@ -83,7 +84,11 @@ still update the grown record in place instead of inserting a duplicate.
 A matching `tcAddress` is an equally valid identity. A manual tunnel-only
 re-pair carries no hosts at all, so its host set is disjoint with every record.
 Without this key each re-pair of the same tunnel address would insert a
-duplicate record.
+duplicate record. Two records without a `tcAddress` never match on this key: a
+missing address is not equal to another missing address.
+
+As a consequence, two different daemons that share a host and port are treated
+as the same pairing.
 
 Callers that publish pairing success must use `upsertConnectionWithOutcome`,
 which reports whether the resulting registry was durably saved.
@@ -172,3 +177,14 @@ daemons without a running tunnel.
 
 `StoredConnection.displayName` is the daemon hostname when known, else the
 first host and port.
+
+### 13. Keychain items stay device-local and readable after first unlock
+
+Applies to: `SecItemKeychainStorage`
+
+Every local credential class is `AfterFirstUnlock`, non-synchronizable, and
+app-private (ios#263). Synced backend records are read as synchronizable
+shared-group items with no accessibility constraint of their own. Any change to
+these attributes, including a move to a `ThisDeviceOnly` class, needs an
+explicit policy decision and a migration.
+`IntentTests/PersistenceKeychainAccessibilityTests.swift` covers the policy.
