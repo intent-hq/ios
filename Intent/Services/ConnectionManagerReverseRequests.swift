@@ -10,8 +10,6 @@ extension ConnectionManager {
         }
     }
 
-    /// Reverse IDs are opaque (the daemon uses strings); inspect method before
-    /// matching ordinary numeric response IDs. Always reply on the same socket.
     func handleReverseRequest(id: Any, method: String, params: Any) {
         guard let currentSocket = socket else { return }
         let generation = connectionGeneration
@@ -34,8 +32,6 @@ extension ConnectionManager {
                 guard let text = String(data: data, encoding: .utf8) else { return }
                 try await currentSocket.send(text)
             } catch {
-                // Socket recovery owns transport failures. Never replay a reverse
-                // request or its response on a replacement connection.
             }
         }
     }

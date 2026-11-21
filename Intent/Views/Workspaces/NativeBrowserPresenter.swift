@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// One foreground window owns presentation; other windows sharing the backend
-/// observe the registry without opening duplicate covers.
 struct NativeBrowserPresenter: ViewModifier {
     @Environment(BackendSession.self) private var session
     @Environment(\.scenePhase) private var scenePhase

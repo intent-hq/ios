@@ -80,7 +80,6 @@ struct NativeBrowserRequestTests {
 
         func forward(_ url: URL) throws -> URL {
             addresses.append(url.absoluteString)
-            // Keep the real page/view lifecycle, without any network dependency.
             return try #require(URL(string: "about:blank"))
         }
 

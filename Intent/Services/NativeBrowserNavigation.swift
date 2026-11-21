@@ -2,8 +2,6 @@ import Combine
 import Foundation
 import Observation
 
-/// Logical native browser sessions. Only the presented session has a WKWebView;
-/// registry visibility never implies page load or browser automation support.
 @MainActor
 @Observable
 final class NativeBrowserNavigation {
@@ -116,7 +114,6 @@ final class NativeBrowserNavigation {
         guard let actions = params["actions"] as? [[String: Any]], !actions.isEmpty else {
             return failure("", code: "invalid-params", message: "A nonempty navigation action list is required.")
         }
-        // Reject mixed automation batches before opening even the first tab.
         if let unsupported = actions.first(where: { !Self.actions.contains($0["action"] as? String ?? "") }) {
             return failure(
                 unsupported["action"] as? String ?? "",
@@ -226,7 +223,6 @@ final class NativeBrowserNavigation {
     }
 
     private func checkOwner(_ tab: NativeBrowserTab, agent: String?, mutating: Bool) throws {
-        // Missing agent identity is the daemon's authenticated human operation.
         guard let agent else { return }
         if let owner = tab.ownerAgentId, owner != agent {
             throw NativeBrowserFailure(code: "not-owner", message: "This tab belongs to another agent.", ownerAgentId: owner)
@@ -282,7 +278,6 @@ extension NativeBrowserNavigation {
         persist()
     }
 
-    /// Serialize snapshots so a delayed UI report cannot resurrect a closed tab.
     private func report() -> Task<Void, Error> {
         persist()
         let previous = reportTask
