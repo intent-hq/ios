@@ -92,7 +92,10 @@ Suggestions are assembled without side effects. Recent repos (the daemon's
 known-repo registry, most recently used first) are pinned on top under a
 "Recent" header. The first page of the user's GitHub repos follows. Both are
 prefix-filtered by the typed text. Global search results come last, deduped
-against everything shown; recents win duplicates.
+against everything shown; recents win duplicates. The local registry is keyed
+by path, so two clones of one repo give two entries with the same owner and
+name. Dedupe runs against the displayed rows, so a repo that the local prefix
+filter hides can still come back from server search.
 
 Global search runs only for trimmed queries of at least
 `minSearchQueryLength` (2) characters (web parity: the github-repo-search

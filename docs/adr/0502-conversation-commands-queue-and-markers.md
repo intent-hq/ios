@@ -3,6 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `ConversationCommands` (`Intent/Services/ConversationCommands.swift`), `ConversationCommands.QueueMutation`, `QueueMutationHistory`, `QueueRead` (`Intent/Services/ConversationCommands+QueueEvents.swift`)
+- Related issues: intent-hq/intent#840
 
 ## Context
 
@@ -99,3 +100,16 @@ ids. Logs hold only array positions and error shapes (decoding case and path,
 or the error type), never content or metadata. The optional collection return
 is deliberate: nil preserves the current queue for malformed input, and an
 empty array clears it.
+
+### 10. Send now carries only ids and keeps a re-queued entry
+
+Applies to: `ConversationCommands.sendQueuedMessageNow(agentId:messageId:workspaceId:)`
+
+One `agent.sendQueuedMessageNow` call carries only ids; the daemon owns the
+payload. On success only that entry leaves the local queue. A reply with
+`queued: true` keeps it: the daemon could not start the turn and put the entry
+back at the front (slot race, PROTOCOL §5.5), or the session is quarantined
+(intent-hq/intent#840). The following `agent:queue:updated` fixes the order. A
+definitive not-found refreshes the queue and rethrows. A `-32602` without
+`data.code == "not-found"`, and every other error, propagates with no refresh
+and no local change.

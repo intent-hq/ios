@@ -152,3 +152,33 @@ A text read begun before a live update cannot erase fragments or an
 authoritative replacement that arrived while it waited. Hydration may expand a
 partial text body, but a later live update or snapshot owns that text.
 Tool and image previews still keep their full hydrated body.
+
+The hydrated-block cache holds `maxHydratedBlocks` (30, like the desktop) and
+evicts the oldest. Eviction loses nothing visible, because the full block is
+already merged into the row, and an evicted block can be fetched again.
+Overlapping requests for one block share one fetch. A fetch that resumes after
+`reset()` is not cached. A failed fetch keeps the preview and clears
+`hydratingBlockKeys`, so the user can retry.
+
+### 12. Re-delivered, sparse, and omitting payloads
+
+Applies to: `applySnapshot(_:)`, the delta apply path
+
+1. A delta with a seq that was already applied is a re-delivery. It is
+   ignored, not treated as a gap. A duplicate or late seq-0 snapshot after
+   deltas applied is ignored, so the expected seq and the transcript never
+   rewind.
+2. A sparse tool progress tick (empty name, same tool call id) keeps the
+   earlier block's name, input, and tool kind and takes only the new status. An
+   `updated` entity with a name replaces the block, so classification sees the
+   fuller raw input; raw input wins over the `_acpTitle` fallback.
+3. A first delta without a timestamp gets a local one; the terminal frame's
+   server timestamp replaces it.
+4. A snapshot is authoritative also for what it omits: missing truncation keys
+   reset to defaults, and a snapshot without activity flags clears a stale
+   streaming state. A mid-turn snapshot shows the partial in-flight assistant
+   row as streaming.
+5. A user-row delta with `streamingComplete: true` completes the row, not the
+   turn. It neither raises nor clears the streaming flag or the optimistic
+   Thinking indicator, and it upserts onto the optimistic local row through the
+   synthetic `{messageId}:0` block id.

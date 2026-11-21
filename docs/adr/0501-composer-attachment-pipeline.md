@@ -3,7 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `ConversationAttachmentPipeline` (`Intent/Services/ConversationAttachmentPipeline.swift`), `ConversationAttachmentPipeline` photo extension and `PhotoLibraryVideos` (`Intent/Services/ConversationAttachmentPipeline+Photos.swift`), `ImportedPhotoVideo` (`Intent/Services/ImportedPhotoVideo.swift`)
-- Related issues: #463, #619
+- Related issues: #463, #619, #861
 
 ## Context
 
@@ -57,6 +57,7 @@ so it runs on the concurrent pool. `outgoingJPEGData` bakes orientation into
 bounded pixel dimensions before JPEG encoding. It never modifies the original
 image retained by the draft or send attempt. When every pass stays over
 budget, it returns the last data, and the caller rejects it before any RPC.
+A cancelled send stops before encoding the next photo.
 
 ### 5. The Assistant sends images inline
 
@@ -129,7 +130,17 @@ A connection drop restores the draft silently, because
 `DiagnosticErrorOwnership.alertMessage` returns nil for it; read-only mode
 explains it.
 
-### 12. Test seams
+### 12. One image limit on every surface
+
+Applies to: `Constants.Conversation.Composer.maximumImageSelectionCount`
+
+The image limit is 10 on every surface: the composer, the question tray, and
+workspace creation. This is closer to the desktop, which has no count cap.
+Every surface derives its capacity and its limit copy from
+`maximumImageSelectionCount` (#861). The Assistant accepts no videos, so its
+picker is images-only and Photos is disabled once its image slots are full.
+
+### 13. Test seams
 
 Applies to: `loadPhotoData`, `photoVideos`, `encodeOutgoingJPEG`
 

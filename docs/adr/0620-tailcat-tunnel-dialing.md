@@ -42,7 +42,10 @@ Applies to: `TailcatTunnelSession.init(client:forwarder:)`, `TailcatTunnelSessio
 1. The session owns the gomobile client and its loopback forwarder.
    `forwarder` is nil for a partially constructed session (client dialed, no
    forwarder started). Its `localPort` is then 0, and `close()` tears down only
-   the client.
+   the client. The session is `@unchecked Sendable`: the gomobile projections
+   are thread-safe Go handles, and `closed` is lock-guarded. Teardown closes
+   the forwarder before the client, because the forwarder rides the client's
+   tunnel.
 2. `close()` runs exactly once: the first caller tears down and awaits it, and
    later callers return at once.
 3. The gomobile closes run off the caller's executor. `close()` takes the Go
@@ -105,3 +108,15 @@ For the tailcat `Client`:
 Cancellation therefore never shortens `ping`; it only guarantees teardown.
 `raceCandidates` no longer waits on losers, so this cost is off the connect
 critical path. The debug log lines measure it.
+
+### 7. TailcatKit tests and end of stream
+
+Applies to: TailcatKit tests in `IntentTests/`, `TailcatKit/cmd/tcecho`
+
+1. TailcatKit has no visionOS (`xros`) slice, so its tests compile only under
+   `#if canImport(TailcatKit)`.
+2. The byte-exchange smoke test dials a `TailcatKit/cmd/tcecho` server that CI
+   starts and names in `TAILCAT_SMOKE_TOKEN`. Without it, only that test skips.
+3. A gomobile read reports end of stream as an error whose description is
+   "EOF". An empty Go slice would bridge to nil `NSData` and break the
+   `throws -> Data` projection.

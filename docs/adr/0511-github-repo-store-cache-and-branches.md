@@ -3,6 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `GitHubRepoStore` (`Intent/Services/GitHubRepoStore.swift`, `Intent/Services/GitHubRepoStore+Branches.swift`)
+- Related issues: ios#308
 
 ## Context
 
@@ -40,7 +41,7 @@ Applies to: `loadIfNeeded(force:)`, `startLoad(silent:)`, `cacheState`, `isLoadi
 parity.
 
 - Cold (nothing cached): `loadIfNeeded` awaits the load with `isLoading` set; a
-  concurrent call joins the in-flight load (single-flight).
+  concurrent call joins the in-flight load (single-flight, ios#308).
 - Cached and `force == false`: it returns at once and revalidates in the
   background without touching `isLoading` or the cached lists. A failed refresh
   keeps the stale lists.
@@ -158,6 +159,7 @@ older daemon, or an empty listing all read as a cache miss (nil). It is never
 promoted to `listing`. The paint is published only while the same generation is
 still waiting on the authoritative read (no listing, no error yet), so a late
 answer from before a reconnect or after the authoritative outcome cannot land.
+The reconnect's own first paint still lands.
 
 ### 10. Default branch lookup
 
@@ -175,7 +177,8 @@ Applies to: `warmRepoCache(owner:repo:)`, `warmedRepos`
 `workspace.create` hydrates from a fresh cache (PROTOCOL §5.11). Every failure
 (a warm already in flight, `-32601` on an older daemon, offline) is only
 logged. Each repo is warmed at most once per session (FE `RepoCacheWarmer`
-parity: at most once per warmer lifetime). The returned task (nil when
+parity: at most once per warmer lifetime). A reconnect's `invalidate()` drops
+`warmedRepos`, so a repo is warmed again once per connection. The returned task (nil when
 deduplicated) lets tests await completion; callers need not keep it.
 
 ### 12. Test-visible task handles

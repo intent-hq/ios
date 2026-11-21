@@ -120,7 +120,7 @@ after reassembly. Both the buffered size and the inflated size are capped at
 
 A continuation with no message in progress is a protocol violation.
 `MessageAssembler` drops it and records a failure rather than fabricate a
-message.
+message. A malformed message never affects the next one.
 
 `InboundStream` turns raw socket bytes into messages and control events: frame
 decoding, RFC 6455 fragmentation rules, and permessage-deflate. It is pure; the

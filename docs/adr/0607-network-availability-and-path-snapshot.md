@@ -35,7 +35,7 @@ automatically at scene teardown.
 
 Applies to: `NetworkCopyDiagnostics`, `NetworkCopyDiagnostics.entries`
 
-The diagnostics are opt-in. They never accept free-form text and never write
+The diagnostics are temporary, opt-in phone evidence. They never accept free-form text and never write
 data. `entries` is not observed, so recording does not subscribe the presenter
 to later diagnostic events.
 
@@ -49,6 +49,8 @@ Applies to: `NetworkPathSnapshot`
    order, even under a virtual primary interface.
 3. `isSatisfied` keeps the transport's existing satisfied/not-satisfied
    interpretation (only `.satisfied` counts).
+4. Interfaces are classified from interface metadata, never from name
+   prefixes.
 
 ### 6. Socket path observation is per-connection evidence
 

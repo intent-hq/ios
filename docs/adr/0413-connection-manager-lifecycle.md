@@ -6,6 +6,7 @@
   `ConnectionManagerRequests.swift`, `ConnectionManagerRecovery.swift`,
   `ConnectionManagerStartup.swift`, `ConnectionManagerHeartbeat.swift`,
   `ConnectionManagerBrowser.swift` (all in `Intent/Services/`)
+- Related issues: intent-hq/intent#4185
 
 ## Context
 
@@ -200,3 +201,19 @@ forwarder. The auxiliary tunnel keeps bearer credentials out of browser
 content. It reads `protocolVersion` from `system.status`, which exposes the
 same value as `client.hello` without replacing the live RPC connection's
 client identity.
+
+### 15. Recovery backoff restarts only after a stable socket
+
+Applies to: `ConnectionManager.reconnectStartingAttempt(connectionLifetime:previousAttempt:)`
+
+A socket that lived at least `stableConnectionThreshold` (10 s) restarts
+recovery at the first attempt, with no backoff. A shorter-lived socket
+continues the backoff from its previous attempt.
+
+### 16. A failed pairing does not abandon a running reconnect
+
+Applies to: `ConnectionManager.connect(...)`
+
+A pairing that fails while the manager is reconnecting keeps the reconnect loop
+and its original target. It never leaves the app on `.connecting` for the
+failed target (intent-hq/intent#4185).

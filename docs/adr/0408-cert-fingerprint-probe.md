@@ -43,6 +43,11 @@ dialed. `tlsFailed` means TCP connected but the handshake failed, for example
 on a plain-TCP or HTTP listener. `unreachable` means the TCP connection never
 came up (refused, unroutable, DNS).
 
+`classify` applies these rules in order: a captured fingerprint wins; a
+TLS-domain error is `tlsFailed`; any other error is `unreachable`; a settled
+handshake without a fingerprint (or with an empty one) is `noCertificate`; no
+settlement before the deadline is `timeout`.
+
 ### 4. Failure causes are safe to show in Release
 
 Applies to: `CertFingerprintProbe.FailureCause`

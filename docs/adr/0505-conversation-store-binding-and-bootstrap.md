@@ -23,6 +23,11 @@ channel. The most recently opened conversations (`retainedConversationLimit`,
 10) stay in memory after their screen closes, so they stay readable during a
 connection drop.
 
+`RetainedTranscriptMemoryTests` measures the store-owned data model of those
+retained conversations (rows, blocks, search state; the screens are gone). The
+ceiling for ten 2,000-message transcripts is 400 MB, and it tightens when the
+model slims down.
+
 ### 2. Streaming binding is local
 
 Applies to: `ConversationStore.bindStreaming(agentId:workspaceId:)`, `deactivateStreaming()`
