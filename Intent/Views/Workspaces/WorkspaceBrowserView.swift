@@ -6,6 +6,7 @@ struct WorkspaceBrowserView: View {
     let browser: WorkspaceBrowser
     let connection: any SessionConnectionManaging
     var onClose: (() -> Void)?
+    var onPageChange: (String, String) -> Void = { _, _ in }
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -18,6 +19,15 @@ struct WorkspaceBrowserView: View {
 
     private var isConnected: Bool { connection.connectionState == .connected }
     private var attachmentKey: String { "\(isConnected)-\(scenePhase == .background)-\(retry)" }
+
+    private struct RequestedNavigation: Equatable {
+        let url: String
+        let id: UUID?
+    }
+
+    private var requestedNavigation: RequestedNavigation {
+        RequestedNavigation(url: browser.url, id: browser.navigationRequestID)
+    }
 
     var body: some View {
         NavigationStack {
@@ -38,7 +48,10 @@ struct WorkspaceBrowserView: View {
             .toolbar(onClose == nil ? .automatic : .hidden, for: .navigationBar)
             .task(id: attachmentKey) { await attach() }
             .onAppear { addressInput = targetAddress ?? browser.url }
+            .onChange(of: requestedNavigation) { _, request in updateRequestedURL(request.url) }
+            .onChange(of: page.title) { _, title in onPageChange(page.address, title) }
             .onChange(of: page.address) { _, address in
+                onPageChange(address, page.title)
                 if !address.isEmpty {
                     targetAddress = address
                     if !addressFocused { addressInput = address }
@@ -49,6 +62,12 @@ struct WorkspaceBrowserView: View {
             }
             .onDisappear { page.stop() }
         }
+    }
+
+    private func updateRequestedURL(_ url: String) {
+        targetAddress = url
+        addressInput = url
+        retry = UUID()
     }
 
     private var browserContent: some View {

@@ -166,6 +166,7 @@ What callers and future changes must respect. Omit when the decisions say it all
 | [0620](0620-tailcat-tunnel-dialing.md) | Tailcat tunnel dialing and teardown |
 | [0621](0621-transport-diagnostic-failure.md) | Transport diagnostic failures are closed classifications |
 | [0622](0622-task-store-live-state-and-event-classification.md) | TaskStore live state and task event classification |
+| [0623](0623-native-browser-navigation.md) | Native browser navigation ownership, requests and presentation |
 | [0701](0701-websocket-transport-and-certificate-pinning.md) | WebSocket transport runs on Network.framework with certificate pinning |
 | [0702](0702-websocket-handshake-framing-and-assembly.md) | WebSocket handshake, framing, and message assembly follow RFC 6455 and RFC 7692 |
 | [0703](0703-websocket-admission-handshake.md) | Admission runs on a bootstrap socket and a startup wait always reconnects |

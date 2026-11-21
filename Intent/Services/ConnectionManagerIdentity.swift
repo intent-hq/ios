@@ -15,6 +15,7 @@ extension ConnectionManager {
         capabilities = handshake.capabilities
         bindSavedIdentity(principal)
         connectionState = .connected
+        advertiseBrowserNavigation()
     }
 
     func clearPrincipal() {
@@ -108,6 +109,7 @@ extension ConnectionManager {
                 pendingAuthorityRevision = -1
                 authorityRefresh = nil
                 bindSavedIdentity(principal)
+                advertiseBrowserNavigation()
             } catch {
                 guard !Task.isCancelled, connectionGeneration == generation, socket === currentSocket else { return }
                 if ConnectionPrincipal.isRevocation(error) { rememberCurrentPersonRevoked() }

@@ -22,7 +22,7 @@ struct ConversationStartupReplayTests {
         let reconnect = fixture.connection.traffic(since: checkpoint)
         #expect(reconnect.methodCounts == [
             "chat.subscribe": 1, "agent.get": 1, "agent.getQueue": 1,
-            "agent.getSubscriptions": 1, "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1
+            "agent.getSubscriptions": 1, "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1, "browser.syncTabs": 1
         ])
         #expect(reconnect.requests.allSatisfy { $0.started.connectionGeneration == 2 })
         #expect(reconnect.notifications.count == 1)
