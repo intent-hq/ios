@@ -3,6 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `MonitoredPrStore`, `PrMonitorFlushMode` (`Intent/Services/MonitoredPrStore.swift`)
+- Related issues: monorepo#2211
 
 ## Decisions
 
@@ -50,3 +51,21 @@ Applies to: `MonitoredPrStore.foldMonitorEvent(monitors:eventType:data:)`
    are cleared.
 4. `prMonitor:completed`: the PR merged or closed. The row is kept, because
    completed monitors stay visible, and the immediate final wake was delivered.
+
+### 5. Reconnects and late replies never resurrect a monitor
+
+Applies to: `MonitoredPrStore`, `WorkspacePrMonitorsStore`
+
+1. A monitor that disappeared while disconnected and was replaced by a
+   different one is not resurrected by reissuing an RPC without applying its
+   reply.
+2. A `prMonitor.list` reply that was in flight never brings back a monitor that
+   a complete cancellation event removed, and never refills a list that
+   `unsubscribe()` cleared.
+
+### 6. Deinit removes the event handler
+
+Applies to: `MonitoredPrStore.deinit`
+
+The store removes its event handler on deinit (monorepo#2211), so a released
+lease leaves no handler on the connection.

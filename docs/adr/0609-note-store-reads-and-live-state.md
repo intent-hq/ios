@@ -3,7 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `NoteStore` (`Intent/Services/NoteStore.swift`, `Intent/Services/NoteStore+LiveState.swift`, `Intent/Services/NoteStore+TaskStatus.swift`, `Intent/Services/NoteStore+Events.swift`, `Intent/Services/NoteStoreCollections.swift`)
-- Related issues: ios#996
+- Related issues: ios#996, ios#250, monorepo#2211, monorepo#2213
 
 ## Context
 
@@ -25,7 +25,11 @@ Applies to: `NoteStore.loadPhase`, `NoteStore.invalidParametersErrorCode`
 3. Only the first read shows loading. Refreshes keep the list as it is.
 4. A refetch assigns `notes` only when the merged list differs, so an identical
    refetch does not invalidate observers.
-5. A cancelled fetch must not publish its late response.
+5. A cancelled fetch must not publish its late response, even when the reply
+   resumes it in the same main-actor turn (ios#250).
+6. `hasLoaded` stays false until the first read succeeds. An empty successful
+   list is a real empty state. A "Not connected" error while the socket is
+   still connecting never flips to the empty state.
 
 ### 2. Workspace switch resets synchronously, then subscribes once
 
@@ -44,11 +48,20 @@ Applies to: `NoteStore.prepareForWorkspaceChange(to:)`,
    nothing. It returns nil when the workspace is unchanged.
 3. The subscribe runs after the list, as `onConnected` does. A later switch,
    reconnect, or suspension bumps the generation, so only the last of them
-   subscribes.
+   subscribes. A late ack for the old workspace is released, and A → B → A ends
+   with one subscription for the last workspace. A connect delivery queued in
+   the same main-queue window does not reset that subscription. The generation
+   fence alone stops a superseded switch back to the same workspace.
 4. Live-state subscription is owned by `onConnected()` and, when the workspace
    changes, by `fetchNotes(workspaceId:)`. `readNotes` does not subscribe.
 5. After a list read, a stale spec note is hydrated with `note.get`, because
-   the spec's content links task notes.
+   the spec's content links task notes (the progress ring). Other rows stay
+   slim.
+6. `prepareForWorkspaceChange(to:)` is a no-op for the same workspace, so a
+   re-appear does not flash the loading state. A different workspace resets the
+   store at once, before any read runs. A read for the old workspace never marks
+   the new one loaded and never replaces its notes. An older read that resolves
+   while a newer one is in flight never publishes and never clears `isLoading`.
 
 ### 3. Reconnect is fenced by generation
 
@@ -118,7 +131,10 @@ Applies to: `NoteStore.fetchNote(noteId:workspaceId:)`, `NoteStore.NoteFetchResu
 7. The fetched note replaces a matching cached slim row, but never a newer row
    or a row from another workspace. A cut fetch never replaces a cached whole
    body of the same revision.
-8. `isCachedRowNewer` is true when the cached row has a strictly newer
+8. A body read that loses to a newer cached row never clears that row's stale
+   marker. The caller still gets the body it fetched. A response at the cached
+   revision or newer replaces the row.
+9. `isCachedRowNewer` is true when the cached row has a strictly newer
    `updatedAt`. Timestamps are parsed leniently. An unparseable side compares
    as not newer, which keeps the replace behavior.
 
@@ -153,6 +169,11 @@ Applies to: `NoteStore.subscribeLiveState(workspaceId:generation:)`,
    `snapshotFiller` is the `PagedSnapshotFiller` that does this.
 10. `resnapshot()` unregisters the handler before it sends `note.unsubscribe`.
     After resubscribing, it runs a baseline refetch to bridge the gap.
+11. A reconnect while the view is offscreen must not leave a stale live
+    subscription that makes resume skip installing a new handler.
+12. Deinit removes the event and subscription handlers (monorepo#2211,
+    monorepo#2213).
+13. Optimistic edits keep the truncation markers of the body they edit.
 
 ### 8. Event observation and offscreen suspension
 
@@ -179,11 +200,14 @@ Applies to: `NoteStore.classify(type:data:)`, `NoteStore.event(from:)`
 
 ### 10. Sorted notes match the desktop app
 
-Applies to: `NoteStore.sortedNotes`
+Applies to: `NoteStore.sortedNotes`, `NoteStore.rootNotes`
 
 The spec note (`isDefault`) comes first. Other notes sort by `createdAt`
 ascending (oldest first, newest at the bottom) to match the Electron app.
 Archived notes are excluded.
+
+`rootNotes` includes notes whose `parentId` is not among the current notes, so
+an orphaned child still shows at the top level.
 
 ### 11. Task status writes are optimistic and roll back one note
 
@@ -202,3 +226,18 @@ Applies to: `NoteStore.updateTaskLineStatus(noteId:workspaceId:line:status:)`,
    concurrent deltas or optimistic writes to other notes that landed mid-flight
    are not clobbered. The note's own `note:updated` event reconciles any
    remaining drift.
+
+### 12. The change stream registers synchronously
+
+Applies to: `NoteStore.noteChanges()`, `NoteStore.onNoteChanged`
+
+`noteChanges()` registers synchronously, so no event delivered after the call
+is missed. `note:deleted` fires it (and `onNoteChanged`), so the detail view
+re-validates. A new note changes list membership but can never be the open
+note, so it does not refresh the open note. A cancelled consumer stops
+receiving events and does not keep the store alive (ios#250).
+
+## Consequences
+
+Deleting a note in the UI needs the daemon's explicit not-found code. An old
+daemon only ever shows an error.

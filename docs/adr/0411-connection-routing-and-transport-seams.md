@@ -31,6 +31,23 @@ that every type intentd emits on the store's channels is a deliberate decision.
 2. `patchInPlace`: apply the payload to the row in place, with no refetch.
 3. `refetch`: refetch the store's list. This is the non-live fallback only.
 
+The catalog is the vendored intentd golden `IntentTests/Fixtures/event_types.json`
+(`crates/intent-core/tests/goldens/event_types.json` in intent-hq/intentd).
+Re-vendor it when the daemon adds a type, then classify the new type; until
+then `EventCatalogCoverageTests` fails.
+
+1. For a type with a discriminator, every golden value (or `changes` key) must
+   be named and must classify as the test spells out. The test does not read
+   the expectation from the store's table, so a flipped table entry fails. The
+   `absent` shape must also classify as expected. For `keys` discriminators a
+   refetch key dominates a patch-in-place key. Example: on `workspace:updated`
+   only a `lastActivity`-only delta is patched in place; every other key, and a
+   missing `changes`, refetches.
+2. A store's tables do nothing unless `ConnectionManager` subscribes to the
+   channel globally (`globalEventTypes`).
+3. A table entry that the catalog does not contain is a typo or a type the
+   daemon no longer emits, and the test fails on it.
+
 ### 2. Stores depend on a narrow routing protocol
 
 Applies to: `ConnectionManagerRouting`

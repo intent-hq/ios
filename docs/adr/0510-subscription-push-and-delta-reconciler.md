@@ -22,7 +22,11 @@ Applies to: `SubscriptionPush`, `SubscriptionPush.parse(method:params:)`
 frame parse (`ConnectionManager.parseInboundFrame`). Chat-channel payloads are
 pre-decoded there into typed values (`snapshotMessages`,
 `DeltaPayload.chatBlocks`), so the caller's isolation domain (off-main in the
-live frame pump) pays the decode cost and the main actor only merges them.
+live frame pump) pays the decode cost and the main actor only merges them. A
+new chat-shaped channel extends this parse-time decode; views never decode.
+
+It is `@unchecked Sendable` because its dictionaries are parsed JSON that is
+never mutated after parsing.
 
 ### 2. Optional collections carry meaning
 
@@ -38,7 +42,9 @@ is suppressed on these members.
   flags such as `isResponding`, `isWaitingOnTool`, `turnInFlight`, and
   `lastStreamActivityAt`. It is nil for array-shaped snapshots (collection
   channels). Nil identifies a collection snapshot; even empty metadata
-  identifies a conversation snapshot.
+  identifies a conversation snapshot. Its `messages` moves into
+  `snapshotMessages` and is not copied into `snapshotMeta`. A chat snapshot
+  object without a `messages` array, or a scalar snapshot, is malformed.
 - `snapshotMessages`: chat-channel snapshot `messages` pre-decoded by `parse`,
   with undecodable rows dropped, matching `ConversationMessage.parseMessage`.
   Nil for collection channels and for pushes built without `parse`; nil asks
@@ -50,6 +56,8 @@ is suppressed on these members.
   without `parse`; nil asks for fallback decoding. `decodeChatBlocks` returns
   nil when no entity is block-shaped, so a collection delta stays distinct from
   a chat delta whose block-shaped rows all failed to decode (an empty array).
+  Collection entities are not block-shaped: their raw dictionaries pass through
+  untouched so the store's reducer can consume them.
 
 ### 3. Paged collection snapshots
 
@@ -68,6 +76,7 @@ Applies to: `ChatBlockEntity`, `ShapedChatBlockEntity`, `ChatBlockEntity.decodeA
 - `textDelta` is an append-only text or thinking fragment, kept outside the full
   block model. The reducer uses it only after a snapshot echoes incremental
   delta encoding.
+- A missing role means assistant.
 - `metadata` is the persisted row's metadata. Only re-read and terminal
   entities carry it (PROTOCOL 07 §7.1); it is empty when the entity has none.
 - `ShapedChatBlockEntity` is a block-shaped entity (`messageId` plus `block`)
@@ -83,8 +92,10 @@ Applies to: `ChatBlockEntity`, `ShapedChatBlockEntity`, `ChatBlockEntity.decodeA
 
 Applies to: `DeltaReconciler.applyDelta(seq:delta:)`, `reset()`, `epoch`
 
-`applyDelta` applies only a contiguous delta. False means a gap, and the caller
-should resnapshot. `reset` forgets all state so the next snapshot rebuilds from
+`applyDelta` applies only a contiguous delta: the reconciler must have been
+seeded by a snapshot, and the delta must carry the next seq. False means a gap
+or an unseeded delta, and the caller should resnapshot. A store that skips this
+check shows a list that silently drifts from the daemon. `reset` forgets all state so the next snapshot rebuilds from
 scratch. `epoch` is bumped by every snapshot and reset, so a stale page walk can
 tell it was superseded. `values()` keeps the server snapshot and insertion
 order.
@@ -102,7 +113,8 @@ Applies to: `DeltaReconciler.seed(id:value:)`, `patch(id:_:)`, `fillFromPage(_:)
 - `changedSinceSnapshot` holds ids a delta or local seed added or updated since
   the last snapshot; they are newer than any later page row.
   `removedSinceSnapshot` holds ids a delta removed; a later page must not re-add
-  them.
+  them. A new snapshot clears both sets, so it forgets earlier removals: its
+  own pages may add a row that an old delta removed.
 - `fillFromPage` adds the rows of a later page (protocol §6.9). It skips rows in
   either set and upserts the rest. A list walk that serves the same row twice
   (`comment.list` rounds) keeps the later, newer one.

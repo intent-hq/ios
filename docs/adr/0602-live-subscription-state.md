@@ -66,3 +66,16 @@ Applies to: `LiveSubscription.Feed`, the cases of `LiveSubscription`
    teardown already ended it.
 7. `reset()`: teardown (reconnect, workspace or note switch). It returns the
    id whose handler the caller unregisters, if it does.
+
+### 5. Races between resnapshots, reconnects, and acks
+
+Applies to: `LiveSubscription`, `WorkspaceStore`, `NoteStore`, `TaskStore`, `CommentStore`
+
+1. A resnapshot parked on its `*.unsubscribe` sees that the connection
+   generation advanced and does not open a duplicate subscription over the new
+   connection.
+2. A reconnect clears the resnapshot guard.
+3. A superseded ack is released on the daemon at once and never registered
+   locally. Two racing connects that get one id register it once.
+4. A store refetches on legacy events only while not live, to avoid applying a
+   change twice. During a resnapshot, a baseline refetch bridges the gap.

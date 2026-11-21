@@ -166,6 +166,8 @@ Applies to: `SpeechDictationController`
    only Sendable values there, then hops to the main actor for all state.
 5. The `SFSpeechRecognizer.requestAuthorization` callback is invoked on an
    arbitrary queue and must not be MainActor-inferred.
+6. Speech requires `append(_:)` on the realtime tap thread, so the tap
+   captures the recognition request `nonisolated(unsafe)`.
 
 ### 9. Audio session and UI state
 

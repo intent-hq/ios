@@ -6,6 +6,7 @@
   event classification (`Intent/Services/WorkspaceStore+EventClassification.swift`),
   local patches (`Intent/Services/WorkspaceStore+LocalPatches.swift`),
   `WorkspaceStore.parseWorkspace` (`Intent/Services/WorkspaceParsing.swift`)
+- Related issues: #1066
 
 ## Context
 
@@ -151,3 +152,30 @@ Applies to: `WorkspaceStore.parseWorkspace`
 `parseWorkspace` returns nil for rows that miss `id` or `title`, and for the
 virtual Chief of Staff workspace (`Workspace.chiefWorkspaceId`). Both
 `workspace.list` and the live reconciler's `normalize` therefore drop it.
+`addOrUpdate(_:)` also excludes it.
+
+### 9. The daemon owns row fields; the store adds nothing on top
+
+Applies to: `WorkspaceStore.updateLastActivity(workspaceId:lastActivity:)`, `WorkspaceStore.addOrUpdate(_:)`,
+`WorkspaceStore.handleEvent`, `Workspace.waiting`
+
+1. intentd derives `lastActivity` (docs/protocol/methods/workspace.md). Agent
+   lifecycle events (the eight `AGENT_LIFECYCLE_EVENTS` of the desktop) never
+   bump it locally, and unknown agent events change nothing. A
+   `workspace:updated` delta applies whatever value intentd sent, and a later
+   `workspace.list` or snapshot with an older value is the daemon's truth:
+   there is no high-water mark.
+2. The `workspace.create` response is the daemon's row, with no local
+   timestamp on top. `addOrUpdate` dedupes it against a subscription delta in
+   either arrival order (#1066), and the seeded reconciler entry keeps the row
+   across a delta that does not mention it.
+3. A full row (list or snapshot) without `waiting` means false, also through
+   the `Decodable` path (PROTOCOL §5.1 omits the field when false), so the flag
+   never sticks from an older row.
+4. A snapshot push that arrives before the subscription id returns is still
+   applied.
+5. A page without rows can still continue (a non-administrator view), a
+   repeated token fails the walk, and a delta during the resubscribe backoff
+   does not publish a partial snapshot.
+6. While live, allowlisted events do not refetch: the live guard sits between
+   the in-place patches and the allowlist.

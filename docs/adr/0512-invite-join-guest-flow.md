@@ -34,7 +34,8 @@ Applies to: `InviteIdentity.parse(_:)`, `InvitePreview.parse(_:scope:requiresNon
 
 `InviteIdentity` names a forge account by its stable id
 (`{ provider, host, externalUserId }`). `parse` validates the canonical wire
-form and never repairs it. `InviteCredential` comes from `invite.prove` or
+form and never repairs it. `InvitePreview.parse` rejects a preview that does
+not match its scope. `InviteCredential` comes from `invite.prove` or
 `invite.accept`: the person's credential for this host, returned once.
 
 ### 3. Pin states

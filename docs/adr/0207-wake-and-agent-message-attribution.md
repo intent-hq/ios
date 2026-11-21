@@ -76,7 +76,8 @@ branch for the row lookup.
   display names. `resolveAgentName` mirrors the web `resolveAgentName`, minus
   the live session-store lookup, which iOS does not keep per message.
 - `summaryLabel` preserves event order and shares the name across consecutive
-  actions by one agent.
+  actions by one agent. It dedupes category labels: two `file:*` events show
+  one "File changes".
 - `activityLabel(for:)`: agent lifecycle events name the agent when the payload
   carries a usable name. Everything else maps to its category label. Web
   parity: activity-labels and event-wake-summary. `categoryLabels` is the

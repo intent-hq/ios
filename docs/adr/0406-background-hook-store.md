@@ -39,3 +39,11 @@ The fold is pure and matches cloudlands-fe's `foldHookEvent`.
 3. On `hook:run-completed`, a present `nextRunAt` means the hook stays
    scheduled. An absent `nextRunAt` means a terminal dispatched or evicted
    event follows and drops it (§6.5).
+
+### 4. Late list replies never undo removals or unsubscribe
+
+Applies to: `BackgroundHookStore.subscribe(workspaceId:agentId:)`, `BackgroundHookStore.unsubscribe()`
+
+A `hook.list` reply that was in flight never brings back a hook that a later
+event removed, and never refills a list that `unsubscribe()` cleared. A
+complete cancellation event replays over a stale seed without a recovery read.

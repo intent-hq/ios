@@ -47,3 +47,11 @@ Applies to: `AssistantStore.runRefreshPass(_:)`
 
 A successful pass sets `.loading(lastLoadedAt:)`. `settled()` at the end of the
 coalesced loop then marks the phase loaded.
+
+### 6. The view refreshes on reconnect while unloaded or failed
+
+Applies to: `AssistantView`, `AssistantStore.loadPhase`
+
+`AssistantView` refreshes on reconnect while the store has not loaded or shows
+an error. A read that runs after a failure keeps that gate open until it ends,
+and a coalesced refresh stays loading from its first pass to its last.

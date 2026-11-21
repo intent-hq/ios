@@ -76,6 +76,9 @@ Entering the same workspace again keeps expansion and cached listings.
 request fails. `reset` invalidates pending replies synchronously, including
 replies for a reused workspace ID.
 
+Only loaded, expanded branches are flattened into `rows`; root children have
+depth zero.
+
 ### 6. Browser: dismissed scripts are filtered before merging
 
 Applies to: `WorkspaceBrowserStore.browsers(workspaceId:)`, `WorkspaceBrowserStore` refresh loop
