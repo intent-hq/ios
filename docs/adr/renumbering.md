@@ -113,6 +113,7 @@ Issues and pull requests written before this date cite the old numbers. Use this
 | 0620 | [0096](0096-tailcat-tunnel-dialing.md) | Tailcat tunnel dialing and teardown |
 | 0621 | [0097](0097-transport-diagnostic-failure.md) | Transport diagnostic failures are closed classifications |
 | 0622 | [0098](0098-task-store-live-state-and-event-classification.md) | TaskStore live state and task event classification |
+| 0623 | [0222](0222-native-browser-navigation.md) | Native browser navigation ownership, requests and presentation |
 | 0701 | [0099](0099-websocket-transport-and-certificate-pinning.md) | WebSocket transport runs on Network.framework with certificate pinning |
 | 0702 | [0100](0100-websocket-handshake-framing-and-assembly.md) | WebSocket handshake, framing, and message assembly follow RFC 6455 and RFC 7692 |
 | 0703 | [0101](0101-websocket-admission-handshake.md) | Admission runs on a bootstrap socket and a startup wait always reconnects |

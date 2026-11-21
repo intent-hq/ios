@@ -181,6 +181,7 @@ What callers and future changes must respect. Omit when the decisions say it all
 | [0096](0096-tailcat-tunnel-dialing.md) | Tailcat tunnel dialing and teardown |
 | [0097](0097-transport-diagnostic-failure.md) | Transport diagnostic failures are closed classifications |
 | [0098](0098-task-store-live-state-and-event-classification.md) | TaskStore live state and task event classification |
+| [0222](0222-native-browser-navigation.md) | Native browser navigation ownership, requests and presentation |
 
 ### `Intent/Services`: `WebSocket…` to `WorkspaceVideo`
 

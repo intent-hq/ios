@@ -5,7 +5,7 @@ import Testing
 
 extension ConnectionManagerTests {
     @Test func globalFeedIncludesCatalogInvalidationOnce() throws {
-        for event in ["specialists:changed", "settings:changed", "host:members-changed"] {
+        for event in ["specialists:changed", "settings:changed", "host:members-changed", "browser:*"] {
             #expect(ConnectionManager.globalEventTypes.filter { $0 == event }.count == 1)
         }
         let request = try RPCFixtureJSON.request(
@@ -19,8 +19,8 @@ extension ConnectionManagerTests {
                 "replaceGroup": "global"
             ]
         )
-        #expect(catalogRequest.count == 185)
-        #expect(request.count == 208)
+        #expect(catalogRequest.count == 197)
+        #expect(request.count == 220)
     }
 
     static let subscribeMethod = "events.subscribe"
