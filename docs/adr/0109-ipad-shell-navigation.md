@@ -81,6 +81,8 @@ Applies to: `IPadShellView.workspaceSidebarContent`, `AppCoordinator.showsIPadSi
 - A persistent sidebar beside the detail pane shows the open workspace. Drawers and compact windows keep the list.
 - Reselecting Workspaces while the sidebar shows the open workspace leaves it, like the main view's Back.
 - `workspaceListPresentation` holds the window's workspace list settings, reported by its iPad sidebar.
+- Closing a pull request (`IPadNavigationState.closePullRequestDetail()`)
+  returns the main pane to the workspace and keeps the sidebar as it is.
 
 ### 7. Rail selection never switches backend
 

@@ -42,6 +42,9 @@ Applies to: `RootView.shouldRepushConversation(currentScreen:pendingAgentId:conv
 The deferred iPad re-push scheduled by the tear-down and re-push branch in
 `syncNavigationState()` happens only while the coordinator still shows the
 same conversation. If the user navigated back in the meantime, it is dropped.
+Matching agent ids alone are not enough: a re-push for a screen the
+coordinator no longer shows leaves the conversation visible with a dead back
+button.
 
 ### 4. One presenter across the animated branch change
 

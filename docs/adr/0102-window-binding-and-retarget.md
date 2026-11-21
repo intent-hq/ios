@@ -78,7 +78,9 @@ Applies to: `WindowRetargetRoute`, `BackendWindowRoot.retarget(to:choosingInPlac
 - Where multiple windows are supported, an unbound (pairing) window is
   replaced by the target's own window instead of being rebound. The first
   window bound after pairing then keeps a native scene value that
-  `openWindow(value:)` can raise.
+  `openWindow(value:)` can raise. The pairing window dismisses itself only
+  after the replacement scene connects (`dismissWhenReplacementConnects()`,
+  a bounded wait).
 - On visionOS every backend gets its own window. Picking another machine
   opens or raises that machine's window, and this window keeps its backend.
 - iPad and iPhone switch a bound window in place (ios#897). "Open in New

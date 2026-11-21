@@ -3,7 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `AppCoordinator` navigation (`Intent/App/AppCoordinatorNavigation.swift`), `AppCoordinatorNavigationState`, agent history (`Intent/App/AppCoordinatorAgentHistory.swift`), `WorkspaceChangeDestination` (`Intent/App/NavigationDestinations.swift`), `AppCoordinator.agentHistory` (`Intent/App/AppCoordinator.swift`)
-- Related issues: ios#349
+- Related issues: ios#349, ios#943
 
 ## Context
 
@@ -49,7 +49,8 @@ A completed row swipe opens the overview first, then the most recently active
 non-retired agent. Ordinary row taps keep using `onSelectWorkspace`.
 
 - The lookup uses unscoped reads, which include delegated and background
-  agents. Every page is read, because the newest agents are on the last page.
+  agents. Every page is read, because the newest agents are on the last page
+  (ios#943).
 - The lookup owns navigation only while there is no newer swipe and the user
   is still on that workspace's overview. A `CancellationError` means a newer
   swipe or navigation superseded it.
@@ -73,6 +74,10 @@ Applies to: `AppCoordinator.validateRestoredAgent(agentId:workspaceId:)`, `valid
 - `handleMissingWorkspace` runs when a restored workspace is no longer in the
   list. The next workspace opens from the iPad auto-selection observer; only an
   empty list reveals the sidebar.
+- Workspace validation runs on the first fetch after launch, also when that
+  fetch returns no workspaces: it observes the fetch marker
+  (`WorkspaceStore.lastUpdated`), not only the `workspaces` array. A publish
+  before any successful fetch (`lastUpdated` still nil) is ignored.
 
 ### 6. Agent history records every route into a conversation
 

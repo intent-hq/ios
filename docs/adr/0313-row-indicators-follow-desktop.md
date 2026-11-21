@@ -3,6 +3,7 @@
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
 - Applies to: `NoteRowIcon` (`Intent/Presentation/NoteRowIcon.swift`), `WorkspaceRowView.PrIndicatorModel`, `WorkspaceRowView.derivePrIndicator(workspace:monitors:)`, `WorkspaceRowView.legacyPillStatus(_:)` (`Intent/Presentation/WorkspacePrPillDerivation.swift`)
+- Related issues: ios#1091 (removal of the legacy `prStatus` / `prNumber` fallback)
 
 ## Decisions
 

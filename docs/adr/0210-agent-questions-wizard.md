@@ -57,6 +57,13 @@ transcript (web parity: `isQuestionResourceBlock`). `question(from:)` returns
 parity: `getQuestionFromResourceBlock`, including the legacy
 `metadata.resource` fallback).
 
+Question resource blocks must survive both decode paths: snapshot transcript
+rows and live block deltas.
+
+A set holds its questions in transcript order, deduplicated by `attachmentId`
+(the first is kept). A change to the question schema must change the web
+client and the app together.
+
 ### 2. The daemon's three-state marker decides what is pending
 
 Applies to: `PendingQuestionSet`, `PendingQuestionSet.MarkerState`,
