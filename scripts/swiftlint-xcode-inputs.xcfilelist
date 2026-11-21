@@ -982,6 +982,8 @@ $(SRCROOT)/IntentTests/MonitoredPrStoreFoldAndIntegrationTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrStoreTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrsRowTests.swift
 $(SRCROOT)/IntentTests/NativeBrowserNavigationTests.swift
+$(SRCROOT)/IntentTests/NativeBrowserReconciliationTests.swift
+$(SRCROOT)/IntentTests/NativeBrowserRequestTests.swift
 $(SRCROOT)/IntentTests/NavigationPopObserverTests.swift
 $(SRCROOT)/IntentTests/NetworkAvailabilityTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerAnchorTests.swift

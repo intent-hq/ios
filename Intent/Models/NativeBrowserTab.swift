@@ -8,11 +8,15 @@ struct NativeBrowserTab: Codable {
     var url: String
     var title: String
     var loadURL: String?
+    var loadRequestID: UUID?
     var visible = false
     var displayed = false
 
     var browser: WorkspaceBrowser {
-        WorkspaceBrowser(id: id, workspaceId: workspaceId, title: title, url: loadURL ?? requestedURL, command: nil)
+        WorkspaceBrowser(
+            id: id, workspaceId: workspaceId, title: title, url: loadURL ?? requestedURL,
+            command: nil, navigationRequestID: loadRequestID
+        )
     }
 
     static func matches(_ lhs: String, _ rhs: String) -> Bool {

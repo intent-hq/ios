@@ -6,6 +6,8 @@ nonisolated struct WorkspaceBrowser: Codable, Equatable, Identifiable, Sendable 
     let title: String
     let url: String
     let command: String?
+    // Native navigation commands remain distinct even when their URLs repeat.
+    var navigationRequestID: UUID?
 
     var isSavedSession: Bool { id.hasPrefix("browser:") }
 

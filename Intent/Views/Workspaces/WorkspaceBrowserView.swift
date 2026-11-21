@@ -20,6 +20,11 @@ struct WorkspaceBrowserView: View {
     private var isConnected: Bool { connection.connectionState == .connected }
     private var attachmentKey: String { "\(isConnected)-\(scenePhase == .background)-\(retry)" }
 
+    private struct RequestedNavigation: Equatable {
+        let url: String
+        let id: UUID?
+    }
+
     var body: some View {
         NavigationStack {
             browserContent
@@ -39,7 +44,9 @@ struct WorkspaceBrowserView: View {
             .toolbar(onClose == nil ? .automatic : .hidden, for: .navigationBar)
             .task(id: attachmentKey) { await attach() }
             .onAppear { addressInput = targetAddress ?? browser.url }
-            .onChange(of: browser.url) { _, url in updateRequestedURL(url) }
+            .onChange(of: RequestedNavigation(url: browser.url, id: browser.navigationRequestID)) { _, request in
+                updateRequestedURL(request.url)
+            }
             .onChange(of: page.title) { _, title in onPageChange(page.address, title) }
             .onChange(of: page.address) { _, address in
                 onPageChange(address, page.title)

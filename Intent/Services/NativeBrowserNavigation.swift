@@ -183,6 +183,7 @@ final class NativeBrowserNavigation {
             let url = try address(action)
             tabs[index].requestedURL = url
             tabs[index].loadURL = url
+            tabs[index].loadRequestID = UUID()
             tabs[index].url = url
         case "showTab", "focusTab":
             try requireWindow()
@@ -292,7 +293,15 @@ extension NativeBrowserNavigation {
             guard let self, generation == currentGeneration, connection.connectionState == .connected,
                   (connection as? any SessionConnectionManaging)?.currentPrincipal == principal else { throw BrowserTunnelError.closed }
             if needsReconciliation, !tabs.isEmpty {
-                let response = try await connection.request("workspace.list", params: ["includeArchived": true])
+                let response = try await PagedReads.requestWholeReply(
+                    params: ["includeArchived": true, "limit": PagedReads.workspacePageLimit], field: "workspaces"
+                ) { params in
+                    guard self.generation == currentGeneration,
+                          (self.connection as? any SessionConnectionManaging)?.currentPrincipal == principal else {
+                        throw BrowserTunnelError.closed
+                    }
+                    return try await self.connection.request("workspace.list", params: params)
+                }
                 guard generation == currentGeneration,
                       (connection as? any SessionConnectionManaging)?.currentPrincipal == principal else { throw BrowserTunnelError.closed }
                 guard let result = response as? [String: Any], let rows = result["workspaces"] as? [[String: Any]] else {
