@@ -75,8 +75,8 @@ extension ConversationAttachmentPipeline {
         return true
     }
 
-    static let photoImportFailureMessage = "Couldn't add some of the selected photos. Try selecting them again."
-    static let fileImportFailureMessage = "Couldn't add some of the selected files. Try selecting them again."
+    static let photoImportFailureMessage = "Couldn’t add some of the selected photos. Try selecting them again."
+    static let fileImportFailureMessage = "Couldn’t add some of the selected files. Try selecting them again."
 
     func reportFileImportFailure(_ error: Error) {
         if (error as? CocoaError)?.code == .userCancelled { return }
@@ -142,7 +142,7 @@ extension ConversationAttachmentPipeline {
 extension View {
     func attachmentImportAlert(_ pipeline: ConversationAttachmentPipeline) -> some View {
         alert(
-            "Couldn't Add Attachments",
+            "Couldn’t Add Attachments",
             isPresented: Binding(
                 get: { pipeline.attachmentImportError != nil },
                 set: { if !$0 { pipeline.attachmentImportError = nil } }

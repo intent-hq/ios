@@ -108,7 +108,7 @@ struct ChatImageActionsTests {
     @Test func saveReportsWriteFailure() async {
         let result = await Self.saveOutcome(status: .authorized, writeFails: true)
         #expect(result.outcome == .failed)
-        #expect(result.outcome.failureMessage == "Couldn't save this image. Try again.")
+        #expect(result.outcome.failureMessage == "Couldn’t save this image. Try again.")
     }
 
     @Test func saveAlertShowsFailureAndClearsOnSuccessfulRetry() async {

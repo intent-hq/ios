@@ -47,7 +47,7 @@ struct CreateWorkspaceBranchStepView: View {
     private var content: some View {
         if let loadError {
             VStack(spacing: Constants.CreateWorkspace.errorStateSpacing) {
-                Text("Couldn't load branches")
+                Text("Couldn’t load branches")
                     .interFont(Constants.Typography.bodyXSEmphasized)
                 Text(loadError)
                     .interFont(Constants.Typography.bodyXS)

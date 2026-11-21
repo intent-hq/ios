@@ -102,7 +102,7 @@ extension ConversationViewModelTests {
         await pipeline.photoImportTask?.value
 
         #expect(viewModel.pendingImages.count == 2)
-        #expect(pipeline.attachmentImportError == "Couldn't add some of the selected photos. Try selecting them again.")
+        #expect(pipeline.attachmentImportError == "Couldn’t add some of the selected photos. Try selecting them again.")
         #expect(viewModel.imagePlacementError == nil)
     }
 
@@ -168,7 +168,7 @@ extension ConversationViewModelTests {
         #expect(pipeline.attachmentImportError == nil)
 
         viewModel.reportFileImportFailure(CocoaError(.fileReadNoPermission))
-        #expect(pipeline.attachmentImportError == "Couldn't add some of the selected files. Try selecting them again.")
+        #expect(pipeline.attachmentImportError == "Couldn’t add some of the selected files. Try selecting them again.")
     }
 
     @Test func composerPhotosStayAvailableForVideosAtImageLimit() async throws {

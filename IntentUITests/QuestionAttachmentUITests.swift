@@ -61,7 +61,7 @@ nonisolated final class QuestionAttachmentUITests: XCTestCase {
     @MainActor
     private func verifyMenu(_ attachment: XCUIElement, in app: XCUIApplication) {
         XCTAssertTrue(attachment.waitForExistence(timeout: Self.timeout))
-        XCTAssertEqual(attachment.label, "Add attachment")
+        XCTAssertEqual(attachment.label, "Add Attachment")
         XCTAssertGreaterThanOrEqual(attachment.frame.width, 44)
         XCTAssertGreaterThanOrEqual(attachment.frame.height, 44)
         attachment.tap()

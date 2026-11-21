@@ -25,7 +25,7 @@ struct ModelPickerView: View {
             .task(id: selection.options.loadGeneration) { await selection.load() }
             .task(id: selection.catalogKey) { await selection.loadModels() }
             .onDisappear { selection.deactivate() }
-            .alert("Couldn't Save Model Settings", isPresented: Binding(
+            .alert("Couldn’t Save Model Settings", isPresented: Binding(
                 get: { selection.errorMessage != nil }, set: { if !$0 { selection.errorMessage = nil } }
             )) {
                 Button("OK", role: .cancel) {}

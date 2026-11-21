@@ -211,7 +211,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
         try FileManager.default.removeItem(at: gate)
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.staticTexts["Loading providers..."].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["Loading providers…"].waitForExistence(timeout: Self.elementTimeout))
         XCTAssertFalse(provider.exists)
         XCTAssertFalse(model.exists)
         XCTAssertFalse(reasoning.exists)

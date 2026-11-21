@@ -126,7 +126,7 @@ struct NoteDetailView: View {
             AvailableWhenReconnectedView()
         } else if isLoading {
             ProgressView {
-                Text("Loading note...").interFont(Constants.Typography.bodyS)
+                Text("Loading note…").interFont(Constants.Typography.bodyS)
             }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         } else {

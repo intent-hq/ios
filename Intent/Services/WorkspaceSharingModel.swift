@@ -117,11 +117,11 @@ nonisolated enum SharingFailure {
         case "github-identity-required":
             return "Connect GitHub or GitLab in Intent on your Mac to create invite links."
         case "github-unreachable":
-            return "Your Mac couldn't reach GitHub or GitLab to check its account. Try again in a moment."
+            return "Your Mac couldn’t reach GitHub or GitLab to check its account. Try again in a moment."
         case "guest-limit":
             return "This workspace has reached its guest limit. Remove someone in Intent on your Mac to invite someone else."
         case "invite-pin-unknown":
-            return pinLogin.map { "No GitHub user named \($0)." } ?? "That GitHub user doesn't exist."
+            return pinLogin.map { "No GitHub user named \($0)." } ?? "That GitHub user doesn’t exist."
         case "rate-limited":
             return "GitHub or GitLab is limiting requests right now. Try again in a few minutes."
         default:

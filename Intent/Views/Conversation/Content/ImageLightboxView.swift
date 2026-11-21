@@ -75,16 +75,16 @@ struct ImageLightboxView: View {
     @ViewBuilder
     private var imageAccessibilityActions: some View {
         if scale > Self.minScale {
-            Button("Pan left") {
+            Button("Pan Left") {
                 panImage(by: CGSize(width: -Self.accessibilityPanDistance, height: 0), in: viewportSize)
             }
-            Button("Pan right") {
+            Button("Pan Right") {
                 panImage(by: CGSize(width: Self.accessibilityPanDistance, height: 0), in: viewportSize)
             }
-            Button("Pan up") {
+            Button("Pan Up") {
                 panImage(by: CGSize(width: 0, height: -Self.accessibilityPanDistance), in: viewportSize)
             }
-            Button("Pan down") {
+            Button("Pan Down") {
                 panImage(by: CGSize(width: 0, height: Self.accessibilityPanDistance), in: viewportSize)
             }
             Button("Reset zoom") {

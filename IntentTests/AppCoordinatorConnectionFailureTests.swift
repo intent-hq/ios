@@ -228,7 +228,7 @@ extension AppCoordinatorTests {
             Issue.record("Expected persistence failure screen")
             return
         }
-        #expect(message == "Could not forget this connection. Please try again.")
+        #expect(message == "Couldn’t remove this connection. Try again.")
 
         var attempts = 0
         await ConnectionFailureView.runAutoRetry(

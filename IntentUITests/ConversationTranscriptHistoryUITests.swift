@@ -108,7 +108,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         waitUntilSettled(on: opened.lastMessage, named: "last message", in: opened, context: "retry entry", allowPreservedEntry: true)
         let retry = app.buttons["transcript.historyRetry"]
         scrollUp(in: opened) { retry.exists && retry.isHittable }
-        XCTAssertEqual(retry.label, "Couldn't load earlier messages — Retry")
+        XCTAssertEqual(retry.label, "Couldn’t load earlier messages — Retry")
         XCTAssertTrue(followReport(in: opened).contains("historyCount=10"))
         XCTAssertFalse(app.staticTexts["transcript.historyBeginning"].exists)
         try Data().write(to: retryGate)

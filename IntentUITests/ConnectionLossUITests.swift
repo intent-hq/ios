@@ -124,10 +124,10 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(composer.exists, "The conversation stays on screen while reconnecting")
         composer.typeText("connection loss")
         XCTAssertEqual(composer.value as? String, "Draft survives connection loss", "Typing stays enabled")
-        let send = app.buttons["Send message"].firstMatch
+        let send = app.buttons["Send Message"].firstMatch
         XCTAssertTrue(send.exists)
         XCTAssertFalse(send.isEnabled, "Send must wait for the Mac")
-        XCTAssertTrue(app.buttons["Add attachment"].firstMatch.isEnabled, "Attaching stays enabled")
+        XCTAssertTrue(app.buttons["Add Attachment"].firstMatch.isEnabled, "Attaching stays enabled")
         capture(app, named: "conversation-read-only")
 
         try trigger("recover", in: directory)

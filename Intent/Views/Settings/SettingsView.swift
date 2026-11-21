@@ -111,12 +111,12 @@ private struct SettingsContent: View {
         }
         SettingsPairingSection(onScanQR: onScanQR, onManualPairing: onManualPairing)
         #if os(iOS)
-        SettingsSection(title: "NOTIFICATIONS") {
+        SettingsSection(title: "Notifications") {
             SettingsLiveActivityRow()
                 .background(SettingsStyle.card(for: colorScheme), in: .rect(cornerRadius: SettingsStyle.cardRadius))
         }
         #endif
-        SettingsSection(title: "SUPPORT") { SettingsSupportSection() }
+        SettingsSection(title: "Support") { SettingsSupportSection() }
     }
 
     private var settingsSurface: some View {

@@ -181,7 +181,7 @@ final class WorkspaceTransferRelay {
         ) as? [String: Any]
         importId = try WorkspaceTransferWire.identifier(result?["importId"])
         guard let limit = WorkspaceTransferWire.integer(result?["maxChunkBytes"]), limit >= archive.chunkBytes else {
-            throw WorkspaceTransferError.message("The destination cannot receive this archive's transfer chunks. Update both hosts.")
+            throw WorkspaceTransferError.message("The destination cannot receive this archive’s transfer chunks. Update both hosts.")
         }
         let importId = try requireImportId()
         var received: Int64 = 0

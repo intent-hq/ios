@@ -28,7 +28,7 @@ struct WatchedAgentRow: Identifiable {
         if isCompleted { return "Completed" }
         if !statusKnown { return "Status unknown" }
         if agent.isErrored { return "Error" }
-        if agent.isActive { return "Working..." }
+        if agent.isActive { return "Working…" }
         return agent.status.capitalized
     }
 }

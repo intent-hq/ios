@@ -237,12 +237,12 @@ nonisolated enum InviteJoinError: Error, Equatable {
 extension InviteJoinModel {
     // swiftlint:disable:next cyclomatic_complexity function_body_length
     nonisolated static func problem(for error: any Error) -> InviteJoinProblem {
-        let failedTitle = "Couldn't Join"
+        let failedTitle = "Couldn’t Join"
         let newLink = "Ask the person who shared it for a new link."
         if case .ownMacUnreachable(let name) = error as? InviteJoinError {
             return InviteJoinProblem(
-                title: "Couldn't Reach Your Mac",
-                message: "Intent couldn't connect to \(name) to confirm your account. Make sure Intent is running on it, then try again.",
+                title: "Couldn’t Reach Your Mac",
+                message: "Intent couldn’t connect to \(name) to confirm your account. Make sure Intent is running on it, then try again.",
                 retryable: true
             )
         }
@@ -251,7 +251,7 @@ extension InviteJoinModel {
         }
         switch error as? InviteFailure {
         case .refused("invite-not-found"):
-            return InviteJoinProblem(title: "Invite Not Found", message: "This invite link isn't valid anymore. \(newLink)", retryable: false)
+            return InviteJoinProblem(title: "Invite Not Found", message: "This invite link isn’t valid anymore. \(newLink)", retryable: false)
         case .refused("invite-expired"):
             return InviteJoinProblem(title: "Invite Expired", message: "This invite link has expired. \(newLink)", retryable: false)
         case .refused("invite-revoked"):
@@ -265,36 +265,36 @@ extension InviteJoinModel {
         case .refused("workspace-archived"):
             return InviteJoinProblem(title: failedTitle, message: "This workspace has been archived.", retryable: false)
         case .refused("owner-self-join"):
-            return InviteJoinProblem(title: failedTitle, message: "This account owns the host, so it can't join as a guest. Open the host from your saved connections instead.", retryable: false)
+            return InviteJoinProblem(title: failedTitle, message: "This account owns the host, so it can’t join as a guest. Open the host from your saved connections instead.", retryable: false)
         case .refused("github-identity-required"):
-            return InviteJoinProblem(title: failedTitle, message: "The host can't accept invites right now: its owner needs to reconnect GitHub or GitLab in Intent.", retryable: true)
+            return InviteJoinProblem(title: failedTitle, message: "The host can’t accept invites right now: its owner needs to reconnect GitHub or GitLab in Intent.", retryable: true)
         case .refused("github-unreachable"), .refused("identity-unverifiable"):
-            return InviteJoinProblem(title: failedTitle, message: "The host couldn't check your account with GitHub or GitLab. Try again in a moment.", retryable: true)
+            return InviteJoinProblem(title: failedTitle, message: "The host couldn’t check your account with GitHub or GitLab. Try again in a moment.", retryable: true)
         case .refused("proof-invalid"), .refused("proof-expired"):
-            return InviteJoinProblem(title: failedTitle, message: "Your account check didn't go through. Try again.", retryable: true)
+            return InviteJoinProblem(title: failedTitle, message: "Your account check didn’t go through. Try again.", retryable: true)
         case .refused("invite-flow-busy"):
             return InviteJoinProblem(title: failedTitle, message: "The host is busy. Try again in a moment.", retryable: true)
         case .unreachable, .timedOut:
             return InviteJoinProblem(
-                title: "Couldn't Reach the Host",
+                title: "Couldn’t Reach the Host",
                 message: "Make sure the shared Mac is on and running Intent with Remote Access turned on, then try again.",
                 retryable: true
             )
         case .certificateMismatch:
-            return InviteJoinProblem(title: failedTitle, message: "The host's security certificate doesn't match this link. \(newLink)", retryable: false)
+            return InviteJoinProblem(title: failedTitle, message: "The host’s security certificate doesn’t match this link. \(newLink)", retryable: false)
         case .tunnelUnavailable:
-            return InviteJoinProblem(title: failedTitle, message: "This device can't open remote connections. Open the link on your iPhone or Mac.", retryable: false)
+            return InviteJoinProblem(title: failedTitle, message: "This device can’t open remote connections. Open the link on your iPhone or Mac.", retryable: false)
         case .connectionClosed:
             return InviteJoinProblem(title: failedTitle, message: "The connection to the host closed. Try again.", retryable: true)
         case .invalidResponse, .refused:
-            return InviteJoinProblem(title: failedTitle, message: "The host sent a response this version of Intent doesn't understand. Update Intent and try again.", retryable: false)
+            return InviteJoinProblem(title: failedTitle, message: "The host sent a response this version of Intent doesn’t understand. Update Intent and try again.", retryable: false)
         case nil:
             return InviteJoinProblem(title: failedTitle, message: "Something went wrong while joining. Try again.", retryable: true)
         }
     }
 
     nonisolated private static func problem(for failure: InviteProofFailure) -> InviteJoinProblem {
-        let title = "Couldn't Confirm Your Account"
+        let title = "Couldn’t Confirm Your Account"
         switch failure {
         case .notSignedIn(let provider):
             let name = provider == "gitlab" ? "GitLab" : "GitHub"
@@ -320,7 +320,7 @@ extension InviteJoinModel {
         case .accountChanged:
             return InviteJoinProblem(title: title, message: "The account on your Mac changed while joining. Try again.", retryable: true)
         case .unavailable:
-            return InviteJoinProblem(title: title, message: "Your Mac couldn't confirm your account. Try again.", retryable: true)
+            return InviteJoinProblem(title: title, message: "Your Mac couldn’t confirm your account. Try again.", retryable: true)
         }
     }
 }

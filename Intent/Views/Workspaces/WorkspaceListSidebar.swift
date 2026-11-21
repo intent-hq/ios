@@ -134,7 +134,7 @@ extension WorkspaceListSidebar {
             surface
             if viewModel.isLoading, viewModel.workspaces.isEmpty {
                 ProgressView {
-                    Text("Loading workspaces...").interFont(Constants.Typography.bodyS)
+                    Text("Loading workspaces…").interFont(Constants.Typography.bodyS)
                 }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if viewModel.filteredWorkspaces.isEmpty {

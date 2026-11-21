@@ -111,7 +111,7 @@ struct WorkspaceCreationProposalView: View {
         let layout = dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())
         return layout {
             if !hasAttempt || activeCreationAction == .create {
-                Button("Not now") {
+                Button("Not Now") {
                     confirmingDismiss = true
                 }
                 .buttonStyle(IntentButtonStyle(variant: .secondary, passesThroughCopyMenu: true))

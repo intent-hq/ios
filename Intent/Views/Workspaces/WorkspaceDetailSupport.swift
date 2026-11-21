@@ -281,7 +281,7 @@ struct WorkspaceActionsMenu: View {
     private var sidebarAction: some View {
         if let onCollapseSidebar {
             Button(action: onCollapseSidebar) {
-                Label { Text("Hide sidebar") } icon: { Image(.collapseLeft) }
+                Label { Text("Hide Sidebar") } icon: { Image(.collapseLeft) }
             }
             .accessibilityIdentifier("ipad.sidebar.collapse")
             Divider()

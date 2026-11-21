@@ -222,7 +222,7 @@ private extension MessageInputView {
                 .visionHoverShape(Circle())
         }
         .buttonStyle(IntentContentButtonStyle())
-        .accessibilityLabel("Add attachment")
+        .accessibilityLabel("Add Attachment")
     }
 
     var textEditor: some View {
@@ -240,7 +240,7 @@ private extension MessageInputView {
             .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
             .frame(height: textViewHeight)
             if viewModel.messageText.isEmpty {
-                Text("Message...")
+                Text("Message")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .interFont(Constants.Typography.bodyS)
                     .padding(.horizontal, Constants.Conversation.Composer.placeholderHorizontalPadding)
@@ -307,7 +307,7 @@ private extension MessageInputView {
                 .buttonStyle(IntentContentButtonStyle())
                 .disabled(!hasSendableContent)
                 .requiresLiveConnection("Reconnect to send")
-                .accessibilityLabel("Send message")
+                .accessibilityLabel("Send Message")
             }
         }
     }

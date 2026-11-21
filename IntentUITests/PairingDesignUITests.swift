@@ -2,7 +2,7 @@ import XCTest
 
 nonisolated final class PairingDesignUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
-    private static let scannerUnavailable = "Camera scanning isn't available — use manual token entry instead"
+    private static let scannerUnavailable = "Camera scanning isn’t available — use manual token entry instead"
 
     @MainActor
     func testSavedConnectionActionsPreserveCurrentConnection() throws {
@@ -77,7 +77,7 @@ nonisolated final class PairingDesignUITests: XCTestCase {
 
         scan.tap()
         XCTAssertTrue(app.staticTexts[Self.scannerUnavailable].waitForExistence(timeout: Self.timeout))
-        XCTAssertFalse(app.staticTexts["Find QR code in Settings -> Mobile\nin the Intent desktop app"].exists)
+        XCTAssertFalse(app.staticTexts["Find the QR code in Settings > Mobile\nin the Intent desktop app"].exists)
         XCTAssertTrue(app.buttons["Cancel"].isHittable)
         capture(app, named: "scanner-full-screen")
         app.buttons["Cancel"].tap()

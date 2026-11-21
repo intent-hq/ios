@@ -19,7 +19,7 @@ struct LoadFailureView: View {
     private var content: some View {
         if isCompact {
             VStack(alignment: .leading, spacing: WorkspaceDetailStyle.headingSpacing) {
-                Text("Couldn't Load \(subject)").interFont(Constants.Typography.bodyS.withFace(.semibold))
+                Text("Couldn’t Load \(subject)").interFont(Constants.Typography.bodyS.withFace(.semibold))
                 Text(message)
                     .interFont(Constants.Typography.bodyXS)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -29,7 +29,7 @@ struct LoadFailureView: View {
         } else {
             ContentUnavailableView {
                 Label {
-                    Text("Couldn't Load \(subject)").interFont(Constants.Typography.bodyM.withFace(.semibold))
+                    Text("Couldn’t Load \(subject)").interFont(Constants.Typography.bodyM.withFace(.semibold))
                 } icon: {
                     Image(systemName: "exclamationmark.triangle")
                 }

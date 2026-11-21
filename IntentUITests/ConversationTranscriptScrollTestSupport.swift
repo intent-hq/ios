@@ -19,7 +19,7 @@ enum Fixture {
     static let firstSuggestedPromptIdentifier = "transcript.suggestedPrompt.0"
     static let firstSuggestedPromptLabel = "Open a PR for the deflake changes"
     static let endRowIdentifier = "transcript.suggestedPrompt.2"
-    static let thinkingIndicatorLabel = "Thinking..."
+    static let thinkingIndicatorLabel = "Thinking…"
     static let thinkingIndicatorLabelInset: CGFloat = 4
     private static let workspaceEndRowGap: CGFloat = 52
     private static let iPadEndRowGap: CGFloat = 56
