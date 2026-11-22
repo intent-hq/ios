@@ -172,7 +172,7 @@ final class DemoDesignFixtures {
         switch method {
         case "prMonitor.list":
             let matchesAgent = params["agentId"] == nil || params["agentId"] as? String == Self.agentId
-            return ["monitors": matchesAgent && scenario == .conversation && !monitorCancelled ? [monitor] : []]
+            return ["monitors": matchesAgent && (scenario == .conversation || scenario == .goal) && !monitorCancelled ? [monitor] : []]
         case "prMonitor.cancel" where params["monitorId"] as? String == Self.monitorId:
             monitorCancelled = true
             return ["success": true]
