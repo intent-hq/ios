@@ -371,10 +371,10 @@ CAPTURES = {
         ),
     },
     "ConversationGoalUITests": {
-        "testGoalStripExpandsEditsRemovesAndFollowsGoalCommands": tuple(
+        "testGoalPillEditsRemovesAndFollowsGoalCommands": tuple(
             f"Goal {state} {appearance}"
             for appearance in ("light", "dark")
-            for state in ("strip collapsed", "strip expanded", "editor", "command chip", "strip after command")
+            for state in ("pill", "editor", "pill menu", "command chip", "pill after command")
         ),
     },
     "TurnFailureNoticeUITests": {

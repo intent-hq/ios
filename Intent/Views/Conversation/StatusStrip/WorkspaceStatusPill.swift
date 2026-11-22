@@ -118,6 +118,13 @@ struct WorkspaceStatusPillsRow: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: Design.Status.composerSpacing))
             : AnyLayout(WorkspaceStatusPillsLayout(spacing: Design.Status.composerSpacing, layoutDirection: layoutDirection))
         layout {
+            if let goal = viewModel.conversationGoal {
+                ConversationGoalPill(
+                    goal: goal,
+                    onSave: { await viewModel.saveGoal($0) },
+                    onRemove: { await viewModel.removeGoal() }
+                )
+            }
             if viewModel.showsPrMonitorStatus {
                 MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: viewModel.monitoredPrStore, usesWorkspaceDesign: true)
             }
@@ -197,6 +204,6 @@ extension ConversationViewModel {
     }
 
     var showsWorkspaceStatusPills: Bool {
-        showsPrMonitorStatus || showsScriptMonitorStatus
+        conversationGoal != nil || showsPrMonitorStatus || showsScriptMonitorStatus
     }
 }

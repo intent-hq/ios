@@ -429,7 +429,7 @@ $(SRCROOT)/Intent/Presentation/AgentConversationPresentation.swift
 $(SRCROOT)/Intent/Presentation/BoundedMarkdownCache.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStep.swift
-$(SRCROOT)/Intent/Presentation/ConversationGoalStripState.swift
+$(SRCROOT)/Intent/Presentation/ConversationGoalPillState.swift
 $(SRCROOT)/Intent/Presentation/ConversationModelSelection.swift
 $(SRCROOT)/Intent/Presentation/ConversationPresentation.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
@@ -792,7 +792,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceLinkedTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceTextFileView.swift
 $(SRCROOT)/Intent/Views/Conversation/ConversationConnectionStatusBlock.swift
 $(SRCROOT)/Intent/Views/Conversation/Goal
-$(SRCROOT)/Intent/Views/Conversation/Goal/ConversationGoalStrip.swift
+$(SRCROOT)/Intent/Views/Conversation/Goal/ConversationGoalPill.swift
 $(SRCROOT)/Intent/Views/Conversation/IPadAssistantSidebar.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift

@@ -124,23 +124,13 @@ struct ConversationGoalTests {
         #expect(GoalCommandNotice(action: action, goal: goal, text: " ").label == label)
     }
 
-    @Test func stripStateExpandsAndCollapses() {
-        var state = ConversationGoalStripState.collapsed
-        state.toggleExpansion()
-        #expect(state.isExpanded)
-        state.toggleExpansion()
-        #expect(state == .collapsed)
-    }
-
-    @Test func stripStateEditsCancelsAndSaves() {
-        var state = ConversationGoalStripState.expanded
+    @Test func pillStateEditsCancelsAndSaves() {
+        var state = ConversationGoalPillState.idle
         state.beginEditing(goal: "Ship it")
         #expect(state.isEditorPresented)
         #expect(state.draft?.text == "Ship it")
-        state.toggleExpansion()
-        #expect(state.isEditorPresented, "Expansion is frozen while editing")
         state.cancelEditing()
-        #expect(state == .collapsed)
+        #expect(state == .idle)
 
         state.beginEditing(goal: "Ship it")
         state.updateDraft("Ship the beta")
@@ -151,11 +141,11 @@ struct ConversationGoalTests {
         state.cancelEditing()
         #expect(state.isSaving, "Cancel is ignored while saving")
         state.finishSaving(failure: nil)
-        #expect(state == .collapsed)
+        #expect(state == .idle)
     }
 
-    @Test func stripStateKeepsDraftAndShowsFailure() {
-        var state = ConversationGoalStripState.collapsed
+    @Test func pillStateKeepsDraftAndShowsFailure() {
+        var state = ConversationGoalPillState.idle
         state.beginEditing(goal: "Ship it")
         state.updateDraft("")
         #expect(state.beginSaving()?.isEmpty == true, "Saving an empty draft removes the goal")
@@ -165,25 +155,24 @@ struct ConversationGoalTests {
         #expect(state.draft?.failure == nil, "Typing clears the failure")
     }
 
-    @Test func stripStateGuardsRemoval() {
-        var state = ConversationGoalStripState.expanded
+    @Test func pillStateGuardsRemoval() {
+        var state = ConversationGoalPillState.idle
         let started = state.beginRemoving()
         #expect(started)
         #expect(state.isRemoving)
         let repeated = state.beginRemoving()
-        #expect(!repeated, "A second tap while removing is ignored")
-        state.toggleExpansion()
+        #expect(!repeated, "A second remove while removing is ignored")
         state.beginEditing(goal: "Ship it")
-        #expect(state == .removing, "Expanding and editing wait for the removal")
+        #expect(state == .removing, "Editing waits for the removal")
         state.finishRemoving()
-        #expect(state == .collapsed)
+        #expect(state == .idle)
         state.beginEditing(goal: "Ship it")
         let whileEditing = state.beginRemoving()
         #expect(!whileEditing, "Removing is unavailable while the editor is open")
     }
 
-    @Test func stripStateLeavesTheLengthCheckToTheDaemon() {
-        var state = ConversationGoalStripState.collapsed
+    @Test func pillStateLeavesTheLengthCheckToTheDaemon() {
+        var state = ConversationGoalPillState.idle
         let long = String(repeating: "a", count: ConversationGoal.maximumLength + 1)
         state.beginEditing(goal: long)
         #expect(state.canSave)

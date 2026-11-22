@@ -128,11 +128,6 @@ extension Constants.Conversation.Design {
 
 extension Constants.Conversation.Design {
     enum Goal {
-        static let verticalPadding: CGFloat = 10
-        static let contentSpacing: CGFloat = 12
-        static let labelSpacing: CGFloat = 2
-        static let actionSpacing: CGFloat = 4
-        static let iconSize: CGFloat = 16
         static let editorMinimumHeight: CGFloat = 160
         static let editorSpacing: CGFloat = 12
     }

@@ -4,12 +4,12 @@ nonisolated final class ConversationGoalUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
     @MainActor
-    func testGoalStripExpandsEditsRemovesAndFollowsGoalCommands() {
+    func testGoalPillEditsRemovesAndFollowsGoalCommands() {
         continueAfterFailure = false
         for appearance in ["light", "dark"] {
             let app = XCUIApplication()
             open(app, appearance: appearance)
-            verifyStrip(in: app, appearance: appearance)
+            verifyPill(in: app, appearance: appearance)
             verifyEditing(in: app, appearance: appearance)
             verifyRemoveAndCommand(in: app, appearance: appearance)
             app.terminate()
@@ -44,43 +44,37 @@ nonisolated final class ConversationGoalUITests: XCTestCase {
     }
 
     @MainActor
-    private func verifyStrip(in app: XCUIApplication, appearance: String) {
-        let text = app.descendants(matching: .any)["goalStrip.text"].firstMatch
-        XCTAssertTrue(text.waitForExistence(timeout: Self.timeout), app.debugDescription)
-        XCTAssertTrue(text.label.hasPrefix("Goal: Finish the release acceptance checks."), "Strip label: \(text.label)")
+    private func verifyPill(in app: XCUIApplication, appearance: String) {
+        let pill = app.buttons["goalPill"]
+        XCTAssertTrue(pill.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        XCTAssertTrue(pill.label.hasPrefix("Goal: Finish the release acceptance checks."), "Pill label: \(pill.label)")
+        let composer = app.textViews["composer.textView"]
+        XCTAssertLessThan(pill.frame.maxY, composer.frame.minY, "The goal pill sits above the composer")
         let notice = app.descendants(matching: .any)["goalNotice"].firstMatch
         XCTAssertTrue(notice.waitForExistence(timeout: Self.timeout), "The goal_command row renders as a goal notice")
         XCTAssertTrue(notice.label.hasPrefix("Goal set: Finish the release"), "Notice label: \(notice.label)")
-        capture(app, name: "Goal strip collapsed \(appearance)")
-
-        let toggle = app.buttons["goalStrip.toggle"]
-        XCTAssertEqual(toggle.value as? String, "Collapsed")
-        XCTAssertEqual(toggle.label, "Show the full goal")
-        toggle.tap()
-        XCTAssertTrue(waitForValue(toggle, "Expanded"), "The toggle reports the expanded state")
-        XCTAssertTrue(
-            app.links.matching(NSPredicate(format: "label CONTAINS %@", "github.com")).firstMatch.waitForExistence(timeout: Self.timeout),
-            "The expanded goal shows its URL as a link\n\(app.debugDescription)"
-        )
-        capture(app, name: "Goal strip expanded \(appearance)")
-        toggle.tap()
-        XCTAssertTrue(waitForValue(toggle, "Collapsed"), "The toggle collapses the goal again")
+        capture(app, name: "Goal pill \(appearance)")
     }
 
     @MainActor
     private func verifyEditing(in app: XCUIApplication, appearance: String) {
-        let text = app.descendants(matching: .any)["goalStrip.text"].firstMatch
-        XCTAssertEqual(app.buttons["goalStrip.edit"].label, "Edit goal")
-        app.buttons["goalStrip.edit"].tap()
+        let pill = app.buttons["goalPill"]
+        pill.tap()
         let editor = app.textViews["goalEditor.text"]
-        XCTAssertTrue(editor.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(editor.waitForExistence(timeout: Self.timeout), "Tapping the pill opens the editor")
         XCTAssertEqual((editor.value as? String)?.hasPrefix("Finish the release"), true, "The editor is pre-filled")
+        XCTAssertTrue(app.staticTexts["goalEditor.count"].exists, "The editor shows a character count")
         capture(app, name: "Goal editor \(appearance)")
         app.buttons["goalEditor.cancel"].tap()
         XCTAssertTrue(editor.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(text.label.hasPrefix("Goal: Finish the release"), "Cancel keeps the goal")
+        XCTAssertTrue(pill.label.hasPrefix("Goal: Finish the release"), "Cancel keeps the goal")
 
-        app.buttons["goalStrip.edit"].tap()
+        pill.press(forDuration: 1)
+        let menuEdit = app.buttons["Edit goal"]
+        XCTAssertTrue(menuEdit.waitForExistence(timeout: Self.timeout), "Long-pressing the pill offers Edit")
+        XCTAssertTrue(app.buttons["Remove goal"].exists, "Long-pressing the pill offers Remove")
+        capture(app, name: "Goal pill menu \(appearance)")
+        menuEdit.tap()
         XCTAssertTrue(editor.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout), "The editor focuses its text")
         let prefilled = editor.value as? String ?? ""
@@ -89,17 +83,19 @@ nonisolated final class ConversationGoalUITests: XCTestCase {
         app.buttons["goalEditor.save"].tap()
         XCTAssertTrue(editor.waitForNonExistence(timeout: Self.timeout))
         XCTAssertTrue(
-            text.wait(for: \.label, toEqual: "Goal: Ship the beta build", timeout: Self.timeout),
-            "Saving updates the strip: \(text.label)"
+            pill.wait(for: \.label, toEqual: "Goal: Ship the beta build", timeout: Self.timeout),
+            "Saving updates the pill: \(pill.label)"
         )
     }
 
     @MainActor
     private func verifyRemoveAndCommand(in app: XCUIApplication, appearance: String) {
-        let text = app.descendants(matching: .any)["goalStrip.text"].firstMatch
-        XCTAssertEqual(app.buttons["goalStrip.remove"].label, "Remove goal")
-        app.buttons["goalStrip.remove"].tap()
-        XCTAssertTrue(text.waitForNonExistence(timeout: Self.timeout), "Remove hides the strip")
+        let pill = app.buttons["goalPill"]
+        pill.press(forDuration: 1)
+        let menuRemove = app.buttons["Remove goal"]
+        XCTAssertTrue(menuRemove.waitForExistence(timeout: Self.timeout))
+        menuRemove.tap()
+        XCTAssertTrue(pill.waitForNonExistence(timeout: Self.timeout), "Remove hides the pill")
         let removed = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Goal removed.")).firstMatch
         XCTAssertTrue(removed.waitForExistence(timeout: Self.timeout), "Removing posts a goal notice")
 
@@ -118,14 +114,14 @@ nonisolated final class ConversationGoalUITests: XCTestCase {
         XCTAssertTrue(waitForValue(composer, "/goal "), "Tapping the chip inserts /goal")
         composer.typeText("Rehearse the rollback")
         app.buttons["composer.send"].tap()
-        XCTAssertTrue(text.waitForExistence(timeout: Self.timeout), "A /goal send sets the goal")
-        XCTAssertEqual(text.label, "Goal: Rehearse the rollback")
+        XCTAssertTrue(pill.waitForExistence(timeout: Self.timeout), "A /goal send sets the goal")
+        XCTAssertEqual(pill.label, "Goal: Rehearse the rollback")
         XCTAssertTrue(waitForValue(composer, ""), "The composer clears after the command succeeds")
         XCTAssertFalse(
             app.staticTexts.matching(NSPredicate(format: "label == %@", "/goal Rehearse the rollback")).firstMatch.exists,
             "A /goal command leaves no user bubble"
         )
-        capture(app, name: "Goal strip after command \(appearance)")
+        capture(app, name: "Goal pill after command \(appearance)")
     }
 
     @MainActor

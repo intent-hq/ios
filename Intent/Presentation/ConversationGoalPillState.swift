@@ -5,21 +5,18 @@ nonisolated struct ConversationGoalDraft: Equatable, Sendable {
     var failure: String?
 }
 
-nonisolated enum ConversationGoalStripState: Equatable, Sendable {
-    case collapsed
+nonisolated enum ConversationGoalPillState: Equatable, Sendable {
+    case idle
     case editing(ConversationGoalDraft)
-    case expanded
     case removing
     case saving(ConversationGoalDraft)
-
-    var isExpanded: Bool { self == .expanded }
 
     var isRemoving: Bool { self == .removing }
 
     var isEditorPresented: Bool {
         switch self {
         case .editing, .saving: true
-        case .collapsed, .expanded, .removing: false
+        case .idle, .removing: false
         }
     }
 
@@ -31,7 +28,7 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
     var draft: ConversationGoalDraft? {
         switch self {
         case let .editing(draft), let .saving(draft): draft
-        case .collapsed, .expanded, .removing: nil
+        case .idle, .removing: nil
         }
     }
 
@@ -40,16 +37,8 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
         return false
     }
 
-    mutating func toggleExpansion() {
-        switch self {
-        case .collapsed: self = .expanded
-        case .expanded: self = .collapsed
-        case .editing, .removing, .saving: break
-        }
-    }
-
     mutating func beginEditing(goal: String) {
-        guard !isEditorPresented, !isRemoving else { return }
+        guard self == .idle else { return }
         self = .editing(ConversationGoalDraft(text: goal))
     }
 
@@ -62,7 +51,7 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
 
     mutating func cancelEditing() {
         guard case .editing = self else { return }
-        self = .collapsed
+        self = .idle
     }
 
     mutating func beginSaving() -> String? {
@@ -77,18 +66,18 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
             draft.failure = failure
             self = .editing(draft)
         } else {
-            self = .collapsed
+            self = .idle
         }
     }
 
     mutating func beginRemoving() -> Bool {
-        guard !isEditorPresented, !isRemoving else { return false }
+        guard self == .idle else { return false }
         self = .removing
         return true
     }
 
     mutating func finishRemoving() {
         guard isRemoving else { return }
-        self = .collapsed
+        self = .idle
     }
 }

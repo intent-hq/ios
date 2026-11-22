@@ -1,41 +1,30 @@
 import SwiftUI
 
-struct ConversationGoalStrip: View {
+struct ConversationGoalPill: View {
     let goal: String
     let onSave: (String) async -> String?
     let onRemove: () async -> Void
-    @State private var state = ConversationGoalStripState.collapsed
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
-    @ScaledMetric(relativeTo: .subheadline) private var iconSize = Constants.Conversation.Design.Goal.iconSize
-
-    private typealias Design = Constants.Conversation.Design
-    private typealias Goal = Constants.Conversation.Design.Goal
+    @State private var state = ConversationGoalPillState.idle
 
     var body: some View {
-        HStack(alignment: .top, spacing: Goal.contentSpacing) {
-            Image(.pin)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
-                .accessibilityHidden(true)
-                .frame(minHeight: Design.minimumTapTarget)
-            goalText
-                .frame(maxWidth: .infinity, alignment: .leading)
-            actions
+        Button(action: edit) {
+            WorkspaceStatusPill(icon: .pin, text: Text(verbatim: goal), truncates: true)
         }
-        .padding(.horizontal, Design.horizontalInset)
-        .padding(.vertical, Goal.verticalPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Design.Palette.background(for: colorScheme))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Design.Palette.border(for: colorScheme, contrast: contrast))
-                .frame(height: Constants.Conversation.DividerNotice.lineHeight)
+        .buttonStyle(IntentContentButtonStyle())
+        .disabled(state.isRemoving)
+        .requiresLiveConnection()
+        .contextMenu {
+            Button(action: edit) {
+                Label("Edit goal", image: "Edit")
+            }
+            Button(role: .destructive, action: remove) {
+                Label("Remove goal", image: "Close")
+            }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("goalStrip")
+        .accessibilityLabel("Goal: \(goal)")
+        .accessibilityHint("Edits the goal")
+        .accessibilityAction(named: "Remove goal", remove)
+        .accessibilityIdentifier("goalPill")
         .sheet(isPresented: editorPresented) {
             ConversationGoalEditor(
                 text: Binding(get: { state.draft?.text ?? "" }, set: { state.updateDraft($0) }),
@@ -47,55 +36,10 @@ struct ConversationGoalStrip: View {
             )
             .coversConversationComposers()
         }
-        .onChange(of: goal) { _, _ in
-            if state.isExpanded { state.toggleExpansion() }
-        }
     }
 
-    @ViewBuilder private var goalText: some View {
-        if state.isExpanded {
-            Text(ConversationGoal.linkedText(goal))
-                .interFont(Constants.Typography.bodyXS)
-                .foregroundStyle(Design.Palette.foreground(for: colorScheme))
-                .tint(Design.Palette.foreground(for: colorScheme))
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-                .frame(minHeight: Design.minimumTapTarget, alignment: .leading)
-                .accessibilityIdentifier("goalStrip.text")
-        } else {
-            Button { state.toggleExpansion() } label: {
-                Text(goal)
-                    .interFont(Constants.Typography.bodyXS)
-                    .foregroundStyle(Design.Palette.foreground(for: colorScheme))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, minHeight: Design.minimumTapTarget, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(IntentContentButtonStyle())
-            .accessibilityLabel("Goal: \(goal)")
-            .accessibilityHint("Shows the full goal")
-            .accessibilityIdentifier("goalStrip.text")
-        }
-    }
-
-    private var actions: some View {
-        HStack(spacing: Goal.actionSpacing) {
-            actionButton(
-                icon: state.isExpanded ? .chevronUp : .chevronDown,
-                label: state.isExpanded ? "Show less of the goal" : "Show the full goal",
-                identifier: "goalStrip.toggle"
-            ) { state.toggleExpansion() }
-            .accessibilityValue(state.isExpanded ? "Expanded" : "Collapsed")
-            HStack(spacing: Goal.actionSpacing) {
-                actionButton(icon: .edit, label: "Edit goal", identifier: "goalStrip.edit") {
-                    state.beginEditing(goal: goal)
-                }
-                actionButton(icon: .close, label: "Remove goal", identifier: "goalStrip.remove", action: remove)
-            }
-            .disabled(state.isRemoving)
-            .requiresLiveConnection()
-        }
+    private func edit() {
+        state.beginEditing(goal: goal)
     }
 
     private func remove() {
@@ -104,21 +48,6 @@ struct ConversationGoalStrip: View {
             await onRemove()
             state.finishRemoving()
         }
-    }
-
-    private func actionButton(icon: ImageResource, label: String, identifier: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(icon)
-                .resizable()
-                .scaledToFit()
-                .frame(width: iconSize, height: iconSize)
-                .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
-                .frame(minWidth: Design.minimumTapTarget, minHeight: Design.minimumTapTarget)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(IntentContentButtonStyle())
-        .accessibilityLabel(label)
-        .accessibilityIdentifier(identifier)
     }
 
     private var editorPresented: Binding<Bool> {

@@ -107,14 +107,6 @@ struct ConversationColumnView: View {
                 )
         }
         #endif
-        if let goal = viewModel.conversationGoal, !viewModel.showsLoadingState {
-            ConversationGoalStrip(
-                goal: goal,
-                onSave: { await viewModel.saveGoal($0) },
-                onRemove: { await viewModel.removeGoal() }
-            )
-            .transition(.opacity)
-        }
         ZStack {
             if viewModel.showsLoadingState {
                 ConversationConnectionLoadingView(viewModel: viewModel, usesWorkspaceDesign: usesWorkspaceDesign)
@@ -358,6 +350,16 @@ extension ConversationColumnView {
         if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
 
         MonitoredScriptsRow(viewModel: viewModel, showsRow: !usesWorkspaceDesign)
+        if !usesWorkspaceDesign, !viewModel.showsLoadingState, let goal = viewModel.conversationGoal {
+            ConversationGoalPill(
+                goal: goal,
+                onSave: { await viewModel.saveGoal($0) },
+                onRemove: { await viewModel.removeGoal() }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Design.horizontalInset)
+            .padding(.vertical, Design.Status.composerSpacing)
+        }
         if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
                 AgentWaitingView(
