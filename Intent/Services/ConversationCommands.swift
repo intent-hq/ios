@@ -44,6 +44,7 @@ final class ConversationCommands {
         let pendingQuestionsMessageId: String?
         let dismissedQuestionsMessageId: String?
         let lastSeenMessageId: String?
+        var goal: String?
     }
 
     struct SubscriptionSnapshot {
@@ -111,8 +112,32 @@ extension ConversationCommands {
                 || (agent["turnInFlight"] as? Bool ?? false),
             pendingQuestionsMessageId: metadata["pendingQuestionsMessageId"] as? String,
             dismissedQuestionsMessageId: metadata["dismissedQuestionsMessageId"] as? String,
-            lastSeenMessageId: metadata["lastSeenMessageId"] as? String
+            lastSeenMessageId: metadata["lastSeenMessageId"] as? String,
+            goal: ConversationGoal.parse(agent["goal"])
         )
+    }
+
+    func sendGoalCommand(agentId: String, workspaceId: String, content: String) async throws -> GoalCommandResult? {
+        let result = try await connectionManager.request(
+            "agent.sendMessage",
+            params: ["agentId": agentId, "workspaceId": workspaceId, "content": content, "interpretCommands": true]
+        )
+        guard let response = result as? [String: Any], response["success"] as? Bool == true else {
+            throw ConversationSendError.invalidAcknowledgement
+        }
+        guard let command = GoalCommandResult(command: response["command"]) else { return nil }
+        agentDetails.updateFields(agentId: agentId, fields: ["goal": command.goal ?? NSNull()])
+        return command
+    }
+
+    func setGoal(agentId: String, workspaceId: String, goal: String?) async throws -> GoalCommandResult {
+        let result = try await connectionManager.request(
+            "agent.setGoal",
+            params: ["agentId": agentId, "workspaceId": workspaceId, "goal": goal ?? NSNull()]
+        )
+        guard let command = GoalCommandResult(setGoalResponse: result) else { throw ConversationSendError.invalidAcknowledgement }
+        agentDetails.updateFields(agentId: agentId, fields: ["goal": command.goal ?? NSNull()])
+        return command
     }
 
     func fetchMessage(

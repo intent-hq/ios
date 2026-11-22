@@ -48,6 +48,8 @@ struct MessageRowContent: View, Equatable {
         VStack(alignment: .leading, spacing: 0) {
             if let dismissedNotice = message.questionsDismissedNotice {
                 QuestionsDismissedNoticeView(notice: dismissedNotice)
+            } else if let goalNotice = message.goalCommandNotice {
+                GoalCommandNoticeView(notice: goalNotice)
             } else if let modelChange = message.modelChangeNotice {
                 ModelChangeNoticeView(
                     notice: modelChange,

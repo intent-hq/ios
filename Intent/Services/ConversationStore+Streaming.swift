@@ -236,6 +236,9 @@ extension ConversationStore {
         if !ignoringMarkers.contains("dismissedQuestionsMessageId"), let dismissedId = data["dismissedQuestionsMessageId"] as? String {
             dismissedQuestionsMessageId = dismissedId
         }
+        if data.keys.contains("goal"), data["agentId"] as? String == agentId {
+            goal = ConversationGoal.parse(data["goal"])
+        }
         if !ignoringMarkers.contains("lastSeenMessageId"), let seenId = data["lastSeenMessageId"] as? String {
             lastSeenMessageId = seenId
             metadataReadyForEntry = connectionManager.globalSubscriptionState == .subscribed

@@ -5,11 +5,14 @@ nonisolated struct ConnectionCapabilities: Equatable, Sendable {
     let scriptMonitorsVersion: Int?
     let scriptActiveListsVersion: Int?
     var collaborationIdentityVersion: Int?
+    var conversationGoalVersion: Int?
     private(set) var scriptMonitorsDisabled = false
 
     static let unknown = Self(protocolVersion: nil, scriptMonitorsVersion: nil, scriptActiveListsVersion: nil)
 
     var supportsCollaborationIdentity: Bool { collaborationIdentityVersion == 1 }
+
+    var supportsConversationGoal: Bool { conversationGoalVersion == 1 }
 
     var supportsIdentitySeam: Bool { Self.protocolVersion(protocolVersion, atLeast: Self.identitySeamVersion) }
 
@@ -45,6 +48,7 @@ nonisolated extension ConnectionCapabilities {
         scriptMonitorsVersion = Self.integer(capabilities?["scriptMonitors"])
         scriptActiveListsVersion = Self.integer(capabilities?["scriptActiveLists"])
         collaborationIdentityVersion = Self.integer(capabilities?["collaborationIdentity"])
+        conversationGoalVersion = Self.integer(capabilities?["conversationGoal"])
     }
 
     private static func integer(_ value: Any?) -> Int? {

@@ -165,6 +165,15 @@ private struct ConversationViewContent: View {
                 Text("The questions were not dismissed and are still pending. " + detail)
             }
             .alert(
+                "Couldn’t Change Goal",
+                isPresented: goalErrorPresented,
+                presenting: viewModel.goalError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { detail in
+                Text(detail)
+            }
+            .alert(
                 "Couldn’t Send Images",
                 isPresented: imagePlacementErrorPresented,
                 presenting: viewModel.imagePlacementError
@@ -314,6 +323,13 @@ private extension ConversationViewContent {
         Binding(
             get: { viewModel.dismissQuestionsError != nil },
             set: { if !$0 { viewModel.dismissQuestionsError = nil } }
+        )
+    }
+
+    private var goalErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.goalError != nil },
+            set: { if !$0 { viewModel.goalError = nil } }
         )
     }
 

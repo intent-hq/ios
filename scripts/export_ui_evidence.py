@@ -370,6 +370,13 @@ CAPTURES = {
             for step in ("", " link created", " one person")
         ),
     },
+    "ConversationGoalUITests": {
+        "testGoalStripExpandsEditsRemovesAndFollowsGoalCommands": tuple(
+            f"Goal {state} {appearance}"
+            for appearance in ("light", "dark")
+            for state in ("strip collapsed", "strip expanded", "editor", "strip after command")
+        ),
+    },
     "TurnFailureNoticeUITests": {
         "testUsageLimitCardHidesRawDetailsUntilExpanded": tuple(
             f"Turn failure {state} {appearance}"

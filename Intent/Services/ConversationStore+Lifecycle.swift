@@ -36,6 +36,7 @@ extension ConversationStore {
                       binding == agentBindingGeneration, isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
                 applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: issuedLiveVersion)
                 applyFetchedMarkers(state, revisions: revisions)
+                if goal != state.goal { goal = state.goal }
                 resolveWorkspaceFromDetail()
                 metadataReadyForEntry = !workspaceAuthority.hasFailed && connectionManager.globalSubscriptionState == .subscribed
                 notifyEntryStateChanged()
@@ -123,6 +124,7 @@ extension ConversationStore {
             cancelMetadataRefreshes()
             sessionMetadataGeneration += 1
             agentBindingGeneration &+= 1
+            goal = nil
         }
         self.agentId = agentId
     }

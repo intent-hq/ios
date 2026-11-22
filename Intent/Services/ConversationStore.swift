@@ -87,6 +87,7 @@ import SwiftUI
         set { commands.lastSeenMessageId = newValue }
     }
     var pendingQuestionRecovery: PendingQuestionRecovery?
+    var goal: String?
 
     let connectionManager: ConnectionManagerRouting
     @ObservationIgnored let liveTranscript: ConversationLiveTranscript

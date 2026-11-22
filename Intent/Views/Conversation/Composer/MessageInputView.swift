@@ -459,6 +459,10 @@ private extension MessageInputView {
                 return
             }
             HapticManager.impact(.medium)
+            if viewModel.routesAsGoalCommand(text) {
+                Task { await viewModel.sendGoalCommand(text) }
+                return
+            }
             let imagesToSend = viewModel.pendingImages
             viewModel.messageText = ""
             viewModel.pendingImages.removeAll()

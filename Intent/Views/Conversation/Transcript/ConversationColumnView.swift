@@ -80,6 +80,10 @@ struct ConversationColumnView: View {
         )
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
+            value: viewModel.conversationGoal
+        )
+        .animation(
+            .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
             value: viewModel.activeAgentHooks.map(\.hookId)
         )
         .animation(
@@ -103,6 +107,14 @@ struct ConversationColumnView: View {
                 )
         }
         #endif
+        if let goal = viewModel.conversationGoal, !viewModel.showsLoadingState {
+            ConversationGoalStrip(
+                goal: goal,
+                onSave: { await viewModel.saveGoal($0) },
+                onRemove: { await viewModel.removeGoal() }
+            )
+            .transition(.opacity)
+        }
         ZStack {
             if viewModel.showsLoadingState {
                 ConversationConnectionLoadingView(viewModel: viewModel, usesWorkspaceDesign: usesWorkspaceDesign)

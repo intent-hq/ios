@@ -40,6 +40,7 @@ struct AgentSession: Identifiable, Equatable {
     var notificationsMuted = false
     var parentAgentId: String?
     var retiredAt: String?
+    var goal: String?
 
     private static let activeStatuses: Set<String> = [
         "active",
@@ -158,7 +159,8 @@ struct AgentSession: Identifiable, Equatable {
             dismissedQuestionsMessageId: dismissedQuestionsMessageId,
             notificationsMuted: notificationsMuted,
             parentAgentId: parentAgentId,
-            retiredAt: retiredAt
+            retiredAt: retiredAt,
+            goal: goal
         )
     }
 
@@ -199,7 +201,8 @@ struct AgentSession: Identifiable, Equatable {
                 ?? metadata?["notificationsMuted"] as? Bool
                 ?? false,
             parentAgentId: dict["parentAgentId"] as? String,
-            retiredAt: dict["retiredAt"] as? String
+            retiredAt: dict["retiredAt"] as? String,
+            goal: ConversationGoal.parse(dict["goal"])
         )
     }
 
