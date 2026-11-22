@@ -9,7 +9,7 @@ struct GoalCommandNoticeView: View {
 
     var body: some View {
         HStack(spacing: Design.Transcript.toolLabelSpacing) {
-            Image(.pin)
+            Image(.mapPin)
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()

@@ -8,7 +8,7 @@ struct ConversationGoalPill: View {
 
     var body: some View {
         Button(action: edit) {
-            WorkspaceStatusPill(icon: .pin, text: Text(verbatim: goal), truncates: true)
+            WorkspaceStatusPill(icon: .mapPin, text: Text("Goal"))
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(state.isRemoving)

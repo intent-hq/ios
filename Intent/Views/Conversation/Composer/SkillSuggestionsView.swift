@@ -118,7 +118,7 @@ struct SkillSuggestionsView: View {
     private func commandChip(_ command: SlashBuiltInCommand, selected: Bool) -> some View {
         Button { completion.insert(command) } label: {
             HStack(spacing: Layout.commandIconSpacing) {
-                Image(.pin)
+                Image(.mapPin)
                     .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
