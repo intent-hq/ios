@@ -144,6 +144,7 @@ struct ConversationGoalEditor: View {
     @FocusState private var focused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private typealias Design = Constants.Conversation.Design
 
@@ -158,6 +159,7 @@ struct ConversationGoalEditor: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { editorToolbar }
         }
+        .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         .interactiveDismissDisabled(isSaving)
         .onAppear { focused = true }
     }
@@ -167,7 +169,7 @@ struct ConversationGoalEditor: View {
             TextEditor(text: $text)
                 .interFont(Constants.Typography.bodyS)
                 .focused($focused)
-                .frame(minHeight: Design.Goal.editorMinimumHeight)
+                .frame(minHeight: Design.Goal.editorMinimumHeight, maxHeight: .infinity)
                 .scrollContentBackground(.hidden)
                 .padding(Design.Goal.editorSpacing)
                 .background(Design.Palette.surface(for: colorScheme), in: .rect(cornerRadius: Design.innerCornerRadius))
@@ -175,10 +177,12 @@ struct ConversationGoalEditor: View {
                 .accessibilityLabel("Goal")
                 .accessibilityHint("Describe what done looks like. Save an empty goal to remove it.")
                 .accessibilityIdentifier("goalEditor.text")
-            Text("\(characterCount) of \(ConversationGoal.maximumLength) characters. Leave it empty to remove the goal.")
+            Text("\(characterCount)/\(ConversationGoal.maximumLength)")
                 .interFont(Constants.Typography.subtextXXS)
+                .monospacedDigit()
                 .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
-                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel("\(characterCount) of \(ConversationGoal.maximumLength) characters")
+                .accessibilityIdentifier("goalEditor.count")
             if let failure {
                 Text(failure)
                     .interFont(Constants.Typography.bodyXS)
@@ -186,7 +190,6 @@ struct ConversationGoalEditor: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("goalEditor.error")
             }
-            Spacer(minLength: 0)
         }
     }
 
@@ -202,9 +205,12 @@ struct ConversationGoalEditor: View {
                 ProgressView().accessibilityLabel("Saving goal")
             } else {
                 Button("Save", action: onSave)
+                    .buttonStyle(IntentButtonStyle())
+                    .fixedSize(horizontal: true, vertical: false)
                     .disabled(!canSave)
                     .accessibilityIdentifier("goalEditor.save")
             }
         }
+        .intentToolbarSurface()
     }
 }
