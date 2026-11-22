@@ -242,6 +242,35 @@ struct ConversationGoalViewModelTests {
         #expect(fake.paramsForMethod("agent.setGoal").count == 1)
     }
 
+    @Test func goalCommandInARetiredWorkspaceKeepsTheTypedText() async {
+        let (viewModel, fake) = await makeGoalVM()
+        fake.errorMap["agent.sendMessage"] = NSError(
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSLocalizedDescriptionKey: "workspace is retired", NSError.intentErrorDataCodeKey: "workspace-retired"]
+        )
+        viewModel.messageText = "/goal Ship it"
+        #expect(!(await viewModel.sendGoalCommand("/goal Ship it")))
+        #expect(viewModel.messageText == "/goal Ship it")
+        #expect(viewModel.goalError == ConversationGoal.workspaceRetiredError)
+        #expect(viewModel.store.goal == nil)
+    }
+
+    @Test func successWithoutANoticeIdStillAppliesTheGoal() async {
+        let (viewModel, fake) = await makeGoalVM()
+        fake.responseMap["agent.sendMessage"] = [
+            "success": true, "queued": false, "command": ["name": "goal", "action": "set", "goal": "Ship it"]
+        ] as [String: Any]
+        fake.responseMap["agent.setGoal"] = ["action": "updated", "goal": "Ship the beta"]
+        viewModel.messageText = "/goal Ship it"
+        #expect(await viewModel.sendGoalCommand("/goal Ship it"))
+        #expect(viewModel.messageText.isEmpty)
+        #expect(viewModel.store.goal == "Ship it")
+        #expect(await viewModel.saveGoal("Ship the beta") == nil)
+        #expect(viewModel.store.goal == "Ship the beta")
+        #expect(viewModel.goalError == nil)
+    }
+
     @Test func removeOnARetiredAgentExplainsWhy() async {
         let (viewModel, fake) = await makeGoalVM()
         fake.errorMap["agent.setGoal"] = NSError(

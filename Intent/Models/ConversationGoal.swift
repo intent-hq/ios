@@ -6,6 +6,7 @@ nonisolated enum ConversationGoal {
     static let attachmentsError = "/goal does not take attachments. Remove the attachments and send it again."
 
     static let retiredError = "This agent is retired, so its goal can't change. Restore the agent first."
+    static let workspaceRetiredError = "This workspace is retired, so the goal can't change."
     static let tooLongError = "The goal is too long. Keep it to \(maximumLength) characters or fewer."
 
     static func isCommand(_ content: String) -> Bool {
@@ -43,6 +44,7 @@ nonisolated enum ConversationGoal {
         case "goal-too-long": return tooLongError
         case "goal-attachments-not-allowed": return attachmentsError
         case "agent-retired": return retiredError
+        case "workspace-retired": return workspaceRetiredError
         default:
             let detail = failure.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
             return detail.isEmpty ? "The goal was not changed. Try again." : "The goal was not changed. \(detail)"

@@ -70,6 +70,7 @@ struct ConversationGoalTests {
         #expect(ConversationGoal.failureMessage(for: failure("goal-too-long")) == ConversationGoal.tooLongError)
         #expect(ConversationGoal.failureMessage(for: failure("goal-attachments-not-allowed")) == ConversationGoal.attachmentsError)
         #expect(ConversationGoal.failureMessage(for: failure("agent-retired")) == ConversationGoal.retiredError)
+        #expect(ConversationGoal.failureMessage(for: failure("workspace-retired")) == ConversationGoal.workspaceRetiredError)
         #expect(ConversationGoal.failureMessage(for: failure(nil, "agent not found")) == "The goal was not changed. agent not found")
         #expect(ConversationGoal.failureMessage(for: failure(nil, " ")) == "The goal was not changed. Try again.")
     }
