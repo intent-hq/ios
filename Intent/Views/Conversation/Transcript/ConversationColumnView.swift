@@ -152,8 +152,7 @@ struct ConversationColumnView: View {
         if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
                 if usesWorkspaceDesign, viewModel.showsWorkspaceStatusPills {
-                    WorkspaceStatusPillsRow(viewModel: viewModel)
-                    .padding(.horizontal, stickyHorizontalInset)
+                    WorkspaceStatusPillsRow(viewModel: viewModel, horizontalInset: stickyHorizontalInset)
                     .padding(.top, Design.Composer.keyboardBottomSpacing)
                     .padding(.bottom, workspaceQueueVisible ? Design.Status.composerSpacing : 0)
                 }

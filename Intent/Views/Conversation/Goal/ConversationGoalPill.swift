@@ -9,8 +9,9 @@ struct ConversationGoalPill: View {
 
     var body: some View {
         Button(action: edit) {
-            WorkspaceStatusPill(icon: .mapPin, text: Text(verbatim: goal))
-                .frame(maxWidth: maximumWidth, alignment: .leading)
+            WidthCappedLayout(maximumWidth: maximumWidth) {
+                WorkspaceStatusPill(icon: .mapPin, text: Text(verbatim: goal))
+            }
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(state.isRemoving)
@@ -62,6 +63,22 @@ struct ConversationGoalPill: View {
             let failure = await onSave(text)
             state.finishSaving(failure: failure)
         }
+    }
+}
+
+private struct WidthCappedLayout: Layout {
+    let maximumWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        subviews.first?.sizeThatFits(cappedProposal(proposal)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: cappedProposal(proposal))
+    }
+
+    private func cappedProposal(_ proposal: ProposedViewSize) -> ProposedViewSize {
+        ProposedViewSize(width: min(proposal.width ?? maximumWidth, maximumWidth), height: proposal.height)
     }
 }
 

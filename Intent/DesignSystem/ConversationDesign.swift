@@ -76,6 +76,8 @@ extension Constants.Conversation.Design {
         static let trailingPadding: CGFloat = 12
         static let iconSpacing: CGFloat = 12
         static let composerSpacing: CGFloat = 8
+        static let trailingFadeWidth: CGFloat = 32
+        static let trailingFadeDuration: Double = 0.2
         static let goToEndLeadingPadding: CGFloat = 12
         static let goToEndTrailingPadding: CGFloat = 16
         static let goToEndIconSpacing: CGFloat = 10

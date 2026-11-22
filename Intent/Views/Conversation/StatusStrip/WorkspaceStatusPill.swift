@@ -108,37 +108,66 @@ struct MarqueeText<Content: View>: View {
 
 struct WorkspaceStatusPillsRow: View {
     let viewModel: ConversationViewModel
+    var horizontalInset: CGFloat = 0
+    @State private var hasMoreTrailing = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.layoutDirection) private var layoutDirection
 
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Design.Status.composerSpacing))
-            : AnyLayout(WorkspaceStatusPillsLayout(spacing: Design.Status.composerSpacing, layoutDirection: layoutDirection))
-        layout {
-            if let goal = viewModel.conversationGoal {
-                ConversationGoalPill(
-                    goal: goal,
-                    onSave: { await viewModel.saveGoal($0) },
-                    onRemove: { await viewModel.removeGoal() }
-                )
-            }
-            if viewModel.showsPrMonitorStatus {
-                MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: viewModel.monitoredPrStore, usesWorkspaceDesign: true)
-            }
-            if viewModel.showsScriptMonitorStatus {
-                ScriptWatchPills(viewModel: viewModel)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: Design.Status.composerSpacing) { pills }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, horizontalInset)
+            } else {
+                scrollingPills
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             #if DEBUG
             if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-script-monitor-hit-probe") {
                 DemoIPadPaneGeometry(identifier: "workspace-status-pills")
             }
             #endif
+        }
+    }
+
+    private var scrollingPills: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Design.Status.composerSpacing) { pills }
+        }
+        .scrollIndicators(.hidden)
+        .contentMargins(.horizontal, horizontalInset, for: .scrollContent)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentSize.width + geometry.contentInsets.trailing
+                - geometry.contentOffset.x - geometry.containerSize.width > 1
+        } action: { _, hasMore in
+            hasMoreTrailing = hasMore
+        }
+        .mask {
+            HStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, hasMoreTrailing ? .clear : .black], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: Design.Status.trailingFadeWidth)
+            }
+        }
+        .animation(.easeInOut(duration: Design.Status.trailingFadeDuration), value: hasMoreTrailing)
+    }
+
+    @ViewBuilder private var pills: some View {
+        if let goal = viewModel.conversationGoal {
+            ConversationGoalPill(
+                goal: goal,
+                onSave: { await viewModel.saveGoal($0) },
+                onRemove: { await viewModel.removeGoal() }
+            )
+        }
+        if viewModel.showsPrMonitorStatus {
+            MonitoredPrsRow(viewModel: viewModel, monitoredPrStore: viewModel.monitoredPrStore, usesWorkspaceDesign: true)
+        }
+        if viewModel.showsScriptMonitorStatus {
+            ScriptWatchPills(viewModel: viewModel)
         }
     }
 }

@@ -6,7 +6,6 @@ struct MonitoredPrsRow: View {
     private let usesWorkspaceDesign: Bool
     @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
-    @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.openURL) private var openURL
     @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 11
 
@@ -24,26 +23,9 @@ struct MonitoredPrsRow: View {
 
     var body: some View {
         if usesWorkspaceDesign {
-            VStack(alignment: .leading, spacing: Constants.Conversation.Design.Status.composerSpacing) {
-                if monitoredPrStore.error != nil { retryButton }
-                if activeMonitors.count == 1, let monitor = activeMonitors.first {
-                    monitorChip(monitor)
-                } else if activeMonitors.count == 2 {
-                    WorkspaceStatusPillsLayout(spacing: Constants.Conversation.Design.Status.composerSpacing, layoutDirection: layoutDirection) {
-                        ForEach(activeMonitors) { monitor in
-                            monitorChip(monitor)
-                        }
-                    }
-                } else if !activeMonitors.isEmpty {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: Constants.Conversation.Design.Status.composerSpacing) {
-                            ForEach(activeMonitors) { monitor in
-                                monitorChip(monitor)
-                            }
-                        }
-                    }
-                    .scrollIndicators(.hidden)
-                }
+            if monitoredPrStore.error != nil { retryButton }
+            ForEach(activeMonitors) { monitor in
+                monitorChip(monitor)
             }
         } else {
             legacyRow
