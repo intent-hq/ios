@@ -23,7 +23,6 @@ import Observation
         observeConnection()
     }
 
-    /// Test-only initializer that skips connection observation
     init(forTesting _: Bool) {
         self.connectionManager = ConnectionManager.shared
     }
@@ -38,7 +37,6 @@ import Observation
         }
     }
 
-    /// Test-only helper to set reconciler for race condition testing
     func setTestReconciler(_ reconciler: DeltaReconciler<CommentThread>) async {
         await MainActor.run {
             commentReconciler = reconciler
@@ -167,14 +165,12 @@ import Observation
     // MARK: - Event handling
 
     func handleEvent(_ method: String, params: Any) {
-        // Handle subscription.push for live-state updates (test injection compatibility)
         if let push = SubscriptionPush.parse(method: method, params: params) {
             handleSubscriptionPush(push)
             return
         }
 
         if !liveSubscription.isLive {
-            // Handle legacy comment:* events if needed
         }
     }
 

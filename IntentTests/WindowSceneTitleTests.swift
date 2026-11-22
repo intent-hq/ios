@@ -56,8 +56,6 @@ struct WindowSceneTitleTests {
             scene.title = title
             try await waitUntil("the server label to supersede the navigation title") { scene.title == "Studio" }
         }
-        // A queued notification from an old navigation write must not bring
-        // back the old server after Home or a rebind.
         scene.title = "Old navigation"
         anchor.title = nil
         await Task.yield()

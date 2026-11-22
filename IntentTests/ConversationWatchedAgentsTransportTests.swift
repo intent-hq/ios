@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Use the production pending-response/cancellation race, inside the existing
-/// recorder boundary. The sent ledger survives local callback cancellation.
 @MainActor
 private final class WatchedDetailTransportFixture {
     let connection = RPCRecordingConnection()
@@ -25,8 +23,6 @@ private final class WatchedDetailTransportFixture {
                     return nil
                 }
             } catch {
-                // A timeout is a terminal transport boundary. A caller's local
-                // cancellation is not a server reply and must leave sent intact.
                 if !(error is CancellationError) { sent[id] = nil }
                 throw error
             }

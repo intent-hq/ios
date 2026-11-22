@@ -3,15 +3,12 @@ import Foundation
 import Testing
 import UIKit
 
-/// Covers the remote http(s) fetch path: decode, status/size guards,
-/// caching, and the session negative cache.
 @MainActor
 struct RemoteImageLoaderTests {
     private typealias LoadError = RemoteImageLoader.LoadError
 
     nonisolated private static let url = URL(string: "https://example.com/pic.png")!
 
-    /// A tiny valid PNG rendered at test time.
     nonisolated private static func pngBytes() -> Data {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4))
         return renderer.pngData { ctx in
@@ -24,7 +21,6 @@ struct RemoteImageLoaderTests {
         try #require(HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil))
     }
 
-    /// Lock-guarded fetch counter usable from the `@Sendable` data fetcher.
     nonisolated private final class FetchCounter: @unchecked Sendable {
         private let lock = NSLock()
         private var value = 0

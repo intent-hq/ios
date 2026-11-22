@@ -146,8 +146,6 @@ private extension ConversationTranscriptView {
         let containerHeight: CGFloat
     }
 
-    // This modifier chain is one scroll-state machine: splitting it would hide
-    // the ordering between gesture, geometry, and past-end observations.
     // swiftlint:disable:next function_body_length
     private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
@@ -156,7 +154,6 @@ private extension ConversationTranscriptView {
             }
             .padding(.horizontal, transcriptHorizontalInset)
             .padding(.top, Layout.transcriptTopPadding)
-            // Keep short transcripts bottom-aligned when the keyboard changes the viewport.
             .frame(minHeight: viewportContentHeight, alignment: .bottom)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.width

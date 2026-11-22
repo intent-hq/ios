@@ -1,8 +1,6 @@
 import Foundation
 import Testing
 
-/// Enforces AGENTS.md's layout policy independently of suppressible lint rules.
-/// Tokens in fixtures and patterns are split so this source passes its own scan.
 struct LayoutPolicyTests {
     private static let reader = "Geometry" + "Reader"
     private static let suppression =

@@ -5,10 +5,7 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// #861: the ordinary composer's Photos picks share the image limit.
 extension ConversationViewModelTests {
-    /// The limit is 10 (closer to desktop, which has no count cap); every
-    /// attachment surface derives its capacity and copy from the one constant.
     @Test func imageLimitIsTenOnEverySurface() throws {
         let limit = Constants.Conversation.Composer.maximumImageSelectionCount
         #expect(limit == 10)
@@ -88,8 +85,6 @@ extension ConversationViewModelTests {
         #expect(viewModel.imagePlacementError?.contains("up to \(limit) images") == true)
     }
 
-    /// #463: photos that fail to transfer or decode are reported, while the
-    /// readable picks in the same selection stay attached.
     @Test func composerPhotoImportReportsFailedItemsAndKeepsSuccessfulOnes() async throws {
         let (viewModel, _) = makeFakeBackedVM()
         let pipeline = viewModel.attachmentPipeline
@@ -107,12 +102,10 @@ extension ConversationViewModelTests {
         await pipeline.photoImportTask?.value
 
         #expect(viewModel.pendingImages.count == 2)
-        #expect(pipeline.attachmentImportError == "Couldn't add some of the selected photos. Try selecting them again.")
+        #expect(pipeline.attachmentImportError == "Couldn’t add some of the selected photos. Try selecting them again.")
         #expect(viewModel.imagePlacementError == nil)
     }
 
-    /// The question tray shows the import error inline with no dismissal,
-    /// so a successful retry must clear it.
     @Test func questionPhotoRetryClearsEarlierImportError() async throws {
         let (viewModel, _) = makeFakeBackedVM()
         let attachments = viewModel.questionAttachments(for: "a1")
@@ -175,11 +168,9 @@ extension ConversationViewModelTests {
         #expect(pipeline.attachmentImportError == nil)
 
         viewModel.reportFileImportFailure(CocoaError(.fileReadNoPermission))
-        #expect(pipeline.attachmentImportError == "Couldn't add some of the selected files. Try selecting them again.")
+        #expect(pipeline.attachmentImportError == "Couldn’t add some of the selected files. Try selecting them again.")
     }
 
-    /// Library videos import as files and never use image slots, so a full
-    /// image tray keeps Photos open for videos in workspace conversations.
     @Test func composerPhotosStayAvailableForVideosAtImageLimit() async throws {
         let (viewModel, _) = makeFakeBackedVM()
         let pipeline = viewModel.attachmentPipeline
@@ -237,8 +228,6 @@ extension ConversationViewModelTests {
         #expect(viewModel.imagePlacementError == nil)
     }
 
-    /// The Assistant accepts no videos, so its picker stays images-only and
-    /// Photos is disabled once the image slots are full.
     @Test func assistantComposerPhotosAreImagesOnlyAndDisabledAtLimit() throws {
         let (viewModel, _) = makeFakeBackedVM(workspaceId: Workspace.chiefWorkspaceId)
         let limit = Constants.Conversation.Composer.maximumImageSelectionCount
@@ -253,7 +242,6 @@ extension ConversationViewModelTests {
         #expect(viewModel.photoPickerMaxSelectionCount == 1, "Photos treats zero as unlimited")
     }
 
-    /// Treats items named `video-…` as library videos backed by a real clip.
     private func stubPhotoVideos(in pipeline: ConversationAttachmentPipeline) async throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("composer-video-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)

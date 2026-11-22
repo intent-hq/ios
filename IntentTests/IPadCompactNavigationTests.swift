@@ -109,8 +109,6 @@ struct IPadCompactNavigationTests {
         }
     }
 
-    /// Only 12 of the 32 combinations of the five former layout flags happen:
-    /// before measurement and at split width there is no drawer, and compact implies overlay.
     @Test func layoutModeReachesOnlyTheInventoriedCombinations() {
         typealias Operation = (inout IPadNavigationState) -> Void
         let operations: [Operation] = [

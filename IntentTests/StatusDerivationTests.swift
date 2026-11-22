@@ -2,9 +2,6 @@
 import Testing
 
 struct StatusDerivationTests {
-    // Helper to build a Workspace with specific fields. Only `displayStatus`
-    // feeds the resolution; `prStatus` is kept to pin that BE authority is not
-    // overridden by the parallel PR surface.
     private func makeWorkspace(
         displayStatus: String? = nil,
         attention: String? = nil,
@@ -45,8 +42,6 @@ struct StatusDerivationTests {
         #expect(WorkspaceDisplayStatus(wireValue: "idle") == .idle)
         #expect(WorkspaceDisplayStatus(wireValue: "not_started") == .notStarted)
         #expect(WorkspaceDisplayStatus(wireValue: "in_progress") == .inProgress)
-        // Legacy wire value from older daemons — unread is now the
-        // attention-flag dot, so the status folds into .idle.
         #expect(WorkspaceDisplayStatus(wireValue: "unread") == .idle)
         #expect(WorkspaceDisplayStatus(wireValue: "complete") == .complete)
         #expect(WorkspaceDisplayStatus(wireValue: "pr_ready") == .prReady)
@@ -59,7 +54,6 @@ struct StatusDerivationTests {
     // MARK: - Resolution (BE-owned value only)
 
     @Test func resolveUsesBackendValue() {
-        // BE value is authoritative — local workspace fields never override it
         let workspace = makeWorkspace(displayStatus: "in_progress", prStatus: "Merged")
         #expect(resolveDisplayStatus(for: workspace) == .inProgress)
     }
@@ -80,8 +74,6 @@ struct StatusDerivationTests {
     }
 
     @Test func resolveMapsUnknownWireValueToUnknown() {
-        // A newer daemon's value must not masquerade as .notStarted
-        // ("No Code Changes") — it gets its own neutral treatment.
         let workspace = makeWorkspace(displayStatus: "some_future_status", prStatus: "Open")
         #expect(resolveDisplayStatus(for: workspace) == .unknown)
         #expect(resolveDisplayStatus(for: workspace) != .notStarted)
@@ -122,7 +114,6 @@ struct StatusDerivationTests {
     }
 
     @Test func unreadAttentionIndependentOfDisplayStatus() {
-        // The dot overlays the real status: a complete workspace can be unread.
         let workspace = makeWorkspace(displayStatus: "complete", attention: "unread")
         #expect(resolveDisplayStatus(for: workspace) == .complete)
         #expect(hasUnreadAttention(workspace))
@@ -136,15 +127,11 @@ struct StatusDerivationTests {
     }
 
     @Test func waitingDotYieldsToRunning() {
-        // Dot precedence: running > unread > waiting.
         let workspace = makeWorkspace(activity: "agent_running", waiting: true)
         #expect(!showsWaitingDot(workspace))
     }
 
     @Test func runningPredicateSharedByGreenAndWaitingDots() {
-        // hasRunningAgents is the single predicate behind both the green
-        // running dot and the waiting-dot precedence check — they can never
-        // disagree on what "running" means (case-insensitive match included).
         #expect(hasRunningAgents(makeWorkspace(activity: "agent_running")))
         #expect(hasRunningAgents(makeWorkspace(activity: "AGENT_RUNNING")))
         #expect(!hasRunningAgents(makeWorkspace(activity: "idle")))
@@ -158,15 +145,11 @@ struct StatusDerivationTests {
     }
 
     @Test func waitingDotShownWithNonUnreadAttention() {
-        // Only the unread dot outranks waiting; other attention values don't
-        // render a dot and must not suppress the waiting affordance.
         #expect(showsWaitingDot(makeWorkspace(attention: "none", waiting: true)))
         #expect(showsWaitingDot(makeWorkspace(attention: "review_required", waiting: true)))
     }
 
     @Test func waitingOrthogonalToDisplayStatus() {
-        // waiting is orthogonal: any status (including in_progress) can wait,
-        // and it never changes the resolved display status.
         for wire in ["in_progress", "complete", "pr_ready", "idle"] {
             let workspace = makeWorkspace(displayStatus: wire, waiting: true)
             #expect(resolveDisplayStatus(for: workspace) == WorkspaceDisplayStatus(wireValue: wire))
@@ -175,7 +158,6 @@ struct StatusDerivationTests {
     }
 
     @Test func waitingNeverFeedsUnreadAttention() {
-        // Informational only — no attention/badge escalation from waiting.
         #expect(!hasUnreadAttention(makeWorkspace(waiting: true)))
     }
 

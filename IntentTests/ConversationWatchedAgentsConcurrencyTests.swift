@@ -29,7 +29,6 @@ extension ConversationWatchedAgentsTests {
         firstRows.setVisible("child-0", visible: false, consumer: consumer)
         try await expectNever("fifth concurrent request") { fixture.connection.pendingRequestCount("agent.get") > 4 }
         #expect(fixture.connection.traffic(since: checkpoint).calls("agent.get").count == 4)
-        // Resolve in actual wire-start order, allowing queued interests to take each slot.
         for index in 0..<7 {
             try await waitUntil("next pending child") { fixture.connection.pendingRequestCount("agent.get") > 0 }
             let requests = fixture.connection.traffic(since: checkpoint).calls("agent.get")

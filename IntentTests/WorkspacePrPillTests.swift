@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Behavior tests for the WorkspacePrPill pure-logic port, mirroring the
-/// Cloudlands `sidebar-changes-utils.ts` reference (selectPrimaryPr,
-/// mergeMonitoredPRs, monitorDisplayStatus, countOtherMonitors).
 struct WorkspacePrPillTests {
     private func makeMonitor(
         repo: String = "octo/repo",

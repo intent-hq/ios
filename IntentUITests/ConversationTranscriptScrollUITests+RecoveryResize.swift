@@ -1,9 +1,6 @@
 import XCTest
 
 extension ConversationTranscriptScrollUITests {
-    /// The hooks response is released by the demo fixture only after the
-    /// real recovery pages up. Missing that overlap fails the control: a
-    /// quiet entry or a footer arriving after follow-back proves nothing.
     @MainActor
     func testHooksRowResizeKeepsRecoveryPagedUpUntilFollowBack() throws {
         let context = "footer resize during recovery page-up"

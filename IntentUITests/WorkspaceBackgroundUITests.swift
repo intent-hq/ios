@@ -1,6 +1,5 @@
 import XCTest
 
-/// Guards the rendered page backgrounds in #833 without coupling to a SwiftUI token name.
 nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     private enum Sample {
         static let timeout: TimeInterval = 30
@@ -29,7 +28,6 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             XCTAssertTrue(app.navigationBars["Spec"].waitForExistence(timeout: Sample.timeout))
             let goal = try app.staticTexts.matching(identifier: "Goal")
                 .waitForSingleHittableElement(timeout: Sample.timeout)
-            // The note's content padding leaves an empty gutter beside the Goal heading.
             let point = CGPoint(x: goal.frame.minX - Sample.gutterInset, y: goal.frame.midY)
             let actual = try background(in: app, at: point, capture: "workspace-background-note-\(appearance)")
             assertMatches(actual, expected: expected, screen: "Note (\(appearance))")
@@ -51,7 +49,6 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             let specialist = app.staticTexts["Implementor"].firstMatch
             XCTAssertTrue(specialist.waitForExistence(timeout: Sample.timeout))
             specialist.tap()
-            // Sample inside the sheet, outside the inset list cards and toolbar controls.
             var point = CGPoint(x: navigation.frame.minX + Sample.gutterInset, y: specialist.frame.midY)
             let actual = try background(in: app, at: point, capture: "workspace-background-agent-\(appearance)")
             assertMatches(actual, expected: expected, screen: "New Agent (\(appearance))")
@@ -80,13 +77,11 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             XCTAssertTrue(navigation.waitForExistence(timeout: Sample.timeout))
             let unavailable = app.staticTexts["Page unavailable"]
             XCTAssertTrue(unavailable.waitForExistence(timeout: Sample.timeout))
-            // The demo has no live browser tunnel: sample native canvas, never web content.
             var point = CGPoint(x: navigation.frame.minX + Sample.gutterInset, y: unavailable.frame.midY)
             let canvas = try background(in: app, at: point, capture: "workspace-background-browser-\(appearance)")
             assertMatches(canvas, expected: expected, screen: "Browser (\(appearance))")
             let address = app.textFields["Browser URL"]
             XCTAssertTrue(address.waitForExistence(timeout: Sample.timeout))
-            // The address control is inset; its outer gutter must match the page, not the card.
             point = CGPoint(x: navigation.frame.minX + Sample.gutterInset, y: address.frame.midY)
             let surround = try background(in: app, at: point, capture: "workspace-background-browser-address-\(appearance)")
             assertMatches(surround, expected: expected, screen: "Browser address surround (\(appearance))")
@@ -106,7 +101,6 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             XCTAssertTrue(app.links["Open server preview"].firstMatch.waitForExistence(timeout: Sample.timeout))
             let transcript = app.scrollViews["transcript.scrollView"]
             XCTAssertTrue(transcript.waitForExistence(timeout: Sample.timeout))
-            // This existing fixture has one short link, leaving the transcript center empty.
             let point = CGPoint(x: transcript.frame.midX, y: transcript.frame.midY)
             let actual = try background(in: app, at: point, capture: "workspace-background-conversation-\(appearance)")
             assertMatches(actual, expected: expected, screen: "Conversation (\(appearance))")
@@ -126,7 +120,6 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             let settings = app.scrollViews["settings.scroll"]
             let point = CGPoint(x: settings.frame.minX + Sample.gutterInset, y: manual.frame.midY)
             let actual = try background(in: app, at: point, capture: "workspace-background-settings-\(appearance)")
-            // The iPad sidebar keeps shell chrome; only the main panel uses the workspace background.
             let isSidebar = app.buttons["ipad.rail.settings"].exists
             let settingsExpected = isSidebar && appearance == "dark" ? Sample.darkSidebar : expected
             assertMatches(actual, expected: settingsExpected, screen: "Settings (\(appearance))")
@@ -135,13 +128,11 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             XCTAssertTrue(host.waitForExistence(timeout: Sample.timeout))
             let cancel = app.buttons["ipad.pairing.cancel"]
             let close = cancel.exists ? cancel : app.buttons["connection-sheet.close"]
-            // The close control shares the content inset; sample outside the field cards.
             let manualPoint = CGPoint(x: close.frame.minX - Sample.gutterInset, y: host.frame.midY)
             let manualColor = try background(in: app, at: manualPoint, capture: "workspace-background-manual-\(appearance)")
             assertMatches(manualColor, expected: expected, screen: "Manual connection (\(appearance))")
             close.tap()
             XCTAssertTrue(host.waitForNonExistence(timeout: Sample.timeout))
-            // Pairing closes an overlay sidebar on smaller iPads; Cancel restores only the detail.
             if app.buttons["ipad.rail.settings"].exists { openSettings(in: app) }
             let disconnect = app.buttons["Disconnect"]
             revealSettingsAction(disconnect, in: app)
@@ -160,7 +151,6 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     @MainActor
     func testIPadSettingsSidebarKeepsShellBackground() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar")
-        // Portrait only: XCUITest screenshots of a landscape iPad simulator come back rotated and cropped.
         XCUIDevice.shared.orientation = .portrait
         for appearance in ["dark", "light"] {
             let app = XCUIApplication()
@@ -176,14 +166,12 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             let point = CGPoint(x: settings.frame.minX + Sample.gutterInset, y: manual.frame.midY)
             let sidebar = try background(in: app, at: point, capture: "ipad-settings-sidebar-\(appearance)")
             assertMatches(sidebar, expected: shell, screen: "iPad Settings sidebar (\(appearance))")
-            // Wide iPads keep the workspace beside the sidebar; smaller ones cover it with a drawer.
             let heading = app.staticTexts["workspace.title.heading"]
             if heading.exists, heading.isHittable {
                 let detailPoint = CGPoint(x: heading.frame.minX - Sample.gutterInset, y: heading.frame.midY)
                 let detail = try background(in: app, at: detailPoint, capture: "ipad-settings-detail-\(appearance)")
                 assertMatches(detail, expected: content, screen: "iPad workspace beside Settings (\(appearance))")
             }
-            // A rounded drawer corner would expose the shade against the rail.
             let panel = app.descendants(matching: .any)["ipad.sidebar.panel.geometry"].firstMatch
             XCTAssertTrue(panel.waitForExistence(timeout: Sample.timeout))
             let corner = CGPoint(x: panel.frame.minX + 1, y: panel.frame.minY + 1)
@@ -252,13 +240,11 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
         app.launch()
         let workspace = app.buttons["workspace.row.demo-ws-dashboard"]
         XCTAssertTrue(workspace.waitForExistence(timeout: Sample.timeout))
-        // Fresh simulators show a system alert that dims screenshots and blocks navigation.
         let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
         if allowNotifications.waitForExistence(timeout: 2) {
             allowNotifications.tap()
             XCTAssertTrue(allowNotifications.waitForNonExistence(timeout: Sample.timeout))
         }
-        // Narrow iPads start with the sidebar collapsed, unlike a wide iPad.
         let workspaces = app.buttons["ipad.rail.workspaces"]
         if workspaces.exists { workspaces.tap() }
         XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Sample.timeout))

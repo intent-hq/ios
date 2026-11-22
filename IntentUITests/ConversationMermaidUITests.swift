@@ -118,7 +118,6 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=mermaid"]
         app.launch()
-        // XCTest assertion aborts can bypass Swift defer blocks.
         addTeardownBlock { @MainActor [self] () async in
             capture(app, name: "mermaid-final-state")
             app.terminate()
@@ -154,7 +153,6 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
     private func verifyFullscreen(in app: XCUIApplication, expand: XCUIElement, webView: XCUIElement) {
         XCTAssertGreaterThanOrEqual(expand.frame.height, Fixture.minimumTapHeight)
         XCTAssertGreaterThanOrEqual(expand.frame.width, webView.frame.width - Fixture.edgeInset)
-        // The far edge is outside the label/icon; tapping the center would miss this regression.
         expand.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: expand.frame.width - Fixture.edgeInset, dy: expand.frame.height / 2))
             .tap()
@@ -207,7 +205,6 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
 
     @MainActor
     private func scrollPosition(in webView: XCUIElement, axis: String) -> Double? {
-        // WebKit clamps offscreen SVG origins, but its own scroll indicator reports the actual position.
         let indicator = webView.otherElements.matching(
             NSPredicate(format: "label BEGINSWITH %@", "\(axis) scroll bar,")
         ).firstMatch
@@ -226,7 +223,6 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
             } ?? viewport.height * Fixture.dragNear
             let maximumStep = viewport.height * Fixture.dragNear
             let step = min(max(adjustment, -maximumStep), maximumStep)
-            // Stay in the transcript's outer margin so the chart cannot consume this positioning drag.
             drag(
                 transcript,
                 from: CGVector(dx: Fixture.transcriptDragX, dy: 0.5),

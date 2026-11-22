@@ -44,7 +44,6 @@ extension AppCoordinatorTests {
         fake.simulateStoppedReconnection()
         await Self.drainStartupCallbacks()
         #expect(!coordinator.isDisconnected)
-        // The real data wait can finish through either data arrival or its timeout.
         coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
         #expect(coordinator.currentScreenDescription == "workspaceList")
         #expect(!coordinator.lifecycleState.hasEnteredRemoteUI)
@@ -91,13 +90,13 @@ extension AppCoordinatorTests {
             await Self.drainStartupCallbacks()
             store.publishFetchedWorkspaces([])
             coordinator.onConnectionSuccess()
-            store.setLastUpdated(nil) // Exercise a recovery that must await a fresh snapshot.
+            store.setLastUpdated(nil)
             fake.simulateStoppedReconnection()
             await Self.drainStartupCallbacks()
             #expect(coordinator.showsConnectionLossOverlay)
             fake.simulateConnect()
             await Self.drainStartupCallbacks()
-            store.setLoading(true) // Queues a recovery callback that must not re-arm in the next flow.
+            store.setLoading(true)
             coordinator.currentScreen = screen
             await Self.drainStartupCallbacks()
             let baseline = callbacks.withLock { $0 }
@@ -255,9 +254,6 @@ extension AppCoordinatorTests {
         coordinator.onInitialWorkspaceLoadComplete(attemptID: coordinator.connectionAttemptId)
         #expect(!coordinator.lifecycleState.hasEnteredRemoteUI, "A socket without its first data is still startup")
 
-        // This socket outlived the stable-connection threshold, so recovery redials
-        // with no backoff: park its admission so the reconnect is still in flight
-        // while the startup UI is asserted, then release it.
         try await ConnectionManagerTests.awaitParkedReplacement(on: server) { server.dropClients() }
         #expect(ConnectionManagerTests.isReconnecting(manager.connectionState))
         await Self.drainStartupCallbacks()
@@ -289,7 +285,7 @@ extension AppCoordinatorTests {
         let stored = Self.makeConnection(port: 4242)
         let fake = FakeConnectionManager()
         let store = WorkspaceStore(forTesting: true)
-        store.publishFetchedWorkspaces([]) // Cached data from before this initial flow is insufficient.
+        store.publishFetchedWorkspaces([])
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
         if pairing {
             coordinator.currentScreen = .pairing
@@ -300,7 +296,7 @@ extension AppCoordinatorTests {
         if pairing {
             coordinator.onPaired(stored)
         } else {
-            coordinator.onConnectionSuccess() // ConnectionFailureView's automatic retry completion.
+            coordinator.onConnectionSuccess()
         }
         await Self.drainStartupCallbacks()
         #expect(coordinator.currentScreenDescription == "workspaceList")
@@ -310,7 +306,7 @@ extension AppCoordinatorTests {
         #expect(!coordinator.showsConnectionLossOverlay)
 
         fake.simulateConnect()
-        store.publishFetchedWorkspaces([]) // An empty but successful fresh snapshot is usable data.
+        store.publishFetchedWorkspaces([])
         try await waitUntil("fresh data after pairing/retry arms subsequent loss") {
             coordinator.lifecycleState.hasEnteredRemoteUI
         }

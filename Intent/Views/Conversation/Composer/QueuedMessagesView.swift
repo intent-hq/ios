@@ -49,7 +49,7 @@ struct QueuedMessagesView: View {
 
     @ViewBuilder
     private func editingRow(_ message: QueuedMessage) -> some View {
-        TextField("Edit message", text: $editText)
+        TextField("Edit Message", text: $editText)
             .textFieldStyle(.plain)
             .interFont(Constants.Typography.bodyXS)
             .onSubmit { saveEdit(messageId: message.id) }

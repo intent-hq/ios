@@ -111,7 +111,7 @@ struct PullRequestListContent: View {
                     AvailableWhenReconnectedView()
                 } else {
                     ProgressView {
-                        Text("Loading pull requests...").interFont(Constants.Typography.bodyS)
+                        Text("Loading pull requests…").interFont(Constants.Typography.bodyS)
                     }
                 }
             case .disconnected:

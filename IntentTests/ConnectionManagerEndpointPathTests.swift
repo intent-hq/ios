@@ -37,7 +37,6 @@ extension ConnectionManagerTests {
             #expect(try await manager.request("system.status") is [String: Any])
             if pathLoss { first.pathChanged(Self.deadPath) } else { first.viabilityChanged(false) }
         }
-        // No clock advance, receive failure, or general report can drive this recovery.
         try await Self.settle { disconnects.count == 1 && manager.connectionState == .connected }
         #expect(manager.socket !== originalSocket)
         #expect(monitor.cancelCount == 1)
@@ -119,7 +118,6 @@ extension ConnectionManagerTests {
         let disconnects = DisconnectCounter(manager)
         first.pathChanged(Self.deadPath)
         first.viabilityChanged(false)
-        // Retire before the queued MainActor notification runs, without a generation change.
         manager.startPathMonitor()
         manager.socketPathObservation?.pathChanged(Self.deadPath)
         manager.socketPathObservation?.viabilityChanged(false)

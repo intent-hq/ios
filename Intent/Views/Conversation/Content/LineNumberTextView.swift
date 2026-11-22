@@ -197,7 +197,6 @@ final class LineNumberTextView: UITextView {
         var labels: [LineLabel] = []
         var start = viewport.location
         if !wrapsLines {
-            // TextKit's horizontal viewport can exclude short source lines.
             let offset = content.offset(from: content.documentRange.location, to: start)
             let precedingRows = Int(ceil(bounds.height / linePitch)) + 1
             let firstLine = max(1, lineIndex.line(at: offset) - precedingRows)

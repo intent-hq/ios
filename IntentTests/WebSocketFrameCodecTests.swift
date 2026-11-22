@@ -2,7 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// RFC 6455 §5 framing: vectors from §5.7 plus boundary and violation cases.
 struct WebSocketFrameCodecTests {
     private static let helloBytes: [UInt8] = [0x48, 0x65, 0x6C, 0x6C, 0x6F]
     private static let rfcMaskingKey = WebSocketMaskingKey(0x37, 0xFA, 0x21, 0x3D)
@@ -109,8 +108,6 @@ struct WebSocketFrameCodecTests {
     }
 
     @Test func rejectsOversizedFrameFromHeaderAlone() {
-        // Only the 64-bit length header is buffered; the cap fails it before
-        // any payload arrives.
         #expect(violation([0x82, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x01], cap: 1 << 20) == .frameTooLarge)
         #expect(violation([0x82, 0x7F, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]) == .frameTooLarge)
         #expect(violation([0x82, 0x7E, 0x01, 0x00], cap: 255) == .frameTooLarge)
@@ -120,7 +117,6 @@ struct WebSocketFrameCodecTests {
         #expect(violation([0xC1, 0x00]) == .reservedBitsSet)
         #expect(violation([0xA1, 0x00], compressed: true) == .reservedBitsSet)
         #expect(violation([0x91, 0x00], compressed: true) == .reservedBitsSet)
-        // RSV1 on a control frame is invalid even with permessage-deflate.
         #expect(violation([0xC9, 0x00], compressed: true) == .reservedBitsSet)
         #expect(violation([0xC1, 0x00], compressed: true) == nil)
     }

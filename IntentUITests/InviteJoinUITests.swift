@@ -1,8 +1,5 @@
 import XCTest
 
-/// The `intent://invite` join sheet against the demo invite seam
-/// (`--demo-invite`, DemoInviteJoin): confirm-then-join, the explanation
-/// when this device has no Mac to confirm the account, and a host refusal.
 nonisolated final class InviteJoinUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 

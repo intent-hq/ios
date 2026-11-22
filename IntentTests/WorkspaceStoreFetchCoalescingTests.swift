@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Workspace list reads under event bursts: one in-flight read, one trailing
-/// read for events during it, and a successor for events during that.
 @MainActor
 struct WorkspaceFetchCoalescingTests {
     private func rows(_ ids: String...) -> [String: Any] {

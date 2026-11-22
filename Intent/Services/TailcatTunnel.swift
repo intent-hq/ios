@@ -39,8 +39,6 @@ nonisolated protocol TunnelForwarderHandle {
 nonisolated extension TailcatkitClient: TunnelClientHandle {}
 nonisolated extension TailcatkitForwarder: TunnelForwarderHandle {}
 
-/// `@unchecked Sendable`: the gomobile projections are thread-safe
-/// handles to Go objects and `closed` is lock-guarded.
 nonisolated final class TailcatTunnelSession: TunnelSession, @unchecked Sendable {
     let localPort: Int
     private let client: any TunnelClientHandle
@@ -78,7 +76,6 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
     static let establishTimeoutMs = 20_000
     private static let millisecondsPerSecond: CFTimeInterval = 1000
 
-    /// `@unchecked Sendable`: state is lock-guarded.
     nonisolated final class DialHandle: @unchecked Sendable {
         private let lock = NSLock()
         private var client: (any TunnelClientHandle)?

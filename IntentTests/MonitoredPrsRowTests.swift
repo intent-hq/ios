@@ -4,7 +4,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Display-helper and hosted accessibility tests for the monitored-PRs chip row.
 @MainActor
 struct MonitoredPrsRowTests {
     private static let hostWidth: CGFloat = 600
@@ -393,8 +392,6 @@ extension MonitoredPrsRowTests {
     }
 
     @Test func detailLinesDropDuplicateSummaryWithoutTitleOrSnapshot() {
-        // The no-title/no-snapshot fallback would render the summary line
-        // identical to the title line — it is dropped so lines stay distinct.
         let monitor = makeMonitor(title: nil)
         let lines = MonitoredPrsRow.detailLines(monitor)
         #expect(lines == ["octo/repo#12", "No pending changes"])

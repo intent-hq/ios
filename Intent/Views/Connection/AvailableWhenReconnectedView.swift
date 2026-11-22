@@ -19,7 +19,7 @@ struct AvailableWhenReconnectedView: View {
             Label("Available when reconnected", systemImage: "wifi.exclamationmark")
                 .interFont(Constants.Typography.bodySEmphasized)
         } description: {
-            Text("This wasn't loaded before the connection dropped.")
+            Text("This wasn’t loaded before the connection dropped.")
                 .interFont(Constants.Typography.bodyXS)
         }
         .accessibilityElement(children: .combine)

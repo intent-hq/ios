@@ -2,10 +2,9 @@
 import Foundation
 
 extension DemoFixtures {
-    // MARK: - Workspaces
-
-    // Literal numeric payloads keep the simulated daemon responses readable and auditable.
     // swiftlint:disable no_magic_numbers
+
+    // MARK: - Workspaces
 
     static var workspaces: [[String: Any]] {
         if LaunchOptions.current.contains("--demo-empty-workspaces") { return [] }

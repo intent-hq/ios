@@ -11,7 +11,6 @@ struct NoteStoreIntegrationTests {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
 
-        // Configure responses
         fake.responseMap["note.list"] = ["notes": []]
         fake.responseMap["note.subscribe"] = [
             "subscriptionId": "sub-1",
@@ -19,20 +18,15 @@ struct NoteStoreIntegrationTests {
             "snapshot": []
         ]
 
-        // Start connected
         fake.simulateConnect()
 
-        // Fetch notes establishes workspace context; the connect observer then
-        // subscribes from its own task.
         await store.fetchNotes(workspaceId: "ws-1")
         try await waitUntil("note.subscribe handler registration") {
             fake.hasSubscriptionHandler(id: "sub-1")
         }
 
-        // Verify subscribe was called
         #expect(fake.didCallMethod("note.subscribe"))
 
-        // Deliver snapshot push to make the store live (applied synchronously)
         let push = SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
@@ -44,7 +38,6 @@ struct NoteStoreIntegrationTests {
         )
         fake.deliverSubscriptionPush(push)
 
-        // Verify state
         #expect(store.notes.count == 1)
     }
 
@@ -62,7 +55,6 @@ struct NoteStoreIntegrationTests {
             fake.hasSubscriptionHandler(id: "sub-1")
         }
 
-        // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
@@ -74,7 +66,6 @@ struct NoteStoreIntegrationTests {
         ))
         #expect(store.notes.count == 1)
 
-        // Contiguous delta
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .delta,
@@ -105,7 +96,6 @@ struct NoteStoreIntegrationTests {
             fake.hasSubscriptionHandler(id: "sub-1")
         }
 
-        // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
@@ -119,7 +109,6 @@ struct NoteStoreIntegrationTests {
 
         fake.clearRequestLog()
 
-        // Gap (seq 5 instead of 1) triggers resnapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .delta,
@@ -127,11 +116,8 @@ struct NoteStoreIntegrationTests {
             snapshot: nil,
             delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: [])
         ))
-        // The baseline `note.list` is the last step of resnapshot, so its
-        // arrival proves unsubscribe and subscribe already ran.
         try await fake.waitForRequests("note.list")
 
-        // Verify resnapshot: unsubscribe, subscribe, list
         #expect(fake.didCallMethod("note.unsubscribe"))
         #expect(fake.didCallMethod("note.subscribe"))
         #expect(fake.didCallMethod("note.list"))
@@ -151,7 +137,6 @@ struct NoteStoreIntegrationTests {
             fake.hasSubscriptionHandler(id: "sub-1")
         }
 
-        // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
@@ -163,8 +148,6 @@ struct NoteStoreIntegrationTests {
         ))
         #expect(store.notes.count == 1)
 
-        // Disconnect, then reconnect with a fresh subscription id so the
-        // resubscribe is distinguishable from the original registration.
         fake.responseMap["note.subscribe"] = ["subscriptionId": "sub-2", "seq": 0, "snapshot": []]
         fake.clearRequestLog()
         fake.simulateDisconnect()
@@ -173,7 +156,6 @@ struct NoteStoreIntegrationTests {
             fake.hasSubscriptionHandler(id: "sub-2")
         }
 
-        // Verify fresh subscribe + list
         #expect(fake.didCallMethod("note.subscribe"))
         #expect(fake.didCallMethod("note.list"))
         #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
@@ -193,7 +175,6 @@ struct NoteStoreIntegrationTests {
             fake.hasSubscriptionHandler(id: "sub-1")
         }
 
-        // Snapshot establishes live state
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .snapshot,
@@ -207,7 +188,6 @@ struct NoteStoreIntegrationTests {
 
         fake.clearRequestLog()
 
-        // Deliver legacy event (should be suppressed)
         fake.deliverEvent(method: "note.updated", params: [
             "event": [
                 "type": "note:updated",
@@ -216,7 +196,6 @@ struct NoteStoreIntegrationTests {
             ]
         ])
 
-        // Verify no refetch (legacy event suppressed)
         try await expectNever("note.list refetch while live") {
             fake.didCallMethod("note.list")
         }
@@ -236,7 +215,6 @@ struct NoteStoreIntegrationTests {
             fake.hasSubscriptionHandler(id: "sub-A")
         }
 
-        // Snapshot for sub-A
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-A",
             kind: .snapshot,
@@ -248,7 +226,6 @@ struct NoteStoreIntegrationTests {
         ))
         #expect(store.notes.count == 1)
 
-        // Push for unregistered sub-B (should be ignored by store)
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-B",
             kind: .snapshot,
@@ -259,7 +236,6 @@ struct NoteStoreIntegrationTests {
             delta: nil
         ))
 
-        // Verify state unchanged
         #expect(store.notes.count == 1)
         #expect(store.notes[0].id == "note-1")
         #expect(!fake.hasSubscriptionHandler(id: "sub-B"))

@@ -224,7 +224,7 @@ struct ReadOnlyBanner: View {
             }
             actionButton(
                 "Back to Home",
-                hint: "Return to your saved machines without forgetting this connection.",
+                hint: "Return to your saved machines without removing this connection.",
                 identifier: "read-only-banner.home",
                 action: onHome
             )

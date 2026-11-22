@@ -1,33 +1,15 @@
 import Vision
 import XCTest
 
-/// Guards intent-hq/ios#349 against the `--demo-data` fixtures: tapping a
-/// workspace whose only foreground agent is a single top-level agent lands
-/// on the workspace overview and stays there once the agent list has
-/// loaded, after a pull-to-refresh reload, and after leaving and
-/// re-entering the workspace. Only an explicit tap on the agent row opens
-/// its conversation.
-///
-/// Runs under the `Intent` scheme (`scripts/xcodebuild.sh test-ios`, CI).
 nonisolated final class WorkspaceEntryUITests: XCTestCase {
     private enum Fixture {
-        /// `DemoFixtures.longConversationWorkspaceId`'s title: the fixture
-        /// workspace with exactly one top-level agent (its delegates are
-        /// background sub-agents).
         static let workspaceTitle = "Deflake payment integration tests"
         static let workspaceListIdentifier = "workspaces.search.open"
-        /// `DemoFixtures.longConversationAgents`' top-level agent name: the
-        /// agent row on the overview and, once opened, the conversation title.
         static let agentName = "Test Stabilizer"
-        /// The overview's Agents/Context segmented control: present only on
-        /// the workspace overview, never on a conversation.
         static let overviewOnlyButton = "Context"
-        /// `ConversationTranscriptView`'s scroll view identifier.
         static let transcriptIdentifier = "transcript.scrollView"
         static let workspaceTimeout: TimeInterval = 30
         static let elementTimeout: TimeInterval = 15
-        /// Long enough for the agent list to have loaded and for any
-        /// forward the load could trigger to have navigated.
         static let noForwardWindow: TimeInterval = 4
         static let pollInterval: TimeInterval = 0.25
         static let backNavigationAttempts = 3
@@ -192,21 +174,17 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
         showWorkspaceList(in: app, workspaceRow: workspaceRow)
 
-        // Cold entry: the agent list loads after the overview appears.
         workspaceRow.tap()
         assertOverviewStaysPut(in: app, context: "after the workspace tap")
 
-        // Reload: pull-to-refresh re-fetches the agent list.
         let agentRow = app.staticTexts[Fixture.agentName].firstMatch
         app.scrollViews.containing(.staticText, identifier: Fixture.agentName).firstMatch.swipeDown()
         assertOverviewStaysPut(in: app, context: "after pulling to refresh the agent list")
 
-        // Re-entry: leaving and tapping the workspace again is a fresh load.
         showWorkspaceList(in: app, workspaceRow: workspaceRow)
         workspaceRow.tap()
         assertOverviewStaysPut(in: app, context: "after re-entering the workspace")
 
-        // Only the explicit agent tap opens the conversation.
         agentRow.tap()
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         XCTAssertTrue(
@@ -215,8 +193,6 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         )
     }
 
-    /// Waits for the overview and its loaded agent list, then asserts that
-    /// no transcript appears for `Fixture.noForwardWindow`.
     @MainActor
     private func assertOverviewStaysPut(in app: XCUIApplication, context: String) {
         let overviewOnly = app.buttons[Fixture.overviewOnlyButton].firstMatch
@@ -242,10 +218,6 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         XCTAssertTrue(overviewOnly.exists, "\(context): the workspace overview was left")
     }
 
-    /// Navigates back until the workspace list's search button shows,
-    /// then waits for `workspaceRow` in it; on a collapsed iPad sidebar the
-    /// first nav button reveals the list. Gating on the row's text alone
-    /// would stop on the overview, whose navigation title is the same text.
     @MainActor
     private func showWorkspaceList(in app: XCUIApplication, workspaceRow: XCUIElement) {
         let workspaceList = app.buttons[Fixture.workspaceListIdentifier].firstMatch
@@ -398,7 +370,6 @@ extension WorkspaceEntryUITests {
         let last = app.buttons["workspace.note.context-task-2"]
         let preferences = app.buttons["workspace.note.preferences"]
         XCTAssertTrue(preferences.waitForExistence(timeout: 15))
-        // Buttons extend 10pt above/below their visible rows for a full touch target.
         XCTAssertEqual(first.frame.minY - spec.frame.maxY, 16, accuracy: 1, "36pt root-to-children gap")
         XCTAssertEqual(second.frame.minY - first.frame.maxY, 4, accuracy: 1, "24pt nested row gap")
         XCTAssertEqual(last.frame.minY - second.frame.maxY, 4, accuracy: 1, "24pt nested row gap")

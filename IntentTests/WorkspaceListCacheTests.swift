@@ -182,7 +182,6 @@ struct WorkspaceListCacheTests {
         store.workspaces.append(active)
         #expect(model.groupedByRepo.first?.1 == [active])
         #expect(model.groupedByStatus.first?.1 == [active])
-        // Re-adding the same ID resolves its time again: removed entries were evicted.
         #expect(parseCount == beforeRemoval + 1)
     }
 

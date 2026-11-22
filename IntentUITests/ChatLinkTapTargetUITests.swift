@@ -1,9 +1,5 @@
 import XCTest
 
-/// Chat lines that are only a link render as full-width rows at least 44 pt
-/// tall. Taps at a row's top and bottom edges and on its trailing side, away
-/// from the link text, must open the link; the message must keep its text
-/// selection and long-press Copy menu.
 nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
     private enum Outcome {
         case text
@@ -24,18 +20,12 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
             ("Open the signed-in preview", .message)
         ]
         static let firstParagraph = "Here are the project notes."
-        static let alertTitle = "Can't Open Link"
+        static let alertTitle = "Can’t Open Link"
         static let minimumRowHeight: CGFloat = 44
-        /// Accessibility frames carry layout rounding (43.99999999999994).
         static let frameTolerance: CGFloat = 0.01
-        /// Rows span the message column, not just the link text.
         static let minimumRowWidthFraction: CGFloat = 0.8
-        /// Taps land this far inside the row's top and bottom edges, above and
-        /// below the link text line.
         static let edgeInset: CGFloat = 3
-        /// Horizontal position of the edge taps: over the start of the title.
         static let edgeTapX: CGFloat = 0.1
-        /// The trailing tap is past the end of every title.
         static let trailingTapX: CGFloat = 0.96
         static let timeout: TimeInterval = 15
         static let launchTimeout: TimeInterval = 30

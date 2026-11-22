@@ -3,9 +3,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Opt-in recorder; existing FakeConnectionManager suites keep their behavior.
-/// All callers use the production ConnectionManagerRouting surface. Response
-/// barriers/errors/cancellation still go through the existing fake implementation.
 @MainActor
 final class RPCRecordingConnection: FakeConnectionManager {
     private(set) var recordedRequests: [RecordedRPC] = []
@@ -13,16 +10,9 @@ final class RPCRecordingConnection: FakeConnectionManager {
     private(set) var connectionGeneration = 0
     private var nextOrder = 0
     private let origin = ContinuousClock.now
-    /// Fixture responses selected by the actual request params. Use
-    /// pendingMethods to pause these; resolvePending then supplies the reply.
     var responseForRequest: ((String, [String: Any]) -> Any?)?
-    /// An opt-in non-cooperative server response barrier. The normal ledger
-    /// still records start, late completion and errors around this response.
     var suspendedResponse: (@MainActor (String, [String: Any]) async throws -> Any?)?
 
-    /// Holds publisher delivery, not connection state or requests. Releasing
-    /// emits the current state once so tests control initial connected replay
-    /// before binding, during a paused load, or after load has settled.
     var holdsConnectionStateDelivery = false
 
     override var connectionState: ConnectionState {
@@ -47,8 +37,6 @@ final class RPCRecordingConnection: FakeConnectionManager {
         connectionState = current
     }
 
-    /// Take checkpoints only after setup has settled. The range owns all
-    /// completions of requests STARTED in it, including delayed responses.
     var checkpoint: Int { nextOrder }
 
     func traffic(since checkpoint: Int = 0) -> RPCTraffic {
@@ -102,8 +90,6 @@ final class RPCRecordingConnection: FakeConnectionManager {
         }
     }
 
-    /// Parse the same raw JSON shape the production inbound parser consumes.
-    /// Recording occurs once per frame even with zero/multiple local consumers.
     func deliverNotification(params: Any, method: String = "subscription.push") throws {
         try recordNotification(method: method, params: params)
         if method == "subscription.push" {
@@ -153,8 +139,6 @@ final class RPCRecordingConnection: FakeConnectionManager {
         }
     }
 
-    /// Same surface as the base fake, but snapshots pass through the real
-    /// predecoder and the inbound byte ledger rather than a typed shortcut.
     override func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
         let rows = chatSnapshotMap.removeValue(forKey: id)
         super.registerSubscriptionHandler(id: id, handler: handler)

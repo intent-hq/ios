@@ -122,7 +122,11 @@ The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 
 Live updates combine domain subscriptions for workspaces, notes, tasks, comments, and chats—delivered as `subscription.push` notifications—with filtered `events.subscribe` streams for agent, hook, and pull-request-monitor events.
 Browser previews use an auxiliary authenticated WebSocket tunnel rather than
-passing daemon credentials to web content.
+passing daemon credentials to web content. With a supporting daemon, agent preview
+requests can open, show, focus, navigate, and close native browser sessions. iOS
+advertises navigation only; screenshots and page automation require a desktop client.
+Matching native previews reuse their tab IDs, and agents cannot navigate or close
+user-owned tabs. A navigation acknowledgement confirms acceptance, not page load.
 
 The workspace browser also opens HTTP and HTTPS addresses reachable from the
 device, including LAN IP addresses, local hostnames, and Tailscale hostnames.
@@ -748,6 +752,17 @@ Three checks keep implicit state machines from growing back:
 
 Prefer one enum per lifecycle, `CoalescedRead` for single-flight reads, and
 `WorkspaceAuthorityGate` for callers that wait on a resolved value.
+
+### Comment ratchet
+
+Swift code has no comments; decisions live in [docs/adr/](docs/adr/README.md)
+([ADR 0001](docs/adr/0001-no-code-comments.md)). The CI lint job runs
+`python3 scripts/test_comment_budget.py` and `python3 scripts/comment_budget.py check`,
+which fail when a file has more comment lines than `scripts/comment-budget.json`
+allows (zero for unlisted files) or fewer without a lowered baseline. Tool
+directives (`// swiftlint:`, `// periphery:`, `// fixture-protocol-version:`) and
+`// MARK:` section headings are exempt. `comment_budget.py estimate`, `inventory`, `strip` and `update` drive the
+[/delete-comment skill](.claude/skills/delete-comment/SKILL.md).
 
 ### Contributor rules
 

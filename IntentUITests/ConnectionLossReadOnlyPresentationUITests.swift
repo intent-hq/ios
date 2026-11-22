@@ -2,7 +2,6 @@ import XCTest
 
 private typealias LossFixture = ConnectionLossUITestFixture
 
-/// Controls on the iPad shell during a drop.
 extension ConnectionLossUITests {
     @MainActor
     func testIPadControlInventoryDuringDrop() throws {

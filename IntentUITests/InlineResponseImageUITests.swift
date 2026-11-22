@@ -1,7 +1,5 @@
 import XCTest
 
-/// Exercises the real assistant message -> Markdown -> saved asset -> lightbox
-/// path using only demo RPC responses, including a missing asset and re-entry.
 nonisolated final class InlineResponseImageUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
@@ -58,8 +56,6 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
             screenshot.lifetime = .keepAlways
             add(screenshot)
 
-            // Return to the overview without restarting the app: the second
-            // entry must reconstruct the conversation with cached asset results.
             if UIDevice.current.userInterfaceIdiom == .phone {
                 app.buttons["conversation.back"].tap()
             } else {
@@ -154,7 +150,6 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         XCTAssertLessThanOrEqual(card.frame.maxX, transcript.frame.maxX)
         captureMedia(app, named: "Inline PDF card and link")
 
-        // Textual draws the attachment into the final square of this paragraph.
         card.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: Fixture.thumbnailSide / 2, dy: card.frame.height - Fixture.thumbnailSide / 2))
             .tap()
@@ -169,7 +164,6 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         let link = app.links["Open the PDF brief"].firstMatch
         XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
         reveal(link, in: transcript)
-        // Selectable Markdown overlays the semantic link in accessibility hit-testing.
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         assertPDFViewer(in: app)
         captureMedia(app, named: "PDF viewer from text link")
@@ -279,8 +273,6 @@ extension InlineResponseImageUITests {
     private func assertLightbox(in app: XCUIApplication, transcript: XCUIElement) {
         let saved = message(in: app, containing: Fixture.savedCaption)
         reveal(saved, in: transcript)
-        // Textual draws attachments in a Canvas. The caption and hard break
-        // identify the paragraph; the final 160 × 90pt region is the full image.
         saved.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(
                 dx: Fixture.thumbnailSide / 2,
@@ -317,7 +309,6 @@ extension InlineResponseImageUITests {
     private func assertMissingImageIsInert(in app: XCUIApplication, transcript: XCUIElement) {
         let missing = message(in: app, containing: Fixture.missingCaption)
         reveal(missing, in: transcript)
-        // Hit the second line, occupied by the compact failure attachment.
         missing.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(
                 dx: missing.frame.height / 2,

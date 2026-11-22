@@ -84,8 +84,6 @@ extension ConnectionManager {
         )
     }
 
-    /// Internal for test visibility (lets tests
-    /// exercise the timeout race without a live socket).
     func awaitResponse(
         id: Int,
         timeout: TimeInterval,
@@ -159,6 +157,9 @@ extension ConnectionManager {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
+        if let method = json["method"] as? String, let id = json["id"], id is String || id is Int {
+            return .request(id: InboundJSONValue(value: id), method: method, params: InboundJSONValue(value: json["params"] ?? [:]))
+        }
         if let id = json["id"] as? Int {
             guard let error = json["error"] as? [String: Any] else {
                 return .response(id: id, result: InboundJSONValue(value: json["result"] as Any))
@@ -215,6 +216,8 @@ extension ConnectionManager {
     ) {
         let dispatchStart = CFAbsoluteTimeGetCurrent()
         switch frame {
+        case let .request(id, method, params):
+            handleReverseRequest(id: id.value, method: method, params: params.value)
         case let .response(id, result):
             pendingRequests.removeValue(forKey: id)?.resume(returning: result.value)
         case let .error(id, error):
@@ -242,7 +245,6 @@ extension ConnectionManager {
         }
     }
 
-    // Keep each frame metric and the reporting threshold explicit in this pure log formatter.
     // swiftlint:disable:next function_parameter_count
     nonisolated static func slowFrameLogLine(
         label: String,
@@ -298,14 +300,13 @@ extension ConnectionManager {
         subscriptionRouter.bufferedPushCount
     }
 
-    /// Internal entry point for testing message dispatch.
     @MainActor
     func dispatchMessage(_ text: String) {
         handleTextMessage(text)
     }
 
     nonisolated static let globalEventTypes = [
-        "workspace:*", "note:*", "agent:*", "task:*", "specialists:changed", "settings:changed", "host:members-changed"
+        "workspace:*", "note:*", "agent:*", "task:*", "browser:*", "specialists:changed", "settings:changed", "host:members-changed"
     ]
     nonisolated static let globalSubscriptionMaxAttempts = 5
     nonisolated static let globalSubscriptionBackoffMaximumSeconds = 8
@@ -330,7 +331,6 @@ extension ConnectionManager {
         connectionGeneration == generation && socket === currentSocket
     }
 
-    // Keep retry ordering unchanged; owner context is scoped to each request.
     // swiftlint:disable:next function_body_length
     private func runGlobalSubscription(
         socket currentSocket: WebSocketConnection,

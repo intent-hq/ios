@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// An authored response group or a generated tool activity summary.
 struct ResponseGroup: Identifiable, Equatable {
     struct Activity: Equatable {
         let tools: Int

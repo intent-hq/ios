@@ -1,6 +1,5 @@
 import XCTest
 
-/// Run on an iPad simulator with native Windowed Apps enabled, not a size-class override.
 nonisolated final class WorkspaceWindowControlsUITests: XCTestCase {
     @MainActor
     func testCompactBackButtonsClearNativeWindowControls() throws {

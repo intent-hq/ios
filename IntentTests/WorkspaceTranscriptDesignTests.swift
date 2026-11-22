@@ -6,7 +6,6 @@ import UIKit
 @MainActor
 @Suite(.serialized)
 struct WorkspaceTranscriptDesignTests {
-    // The 354pt fixture has a valid 265.5pt bubble: 2× represents both mirrored edges exactly.
     private let rasterScale: CGFloat = 2
 
     @Test func workspaceHeaderTracksWidthWithoutRecreatingItsContent() async throws {
@@ -146,7 +145,6 @@ struct WorkspaceTranscriptDesignTests {
 
     private func bubblePixels(width: CGFloat, fullWidth: Bool, direction: LayoutDirection) throws -> [Int] {
         let renderer = ImageRenderer(content: WorkspaceUserBubbleLayout(usesFullWidth: fullWidth, layoutDirection: direction) {
-            // Semantic Color.red is not pure RGB red and can exceed the pixel probe's green threshold.
             Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1).frame(height: 40)
         }.frame(width: width).background(.white))
         renderer.scale = rasterScale

@@ -2,16 +2,12 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Whole-note reads through the `note.get` content cursor (PROTOCOL §5.2
-/// "Bounded note and comment reads").
 @MainActor
 struct NoteContentPagesTests {
     private struct PageError: Error {}
 
     private static let noSleep: PagedReads.Sleep = { _ in }
 
-    /// A fake bounded `note.get`: serves `content` from `contentOffset` up to
-    /// the next cut in `cuts` (UTF-8 byte offsets), with the §5.2 markers.
     private final class FakeNoteGet {
         let bytes: [UInt8]
         let cuts: [Int]
@@ -51,7 +47,6 @@ struct NoteContentPagesTests {
         }
     }
 
-    /// Byte offsets just after each character, i.e. valid cut points.
     private static func boundaries(_ text: String) -> [Int] {
         var offsets: [Int] = []
         var total = 0
@@ -75,8 +70,6 @@ struct NoteContentPagesTests {
     func wholeNoteJoinsPagesAtUTF8Boundaries(text: String) async throws {
         let full = String(repeating: text, count: 4)
         let marks = Self.boundaries(full)
-        // Cut at three character boundaries, including inside a multi-scalar
-        // emoji sequence where one exists (scalar, not grapheme, boundaries).
         let cuts = [marks[marks.count / 4], marks[marks.count / 2], marks[(marks.count * 3) / 4]]
         let daemon = FakeNoteGet(content: full, cuts: cuts)
         let result = try await NoteContentPages.readWholeNote(

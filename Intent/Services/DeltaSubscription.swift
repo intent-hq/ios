@@ -1,7 +1,5 @@
 import Foundation
 
-/// `@unchecked Sendable`: the raw dictionaries are parsed JSON containers that are never
-/// mutated after parse.
 nonisolated struct SubscriptionPush: @unchecked Sendable {
     let subscriptionId: String
     let kind: Kind
@@ -279,12 +277,6 @@ class DeltaReconciler<T> {
         self.normalize = normalize
     }
 
-    // Workaround for a swift-frontend (6.3.3) SIGSEGV: the EarlyPerfInliner SIL pass
-    // crashes in isCallerAndCalleeLayoutConstraintsCompatible while optimizing the
-    // compiler-generated deinit of this generic class in Release builds
-    // (-O -enable-default-cmo). An explicit deinit marked @_optimize(none) keeps the
-    // optimizer out of this one function; behavior is identical (stored properties
-    // are still released normally).
     @_optimize(none)
     deinit {}
 

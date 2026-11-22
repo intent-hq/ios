@@ -5,8 +5,6 @@ import UIKit
 
 @testable import Intent
 
-/// Covers the chat-image action menu helpers: info-row formatting and the
-/// image block's base64 payload decoding.
 struct ChatImageActionsTests {
     // MARK: - Dimensions formatting
 
@@ -110,7 +108,7 @@ struct ChatImageActionsTests {
     @Test func saveReportsWriteFailure() async {
         let result = await Self.saveOutcome(status: .authorized, writeFails: true)
         #expect(result.outcome == .failed)
-        #expect(result.outcome.failureMessage == "Couldn't save this image. Try again.")
+        #expect(result.outcome.failureMessage == "Couldn’t save this image. Try again.")
     }
 
     @Test func saveAlertShowsFailureAndClearsOnSuccessfulRetry() async {

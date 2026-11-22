@@ -55,9 +55,6 @@ extension ConversationStartupBudgetTests {
         try ConversationBudgetEvidence.emit("gap-recovery-complete", connection.traffic())
     }
 
-    /// The earlier iOS-only streaming fixture intentionally accepts aliases.
-    /// This matched trace uses the daemon's canonical tool_result field so the
-    /// desktop strict decoder consumes the SAME content without dropping it.
     private func canonicalToolResult(_ value: Any) -> Any {
         if let rows = value as? [Any] { return rows.map(canonicalToolResult) }
         guard let dictionary = value as? [String: Any] else { return value }

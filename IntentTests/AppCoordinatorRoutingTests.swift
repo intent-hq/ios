@@ -35,9 +35,6 @@ extension AppCoordinatorTests {
         ) == .rebindInPlace)
     }
 
-    /// Regression: on Vision Pro, picking another machine (Intent menu →
-    /// Connections, the connection switcher or a recent agent) replaced the
-    /// current window instead of opening that machine's own window.
     @Test func retargetRouteOpensTheOtherBackendsWindowWhereBackendsGetSeparateWindows() {
         let current = BackendID(UUID())
         let other = BackendID(UUID())
@@ -68,9 +65,6 @@ extension AppCoordinatorTests {
         ) == .rebindInPlace, "iPad keeps switching in place (ios#897)")
     }
 
-    /// Regression (ios#1040 review): picking another saved machine on the
-    /// connection failure screen opened a second window and left the failed
-    /// one behind with auto-retry stopped.
     @Test @MainActor func onlyAWindowShowingItsConnectedMachineOpensAnotherMachinesWindow() {
         let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
         coordinator.currentScreen = .connectionFailed(error: "Timed out")
@@ -120,7 +114,6 @@ extension AppCoordinatorTests {
 
         #expect(coordinator.pendingDeepLink == nil)
         if case .pairing = coordinator.currentScreen {
-            // pass — app state untouched
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -136,14 +129,12 @@ extension AppCoordinatorTests {
         )
         coordinator.onLoadComplete()
 
-        // Missing token — PairingPayload.parse rejects it.
         coordinator.handleIncomingURL(
             URL(string: "intent://pair?host=127.0.0.1&port=5181")!
         )
 
         #expect(coordinator.pendingDeepLink == nil)
         if case .pairing = coordinator.currentScreen {
-            // pass — app state untouched
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -158,7 +149,6 @@ extension AppCoordinatorTests {
             syncedRegistry: Self.syncedRegistry(payloads: [])
         )
 
-        // Cold start: the URL arrives while currentScreen is still .loading.
         coordinator.handleIncomingURL(
             URL(string: "intent://pair?token=t&host=10.0.0.5&port=4242")!
         )
@@ -167,7 +157,6 @@ extension AppCoordinatorTests {
         coordinator.onLoadComplete()
         #expect(coordinator.pendingDeepLink?.pairingPayload?.hosts == ["10.0.0.5"])
         if case .pairing = coordinator.currentScreen {
-            // pass — load still routed to its normal first screen
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -190,7 +179,6 @@ extension AppCoordinatorTests {
 
         #expect(coordinator.pendingDeepLink == nil)
         if case .workspaceList = coordinator.currentScreen {
-            // pass — same landing as a successful QR scan
         } else {
             Issue.record("Expected .workspaceList, got \(coordinator.currentScreen)")
         }
@@ -218,7 +206,6 @@ extension AppCoordinatorTests {
         #expect(coordinator.pendingDeepLink == nil)
         #expect(persistence.activeConnection()?.id == stored.id)
         if case .connecting = coordinator.currentScreen {
-            // pass — routed through onSwitchConnection
         } else {
             Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
         }
@@ -230,8 +217,6 @@ extension AppCoordinatorTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        // Cold start of a bound window: onLoadComplete routes to .connecting
-        // and the stashed deep link is confirmed over it.
         let old = persistence.upsertConnection(Self.makeConnection(port: 1111))
         persistence.setActiveConnection(id: old.id)
         let coordinator = AppCoordinator(
@@ -244,7 +229,6 @@ extension AppCoordinatorTests {
         )
         coordinator.onLoadComplete()
         if case .connecting = coordinator.currentScreen {
-            // as expected — the deep-link sheet is presented over .connecting
         } else {
             Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
         }
@@ -253,8 +237,6 @@ extension AppCoordinatorTests {
         let paired = persistence.upsertConnection(Self.makeConnection(port: 2222))
         coordinator.onDeepLinkPaired(paired)
 
-        // Screen stays .connecting (same value), so the restart must come
-        // from the attempt id that keys ConnectingView's .task(id:).
         #expect(coordinator.pendingDeepLink == nil)
         #expect(persistence.activeConnection()?.id == paired.id)
         #expect(
@@ -262,7 +244,6 @@ extension AppCoordinatorTests {
             "Switching while already on .connecting must restart the attempt"
         )
         if case .connecting = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
         }
@@ -270,7 +251,6 @@ extension AppCoordinatorTests {
 
     // MARK: - Synced backend registry merge
 
-    /// Registry whose keychain returns the given records as raw rows.
     static func syncedRegistry(payloads: [String]) -> SyncedBackendRegistry {
         let rows: [[String: Any]] = payloads.enumerated().map { index, payload in
             [
@@ -305,7 +285,6 @@ extension AppCoordinatorTests {
             "A merged synced connection must be offered on the pairing surface"
         )
         if case .pairing = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -351,7 +330,6 @@ extension AppCoordinatorTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        // First-run pairing screen, empty registry: nothing offered.
         let coordinator = AppCoordinator(
             persistence: persistence,
             syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload])
@@ -359,8 +337,6 @@ extension AppCoordinatorTests {
         coordinator.currentScreen = .pairing
         #expect(!coordinator.pairingShowsSavedConnections)
 
-        // A foreground merge that adds a synced connection while the pairing
-        // surface is up must start offering it.
         coordinator.onScenePhaseActive()
         #expect(
             coordinator.pairingShowsSavedConnections,
@@ -402,8 +378,6 @@ extension AppCoordinatorTests {
         let other = persistence.upsertConnection(Self.makeConnection(port: 1))
         persistence.setActiveConnection(id: doomed.id)
 
-        // Registry reads use the wall clock, so the tombstone must be recent
-        // enough to be within the 30-day TTL and newer than the local pairing.
         let clock = Date().timeIntervalSince1970 * 1000
         let tombstone = #"{"v": 1, "label": "Synced Mac", "#
             + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
@@ -423,7 +397,6 @@ extension AppCoordinatorTests {
             "The remaining saved connection must be offered on the pairing surface"
         )
         if case .pairing = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -463,14 +436,11 @@ extension AppCoordinatorTests {
         )
         let outcome = coordinator.refreshSyncedBackends()
 
-        // The tombstone removed this window's backend — not the last-used
-        // one — so this window must still route out.
         #expect(outcome?.removedIds == [doomed.id])
         #expect(outcome?.removedActiveConnection == false)
         #expect(persistence.activeConnection()?.id == active.id)
         #expect(registry.isBackendRemoved(BackendID(doomed.id)))
         if case .pairing = coordinator.currentScreen {
-            // pass — exitRemovedBackend ran for the pinned backend's removal
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -529,7 +499,6 @@ extension AppCoordinatorTests {
             "Pairing surface should offer saved connections after a startup connection failure"
         )
         if case .pairing = coordinator.currentScreen {
-            // pass
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }

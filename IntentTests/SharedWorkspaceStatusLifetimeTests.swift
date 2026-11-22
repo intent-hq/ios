@@ -16,7 +16,6 @@ struct SharedWorkspaceStatusLifetimeTests {
         let oldIDs = try Support.acknowledgedIDs(connection)
         #expect(oldIDs.count == 2)
         let checkpoint = connection.checkpoint
-        // No suspension: cleanup cannot start until the socket has changed.
         model.hookStore.deactivate()
         model.monitoredPrStore.deactivate()
         connection.simulateDisconnect()
@@ -151,7 +150,7 @@ struct SharedWorkspaceStatusLifetimeTests {
         }
         let reconnect = connection.traffic(since: checkpoint)
         #expect(reconnect.methodCounts == [
-            "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1,
+            "events.subscribe": 2, "hook.list": 1, "prMonitor.list": 1, "browser.syncTabs": 1,
             "chat.subscribe": 1, "agent.get": 1, "agent.getQueue": 1, "agent.getSubscriptions": 1
         ])
         print("Shared reconnect: \(reconnect.summary)")
@@ -325,8 +324,6 @@ extension SharedWorkspaceStatusLifetimeTests {
         defer { fixture.stop() }
         let connection = fixture.connection
         connection.releaseConnectionStateDelivery()
-        // Exercise the deferred helper used after a late ACK independently of
-        // whether the ACK continuation or the caller resumes first.
         let source = fixture.session.hooksStore
         let cleanup = WorkspaceStatusStore<BackgroundHook>.releaseRemote(
             "orphan", connection: connection, lifetime: source.connectionLifetime, epoch: source.connectionEpoch

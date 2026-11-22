@@ -6,8 +6,6 @@ import Testing
 
 extension ConversationTranscriptScrollPolicyTests {
     @Test @MainActor func issuedRetainedScrollWaitsForTheObservedLanding() {
-        // Native afc4c21: a fresh owner-token measurement arrived before the
-        // asynchronous scrollTo moved the row, despite the command returning.
         let savedY = CGFloat(52.66666666666629)
         let state = retainedRestorationState(y: savedY)
         #expect(state.resumeViewportTarget() == "row-31")
@@ -77,15 +75,12 @@ extension ConversationTranscriptScrollPolicyTests {
         let remaining: Set<String> = replacesRow ? ["survivor", "replacement"] : ["survivor"]
         #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(from: 2, to: remaining.count, hasInitiallyScrolled: true) == (replacesRow ? .none : .rePinIfPastEnd))
         transcript.messages = remaining.map { ConversationMessage(id: $0, role: .user) }
-        // A queued callback reads current membership before SwiftUI observes
-        // the replacement; the warmed cache must not resurrect the deleted row.
         state.retainViewportMessages(withIDs: transcript.messageIDs)
         state.viewportAnchor.remove(id: "row-31", generation: queued.generation, entryGeneration: state.initialScrollGeneration, ownershipRevision: queued.ownershipRevision)
         #expect(state.viewportAnchor.record(id: "survivor", measurement: retainedMeasurement(state, y: 64), viewportHeight: 624, preserve: true, entryGeneration: state.initialScrollGeneration) == nil)
         #expect(recordRetainedMeasurement(state, queued) == nil)
         #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 0)) == nil)
         #expect(state.resumeViewportTarget() == nil)
-        // Reusing an ID cannot resurrect the captured measurement either.
         transcript.messages = ["row-31", "survivor"].map { ConversationMessage(id: $0, role: .user) }
         state.retainViewportMessages(withIDs: transcript.messageIDs)
         #expect(recordRetainedMeasurement(state, queued) == nil)
@@ -106,9 +101,7 @@ extension ConversationTranscriptScrollPolicyTests {
         let before = retainedMeasurement(state, y: savedY)
         #expect(recordRetainedMeasurement(state, before) == nil)
         issueRetainedScroll(state)
-        // A queued frame captured before the command is not its completion.
         #expect(recordRetainedMeasurement(state, before) == nil)
-        // Nonzero top alignment may legitimately stay put at the content end.
         let geometry = ConversationTranscriptScrollPolicy.ViewportGeometry(
             contentOffsetY: 1000, contentHeight: 1624, containerHeight: 624, topInset: 0, bottomInset: 0
         )
@@ -123,7 +116,6 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(state.resumeViewportTarget() == "row-31")
         let queued = retainedMeasurement(state, y: 48)
         #expect(recordRetainedMeasurement(state, queued) == nil)
-        // Even a different pre-command frame cannot consume the correction.
         #expect(recordRetainedMeasurement(state, retainedMeasurement(state, y: 20)) == nil)
         issueRetainedScroll(state)
         if derealizes {

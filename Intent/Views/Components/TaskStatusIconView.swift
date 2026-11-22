@@ -124,7 +124,6 @@ struct TaskStatusIconView: View {
                 .foregroundStyle(.white)
                 .accessibilityHidden(true)
         case .blocked:
-            // Path coordinates are intrinsic vector artwork data.
             // swiftlint:disable no_magic_numbers
             Path { p in
                 p.move(to: point(12, 5.5))
@@ -150,7 +149,6 @@ struct TaskStatusIconView: View {
                 .foregroundStyle(.white)
                 .accessibilityHidden(true)
         case .complete:
-            // Path coordinates are intrinsic vector artwork data.
             // swiftlint:disable no_magic_numbers
             Path { p in
                 p.move(to: point(7, 12.5))
@@ -167,7 +165,6 @@ struct TaskStatusIconView: View {
                 )
             )
         case .cancelled:
-            // Path coordinates are intrinsic vector artwork data.
             // swiftlint:disable no_magic_numbers
             Path { p in
                 p.move(to: point(5, 19))

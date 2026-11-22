@@ -16,9 +16,6 @@ extension MonitoredPrStoreTests {
     }
 
     @Test func foldRegisteredReArmClearsPendingStateAndRefetches() throws {
-        // A re-arm refreshes the baseline server-side (§5.42): the fold
-        // must not leave pre-re-arm pending state visible, and must refetch
-        // to converge on the refreshed row.
         let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict()))
         #expect(monitor.hasPendingChanges == true)
         let result = MonitoredPrStore.foldMonitorEvent(
@@ -117,7 +114,6 @@ extension MonitoredPrStoreTests {
             #expect(result.monitors.isEmpty)
             #expect(result.needsRefetch == true)
         }
-        // Unknown + cancelled: nothing to drop, nothing to fetch
         let cancelled = MonitoredPrStore.foldMonitorEvent(
             monitors: [],
             eventType: "prMonitor:cancelled",
@@ -245,8 +241,6 @@ extension MonitoredPrStoreTests {
         let flushParams = try #require(fake.paramsForMethod("prMonitor.flush").first)
         #expect(flushParams["workspaceId"] as? String == "ws-abc")
         #expect(flushParams["monitorId"] as? String == "prm-1")
-        // `check` nil must omit the key entirely (presence-detection
-        // convention — wire-compatible with pre-check daemons).
         #expect(flushParams["check"] == nil)
         let cancelParams = try #require(fake.paramsForMethod("prMonitor.cancel").first)
         #expect(cancelParams["workspaceId"] as? String == "ws-abc")
@@ -273,8 +267,6 @@ extension MonitoredPrStoreTests {
         try #require(store.monitors.first?.hasPendingChanges == true)
         fake.clearRequestLog()
 
-        // The old monitor disappeared and a different one was registered while
-        // disconnected. Reissuing the RPC without applying its reply must fail.
         var freshRow = makeMinimalMonitorDict()
         freshRow["title"] = "Registered while disconnected"
         let freshMonitor = try #require(MonitoredPr.parseMonitor(freshRow))
@@ -339,8 +331,6 @@ extension MonitoredPrStoreTests {
         let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])
         fake.clearRequestLog()
 
-        // Suspend prMonitor.list requests so a fold can land while one is
-        // in flight.
         fake.pendingMethods.insert("prMonitor.list")
         let refetchTask = Task { await store.refetch() }
         try await fake.waitForPendingRequests("prMonitor.list")
@@ -355,8 +345,6 @@ extension MonitoredPrStoreTests {
         ] as [String: Any])
         try await waitUntil("prMonitor:cancelled fold") { store.monitors.isEmpty }
 
-        // Replay the complete cancellation over the stale seed. No recovery
-        // read is needed, and the removed row must never reappear.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
         await refetchTask.value
         #expect(store.monitors.isEmpty)
@@ -368,8 +356,6 @@ extension MonitoredPrStoreTests {
         let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])
         fake.clearRequestLog()
 
-        // Suspend prMonitor.list so unsubscribe lands while the request is
-        // in flight.
         fake.pendingMethods.insert("prMonitor.list")
         let refetchTask = Task { await store.refetch() }
         try await fake.waitForPendingRequests("prMonitor.list")
@@ -377,13 +363,9 @@ extension MonitoredPrStoreTests {
         await store.unsubscribe()
         #expect(store.monitors.isEmpty)
 
-        // Resolve the in-flight request with the STALE payload — it still
-        // lists the monitor that unsubscribe cleared.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
         await refetchTask.value
 
-        // The stale response must not repopulate the cleared list, and the
-        // queued follow-up bails out (no workspace bound anymore).
         #expect(store.monitors.isEmpty)
         #expect(fake.paramsForMethod("prMonitor.list").count == 1)
     }

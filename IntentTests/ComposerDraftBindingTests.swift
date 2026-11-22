@@ -27,7 +27,6 @@ struct ComposerDraftBindingTests {
         try await SyntheticBadgeHost.render(view, width: 390, height: 250) { root, _ in
             try pastePhoto(in: root, model: model, jpeg: jpeg, orientation: orientation, large: large)
         }
-        // Removing a pasted preview must leave only one outbound image block.
         model.removeImage(at: 1)
         if queue { await model.queueMessage(model.messageText) } else { await model.sendMessage(model.messageText) }
         let requests = connection.paramsForMethod(queue ? "agent.queueMessage" : "agent.sendMessage")
@@ -49,8 +48,6 @@ struct ComposerDraftBindingTests {
         }
         let data = try #require(Data(base64Encoded: encoded))
         let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
-        // Host thumbnails decode raw pixels and discard EXIF. Both these pixels
-        // and UIKit's metadata-aware display must match the original preview.
         let pixels = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
         try expectPhotoPixels(pixels, orientation: orientation, stage: "outgoing", large: large)
         let decoded = try #require(UIImage(data: data))
@@ -137,9 +134,6 @@ struct ComposerDraftBindingTests {
             #expect(editor.text == prefix)
             editor.selectedRange = NSRange(location: prefix.utf16.count, length: 0)
 
-            // Deliver an input burst without allowing SwiftUI's deferred change
-            // callbacks to run between edits. The model must own every edit now,
-            // so a later render cannot echo an older draft into the editor.
             for part in [" with e", "nough text to wrap onto multiple lines"] {
                 editor.insertText(part)
                 #expect(model.messageText == editor.text)
@@ -230,7 +224,6 @@ struct ComposerDraftBindingTests {
     private func pastePhoto(in root: UIView, model: ConversationViewModel, jpeg: Data, orientation: Int, large: Bool) throws {
         let editor = try #require(textView(in: root))
         editor.selectedRange = NSRange(location: 0, length: 4)
-        // Multiple representations of one item must not duplicate the image.
         let pasteboard = ImagePasteboardFixture(items: [
             [UTType.jpeg.identifier: jpeg, UTType.utf8PlainText.identifier: "Do not replace the draft"],
             [UTType.jpeg.identifier: jpeg]
@@ -286,8 +279,6 @@ struct ComposerDraftBindingTests {
         let height = large ? (stage == "preview" ? 2048 : 1365) : 64
         #expect(image.width == (orientation <= 4 ? width : height), "\(stage) width, EXIF \(orientation)")
         #expect(image.height == (orientation <= 4 ? height : width), "\(stage) height, EXIF \(orientation)")
-        // Independent EXIF corner expectations: top-left, top-right, bottom-left,
-        // bottom-right, where the untransformed fixture is red/green/blue/yellow.
         let corners = [
             [0, 1, 2, 3], [1, 0, 3, 2], [3, 2, 1, 0], [2, 3, 0, 1],
             [0, 2, 1, 3], [2, 0, 3, 1], [3, 1, 2, 0], [1, 3, 0, 2]

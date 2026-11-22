@@ -5,6 +5,6 @@ struct ConnectionBackButton: View {
 
     var body: some View {
         IntentIconButton(icon: .arrowLeft, label: "Back to Home", action: action)
-            .accessibilityHint("Return to your saved machines without forgetting this connection.")
+            .accessibilityHint("Return to your saved machines without removing this connection.")
     }
 }

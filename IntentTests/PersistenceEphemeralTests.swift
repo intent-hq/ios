@@ -38,7 +38,6 @@ struct EphemeralPersistenceTests {
         )
         #expect(first.lastUsedConnection()?.id == stored.id)
 
-        // A relaunch builds a new ephemeral manager: nothing carries over.
         let second = PersistenceManager.ephemeral()
         #expect(second.loadConnections().isEmpty)
         #expect(second.lastUsedConnection() == nil)

@@ -100,7 +100,6 @@ import Testing
         var authenticated: [String] = []
         _ = await store.persistence.refreshInvitedSessions { connection in
             authenticated.append(connection.token)
-            // The forgotten bearer remains valid on the controlled host.
             return InvitedSessionFixtures.principal(connection.token.hasPrefix("C") ? "C" : "B")
         }
         #expect(authenticated == ["C-still-valid"])

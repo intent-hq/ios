@@ -84,9 +84,6 @@ final class LocalNotificationService: NSObject {
     private let center: any LocalNotificationCenter
     private let soundPolicy: NotificationSoundPolicy
     private let playForegroundSound: () async -> Void
-    /// The in-app chime for the latest foreground banner. It runs after the
-    /// presentation completion handler so the banner never waits for it;
-    /// exposed so tests can await the sound decision.
     private(set) var foregroundSoundTask: Task<Void, Never>?
 
     init(

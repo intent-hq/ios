@@ -2,13 +2,10 @@ import CoreGraphics
 @testable import Intent
 import Testing
 
-/// `LifecycleHarness`: the sequence tests' driver.
 extension TranscriptRecoveryLifecycleTests {
     typealias Geometry = ConversationTranscriptScrollPolicy.ViewportGeometry
     typealias RecoveryStep = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep
 
-    /// The reducer's log lines, so a sequence asserts each transition's
-    /// full ordered effect list.
     enum LogLine {
         static let followToEnd = Effect.log("[SCROLL] End row off screen short of the bottom; following to the end")
         static let pageUp = Effect.log("[SCROLL] Blank viewport at the bottom; paging up and following back")
@@ -21,18 +18,6 @@ extension TranscriptRecoveryLifecycleTests {
         static let forcedCancelled = Effect.log("[SCROLL] Forced follow cancelled: the user took over")
     }
 
-    /// Drives the reducer the way the view does, with its asynchrony
-    /// replaced by explicit events and its effects executed against
-    /// scripted geometry. The live tasks are the token sets the start /
-    /// cancel effects maintain (a terminal for a current token ends its
-    /// task); `replayLiveEdge` and a raw `geometryEdge` apply
-    /// `scrolledAwayTransition` and `shouldRePinAfterContentGrowth` to the
-    /// harness's `userIsScrolledAway`, counting growth re-pins; `showGoToEnd`
-    /// raises the flag; a recorded outcome is rendered through
-    /// `unrealizedEndRecoveryReport` as the demo-data report does; the
-    /// recovery loop's polls go through `unrealizedEndRecoveryStep` against
-    /// the live state. No clock: the sequence is the schedule. Every
-    /// transition is checked against the contract's invariants.
     struct LifecycleHarness {
         static let threshold: CGFloat = 50
         var state: State
@@ -77,7 +62,6 @@ extension TranscriptRecoveryLifecycleTests {
             return effects
         }
 
-        /// The task bookkeeping of one effect; the rest is rendered.
         private mutating func apply(_ effect: Effect) {
             switch effect {
             case .startFollowTask(let token, _): liveFollows.insert(token)
@@ -91,7 +75,6 @@ extension TranscriptRecoveryLifecycleTests {
             }
         }
 
-        /// One effect executed against the scripted geometry, as the view does.
         private mutating func render(_ effect: Effect) {
             switch effect {
             case .scrollToEnd: scrolls += 1
@@ -113,13 +96,10 @@ extension TranscriptRecoveryLifecycleTests {
             }
         }
 
-        /// A geometry edge from the scroll view: a layout settle, a content
-        /// update, or a gesture phase ending, sampled with the live gesture.
         mutating func geometryEdge(distanceToBottom: CGFloat) {
             geometryEdge(distanceToBottom: distanceToBottom, isInteracting: isInteracting)
         }
 
-        /// A geometry edge carrying its own gesture sample.
         mutating func geometryEdge(distanceToBottom: CGFloat, isInteracting sample: Bool) {
             self.distanceToBottom = distanceToBottom
             applyEdge(isInteracting: sample)
@@ -148,8 +128,6 @@ extension TranscriptRecoveryLifecycleTests {
             }
         }
 
-        /// The finger lands: the takeover the view sends, then the gesture's
-        /// own edge.
         @discardableResult
         mutating func gestureBegins(
             distanceToBottom: CGFloat, sourceLocation: SourceLocation = #_sourceLocation
@@ -165,9 +143,6 @@ extension TranscriptRecoveryLifecycleTests {
             return effects
         }
 
-        /// Go to End: the flag cleared, the recovery claimed (cancelling
-        /// `cancelling`, asserted as its own transition), a forced follow
-        /// whose request effects are returned.
         @discardableResult
         mutating func tapGoToEnd(
             cancelling recovery: RecoveryToken? = nil, sourceLocation: SourceLocation = #_sourceLocation
@@ -178,8 +153,6 @@ extension TranscriptRecoveryLifecycleTests {
             return send(.followRequested(forced: true), sourceLocation: sourceLocation)
         }
 
-        /// `shouldExecuteFollow` for the pending follow against the live
-        /// distance and gesture.
         func execute() -> Bool {
             guard case .follow(_, let forced) = state.owner else { return false }
             return ConversationTranscriptScrollPolicy.shouldExecuteFollow(
@@ -192,7 +165,6 @@ extension TranscriptRecoveryLifecycleTests {
             )
         }
 
-        /// The page-up check, reading a follow pending as the view does.
         func mayFollowBack() -> Bool {
             ConversationTranscriptScrollPolicy.unrealizedEndRecoveryMayFollowBack(
                 isInteracting: isInteracting,
@@ -201,7 +173,6 @@ extension TranscriptRecoveryLifecycleTests {
             )
         }
 
-        /// One poll of the recovery loop at rest on `geometry`.
         func poll(
             _ geometry: Geometry, correctionsLeft: Int = 2, correctionsSpent: Int = 0, timedOut: Bool = false
         ) -> RecoveryStep {

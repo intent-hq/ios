@@ -18,7 +18,6 @@ extension ConversationTranscriptScrollPolicy {
         case finish(UnrealizedEndRecoveryTerminal)
     }
 
-    // Keep recovery inputs explicit and the optional correction history beside the required correction budget.
     // swiftlint:disable function_parameter_count function_default_parameter_at_end
     static func unrealizedEndRecoveryStep(
         geometry: ViewportGeometry?,

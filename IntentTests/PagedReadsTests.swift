@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Page walks for bounded daemon reads (PROTOCOL §5.2 "Bounded note and
-/// comment reads", §6.9 "Paged snapshots", workspace "Paged workspace lists").
 @MainActor
 struct PagedReadsTests {
     private struct PageError: Error {}

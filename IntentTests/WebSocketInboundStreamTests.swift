@@ -2,7 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// The pure receive path behind `WebSocketConnection.receive()`.
 struct WebSocketInboundStreamTests {
     private typealias Stream = WebSocketConnection.InboundStream
 
@@ -65,8 +64,6 @@ struct WebSocketInboundStreamTests {
             WebSocketFrame(opcode: .continuation, payload: Data(rest)),
             WebSocketFrame(opcode: .text, payload: Data("plain".utf8))
         ], in: &stream)
-        // The RFC sample is a literal-only block, so it inflates to "Hello"
-        // whatever the retained context; RSV1 only on the first fragment.
         #expect(events == ["text:Hello", "text:Hello", "text:plain"])
     }
 
@@ -114,11 +111,9 @@ struct WebSocketInboundStreamTests {
         func close(_ code: Int, _ reason: [UInt8] = []) -> [WebSocketFrame] {
             [WebSocketFrame(opcode: .close, payload: Data([UInt8(code >> 8), UInt8(code & 0xFF)] + reason))]
         }
-        // Codes that must never appear on the wire (RFC 6455 §7.4.1, §7.4.2).
         for code in [0, 999, 1004, 1005, 1006, 1015, 1016, 2999, 5000] {
             #expect(try violation(close(code)) == .protocolViolation(.invalidCloseFrame), "code \(code)")
         }
-        // A reason that is not valid UTF-8 fails with 1007, not a clean close.
         #expect(try violation(close(1000, [0xFF])) == .invalidTextEncoding)
         for code in [1000, 1003, 1007, 1014, 3000, 4999] {
             var stream = try stream()

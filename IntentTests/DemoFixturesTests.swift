@@ -4,7 +4,6 @@ import Foundation
 import Testing
 import UIKit
 
-// Protocol fixtures use exact wire literals and long end-to-end assertions.
 // swiftlint:disable function_body_length
 // swiftlint:disable type_body_length
 
@@ -41,8 +40,6 @@ struct DemoFixturesTests {
     }
 
     @Test func normalLaunchLeavesDemoModeOff() {
-        // The live values are computed from the real process arguments; the
-        // test runner never passes the demo flags, so both must be false.
         #expect(!DemoMode.isEnabled)
         #expect(!DemoMode.pretendPaired)
     }
@@ -82,7 +79,6 @@ struct DemoFixturesTests {
         let workspaces = WorkspaceStore.parseWorkspaces(from: result)
         #expect(workspaces.count == 4)
         #expect(workspaces.allSatisfy { !$0.title.isEmpty })
-        // At least one workspace carries an agent summary for the detail screen
         #expect(workspaces.contains { !$0.agentSummaryAgents.isEmpty })
     }
 
@@ -93,13 +89,10 @@ struct DemoFixturesTests {
         let notes = items.compactMap { Note.parseNote($0) }
         #expect(notes.count == items.count)
         #expect(notes.contains { $0.isDefault })
-        // A task note with checkboxes is present for the note detail screenshot
         #expect(notes.contains { $0.taskStatus != nil && $0.content.contains("- [ ]") })
     }
 
     @Test func exactlyOneWorkspaceFixtureCarriesAStatusImage() {
-        // The status-image UI test relies on one — and only one — workspace
-        // row rendering the status thumbnail (intent-hq/intent#3868).
         let result = DemoFixtures.response(for: "workspace.list", params: [:])
         let withImage = WorkspaceStore.parseWorkspaces(from: result)
             .filter { $0.statusImageAssetId != nil }
@@ -150,7 +143,6 @@ struct DemoFixturesTests {
         #expect(messages.count == items.count)
         #expect(messages.contains { $0.role == .user })
         #expect(messages.contains { $0.role == .assistant })
-        // Every message renders at least one text block
         #expect(messages.allSatisfy { message in
             message.contentBlocks.contains { $0.resolvedText?.isEmpty == false }
         })
@@ -158,8 +150,6 @@ struct DemoFixturesTests {
 
     // MARK: - Per-agent conversation routing
 
-    /// The transcript as the app loads it: the `chat.subscribe` seq-0
-    /// snapshot push routed by `agentId`.
     private func conversationMessages(agentId: String?) throws -> (items: [[String: Any]], total: Int) {
         var params: [String: Any] = [:]
         if let agentId {
@@ -198,7 +188,6 @@ struct DemoFixturesTests {
         #expect(messages.first?.role == .user)
         #expect(messages.last?.role == .assistant)
         #expect(Set(long.items.compactMap { $0["id"] as? String }).count == long.items.count)
-        // Timestamps descend from the first message to the last.
         let timestamps = long.items.compactMap { $0["timestamp"] as? String }
         #expect(timestamps.count == long.items.count)
         #expect(timestamps == timestamps.sorted())
@@ -206,8 +195,6 @@ struct DemoFixturesTests {
         let first = try #require(long.items.first)
         let last = try #require(long.items.last)
         #expect(text(of: first).hasPrefix(DemoFixtures.longConversationFirstSentence))
-        // The last message carries the suggested-prompts block after its
-        // closing sentence; the rendered (stripped) text still ends there.
         let lastText = text(of: last)
         #expect(SuggestedPrompts.parse(lastText) == DemoFixtures.longConversationSuggestedPrompts)
         #expect(DemoFixtures.longConversationSuggestedPrompts.count == 3)
@@ -215,14 +202,10 @@ struct DemoFixturesTests {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .hasSuffix(DemoFixtures.longConversationLastSentence))
         #expect(!long.items.contains { text(of: $0).contains("more than 90 days") })
-        // The anchors the transcript UI tests match on stay unique.
         #expect(long.items.filter { text(of: $0).contains(DemoFixtures.longConversationFirstSentence) }.count == 1)
         #expect(long.items.filter { text(of: $0).contains(DemoFixtures.longConversationLastSentence) }.count == 1)
     }
 
-    /// The transcript is loaded from the `chat.subscribe` seq-0 snapshot, so
-    /// the long transcript the scroll UI tests run against must ride that
-    /// push — the same rows the `agent.getConversation` recovery seek serves.
     @Test func chatSubscribeSnapshotCarriesTheRoutedTranscript() throws {
         let long = ["agentId": DemoFixtures.longConversationAgentId]
         let push = try #require(DemoFixtures.subscriptionPush(for: "chat.subscribe", params: long))
@@ -240,8 +223,6 @@ struct DemoFixturesTests {
         #expect(push.snapshotMeta?["truncated"] as? Bool == false)
         #expect(push.snapshotMessages?.count == rows.count, "every long-transcript row decodes")
 
-        // The recovery seek resolves the sought row to the same row the push
-        // carries (the fixture serves the seek from the same transcript).
         let soughtId = try #require(rowIds.first)
         let seek: [String: Any] = ["agentId": DemoFixtures.longConversationAgentId, "aroundMessageId": soughtId, "limit": 1]
         let served = DemoFixtures.response(for: "agent.getConversation", params: seek) as? [String: Any]
@@ -364,10 +345,6 @@ struct DemoFixturesTests {
         #expect(laterNextRun > laterAnchor)
     }
 
-    /// The long transcript is coordinator-shaped (intent-hq/ios#304, #305):
-    /// paired tool calls, agent-to-agent report rows attributed to the
-    /// delegates the coordinator waits on, thinking blocks, and markdown
-    /// with fenced code — so rows vary widely in height.
     @Test func longConversationMixesToolCallsAgentMessagesAndMarkdown() throws {
         let long = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
         let messages = long.items.compactMap { ConversationMessage.parseMessage($0) }
@@ -394,8 +371,6 @@ struct DemoFixturesTests {
 
         let texts = blocks.filter { $0.type == .text }.compactMap(\.resolvedText)
         #expect(texts.filter { $0.contains("```") }.count >= 30)
-        // Tool-call groups: the open tag and the close tag sit in different
-        // text blocks around the tool_use/tool_result pairs.
         #expect(texts.contains { $0.contains("<group:") && !$0.contains("</group>") })
         #expect(texts.contains { $0.contains("</group>") && !$0.contains("<group:") })
         #expect(texts.contains { $0.contains("| Percentile | Duration |") })
@@ -450,10 +425,6 @@ struct DemoFixturesTests {
         #expect(agentDict["status"] as? String == "idle")
     }
 
-    /// The delegates are background sub-agents of the coordinator, so the
-    /// coordinator stays the workspace's only foreground agent (the only
-    /// row the UI tests tap on the workspace overview) while the
-    /// "Waiting for all" footer has rows to show.
     @Test func longConversationDelegatesAreBackgroundSubAgentsOfTheCoordinator() throws {
         let result = DemoFixtures.response(
             for: "agent.list",
@@ -531,7 +502,6 @@ extension DemoFixturesTests {
             == .delay(.milliseconds(9000)))
         #expect(DemoFixtures.hookListGate(from: ["--demo-hook-list-trigger-file=/tmp/a.trigger"])
             == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
-        // The trigger file wins over a delay; the last non-empty path wins.
         #expect(DemoFixtures.hookListGate(from: [
             "--demo-hook-list-delay-ms=9000",
             "--demo-hook-list-trigger-file=/tmp/a.trigger",
@@ -552,12 +522,10 @@ extension DemoFixturesTests {
             try await DemoFixtures.wait(for: .triggerFile(url))
             await opened.set()
         }
-        // Several poll intervals without the file: still closed.
         try await Task.sleep(for: .milliseconds(400))
         #expect(await opened.value == false)
 
         try Data().write(to: url)
-        // Bounded: a gate that never opens must fail the test, not hang it.
         let watchdog = Task {
             try await Task.sleep(for: .seconds(5))
             gate.cancel()
@@ -621,7 +589,6 @@ extension DemoFixturesTests {
             "--demo-end-derealization-trigger-file=",
             "--demo-end-derealization-trigger-file=/tmp/b.trigger"
         ]) == URL(fileURLWithPath: "/tmp/b.trigger"))
-        // The test runner never passes the argument, so the live value is nil.
         #expect(DemoFixtures.configuredEndDerealizationTriggerFile == nil)
     }
 
@@ -643,11 +610,6 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.configuredEndDerealizationMode == .release)
     }
 
-    /// The withdrawn row is restored on measured movement of the live scroll
-    /// view only: in `release` the recovery's page up (a full container, so
-    /// half of one is the bar), in either mode a gesture that moved the
-    /// viewport; never at rest, never on a re-measure jitter, and never
-    /// in `hold` without a gesture.
     @Test func derealizedEndIsRestoredOnlyOnMeasuredMovement() {
         func restore(_ mode: DemoFixtures.EndDerealizationMode, offset: CGFloat, interacting: Bool = false) -> Bool {
             DemoFixtures.shouldRestoreDerealizedEnd(
@@ -697,7 +659,6 @@ extension DemoFixturesTests {
             "--demo-block-hydration-trigger-file=/tmp/a.trigger",
             "--demo-block-hydration-trigger-file="
         ]) == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
-        // The two gates read their own arguments only.
         #expect(DemoFixtures.blockHydrationGate(from: ["--demo-hook-list-trigger-file=/tmp/a.trigger"])
             == .delay(DemoFixtures.defaultBlockHydrationDelay))
         #expect(DemoFixtures.hookListGate(from: ["--demo-block-hydration-trigger-file=/tmp/a.trigger"])
@@ -709,14 +670,12 @@ extension DemoFixturesTests {
         #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-data", "--demo-long-slim-tool-rows=standalone"])
             == .standalone)
         #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=leading"]) == .leading)
-        // The last well-formed value wins; unknown values are ignored.
         #expect(DemoFixtures.slimToolRowLayout(from: [
             "--demo-long-slim-tool-rows=standalone",
             "--demo-long-slim-tool-rows=sideways",
             "--demo-long-slim-tool-rows="
         ]) == .standalone)
         #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=sideways"]) == .leading)
-        // The `chat.subscribe` snapshot serves the process default.
         let push = DemoFixtures.subscriptionPush(
             for: "chat.subscribe", params: ["agentId": DemoFixtures.longConversationAgentId]
         )
@@ -737,9 +696,6 @@ extension DemoFixturesTests {
         let calls = DemoFixtures.longConversationTruncatedToolCalls
         #expect(calls.count == 2)
 
-        // The first call sits with the very last (assistant text) message,
-        // the second with the assistant text message of the exchange before
-        // it; no other row is truncated.
         let truncatedIndices = messages.indices.filter { index in
             messages[index].contentBlocks.contains { $0.isSlimTruncated }
         }
@@ -760,14 +716,9 @@ extension DemoFixturesTests {
             #expect(message.role == .assistant)
             switch layout {
             case .leading:
-                // The row opens a text-bearing message — the shape that
-                // reproduced intent-hq/ios#338 (CI run 35100409278).
                 #expect(blocks.first?.id == call.id)
                 #expect(blocks.last?.type == .text)
             case .standalone:
-                // A tool-only assistant message (no text, so no copy
-                // context-menu overlay claims the row's taps, intent-hq/ios#344)
-                // right before a text message.
                 #expect(blocks.allSatisfy { $0.type == .toolUse || $0.type == .toolResult })
                 let following = messages[index + 1]
                 #expect(following.role == .assistant)
@@ -830,7 +781,6 @@ extension DemoFixturesTests {
     @Test func unknownMethodReturnsEmptyDictionary() throws {
         let result = DemoFixtures.response(for: "note.subscribe", params: [:])
         let dict = try #require(result as? [String: Any])
-        // No subscriptionId → stores fall back to their legacy fetch paths
         #expect(dict["subscriptionId"] == nil)
         #expect(dict.isEmpty)
     }

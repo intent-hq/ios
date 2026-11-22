@@ -4,7 +4,6 @@ import Network
 import os
 import Testing
 
-/// Exercises real producer paths without the DEBUG-only plaintext socket escape.
 @MainActor struct TransportDiagnosticTests {
     private let marker = "synthetic-private-host-token-path"
 
@@ -284,8 +283,6 @@ extension ConnectionManagerTests {
         }
     }
 
-    /// Accepts TCP but sends no TLS/WSS response, exercising the real handshake
-    /// deadline without changing production timeouts or injecting a fake socket.
     nonisolated private static func startSilentListener(
         accepted: OSAllocatedUnfairLock<[NWConnection]>
     ) async throws -> NWListener {

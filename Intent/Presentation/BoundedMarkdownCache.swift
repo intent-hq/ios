@@ -132,7 +132,6 @@ final class BoundedMarkdownCache<Value> {
     }
 
     private func touch(_ key: CacheKey) {
-        // Linear bookkeeping is bounded by the small entry limit, not message count.
         if let index = recency.firstIndex(of: key) {
             let storedKey = recency.remove(at: index)
             recency.append(storedKey)

@@ -16,8 +16,6 @@ extension DemoFixturesTests {
         #expect(DemoDesignScenario.requested(by: ["--demo-data", "--demo-design-scenario=questions-extra"]) == nil)
     }
 
-    /// Guards compatibility with actual load/parsing, not just dictionaries:
-    /// broken wire keys must fail before screenshots.
     @Test(arguments: DemoDesignScenario.allCases)
     func designScenarioLoadsThroughConversationStores(_ scenario: DemoDesignScenario) async throws {
         let connection = DesignFixtureConnection(scenario: scenario)
@@ -114,7 +112,6 @@ extension DemoFixturesTests {
         await viewModel.stopStreaming()
         try await waitUntil("design demo stopped") { !viewModel.isStreaming }
 
-        // Re-enter via the ordinary subscribe path, not a directly seeded store.
         viewModel.teardownLiveStores()
         await viewModel.load()
         #expect(!viewModel.isStreaming)
@@ -194,9 +191,6 @@ extension DemoFixturesTests {
     }
 }
 
-/// Transport-only adapter. All scenario data and command effects come from
-/// the same fixture used by the app; the real router/store apply the pushes.
-/// This adapter does not implement send, stop, question or monitor behavior.
 @MainActor
 private final class DesignFixtureConnection: FakeConnectionManager {
     private let fixture: DemoDesignFixtures

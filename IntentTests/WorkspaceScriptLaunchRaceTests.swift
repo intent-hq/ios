@@ -42,8 +42,6 @@ struct WorkspaceScriptLaunchRaceTests {
         defer { fake.startReplyGate.open() }
         let oldLaunch = Task { await fixture.store.launch(script) }
         try await fixture.fake.waitForPendingRequests("script.start")
-        // Hold a delivered reply across reconnect: the normal fake removes
-        // parked requests on cancellation, which cannot create this overlap.
         fixture.fake.resolvePending("script.start", with: ["ok": true])
         try await waitUntil("first start reply held before cleanup") { fake.holdsFirstStartReply }
         fixture.store.suspendObservation()

@@ -128,10 +128,6 @@ struct ConnectingView: View {
             guard await connectSavedMachine() else { return }
         }
 
-        // Wait for WorkspaceStore to finish fetching workspace data before
-        // navigating, so the user doesn't see an empty workspace list.
-        // WorkspaceStore auto-fetches on .connected and sets lastUpdated
-        // when done. Poll with a 5-second timeout to avoid getting stuck.
         do {
             #if DEBUG
             if let gate = DemoConnectionLoss.initialRoutingGate {
@@ -145,10 +141,6 @@ struct ConnectingView: View {
         coordinator.onInitialWorkspaceLoadComplete(attemptID: attemptID)
     }
 
-    /// Waits for the session's `WorkspaceStore.lastUpdated` to become
-    /// non-nil, indicating that workspace data has been fetched. Gives up
-    /// after `timeout` so the app never gets stuck on the loading screen;
-    /// throws `CancellationError` if the attempt is cancelled meanwhile.
     private func waitForWorkspaceData(timeout: Duration) async throws {
         try await LaunchPhaseTimeline.poll(
             until: { session.workspaceStore.lastUpdated != nil },

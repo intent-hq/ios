@@ -265,9 +265,6 @@ final class SpeechDictationController {
         let inputNode = engine.inputNode
         inputNode.removeTap(onBus: 0)
         let format = inputNode.outputFormat(forBus: 0)
-        // Speech's own API contract is that append(_:) is
-        // called from the tap thread, hence the nonisolated(unsafe) capture
-        // of the non-Sendable request.
         nonisolated(unsafe) let tapRequest = request
         inputNode.installTap(
             onBus: 0,

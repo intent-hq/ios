@@ -175,7 +175,6 @@ extension NotificationManagerTests {
                 continuation.resume(returning: options)
             }
         }
-        // The chime runs after the banner is presented; wait for its decision.
         await service.foregroundSoundTask?.value
         return options
     }

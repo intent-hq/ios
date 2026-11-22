@@ -14,7 +14,6 @@ struct TaskStoreLiveStateTests {
             ],
         )
 
-        // Directly initialize reconciler and apply push (simulating what subscribeLiveState does)
         let reconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in WorkspaceTask.parseTask(dict) }
@@ -41,14 +40,12 @@ struct TaskStoreLiveStateTests {
             normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
 
-        // Start with snapshot
         let snapshot = [
             ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2026-07-17T12:00:00Z"],
             ["id": "task-2", "title": "Task 2", "status": "in_progress", "updatedAt": "2026-07-17T12:01:00Z"]
         ]
         reconciler.applySnapshot(seq: 0, rawItems: snapshot)
 
-        // Apply contiguous delta (seq 1)
         let delta = SubscriptionPush.DeltaPayload(
             added: [["id": "task-3", "title": "Task 3", "status": "complete", "updatedAt": "2026-07-17T12:02:00Z"]],
             updated: [["id": "task-1", "title": "Task 1 Updated", "status": "in_progress", "updatedAt": "2026-07-17T12:03:00Z"]],
@@ -72,12 +69,10 @@ struct TaskStoreLiveStateTests {
             normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
 
-        // Start with snapshot
         reconciler.applySnapshot(seq: 0, rawItems: [
             ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2026-07-17T12:00:00Z"]
         ])
 
-        // Try to apply delta with gap (expected seq 1, got seq 5)
         let delta = SubscriptionPush.DeltaPayload(
             added: [["id": "task-2", "title": "Task 2", "status": "not_started", "updatedAt": "2026-07-17T12:01:00Z"]],
             updated: [],
@@ -94,17 +89,14 @@ struct TaskStoreLiveStateTests {
             normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
 
-        // Apply snapshot
         reconciler.applySnapshot(seq: 0, rawItems: [
             ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2026-07-17T12:00:00Z"]
         ])
         #expect(reconciler.values().count == 1)
 
-        // Simulate reconnect by resetting
         reconciler.reset()
         #expect(reconciler.values().isEmpty)
 
-        // Delta should fail after reset (not seeded)
         let delta = SubscriptionPush.DeltaPayload(
             added: [["id": "task-2", "title": "Task 2", "status": "not_started", "updatedAt": "2026-07-17T12:01:00Z"]],
             updated: [],
@@ -115,7 +107,6 @@ struct TaskStoreLiveStateTests {
     }
 
     @Test func rejectsMalformedPush() {
-        // Snapshot push missing "snapshot" field
         let snapshotMissingPayload: [String: Any] = [
             "subscriptionId": "sub-1",
             "kind": "snapshot",
@@ -124,7 +115,6 @@ struct TaskStoreLiveStateTests {
         let push1 = SubscriptionPush.parse(method: "subscription.push", params: snapshotMissingPayload)
         #expect(push1 == nil)
 
-        // Delta push missing "delta" field
         let deltaMissingPayload: [String: Any] = [
             "subscriptionId": "sub-1",
             "kind": "delta",

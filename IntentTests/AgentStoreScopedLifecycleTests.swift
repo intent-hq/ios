@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Holds one response even if its caller is cancelled, to exercise stores'
-/// own freshness guards independently of transport cancellation behavior.
 @MainActor
 private final class HeldAgentListConnection: FakeConnectionManager {
     var holdNext = false
@@ -57,7 +55,6 @@ extension AgentStoreTests {
         #expect(store.agents.map(\.id) == ["new"])
     }
 
-    /// A sidebar stops expecting rows once the first read fails, so the open conversation keeps its title.
     @Test func failedInitialReadIsReportedUntilAReadSucceeds() async {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake, scopedLoading: true)
@@ -246,13 +243,11 @@ extension AgentStoreTests {
         let child = scopedRow("child", parent: "parent")
         fake.responseMap["agent.list"] = scopedResponse([child])
         await store.loadAgentGroup(.delegated(parentId: "parent"), workspaceId: "ws-1")
-        // The parent is retired; its active child is now an orphan.
         fake.responseQueueMap["agent.list"] = [scopedResponse([]), scopedResponse([child])]
         await store.fetchAgents(workspaceId: "ws-1")
         fake.responseMap["agent.list"] = scopedResponse([child])
         await store.loadAgentGroup(.orphaned, workspaceId: "ws-1")
         #expect(store.list.orphanedAgentIds == ["child"])
-        // Restore the parent: its group refresh precedes the empty orphan read.
         fake.responseQueueMap["agent.list"] = [
             scopedResponse([scopedRow("parent")]), scopedResponse([child]), scopedResponse([])
         ]
@@ -260,7 +255,6 @@ extension AgentStoreTests {
         #expect(Set(store.agents.map(\.id)) == ["parent", "child"])
         #expect(store.list.orphanedAgentIds.isEmpty)
         #expect(store.isAgentGroupLoaded(.delegated(parentId: "parent")))
-        // A subsequent deletion must still evict the child from both sections.
         fake.responseQueueMap["agent.list"] = [
             scopedResponse([scopedRow("parent")]), scopedResponse([]), scopedResponse([])
         ]

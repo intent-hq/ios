@@ -4,7 +4,6 @@ import Testing
 import UIKit
 import WebKit
 
-/// Loads that find the page budget reserved by loads in flight wait their turn instead of failing.
 @MainActor
 struct HTMLFileResourceQueueTests {
     private typealias Policy = HTMLFileResourcePolicy

@@ -5,8 +5,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Archive and delete from the workspace page go through the workspace store: success leaves
-/// for the list, failure keeps the page and shows the server's message.
 @MainActor
 @Suite(.serialized)
 struct WorkspaceDetailActionTests {
@@ -50,12 +48,6 @@ struct WorkspaceDetailActionTests {
         #expect(store.workspaces.map(\.id) == ["selected", "other"])
     }
 
-    /// Confirming in the page's own dialog runs the action: success returns to the list, and a
-    /// failure shows "Workspace action failed" with the message while the page stays open.
-    /// The test reads the presented confirmation but does not tap its buttons: activating
-    /// actions inside a `UIAlertController` depends on the simulator (it fails on fresh CI
-    /// simulators). It dismisses the dialog and runs the same `perform` call the page's
-    /// confirm button makes, leaving through the coordinator as the page does.
     @Test(arguments: [WorkspaceAction.archive, .delete], [false, true])
     func confirmedActionFromThePage(_ action: WorkspaceAction, succeeds: Bool) async throws {
         let (fake, store) = try Self.fixture()

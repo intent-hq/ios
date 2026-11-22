@@ -196,7 +196,6 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         app.launch()
         let workspace = app.buttons["workspace.row.demo-ws-dashboard"]
         XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
-        // Narrow iPads retain the workspace list behind a closed sidebar.
         let workspaces = app.buttons["ipad.rail.workspaces"]
         if workspaces.exists {
             waitForStableRailButton(workspaces)
@@ -244,7 +243,6 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     private func revealRepositoryPicker(in app: XCUIApplication) -> XCUIElement {
         let picker = app.buttons["changes.repository"].firstMatch
         reveal(picker, in: app, towardTop: true, required: false)
-        // A short sidebar can swipe straight past the picker; collapsing the pull requests lifts it under their heading.
         let pullRequests = app.buttons["changes.section.pullRequests"].firstMatch
         if !(picker.exists && picker.isHittable), pullRequests.exists, pullRequests.isHittable, pullRequests.value as? String == "Expanded" {
             pullRequests.tap()
@@ -256,7 +254,6 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication, towardTop: Bool = false, required: Bool = true) {
         let overview = app.scrollViews["workspace.detail.scroll"].firstMatch
-        // On iPad the workspace can be beside a viewer; app-wide swipes target the viewer instead.
         let scrollTarget = UIDevice.current.userInterfaceIdiom == .pad && overview.exists ? overview : app
         for _ in 0..<Fixture.scrollAttempts {
             if element.exists, element.isHittable { return }
@@ -316,7 +313,6 @@ extension WorkspaceChangesUITests {
 
     @MainActor
     func testCommitFilenamesStayPinnedWhileScrollingInBothThemes() {
-        // Exercise the narrow iPad launch without depending on the previous test's orientation.
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {
             let app = openChanges(launchArguments: ["--demo-long-commit", "-appThemePreference", appearance])
@@ -408,12 +404,10 @@ extension WorkspaceChangesUITests {
 
     @MainActor
     private func verifyIPadSidebarViewers(in app: XCUIApplication, appearance: String) {
-        // A commit selected beside a conversation also belongs to the main pane.
         XCUIDevice.shared.orientation = .landscapeLeft
         let agents = app.buttons["Agents"].firstMatch
         reveal(agents, in: app, towardTop: true)
         agents.tap()
-        // A tap that only stops the overview's scroll momentum leaves Changes selected; tap again.
         if !app.buttons["changes.section.pullRequests"].waitForNonExistence(timeout: Fixture.tabSwitchTimeout) { agents.tap() }
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         reveal(agent, in: app)
@@ -423,7 +417,6 @@ extension WorkspaceChangesUITests {
         selectRepository("ios", in: app)
         openIPadCommit(in: app)
         assertIPadCommitPane(in: app)
-        // Reaching the commit can scroll the repository picker offscreen on a smaller iPad.
         XCTAssertTrue(revealRepositoryPicker(in: app).isHittable, "The sidebar stays interactive")
         capture(app, name: "ipad-commit-from-sidebar-\(appearance)")
         openIPadFileDiff(in: app, staged: false)

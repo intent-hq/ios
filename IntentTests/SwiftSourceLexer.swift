@@ -1,11 +1,6 @@
 import Foundation
 
-/// Minimal Swift lexer for source policy scans: blanks comments and literals,
-/// then pairs brackets on the remaining code. See `CopyContextMenuButtonScanner`.
 enum SwiftSourceLexer {
-    /// Replaces comment, string-literal (interpolations included), and regex
-    /// literal bytes with spaces, keeping newlines so offsets and line numbers
-    /// survive. `isReliable` is false when a literal or comment never closes.
     static func blankingLiterals(_ bytes: [UInt8]) -> (code: [UInt8], isReliable: Bool) {
         var code = bytes
         var isReliable = true
@@ -29,13 +24,8 @@ enum SwiftSourceLexer {
         return (code, isReliable)
     }
 
-    /// Bytes after which a `/` starts a regex literal rather than division.
     private static let regexPrefixes = Set("(,=:[{;!&|?".utf8)
 
-    /// End (exclusive) of a `#/…/#` or bare `/…/` regex literal starting at
-    /// `start`. A bare literal needs an expression-start byte before it (blanked
-    /// `code` so far, skipping whitespace), no whitespace after the opening
-    /// slash, and a closing slash on the same line; otherwise `/` is an operator.
     private static func regexLiteralEnd(from start: Int, in bytes: [UInt8], code: [UInt8]) -> (end: Int, closed: Bool)? {
         var index = start
         while index < bytes.count, bytes[index] == Byte.hash { index += 1 }
@@ -82,10 +72,6 @@ enum SwiftSourceLexer {
         return index
     }
 
-    /// End (exclusive) of the string literal starting at `start`, or nil when
-    /// no literal starts there. Handles `#` delimiters, multi-line literals,
-    /// escapes, and interpolations containing nested literals. A single-line
-    /// literal that reaches a newline is reported unclosed and ends there.
     private static func stringLiteralEnd(from start: Int, in bytes: [UInt8]) -> (end: Int, closed: Bool)? {
         var index = start
         while index < bytes.count, bytes[index] == Byte.hash { index += 1 }
@@ -147,7 +133,6 @@ enum SwiftSourceLexer {
         String(bytes: bytes, encoding: .utf8) ?? ""
     }
 
-    /// Matched `(`/`{`/`[` pairs of blanked code.
     struct Brackets {
         private(set) var closer: [Int: Int] = [:]
         private(set) var opener: [Int: Int] = [:]

@@ -103,8 +103,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func openConversationOnAnotherBackendDoesNotSuppressToast() {
-        // Suppression is connection-scoped: the same agent id open on
-        // ANOTHER backend's window must not swallow this backend's toast.
         let (manager, _) = makeNotificationManager(state: .active)
         manager.conversationOpened(agentId: "agent-1", connectionId: UUID())
 
@@ -133,9 +131,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func conversationOpenInSiblingWindowKeepsSuppressingAfterOneClose() {
-        // Visibility is counted per (id, connection): two windows on the
-        // SAME backend can show the same conversation, and closing one
-        // must not stop suppressing while the sibling still shows it.
         let (manager, _) = makeNotificationManager(state: .active)
         manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
         manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
@@ -164,7 +159,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func workspaceOpenInSiblingWindowKeepsSuppressingAfterOneClose() {
-        // Same counted semantics for workspace-detail visibility.
         let (manager, _) = makeNotificationManager(state: .active)
         manager.workspaceOpened(workspaceId: "workspace-1", connectionId: Self.connectionId)
         manager.workspaceOpened(workspaceId: "workspace-1", connectionId: Self.connectionId)
@@ -260,9 +254,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func singleWindowTapForAnotherBackendIsDropped() {
-        // iPhone showing backend A: a tap for backend B is dropped — same
-        // visible behavior as the old coordinator-side connection guard —
-        // and must not fire later when A's window re-registers.
         let (manager, _) = makeNotificationManager(state: .inactive)
         let windowBackend = BackendID(Self.connectionId)
         var didRoute = false
@@ -280,9 +271,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func tapForUnshownBackendOpensItsWindowThenDeliversOnRegistration() {
-        // Multi-window: a tap for a backend with no window opens that
-        // backend's window; the held tap is delivered — with the SOURCE
-        // connection id — once the opened window registers its handler.
         let (manager, _) = makeNotificationManager(state: .inactive)
         manager.supportsMultipleWindows = true
         var openedWindows: [BackendID] = []
@@ -307,9 +295,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func toastTapRoutesToSourceBackendWindow() {
-        // Toast taps go through the same routing as system-notification
-        // taps: whichever window renders the toast, the tap is delivered to
-        // the source backend's registered window.
         let (manager, _) = makeNotificationManager(state: .active)
         let source = BackendID(Self.connectionId)
         var routedValues: (String, UUID)?
@@ -329,8 +314,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func staleWindowTeardownDoesNotRemoveReplacementHandler() {
-        // A rebound window's disappear runs after its replacement has
-        // registered: the token guard keeps the replacement's handler.
         let (manager, _) = makeNotificationManager(state: .inactive)
         let backend = BackendID(Self.connectionId)
         let staleToken = manager.registerAgentSelectionHandler(for: backend) { _, _, _, _ in
@@ -380,8 +363,6 @@ extension NotificationManagerTests {
     }
 
     @Test @MainActor func openingConversationClearsNotificationScopedToItsConnection() {
-        // The cleared identifier carries the conversation's OWN connection
-        // id, not a global active-connection pointer.
         let (manager, center) = makeNotificationManager(state: .active)
         let pinnedConnectionId = UUID()
 

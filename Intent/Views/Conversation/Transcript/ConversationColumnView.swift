@@ -318,7 +318,6 @@ extension ConversationColumnView {
         usesWorkspaceDesign && presentation != .iPad
     }
 
-    /// Mirrors the visible rows below the transcript.
     private var hasAccessoryRows: Bool {
         let showsMonitors = !usesWorkspaceDesign && !viewModel.showsLoadingState
             && (!viewModel.activeAgentMonitors.isEmpty || viewModel.monitoredPrStore.error != nil)
@@ -488,7 +487,7 @@ private struct PendingQuestionRecoveryPlaceholder: View {
         HStack(spacing: Layout.contentSpacing) {
             ProgressView()
                 .controlSize(.small)
-            Text("Loading questions...")
+            Text("Loading questions…")
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }

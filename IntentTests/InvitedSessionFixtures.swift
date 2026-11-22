@@ -11,8 +11,6 @@ enum InvitedSessionFixtures {
         ConnectionPrincipal(id: id, hostRole: role, revision: 1, login: nil, displayName: nil)
     }
 
-    /// Exact base object from FE25bf invited-session-sync.test.ts. All bearers
-    /// are test strings; the controlled authenticator accepts forgotten B too.
     static func session(_ person: String = "B", changes: [String: Any] = [:]) throws -> InvitedSyncRecord {
         var object: [String: Any] = [
             "v": 2, "kind": "session", "fingerprint": pin, "principalId": person,

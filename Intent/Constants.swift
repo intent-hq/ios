@@ -52,24 +52,18 @@ enum ConversationConstants {
     enum Transcript {
         static let atBottomThreshold: CGFloat = 50
         static let initialScrollDelay: Double = 0.1
-        /// Longest the entry scroll waits for the transcript UIScrollView
-        /// to be found before scrolling anyway.
         static let initialScrollHostingTimeout: Double = 1.0
         static let initialScrollSettleDelay: Double = 0.2
         static let dividerProbeDelay: Double = 0.15
         static let scrollDebounceMilliseconds = 100
         static let rowHeightSettleMilliseconds = 120
         static let scrollCompletionMilliseconds = 300
-        /// How many corrections a forced follow issues before giving up.
         static let followLandingRetries = 3
-        /// Spacing between live geometry reads that verify a forced follow.
         static let followLandingPollMilliseconds = 50
-        /// Longest a forced follow keeps verifying its landing.
         static let followLandingTimeoutMilliseconds = 3000
         static let followLandingTolerance: CGFloat = 1
         static let streamingFollowMinimumInterval: TimeInterval = 0.5
         static let streamingFollowDriftTolerance: CGFloat = 1
-        /// Delay before rechecking geometry that briefly reads past the end.
         static let pastEndSettleMilliseconds = 150
     }
 

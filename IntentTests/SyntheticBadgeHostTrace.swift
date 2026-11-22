@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 
-/// Test-only, bounded observations. Encoding and output happen after owned cleanup.
 @MainActor
 final class SyntheticBadgeHostTrace {
     struct Entry: Codable {
@@ -39,7 +38,6 @@ final class SyntheticBadgeHostTrace {
     func record(_ event: String, fields: [String: String] = [:]) {
         let elapsed = clock() - startedUptime
         if entries.count == Self.capacity {
-            // Keep the initial wait/trigger evidence and the most recent cleanup boundary.
             entries.removeLast()
             omittedEntries += 1
         }
@@ -70,7 +68,6 @@ final class SyntheticBadgeHostTrace {
                 Attachment.record(report, named: "synthetic-host-\(id).json")
             }
         } catch {
-            // Diagnostic failure must not replace the render or teardown error.
             print("SYNTHETIC host trace \(id) encoding failed: \(error)")
         }
     }

@@ -1,77 +1,16 @@
 import XCTest
 
-/// Guards "Go to End" visibility in demo transcripts across scrolling, tapping,
-/// footer hooks, suggested prompts, and repeated conversation entry;
-/// hidden — with the last message on screen, no blank band, and the prompt
-/// rows under it on screen — once a cold entry has settled
-/// (intent-hq/ios#304), hidden when the hooks row lands after a cold entry or
-/// a slim-truncated tool row hydrates after entry (intent-hq/ios#338),
-/// hidden after a single tap from the very top of the transcript (#305),
-/// and — the controlled cases in `+Recovery` — absent once the real recovery
-/// recovered an end row the fixture withdrew on the test's signal, present
-/// once it gave up over one kept withdrawn. Those launches and the cold-entry
-/// ones attach a JSON evidence record (`recoveryEvidence`).
-/// Every wait is settlement polling on the app's own state, never a guessed
-/// idle delay: a forced follow (entry, Go to End, a send) reports its
-/// outcome in the transcript's accessibility value once its live geometry
-/// has come to rest, and the last row is asserted inside the transcript
-/// only once that report is in and the row's frame has held still
-/// (`waitUntilSettled`). Sampling the geometry alone raced the follow: two
-/// samples 0.25 s apart also agree while the follow waits out its debounce
-/// or between two of its landing corrections, and the correction that then
-/// ran moved the rows under the assertions (intent-hq/ios#313,
-/// intent-hq/ios#307, intent-hq/intent#5109). The report is
-/// synchronization only — its outcome is not asserted, as CI simulators
-/// exhaust the landing budget (`giveUp`) with the viewport at the end — so
-/// the end itself is asserted on geometry: the transcript's final content
-/// row (`EndRow`) rests `Fixture.endRowGap` above the bottom edge
-/// (`assertAtEnd`), which a viewport stalled past the end over a blank band
-/// or short of the end fails where containment alone would not. Frames are
-/// read from single snapshots (`frame(of:)`): `exists` followed by `frame`
-/// resolves the query twice and a row the lazy stack derealizes in between
-/// fails the test outright.
-/// Every "rests at the bottom" failure message reports the follow's report,
-/// whether Go to End is present and where the last row's frame lies
-/// relative to the transcript's frame (ABOVE it: viewport past the end over
-/// a blank band; BELOW it: viewport short of the end) so a CI failure is
-/// diagnostic on its own (intent-hq/ios#281).
-/// Runs under the `Intent` scheme (`scripts/xcodebuild.sh test-ios`, CI).
-/// The transcript is the coordinator-shaped, 150+-message
-/// `DemoFixtures.longConversationMessages` (tool-call groups, agent-to-agent
-/// rows, code fences, tables) served for the "Deflake payment integration
-/// tests" workspace, whose single foreground agent opens straight into the
-/// transcript from the workspace row with the "Waiting for all" footer
-/// already under it. That workspace's `hook.list` fixture waits on
-/// `DemoFixtures.longConversationHookListGate` — a delay by default, or a
-/// trigger file — and every test here launches with the trigger file, so
-/// the hooks row never lands on its own clock: only the footer test
-/// releases it, once the transcript has been observed settled. On its
-/// default clock the row lands ~4 s after entry, inside every test's
-/// settle and quiet windows, and a row landing right after an entry had
-/// settled left the transcript blank with Go to End hidden on CI
-/// (intent-hq/ios#338) — a second event, a container resize, with its own
-/// outcome, in tests that measure the entry, a tap or a send.
 nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
-    // Trigger URLs are shared with recovery tests extracted into a companion file.
     // swiftlint:disable test_case_accessibility
-    /// The file the fixture's hooks-row gate waits on (see
-    /// `Fixture.hooksRowTriggerFileArgumentPrefix`): one path per test
-    /// (XCTest instantiates the case per test method), never created unless
-    /// the test releases the row.
     let hooksRowTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-hooks-row-\(UUID().uuidString).trigger")
 
     let blockHydrationTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-block-hydration-\(UUID().uuidString).trigger")
 
-    /// The file the fixture's end-derealization gate waits on (see
-    /// `Fixture.endDerealizationTriggerArgumentPrefix`), passed only by
-    /// the two controlled-recovery tests.
     let endDerealizationTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-end-derealization-\(UUID().uuidString).trigger")
 
-    /// The launch whose evidence record is still owed (see `recoveryEvidence`):
-    /// flushed by `attachRecoveryEvidence`, or in teardown after a failure.
     var pendingRecoveryEvidence: PendingRecoveryEvidence?
     // swiftlint:enable test_case_accessibility
 
@@ -84,8 +23,6 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        // XCTest runs teardown on the main thread, so the main-actor hop is
-        // sound; nonisolated(unsafe) keeps the test case out of the region check.
         nonisolated(unsafe) let test = self
         MainActor.assumeIsolated { test.attachPendingRecoveryEvidence() }
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
@@ -93,21 +30,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         try? FileManager.default.removeItem(at: endDerealizationTriggerFile)
         try super.tearDownWithError()
     }
-
-    /// Tapping a suggested prompt under the last assistant message appends
 }
 
 extension ConversationTranscriptScrollUITests {
-    /// the optimistic user row and the thinking indicator while the prompt
-    /// rows disappear (the last message is now the user's). The transcript
-    /// was resting at the bottom, so it must follow: once the send's forced
-    /// follow has reported, Go to End must not be shown and the sent row and
-    /// the thinking indicator must rest inside the transcript
-    /// (intent-hq/ios#281, symptom 1). The indicator is the settled state's
-    /// last row rather than a precondition waited for on its own: a fixed
-    /// 5 s wait for it raced the follow on CI (intent-hq/ios#307), while a
-    /// transcript that has settled without it is reported with the sent
-    /// row's resting state.
     @MainActor
     // swiftlint:disable:next function_body_length
     func testTappingSuggestedPromptKeepsTranscriptAtBottomAndGoToEndHidden() {
@@ -115,7 +40,6 @@ extension ConversationTranscriptScrollUITests {
         let opened = openLongConversation(in: app)
         let transcript = opened.transcript
 
-        // 1. Settled at the bottom with the prompt rows on screen.
         assertRestsAtBottom(
             lastRow: opened.lastMessage,
             named: "last assistant paragraph",
@@ -134,8 +58,6 @@ extension ConversationTranscriptScrollUITests {
         XCTAssertEqual(prompt.label, Fixture.firstSuggestedPromptLabel)
         add(transcriptScreenshot(in: app, named: "Workspace-Suggested-Prompts"))
 
-        // 2. Tap it: the prompt rows collapse, the sent row and the thinking
-        //    indicator appear as the new tail.
         let beforeSend = forcedFollowRequestCount(in: opened)
         prompt.tap()
         XCTAssertTrue(
@@ -145,10 +67,6 @@ extension ConversationTranscriptScrollUITests {
         let sentRow = message(in: app, containing: Fixture.firstSuggestedPromptLabel)
         let thinkingIndicator = EndRow.thinkingIndicator(in: app)
 
-        // 3. Still pinned: the send's forced follow reports with the
-        //    indicator (now the final content row) at the end of the
-        //    transcript, the sent row is on screen too, and both hold over
-        //    the quiet window with no Go to End.
         guard waitUntilSettled(
             on: thinkingIndicator.element,
             named: thinkingIndicator.name,
@@ -177,12 +95,6 @@ extension ConversationTranscriptScrollUITests {
         )
     }
 
-    /// Entering the conversation must land the transcript at the bottom
-    /// every time: last row inside the transcript — neither above it (viewport
-    /// past the end over a blank band, intent-hq/ios#271) nor below it (short
-    /// of the end) — and no Go to End once layout settles. Both entry
-    /// symptoms are intermittent, so the entry is repeated
-    /// (intent-hq/ios#281, symptoms 2 and 3).
     @MainActor
     func testEnteringConversationRepeatedlyRestsAtBottomWithGoToEndHidden() throws {
         try XCTSkipUnless(
@@ -208,11 +120,6 @@ extension ConversationTranscriptScrollUITests {
 }
 
 extension ConversationTranscriptScrollUITests {
-    /// From the very top of the long transcript a single tap on Go to End
-    /// must land at the very end: the last message and the prompt rows under
-    /// it come on screen with the end row `Fixture.endRowGap` above the
-    /// bottom edge, the button disappears and stays gone over the quiet
-    /// window — no second tap (intent-hq/ios#305).
     @MainActor
     // swiftlint:disable:next function_body_length
     func testGoToEndFromTopOfLongTranscriptLandsAtEndInOneTap() {
@@ -231,8 +138,6 @@ extension ConversationTranscriptScrollUITests {
             allowPreservedEntry: true
         )
 
-        // 1. Scroll to the very top: swipe down (content moves down) until
-        //    the first message is on screen.
         let firstMessage = message(in: app, containing: Fixture.firstMessageFragment)
         var swipes = 0
         while swipes < Fixture.maxSwipesToTop, !firstMessage.exists || !isVisible(firstMessage, in: transcript) {
@@ -249,10 +154,6 @@ extension ConversationTranscriptScrollUITests {
             "Go to End is absent at the top of the transcript"
         )
 
-        // 2. One tap, then no further interaction: the tap's forced follow
-        //    reports with the last message resting inside the transcript
-        //    and the end row at the end, the button goes, and both hold
-        //    over the quiet window.
         let beforeGoToEnd = forcedFollowRequestCount(in: opened)
         goToEnd.tap()
         let context = "after one tap on Go to End from the top (after \(swipes) swipes)"
@@ -299,7 +200,6 @@ extension ConversationTranscriptScrollUITests {
             return isInside(rect, opened.transcript)
         })
         assertStartupDividerGeometry(app, opened: opened)
-        // The divider can be at the viewport's bottom, leaving row 26 offscreen.
         let row = try startupVisibleRow(opened)
         try assertStartupViewportStays(app, opened: opened, row: row) {}
     }
@@ -433,9 +333,6 @@ extension ConversationTranscriptScrollUITests {
         let maximumViewportSteps = 30
         for _ in 0..<maximumViewportSteps {
             if isInside(divider, opened.transcript) { return }
-            // A full-speed swipe can jump over the divider and then keep
-            // moving toward the first row. Walk overlapping viewport bands,
-            // reversing if the authoritative marker is already below them.
             let visible = rows(intersecting: opened.transcript).compactMap { row -> Int? in
                 guard row.label.hasPrefix("Startup row ") else { return nil }
                 return Int(row.label.dropFirst("Startup row ".count).prefix { $0.isNumber })

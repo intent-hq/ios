@@ -6,6 +6,7 @@ nonisolated struct WorkspaceBrowser: Codable, Equatable, Identifiable, Sendable 
     let title: String
     let url: String
     let command: String?
+    var navigationRequestID: UUID?
 
     var isSavedSession: Bool { id.hasPrefix("browser:") }
 

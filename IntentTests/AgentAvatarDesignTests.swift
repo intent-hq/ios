@@ -2,8 +2,6 @@
 import SwiftUI
 import Testing
 
-/// Tests for the desktop-parity agent avatar design selection (mirrors
-/// cloudlands-fe avatar-design.ts) and the ported glyph geometry.
 struct AgentAvatarDesignTests {
     // MARK: - Builtin specialist mapping
 
@@ -105,10 +103,6 @@ struct AgentAvatarDesignTests {
     }
 
     @Test func fallbackMatchesDesktopFixtures() {
-        // Expected values computed with the desktop JS implementation:
-        // stringToSeededRandom(agentId).pick(fallbackAgentAvatarDesigns)
-        // (cloudlands-fe hash.ts + avatar-design.ts). Covers all six
-        // fallback designs.
         let fixtures: [(String, AgentAvatarDesign)] = [
             ("", .fallbackGlasses),
             ("a", .fallbackDots),
@@ -120,9 +114,6 @@ struct AgentAvatarDesignTests {
             ("agent-1", .fallbackCrownMouth),
             ("agent-5", .fallbackCrownInverted),
             ("agent-11", .fallbackCrown),
-            // Seeds where the JS float64 LCG step loses low bits and picks a
-            // different design than exact integer math would — regression
-            // coverage for the Double-based LCG step.
             ("agent-750158", .fallbackCrownMouth),
             ("x2191079", .fallbackGlasses)
         ]

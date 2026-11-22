@@ -2,12 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Tests for the SpecialistPickerView selection helpers: specialist
-/// reconciliation against the cached catalog, the loading states derived
-/// from `CreationOptionsStore` (cached and cold paths), and the
-/// provider/model params sent on agent.create. Shared provider defaulting and
-/// model reconciliation use `CreationSelectionPolicy` (covered in this suite's
-/// loading tests and `CreateWorkspaceParamsTests`).
 struct SpecialistPickerSelectionTests {
     func makeSpecialist(resolvedModel: String? = nil, resolvedProvider: String? = nil) -> SpecialistInfo {
         SpecialistInfo(
@@ -45,8 +39,6 @@ struct SpecialistPickerSelectionTests {
                 catalog: withOrchestrator
             )?.id == "coordinator"
         )
-        // No orchestrator: the first pickable specialist as the daemon lists
-        // it, not by name (the picker shows daemon order).
         let plain = [
             makeCatalogSpecialist(id: "verifier", name: "Verifier"),
             makeCatalogSpecialist(id: "implementor", name: "Implementor")
@@ -83,8 +75,6 @@ struct SpecialistPickerSelectionTests {
             makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator")
         ]
         #expect(SpecialistPickerView.reconciledSpecialist(current: current, catalog: gone)?.id == "coordinator")
-        // Same ids, but the selection turned hidden under a refresh: a
-        // hidden id must never be submitted.
         let hidden = [
             makeCatalogSpecialist(id: "verifier", name: "Verifier", hidden: true),
             makeCatalogSpecialist(id: "implementor", name: "Implementor")
@@ -96,8 +86,6 @@ struct SpecialistPickerSelectionTests {
         let current = makeCatalogSpecialist(id: "verifier", name: "Verifier")
         let nonePickable = [makeCatalogSpecialist(id: "verifier", name: "Verifier", hidden: true)]
         #expect(SpecialistPickerView.reconciledSpecialist(current: current, catalog: nonePickable) == nil)
-        // A reconnect clear (or cold load) empties the catalog: the
-        // selection survives until the reload answers.
         #expect(SpecialistPickerView.reconciledSpecialist(current: current, catalog: [])?.id == "verifier")
         #expect(SpecialistPickerView.reconciledSpecialist(current: nil, catalog: []) == nil)
     }
@@ -155,7 +143,6 @@ struct SpecialistPickerSelectionTests {
         ]
         #expect(!signedIn.noneSelectable)
 
-        // nil (unknown) stays selectable since probes can fail transiently
         let unknown = [
             ProviderInfo(id: "auggie", authenticated: false),
             ProviderInfo(id: "grok", authenticated: .unknown)
@@ -191,7 +178,6 @@ struct SpecialistPickerSelectionTests {
 
     @Test func createEnabledWhenAProviderIsSelectable() {
         #expect(!isCreateDisabled(providers: [ProviderInfo(id: "auggie", authenticated: true)]))
-        // nil (unknown) stays selectable since probes can fail transiently
         #expect(!isCreateDisabled(providers: [ProviderInfo(id: "grok", authenticated: .unknown)]))
     }
 
@@ -228,14 +214,11 @@ struct SpecialistPickerSelectionTests {
     }
 
     @Test func daemonDefaultLabelFallsBackWhenProviderContextDiffers() {
-        // The preview was resolved for another provider; its model must not
-        // be shown as the default for the selected one.
         let specialist = makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie")
         #expect(SpecialistInfo.daemonDefaultLabel(for: specialist, providerId: "claude-code") == "Provider default")
     }
 
     @Test func daemonDefaultLabelFallsBackWhenFieldsOmitted() {
-        // Omitted fields mean resolution yielded the provider CLI default.
         #expect(SpecialistInfo.daemonDefaultLabel(for: makeSpecialist(), providerId: "auggie") == "Provider default")
         #expect(SpecialistInfo.daemonDefaultLabel(for: nil, providerId: "auggie") == "Provider default")
     }
@@ -243,7 +226,6 @@ struct SpecialistPickerSelectionTests {
     // MARK: - buildCreateAgentSelection
 
     @Test func omitsBothOnDaemonDefaultSelection() {
-        // No explicit user pick: the daemon's resolver decides the model.
         let selection = SpecialistPickerView.buildCreateAgentSelection(
             provider: ProviderInfo(id: "auggie", authenticated: true),
             model: nil
@@ -253,8 +235,6 @@ struct SpecialistPickerSelectionTests {
     }
 
     @Test func sendsModelOnlyOnExplicitAuggiePick() {
-        // Auggie is the daemon default, so the provider is omitted and only
-        // the bare model pick is sent — matching CreateWorkspaceView.
         let selection = SpecialistPickerView.buildCreateAgentSelection(
             provider: ProviderInfo(id: "auggie", authenticated: true),
             model: makeModel("opus4.7")
@@ -334,7 +314,6 @@ extension SpecialistPickerSelectionTests {
         #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: "future-level", effortLevels: levels) == "future-level")
         #expect(CreationSelectionPolicy.reconciledReasoningEffort(current: nil, effortLevels: levels) == nil)
 
-        // An unresolved default never borrows capabilities from the first or default row.
         #expect(CreationSelectionPolicy.workspaceReasoningLevels(provider: provider, model: nil, models: [refreshed]).isEmpty)
         let otherProviderModel = ModelInfo(
             id: selected.id, name: "Model", provider: "provider-b", effortLevels: ["future-level"]

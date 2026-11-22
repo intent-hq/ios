@@ -30,9 +30,6 @@ extension SpecialistPickerView {
         return pickable.orchestrator ?? pickable.first
     }
 
-    // The Model section's loading state distinguishes no catalog from an empty
-    // settled catalog, so the optional collection is intentional.
-    // `nil` means no catalog has arrived; an empty catalog is a settled result.
     // swiftlint:disable:next discouraged_optional_collection
     static func showsModelsLoading(catalog: [ModelInfo]?, settled: Bool) -> Bool {
         catalog == nil && !settled

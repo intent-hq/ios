@@ -77,7 +77,7 @@ extension CreationOptionsStoreTests {
         store.selectModelProvider("auggie", consumer: consumer)
         await store.ensureSpecialists(consumer: consumer)
         await store.ensureModels(providerId: "auggie", consumer: consumer)
-        await store.ensureModels(providerId: "codex") // Idle, never selected.
+        await store.ensureModels(providerId: "codex")
         store.releaseCatalogs(consumer: consumer)
         let checkpoint = connection.checkpoint
         connection.globalSubscriptionState = .subscribed

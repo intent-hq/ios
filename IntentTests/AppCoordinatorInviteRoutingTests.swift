@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// `intent://invite` routing: the join sheet, cold-start stashing and where
-/// a joined invite lands.
 extension AppCoordinatorTests {
     @Test @MainActor func handleIncomingURL_inviteURL_presentsJoinSheetAfterLoad() throws {
         resetConnectionState()
@@ -14,7 +12,6 @@ extension AppCoordinatorTests {
             syncedRegistry: Self.syncedRegistry(payloads: [])
         )
         let fingerprint = String(repeating: "ab", count: 32)
-        // Cold start: stashed until the first screen is routed.
         coordinator.handleIncomingURL(
             try #require(URL(string: "intent://invite?v=1&port=5181&fp=\(fingerprint)&inviteId=inv-1&secret=s&tc=tc1-x"))
         )

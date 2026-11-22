@@ -2,7 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// RFC 6455 §4 opening handshake and RFC 7692 extension negotiation.
 struct WebSocketHandshakeTests {
     private static let rfcKey = "dGhlIHNhbXBsZSBub25jZQ=="
     private static let rfcAccept = "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
@@ -136,7 +135,6 @@ struct WebSocketHandshakeTests {
         for header in invalid {
             #expect(throws: WebSocketHandshakeError.invalidExtensions, "\(header)") { try negotiate(header) }
         }
-        // An accepted extension the client never offered (kill switch off).
         #expect(throws: WebSocketHandshakeError.invalidExtensions) { try negotiate("permessage-deflate", offered: false) }
     }
 }

@@ -13,6 +13,7 @@ struct ManualConnectionField<Content: View>: View {
                 style: Constants.Typography.eyebrow,
                 tracking: Constants.ManualTokenEntry.labelTracking
             )
+                .textCase(.uppercase)
                 .foregroundStyle(Constants.ManualTokenEntry.labelForeground(for: colorScheme))
                 .accessibilityHidden(true)
             content

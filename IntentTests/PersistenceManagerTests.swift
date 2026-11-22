@@ -3,8 +3,6 @@ import Foundation
 import Security
 import Testing
 
-/// Tests for PersistenceManager per-workspace tab persistence.
-/// Uses a unique key prefix per test to avoid UserDefaults collisions.
 @Suite(.serialized)
 struct PersistenceManagerTests {
     // MARK: - MainActor serialization smoke test
@@ -14,7 +12,6 @@ struct PersistenceManagerTests {
         let iterations = 100
         let workspaceIds = (0..<iterations).map { "\(prefix)-\($0)" }
 
-        // Submit many saves as independent tasks; the MainActor contract serializes mutations.
         await withTaskGroup(of: Void.self) { group in
             for i in 0..<iterations {
                 group.addTask { @MainActor in
@@ -24,7 +21,6 @@ struct PersistenceManagerTests {
             }
         }
 
-        // Verify all tabs persisted correctly
         for i in 0..<iterations {
             let wsId = workspaceIds[i]
             let tab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: wsId)
@@ -33,9 +29,6 @@ struct PersistenceManagerTests {
     }
 }
 
-/// In-memory `KeychainStorage` so connection-persistence tests are hermetic:
-/// SecItem calls fail on headless CI simulators, and real Keychain state would
-/// leak between runs.
 final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
     private var items: [String: Data] = [:]
     private var shouldFailSaves = false
@@ -71,7 +64,6 @@ final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
     }
 }
 
-/// Installs the in-memory Keychain backend exactly once per test process.
 enum TestKeychainStorage {
     static let installed: Void = {
         PersistenceManager.shared.keychainStorage = InMemoryKeychainStorage()
@@ -94,8 +86,6 @@ final class FakeSecItemStore {
     private(set) var updateCallCount = 0
     private(set) var addCallCount = 0
     private(set) var deleteCallCount = 0
-    /// Raw attribute dictionaries handed to SecItemUpdate / SecItemAdd, so
-    /// policy tests can assert exactly what would reach the Security framework.
     private(set) var updateCalls: [(query: [String: Any], attributes: [String: Any])] = []
     private(set) var addQueries: [[String: Any]] = []
     private(set) var readQueries: [[String: Any]] = []
@@ -264,7 +254,6 @@ struct DraftPersistenceTests {
 
     @Test func legacyDraftMigratesOnlyToActiveBackendAndSurvivesRestart() throws {
         try withStore { persistence, defaults, first, second in
-            // Seed the exact key written by the previous app version.
             defaults.set("Saved before upgrade", forKey: "draft_workspace_agent")
             #expect(persistence.loadDraft(workspaceId: "workspace", agentId: "agent", backendID: second).isEmpty)
             #expect(defaults.string(forKey: "draft_workspace_agent") == "Saved before upgrade")

@@ -29,8 +29,6 @@ struct MediaAudioSessionTests {
         let nextDictation = try await session.acquire(.dictation)
         try await session.release(nextDictation)
 
-        // Deactivation does not reset AVAudioSession's category: each consumer
-        // must set its own before activation, including after a different use.
         #expect(client.events == [
             .category(.record, .measurement, .duckOthers), .active(true, []),
             .active(false, .notifyOthersOnDeactivation),
@@ -91,8 +89,6 @@ struct MediaAudioSessionTests {
     }
 }
 
-/// Records only the platform boundary; category selection, lease ownership and
-/// cleanup ordering all run in the production session actor.
 nonisolated private final class RecordingAudioSessionClient: MediaAudioSessionClient {
     enum Event: Equatable {
         case category(AVAudioSession.Category, AVAudioSession.Mode, AVAudioSession.CategoryOptions)

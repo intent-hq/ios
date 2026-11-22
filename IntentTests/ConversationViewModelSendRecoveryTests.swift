@@ -12,7 +12,6 @@ extension ConversationViewModelTests {
         let image = try #require(UIImage(systemName: "star"))
         let nextImage = try #require(UIImage(systemName: "circle"))
         let file = PendingFile(url: URL(fileURLWithPath: "/tmp/retained.txt"), displayName: "retained.txt", size: 0)
-        // A file added during the send belongs to the newer composer draft.
         let send = Task { await viewModel.sendMessage("original", images: [image]) }
         defer { send.cancel() }
         try await fake.waitForPendingRequests("agent.sendMessage")
@@ -189,7 +188,6 @@ extension ConversationViewModelTests {
         #expect(store.sendAttempts.first?.status == .preparing)
         for _ in 0 ..< (retryEntry ? 2 : 1) {
             let send = Task { @MainActor in try await store.sendPreparedAttempt(id) }
-            // No suspension on MainActor before cancel: the request cannot have entered yet.
             send.cancel()
             await #expect(throws: CancellationError.self) { try await send.value }
             #expect(store.sendAttempts.first?.status == .notSent)

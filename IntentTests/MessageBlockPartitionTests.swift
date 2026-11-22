@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// User-row block partitioning: text renders first, image/video attachments render
-/// after as thumbnails, file attachments last as chips, regardless of
-/// block order in the payload.
 struct MessageBlockPartitionTests {
     private func textBlock(_ text: String) -> ContentBlock {
         ContentBlock(type: .text, text: text)
@@ -121,10 +118,6 @@ struct MessageBlockPartitionTests {
     }
 }
 
-/// Copied-string composition for the whole-message Copy action:
-/// `MessageView.plainTextContent` joins text/code blocks, skips
-/// tool/thinking/image blocks, strips supervisor tags and wake prefixes,
-/// and replaces `@context[...]` tokens with their decoded titles.
 struct MessagePlainTextContentTests {
     @Test func joinsTextAndCodeBlocksSkippingOthers() {
         let blocks = [
@@ -227,9 +220,6 @@ struct MessagePlainTextContentTests {
     }
 
     @Test func assistantCopyStripsSuggestedPromptsSpanningTextBlocks() {
-        // A block well-formed only across text-block boundaries is stripped
-        // by the message-level pre-scan, so the copy matches the display
-        // (intent-hq/intent#3936).
         let blocks = [
             ContentBlock(type: .text, text: "Answer.\n<!-- suggested-prompts\nRun the te"),
             ContentBlock(type: .text, text: "sts\n-->\n"),
@@ -258,9 +248,6 @@ struct MessagePlainTextContentTests {
     }
 }
 
-/// One-line preview shown in the collapsed agent-to-agent disclosure header:
-/// `MessageView.agentMessagePreview` renders the row's copy text with all
-/// whitespace runs (including newlines) collapsed to single spaces.
 struct AgentMessagePreviewTests {
     @Test func collapsesNewlinesAndWhitespaceRunsToOneLine() {
         let blocks = [
@@ -304,9 +291,6 @@ struct AgentMessagePreviewTests {
     }
 }
 
-/// `AssistantMessageView` pairs tool results once per message so each block
-/// row's equatable gate compares only its own tool result, not the whole
-/// block array.
 struct ToolResultPairingTests {
     @Test func pairsResultsByToolUseId() {
         let blocks = [
@@ -340,9 +324,6 @@ struct ToolResultPairingTests {
     }
 
     @Test func pairsToolUseInsideGroupWithResultOutsideIt() {
-        // Pairing runs over the whole raw message, not per render row: a
-        // tool_use parsed into a group child still finds its tool_result
-        // when that result lands after the closing tag.
         let blocks = [
             ContentBlock(id: "t1", type: .text, text: "<group:Setup>"),
             ContentBlock(id: "u1", type: .toolUse, name: "read_file", toolUseId: "call-1"),

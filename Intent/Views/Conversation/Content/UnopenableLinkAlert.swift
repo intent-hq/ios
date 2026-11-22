@@ -7,7 +7,7 @@ nonisolated struct UnopenableLink: Equatable {
         case browserFailed(String)
     }
 
-    static let title = "Can't Open Link"
+    static let title = "Can’t Open Link"
 
     let target: String
     let reason: Reason
@@ -20,9 +20,9 @@ nonisolated struct UnopenableLink: Equatable {
     var message: String {
         switch reason {
         case .unsupportedLocation, .unsupportedIntentLink:
-            "This link can't be opened on this device.\n\n\(target)"
+            "This link can’t be opened on this device.\n\n\(target)"
         case .browserFailed(let detail):
-            "The in-app browser couldn't open this link. \(detail)\n\n\(target)"
+            "The in-app browser couldn’t open this link. \(detail)\n\n\(target)"
         }
     }
 

@@ -3,7 +3,6 @@ import Foundation
 import Network
 import Testing
 
-// Explicit ports and encoded URL fixtures exercise the wire/security contract.
 @MainActor
 struct BrowserTunnelURLTests {
     @Test func recognizesOnlyExplicitDaemonLoopbackHosts() throws {

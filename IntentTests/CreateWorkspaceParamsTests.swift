@@ -75,23 +75,17 @@ struct CreateWorkspaceParamsTests {
     }
 
     @Test func localPathParamsOmitted() {
-        // Omitting repositoryPath/clonePath alongside githubUrl selects the
-        // daemon's cache-hydrated clone path (PROTOCOL §5.1).
         let params = buildParams()
         #expect(params["repositoryPath"] == nil)
         #expect(params["clonePath"] == nil)
     }
 
     @Test func createRequestTimeoutMatchesCloudlandsFe() {
-        // 120s mirrors cloudlands-fe's CREATE_TIMEOUT_MS (#1954): the daemon's
-        // ~70s NPX budget plus first-turn overhead exceeds the flat 10s default.
         #expect(CreateWorkspaceView.createRequestTimeout == 120)
         #expect(CreateWorkspaceView.createRequestTimeout > ConnectionManager.defaultRequestTimeout)
     }
 
     @Test func baseRefSentAsPlainBranchName() {
-        // Remote branch names from github.branches.list are plain names —
-        // no remote-prefix normalization is applied (or expected).
         let params = buildParams(baseRef: "feature/x")
         #expect(params["baseRef"] as? String == "feature/x")
     }
@@ -104,8 +98,6 @@ struct CreateWorkspaceParamsTests {
     // MARK: - Optional message (creation without a prompt, matching cloudlands-fe)
 
     @Test func promptOmittedWithSpecialistAndEmptyMessage() throws {
-        // The default flow: a specialist is pre-selected, the message field
-        // is left empty — initialAgent is sent without a `prompt` key.
         let params = buildParams(specialist: makeSpecialist(), message: "")
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
         #expect(initialAgent["specialist"] as? String == "implementor")
@@ -167,8 +159,6 @@ struct CreateWorkspaceParamsTests {
     }
 
     @Test func modelOmittedOnDaemonDefaultSelection() throws {
-        // No explicit user pick (model nil): the daemon's resolver decides,
-        // even when the specialist carries a resolvedModel preview.
         let params = buildParams(
             specialist: makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie"),
             model: nil,
@@ -180,8 +170,6 @@ struct CreateWorkspaceParamsTests {
     }
 
     @Test func modelSentOnExplicitPickWithSpecialist() throws {
-        // An explicit pick is always sent as-is, even if it happens to match
-        // the daemon's resolved preview — model is non-nil only on user picks.
         let params = buildParams(
             specialist: makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie"),
             model: makeModel(id: "opus4.6")
@@ -200,7 +188,7 @@ struct CreateWorkspaceParamsTests {
             model: explicitModel ? makeModel() : nil
         )
         let agent = try #require(params["initialAgent"] as? [String: Any])
-        #expect(agent["reasoningEffort"] == nil) // Blank would clear, not inherit.
+        #expect(agent["reasoningEffort"] == nil)
         #expect(agent["model"] as? String == (explicitModel ? "sonnet4.5" : nil))
     }
 

@@ -17,7 +17,7 @@ nonisolated enum TurnFailureCategory: Equatable, Sendable {
 
     var fallbackMessage: String? {
         switch self {
-        case .usageLimit: "The provider's usage limit was reached."
+        case .usageLimit: "The provider’s usage limit was reached."
         case .authentication: "The provider needs you to sign in again."
         case .network: "The connection to the provider was interrupted."
         case .generic: nil

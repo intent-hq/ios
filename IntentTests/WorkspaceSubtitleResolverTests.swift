@@ -31,7 +31,6 @@ struct WorkspaceSubtitleResolverTests {
     }
 
     @Test func returnsNilForEmptyStore() {
-        // Cold start / deep link before the first fetch lands.
         #expect(WorkspaceSubtitleResolver.subtitle(
             forWorkspaceId: "ws-1",
             in: []
@@ -39,7 +38,6 @@ struct WorkspaceSubtitleResolverTests {
     }
 
     @Test func returnsNilForBlankTitle() throws {
-        // Never show a blank subtitle line — hide it instead.
         let workspaces = [try makeWorkspace(id: "ws-1", title: "   ")]
         #expect(WorkspaceSubtitleResolver.subtitle(
             forWorkspaceId: "ws-1",

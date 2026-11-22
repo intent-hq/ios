@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Event-driven refreshes: one in flight, one trailing refresh per burst, and
-/// nothing stale after teardown or a workspace switch.
 extension WorkspaceChangesStoreTests {
     func commitReads(_ fake: FakeConnectionManager, workspaceId: String = "workspace-1") -> Int {
         fake.paramsForMethod("file-tracking.loadCommits").filter { $0["workspaceId"] as? String == workspaceId }.count

@@ -5,10 +5,6 @@ import os
 import Security
 import Testing
 
-/// Regression coverage for the pairing TLS probe decision (shared by manual
-/// entry and fingerprint-less QR payloads): pairing connections must always
-/// be pinned, so a probe that finds no certificate aborts with an error
-/// instead of falling back to an unpinned plain-WS connection.
 struct ManualTokenEntryViewTests {
     private typealias ProbeResult = CertFingerprintProbe.ProbeResult
     private typealias FailureCause = CertFingerprintProbe.FailureCause
@@ -30,8 +26,6 @@ struct ManualTokenEntryViewTests {
     }
 
     // MARK: - Failure stage and cause (ios#233): each failure names the
-
-    // stage it failed at instead of collapsing to one generic message.
 
     @Test @MainActor func everyFailureStageAbortsWithADistinctMessage() {
         let refused = FailureCause(domain: .posix, code: POSIXErrorCode.ECONNREFUSED.rawValue)
@@ -174,11 +168,6 @@ struct ManualTokenEntryViewTests {
 extension ManualTokenEntryViewTests {
     // MARK: - Trust fingerprint extraction (the capture path of the probe's
 
-    // TLS verify block, factored so it is testable without a live handshake)
-
-    /// Self-signed DER certificate fixture (CN=CertFingerprintProbe Test
-    /// Fixture) with its independently computed SHA-256 fingerprint
-    /// (openssl dgst -sha256 -c), pinning the normalization end to end.
     private static let fixtureCertDERBase64 = """
     MIIBrTCCAVOgAwIBAgIUR7S/oedy6Qg4laIDRfAbIuYBqn8wCgYIKoZIzj0EAwIw\
     LDEqMCgGA1UEAwwhQ2VydEZpbmdlcnByaW50UHJvYmUgVGVzdCBGaXh0dXJlMB4X\
@@ -217,14 +206,6 @@ extension ManualTokenEntryViewTests {
 
     // MARK: - Live TLS handshake (regression for the verify-block MainActor
 
-    // crash: probe must be nonisolated, so boringssl can invoke its verify
-    // block on the probe's private queue without tripping a MainActor
-    // assertion — EXC_BREAKPOINT in dispatch_assert_queue_fail)
-
-    /// PKCS#12 bundle (password "fixture") with a self-signed EC P-256
-    /// identity (CN=CertFingerprintProbe Live Handshake Fixture), plus the
-    /// leaf certificate's independently computed SHA-256 fingerprint
-    /// (openssl dgst -sha256 -c).
     nonisolated private static let fixtureIdentityP12Base64 = """
     MIIDwgIBAzCCA4gGCSqGSIb3DQEHAaCCA3kEggN1MIIDcTCCAmcGCSqGSIb3DQEH\
     BqCCAlgwggJUAgEAMIICTQYJKoZIhvcNAQcBMBwGCiqGSIb3DQEMAQMwDgQIKjGU\
@@ -263,8 +244,6 @@ extension ManualTokenEntryViewTests {
         let dicts = try #require(items as? [[String: Any]])
         let first = try #require(dicts.first)
         let identity = try #require(first[kSecImportItemIdentity as String])
-        // Swift 6.4 cannot conditionally cast CoreFoundation identities, so check
-        // the CF type first to report an invalid fixture as a test failure.
         try #require(
             CFGetTypeID(identity as CFTypeRef) == SecIdentityGetTypeID(),
             "Expected a SecIdentity from the PKCS#12 fixture"
@@ -272,10 +251,6 @@ extension ManualTokenEntryViewTests {
         return unsafeDowncast(identity as AnyObject, to: SecIdentity.self)
     }
 
-    /// Starts a loopback TLS listener serving the fixture identity and waits
-    /// until it is ready. Nonisolated for the same reason as the probe itself:
-    /// the handlers formed here run on the listener queue and must not inherit
-    /// MainActor isolation.
     nonisolated private static func startTLSListener() async throws -> NWListener {
         let identity = try fixtureIdentity()
         let tlsOptions = NWProtocolTLS.Options()
@@ -283,9 +258,6 @@ extension ManualTokenEntryViewTests {
         sec_protocol_options_set_local_identity(tlsOptions.securityProtocolOptions, secIdentity)
         let listener = try NWListener.loopback(using: NWParameters(tls: tlsOptions))
         let queue = DispatchQueue(label: "ManualTokenEntryViewTests.tls-listener")
-        // Retain accepted connections for the listener's lifetime: an
-        // unreferenced NWConnection can deallocate and cancel the handshake
-        // before the probe captures the certificate.
         let accepted = OSAllocatedUnfairLock(initialState: [NWConnection]())
         listener.newConnectionHandler = { connection in
             accepted.withLock { $0.append(connection) }
@@ -313,8 +285,6 @@ extension ManualTokenEntryViewTests {
         return listener
     }
 
-    /// Cancels `listener` and returns a flag that flips once it reaches a
-    /// terminal state, i.e. once its port is closed and connects are refused.
     nonisolated private static func cancel(_ listener: NWListener) -> OSAllocatedUnfairLock<Bool> {
         let released = OSAllocatedUnfairLock(initialState: false)
         listener.stateUpdateHandler = { state in
@@ -327,10 +297,6 @@ extension ManualTokenEntryViewTests {
         return released
     }
 
-    /// Full probe against a live local TLS handshake. Before probe was marked
-    /// nonisolated this crashed instead of failing: the verify block inherited
-    /// MainActor isolation and trapped when boringssl invoked it on the
-    /// probe's queue.
     @Test func probeCapturesFingerprintViaLiveTLSHandshake() async throws {
         let listener = try await Self.startTLSListener()
         defer { listener.cancel() }
@@ -339,8 +305,6 @@ extension ManualTokenEntryViewTests {
         #expect(result == .fingerprint(Self.fixtureIdentityFingerprint))
     }
 
-    /// Starts a plain-TCP loopback listener and waits until it is ready. Each
-    /// accepted connection is handed to `onAccept` on the listener queue.
     nonisolated private static func startTCPListener(
         onAccept: @escaping @Sendable (NWConnection) -> Void
     ) async throws -> NWListener {
@@ -374,8 +338,6 @@ extension ManualTokenEntryViewTests {
         return listener
     }
 
-    /// Nothing listening on the port: the TCP connect is refused, which must
-    /// surface as unreachable (with the POSIX cause) — not as "no certificate".
     @Test func probeReportsUnreachableWhenConnectionIsRefused() async throws {
         let listener = try await Self.startTCPListener { _ in }
         let port = try #require(listener.port?.rawValue)
@@ -391,9 +353,6 @@ extension ManualTokenEntryViewTests {
         #expect(cause.code == POSIXErrorCode.ECONNREFUSED.rawValue)
     }
 
-    /// A listener that accepts TCP but never answers the ClientHello: neither
-    /// a handshake nor an error settles the connection, so the probe must
-    /// report a timeout — not "no certificate".
     @Test func probeReportsTimeoutWhenServerNeverAnswersHandshake() async throws {
         let listener = try await Self.startTCPListener { _ in }
         defer { listener.cancel() }
@@ -407,9 +366,6 @@ extension ManualTokenEntryViewTests {
         #expect(result == .timeout)
     }
 
-    /// A plain-TCP listener answering with non-TLS bytes (an HTTP server on
-    /// the wrong port): TCP connects, the handshake fails, and the probe must
-    /// report a TLS failure with the cause — not "no certificate".
     @Test func probeReportsTLSFailureWhenServerSpeaksPlainText() async throws {
         let listener = try await Self.startTCPListener { connection in
             connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { _, _, _, _ in
@@ -430,8 +386,6 @@ extension ManualTokenEntryViewTests {
         #expect(cause.domain == .tls)
     }
 
-    /// Cancelling the probing task (the user hit Cancel) reports `.cancelled`
-    /// rather than a misleading timeout or certificate error.
     @Test func probeReportsCancellationWhenTaskIsCancelled() async throws {
         let accepted = OSAllocatedUnfairLock(initialState: false)
         let listener = try await Self.startTCPListener { _ in accepted.withLock { $0 = true } }
@@ -441,8 +395,6 @@ extension ManualTokenEntryViewTests {
         let task = Task {
             await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
         }
-        // Cancel mid-handshake: TCP is connected and the ClientHello is
-        // unanswered, so only cancellation can settle the probe.
         try await waitUntil("probe TCP connection to be accepted") { accepted.withLock { $0 } }
         task.cancel()
         #expect(await task.value == .cancelled)

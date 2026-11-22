@@ -175,7 +175,7 @@ struct TurnFailureSummaryTests {
         let summary = TurnFailureSummary(reason: #"{"codexErrorInfo":"usageLimitExceeded"}"#)
 
         #expect(summary.category == .usageLimit)
-        #expect(summary.message == "The provider's usage limit was reached.")
+        #expect(summary.message == "The provider’s usage limit was reached.")
     }
 
     @Test func connectionResetIsNotARetryHint() {

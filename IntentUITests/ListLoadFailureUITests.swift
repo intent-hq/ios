@@ -1,6 +1,5 @@
 import XCTest
 
-/// ios#462: a failed first read shows an error with Retry, and Retry loads the list.
 nonisolated final class ListLoadFailureUITests: XCTestCase {
     private enum Fixture {
         static let timeout: TimeInterval = 30

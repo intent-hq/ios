@@ -2,7 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-// These are literal wire vectors from protocol §1.4.
 struct BrowserTunnelFrameTests {
     @Test func encodesNetworkByteOrder() throws {
         let frame = BrowserTunnelFrame(opcode: .open, streamID: 0x0102_0304, payload: BrowserTunnelFrame.bigEndian(UInt16(8080)))

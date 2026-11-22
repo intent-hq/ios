@@ -2,10 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// `agent.list` against a bounded daemon (protocol "Paged agent lists and
-/// queues"): rows ascend by `(createdAt, id)`, so the newest agents are on the
-/// last page. Every caller reads every page of its variant, and a walk that
-/// fails or cannot finish never publishes a partial list as whole.
 @MainActor
 struct AgentListPagingTests {
     private struct PageError: Error {}
@@ -39,7 +35,6 @@ struct AgentListPagingTests {
         let replies = [
             Self.page(Self.rows(1...2), next: "t1"),
             Self.page(Self.rows(3...3), next: "t2"),
-            // An empty last page still ends the walk cleanly.
             Self.page([], next: nil)
         ]
         let reply = try await PagedReads.requestWholeReply(params: ["workspaceId": "ws-1"], field: "agents") { params in
@@ -184,7 +179,6 @@ struct AgentListPagingTests {
 
         fake.responseMap["agent.list"] = nil
         fake.responseQueueMap["agent.list"] = [Self.page(Self.rows(1...1), next: "t1")]
-        // The second page has no configured reply, so it fails.
         await store._fetchAgents(workspaceId: "ws-1")
 
         #expect(store.agents.map(\.id).sorted() == ["agent-1", "agent-2", "agent-3"])

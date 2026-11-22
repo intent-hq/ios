@@ -215,8 +215,6 @@ extension BackendSessionRegistryTests {
         window.updateNetworkObservation(for: .active)
         #expect(window.sceneTitle == "Studio")
         keychain.readFailures = [:]
-        // Simulate a registry refresh while the app is suspended: no in-process
-        // publisher event is available, so foreground must read the new name.
         var changed = stored
         changed.displayName = "Renamed while suspended"
         let data = try JSONEncoder().encode([changed])

@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Parent and end-marker callback ordering, including callbacks that arrive
-/// after teardown while the transcript remains mounted but inactive.
 extension TranscriptRecoveryLifecycleTests {
     @Test(arguments: [false, true])
     func inactiveMarkerCallbacksOnlyUpdateRealization(scrolledAway: Bool) {
@@ -190,7 +188,6 @@ extension TranscriptRecoveryLifecycleTests {
         LifecycleHarness(state: State(), userIsScrolledAway: false, check: checkInvariants)
     }
 
-    /// Continuations and all terminal outcomes from cancelled tasks.
     func lateLifecycleEvents(follow: FollowToken, recovery: RecoveryToken) -> [Event] {
         [
             .followDue(follow, execute: false), .followDue(follow, execute: true),

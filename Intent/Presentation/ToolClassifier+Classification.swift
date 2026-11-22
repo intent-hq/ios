@@ -58,8 +58,6 @@ private extension ToolClassifier {
             || firstCapture(selector, in: context.acpTitle ?? "", group: 0) != nil
     }
 
-    // Match desktop's cleanToolName for deferred-load recognition only. Other
-    // categories retain their existing normalization and human-title handling.
     static func deferredToolName(_ name: String) -> String {
         let urlTool = name.range(of: #"(?<=//local/mcp/).+$"#, options: .regularExpression)
         var clean = urlTool.map { String(name[$0]) } ?? name

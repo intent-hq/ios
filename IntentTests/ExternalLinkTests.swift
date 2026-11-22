@@ -2,13 +2,7 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Backend-supplied strings opened via `openURL` (context-mention chips,
-/// PR-monitor chips) must go through the shared `ExternalLink` http/https
-/// allowlist rather than a bare `URL(string:)` (ios#262). The call-site scan
-/// reads the copies packaged into the test bundle (see TestBundleInputs),
-/// never the checkout via `#filePath` (ios#320, ios#373).
 struct ExternalLinkTests {
-    /// Every view that hands a daemon-supplied string to `openURL`.
     private static let externalLinkCallSites = [
         "Intent/Views/Conversation/Content/ContextMentionChipView.swift",
         "Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift",

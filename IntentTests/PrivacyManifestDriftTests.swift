@@ -1,34 +1,14 @@
 import Foundation
 import Testing
 
-/// Keeps Intent/PrivacyInfo.xcprivacy in step with the required-reason APIs
-/// the production sources actually call (ios#381). Reading the system boot
-/// time — `ProcessInfo.systemUptime` or `mach_absolute_time()` — obliges the
-/// manifest to declare `NSPrivacyAccessedAPICategorySystemBootTime` with an
-/// approved reason; the transcript scroll timing measures elapsed time
-/// between in-app events, which is reason `35F9.1`. A declaration with no
-/// remaining caller is stale and fails too. The scan reads the copy of
-/// Intent/ packaged into the test bundle (see TestSourceInputs), not the
-/// checkout; IntentTests/ is not scanned because test code does not ship.
-/// Comments and string literals are blanked before matching so a mention of
-/// an API in prose cannot stand in for a call; a literal that interpolates an
-/// expression is kept whole, because the expression is code.
 struct PrivacyManifestDriftTests {
     private static let manifestPath = "Intent/PrivacyInfo.xcprivacy"
     private static let systemBootTimeCategory = "NSPrivacyAccessedAPICategorySystemBootTime"
     private static let elapsedTimeReasons = ["35F9.1"]
     private static let systemBootTimeAPI = #"\b(systemUptime|mach_absolute_time)\b"#
-    /// Multi-line string literal, single-line string literal, block comment,
-    /// line comment — leftmost match wins, so `//` inside a string stays a
-    /// string and a quote inside a comment stays a comment.
     private static let commentOrStringLiteral = #""""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|/\*[\s\S]*?\*/|//[^\n]*"#
-    /// `\(` in an ordinary literal, `\#(` / `\##(` … in a raw one.
     private static let interpolationStart = ##"\\#*\("##
 
-    /// `source` with every comment and string literal replaced by a space,
-    /// leaving only the tokens the compiler treats as code. A string literal
-    /// containing an interpolation is retained unchanged so a call made
-    /// inside it still counts.
     private func codeOnly(_ source: String) throws -> String {
         let regex = try NSRegularExpression(pattern: Self.commentOrStringLiteral)
         var code = ""
@@ -49,8 +29,6 @@ struct PrivacyManifestDriftTests {
         return code
     }
 
-    /// `NSPrivacyAccessedAPIType` → `NSPrivacyAccessedAPITypeReasons` for
-    /// every entry of the manifest's `NSPrivacyAccessedAPITypes` array.
     private func accessedAPIReasons(in manifestURL: URL) throws -> [String: [String]] {
         let data = try Data(contentsOf: manifestURL)
         let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
@@ -74,8 +52,6 @@ struct PrivacyManifestDriftTests {
         return reasons
     }
 
-    /// Paths relative to `repoRoot` of .swift files under its Intent/ whose
-    /// code (comments and string literals excluded) matches the regex `pattern`.
     private func productionFilesContaining(
         _ pattern: String, under repoRoot: URL = TestSourceInputs.root
     ) throws -> Set<String> {
@@ -132,12 +108,6 @@ struct PrivacyManifestDriftTests {
         }
     }
 
-    /// Negative case: the scan reports every production Swift caller of either
-    /// system-boot-time API and nothing else (no test code, no non-Swift
-    /// files, no other clocks, no mention in a comment or string literal), and
-    /// the manifest reader returns each declared
-    /// category's reasons — so a match above is evidence of the tree's
-    /// contents rather than of an empty scan or an unread manifest.
     @Test func scanAndManifestReaderReportFixtureContents() throws {
         let fixture = FileManager.default.temporaryDirectory
             .appendingPathComponent("PrivacyManifestDrift-\(UUID().uuidString)")
@@ -166,7 +136,6 @@ struct PrivacyManifestDriftTests {
         )
     }
 
-    /// Path → contents of the fixture tree the negative case writes and scans.
     private static let fixtureFiles = [
         "Intent/Nested/Uptime.swift": "let now = ProcessInfo.processInfo.systemUptime\n",
         "Intent/Mach.swift": "let ticks = mach_absolute_time()\n",

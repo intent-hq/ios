@@ -1,17 +1,3 @@
-//
-//  SnapshotHelper.swift
-//  Example
-//
-//  Created by Felix Krause on 10/8/15.
-//
-
-// -----------------------------------------------------
-// IMPORTANT: When modifying this file, make sure to
-//            increment the version number at the very
-//            bottom of the file to notify users about
-//            the new SnapshotHelper.swift
-// -----------------------------------------------------
-
 import Foundation
 import XCTest
 
@@ -30,9 +16,6 @@ func setupSnapshot(_ app: XCUIApplication, waitForAnimations: Bool = true) {
     Snapshot.setupSnapshot(app, waitForAnimations: waitForAnimations)
 }
 
-/// - Parameters:
-///   - name: The name of the snapshot
-///   - timeout: Amount of seconds to wait until the network loading indicator disappears. Pass `0` if you don't want to wait.
 @MainActor
 func snapshot(_ name: String, timeWaitingForIdle timeout: TimeInterval = 20) {
     Snapshot.snapshot(name, timeWaitingForIdle: timeout)
@@ -149,10 +132,10 @@ open class Snapshot: NSObject {
             waitForLoadingIndicatorToDisappear(within: timeout)
         }
 
-        NSLog("snapshot: \(name)") // more information about this, check out https://docs.fastlane.tools/actions/snapshot/#how-does-it-work
+        NSLog("snapshot: \(name)")
 
         if Self.waitForAnimations {
-            sleep(1) // Waiting for the animation to be finished (kind of)
+            sleep(1)
         }
 
         #if os(OSX)
@@ -179,7 +162,6 @@ open class Snapshot: NSObject {
             guard var simulator = ProcessInfo().environment["SIMULATOR_DEVICE_NAME"], let screenshotsDir = screenshotsDirectory else { return }
 
             do {
-                // The simulator name contains "Clone X of " inside the screenshot file when running parallelized UI Tests on concurrent devices
                 let regex = try NSRegularExpression(pattern: "Clone [0-9]+ of ")
                 let range = NSRange(location: 0, length: simulator.count)
                 simulator = regex.stringByReplacingMatches(in: simulator, range: range, withTemplate: "")
@@ -231,8 +213,6 @@ open class Snapshot: NSObject {
 
     class func getCacheDirectory() throws -> URL {
         let cachePath = "Library/Caches/tools.fastlane"
-        // on OSX config is stored in /Users/<username>/Library
-        // and on iOS/tvOS/WatchOS it's in simulator's home dir
         #if os(OSX)
             let homeDir = URL(fileURLWithPath: NSHomeDirectory())
             return homeDir.appendingPathComponent(cachePath)
@@ -311,6 +291,4 @@ private extension CGFloat {
     }
 }
 
-// Please don't remove the lines below
-// They are used to detect outdated configuration files
 // SnapshotHelperVersion [1.30]

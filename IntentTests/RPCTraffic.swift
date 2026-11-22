@@ -1,9 +1,5 @@
 import Foundation
 
-/// Compact UTF-8 JSON at the injectable connection boundary, not a socket capture.
-/// Envelopes retain every payload field; only the transport-assigned RPC id is
-/// normalized to 0. Key sorting removes ordering variance, and no WebSocket/TLS
-/// framing is counted. Identifier strings in params/results are NOT stripped.
 enum RPCFixtureJSON {
     static func encode(_ value: Any) throws -> Data {
         try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
@@ -25,7 +21,6 @@ enum RPCFixtureJSON {
 }
 
 struct RPCMilestone {
-    /// One monotonic order for starts, completions and inbound notifications.
     let order: Int
     let elapsed: Duration
     let connectionGeneration: Int
@@ -38,8 +33,6 @@ struct RecordedRPC {
     let requestJSON: Data
     var completed: RPCMilestone?
     var responseJSON: Data?
-    /// Local failures/cancellation have no received JSON frame. Never invent
-    /// response bytes from an NSError's localized description.
     var failure: String?
 }
 

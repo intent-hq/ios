@@ -50,7 +50,7 @@ struct AgentModelFields: View {
             Text(providerGuidance).interFont(Constants.Typography.bodyS)
             Button("Retry", action: onRetryProviders).buttonStyle(IntentButtonStyle(variant: .secondary))
         } else if isLoadingProviders, providers.isEmpty {
-            ProgressView { Text("Loading providers...").interFont(Constants.Typography.bodyS) }
+            ProgressView { Text("Loading providers…").interFont(Constants.Typography.bodyS) }
         } else if providers.noneSelectable {
             Text("No providers are signed in").interFont(Constants.Typography.bodyXSEmphasized)
             Text("Set up a provider in the Intent desktop app, then come back and try again.")
@@ -76,7 +76,7 @@ struct AgentModelFields: View {
         .disabled((reasoningLevels.isEmpty && selectedReasoningEffort == nil) || isLoadingProviders || isLoadingModels)
         .accessibilityLabel("Reasoning")
         .accessibilityValue(selectedReasoningEffort ?? String(localized: "Auto"))
-        .accessibilityHint("Auto uses the host's defaults. Other options override reasoning for the selected model.")
+        .accessibilityHint("Auto uses the host’s defaults. Other options override reasoning for the selected model.")
         .accessibilityIdentifier("creation.reasoningPicker")
     }
 }

@@ -194,8 +194,6 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         let history = app.buttons["assistant.conversations"]
         XCTAssertTrue(history.waitForExistence(timeout: Fixture.timeout))
         history.tap()
-        // Native submenus on iOS 27 omit SwiftUI identifiers. Match the app's
-        // localized toolbar label inside the menu, never the toolbar itself.
         let menuAction = UIDevice.current.userInterfaceIdiom == .phone
             ? app.buttons["assistant.history.newConversation"]
             : app.collectionViews.buttons[newConversationLabel]

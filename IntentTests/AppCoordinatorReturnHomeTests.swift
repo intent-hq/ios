@@ -4,8 +4,6 @@ import Synchronization
 import Testing
 
 extension AppCoordinatorTests {
-    // Guard the legacy view's actual button wiring, not just the coordinator
-    // behavior below: relabeling the old destructive action must still fail.
     @Test func legacyDisconnectedExitUsesNonDestructiveHomeAction() throws {
         let source = try String(
             contentsOf: TestSourceInputs.url(for: "Intent/Views/Connection/DisconnectedView.swift"),
@@ -14,7 +12,7 @@ extension AppCoordinatorTests {
         #expect(source.contains("Button(action: coordinator.onReturnToSavedMachines)"))
         #expect(source.contains("Text(\"Back to Home\")"))
         #expect(source.contains(".accessibilityIdentifier(\"disconnected.home\")"))
-        #expect(source.contains("Return to your saved machines without forgetting this connection."))
+        #expect(source.contains("Return to your saved machines without removing this connection."))
         #expect(!source.contains("onLogOff"))
         #expect(!source.contains(".disconnect("))
         #expect(!source.contains("Log Off"))
@@ -76,7 +74,6 @@ extension AppCoordinatorTests {
         let abandonedAttempt = coordinator.connectionAttemptId
         fake.simulateConnect()
         fake.certMismatchDetected = true
-        // Both publishers have queued deliveries on the main queue.
         coordinator.onReturnToSavedMachines()
         await Self.drainReturnHomeCallbacks()
         fake.simulateConnect()
@@ -112,7 +109,7 @@ extension AppCoordinatorTests {
         await Self.drainReturnHomeCallbacks()
         store.publishFetchedWorkspaces([])
         coordinator.onConnectionSuccess()
-        store.setLastUpdated(nil) // Home must retire a pending fresh-data recovery.
+        store.setLastUpdated(nil)
         fake.simulateDisconnect()
         await Self.drainReturnHomeCallbacks()
         #expect(coordinator.isDisconnected)

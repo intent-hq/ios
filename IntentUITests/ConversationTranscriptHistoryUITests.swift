@@ -108,7 +108,7 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         waitUntilSettled(on: opened.lastMessage, named: "last message", in: opened, context: "retry entry", allowPreservedEntry: true)
         let retry = app.buttons["transcript.historyRetry"]
         scrollUp(in: opened) { retry.exists && retry.isHittable }
-        XCTAssertEqual(retry.label, "Couldn't load earlier messages — Retry")
+        XCTAssertEqual(retry.label, "Couldn’t load earlier messages — Retry")
         XCTAssertTrue(followReport(in: opened).contains("historyCount=10"))
         XCTAssertFalse(app.staticTexts["transcript.historyBeginning"].exists)
         try Data().write(to: retryGate)
@@ -127,8 +127,6 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
 
     @MainActor
     private func assertRetainedHistoryAndFreshEntry(in app: XCUIApplication, opened: OpenConversation) {
-        // This existing cover uses real navigation while keeping the view model
-        // alive. The generic leave helper may restart the process instead.
         opened.goToEnd.tap()
         assertRestsAtBottom(lastRow: opened.lastMessage, named: "last message", endRow: .lastSuggestedPrompt(in: app), in: opened, context: "loaded history Go to End")
         let cover = app.buttons["demo.conversation.cover"]
@@ -143,8 +141,6 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         assertRestsAtBottom(lastRow: opened.lastMessage, named: "last message", endRow: .lastSuggestedPrompt(in: app), in: opened, context: "retained history return", allowPreservedEntry: true)
         XCTAssertTrue(followReport(in: opened).contains("historyCount=30"), "A retained store must keep loaded history")
 
-        // A fresh entry may recreate the weakly pooled store; regardless of
-        // retention it must land at the bottom, without restarting the app.
         let conversationBack = app.buttons["conversation.back"]
         if conversationBack.exists { conversationBack.tap() } else { app.navigationBars.buttons.element(boundBy: 0).tap() }
         XCTAssertTrue(app.buttons[Fixture.overviewOnlyButton].waitForExistence(timeout: Fixture.settleTimeout))
@@ -193,8 +189,6 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
                 let firstVisible = try XCTUnwrap(visibleNumbers.min(), "No history row available to choose scroll direction")
                 towardOlder = number < firstVisible
             }
-            // Full swipes can pass the target between checks. Short, slow drags
-            // stop without a fling and reverse when the target is below us.
             let startY = towardOlder ? 0.4 : 0.6
             let endY = towardOlder ? 0.6 : 0.4
             let start = opened.transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))

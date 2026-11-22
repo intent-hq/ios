@@ -26,7 +26,7 @@ enum ChatImageSaveOutcome: Equatable {
     var failureMessage: String? {
         switch self {
         case .denied: "Allow Intent to add photos in Settings to save this image."
-        case .failed: "Couldn't save this image. Try again."
+        case .failed: "Couldn’t save this image. Try again."
         case .saved: nil
         }
     }
@@ -92,7 +92,7 @@ private struct ImageSaveAlertModifier: ViewModifier {
         content
             .environment(model)
             .alert(
-                "Couldn't Save Image",
+                "Couldn’t Save Image",
                 isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } }),
                 presenting: model.failure
             ) { failure in

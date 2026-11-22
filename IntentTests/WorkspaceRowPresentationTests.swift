@@ -5,10 +5,6 @@ import UIKit
 
 @MainActor
 struct WorkspaceRowPresentationTests {
-    // Gated, not skipped silently: on the simulator the wrapper guarantees the
-    // accessibility tree, so the condition is always true there and a missing
-    // badge is a real failure. Only a physical-device run with accessibility off
-    // is excluded, by probing the host rather than guessing.
     @Test(
         .enabled(
             Comment(
@@ -207,7 +203,6 @@ struct WorkspaceRowPresentationTests {
 
 extension WorkspaceRowPresentationTests {
     private func expectedStatusColor(_ status: WorkspaceDisplayStatus) throws -> Color {
-        // Figma Status Colors (3448:29525): independent of the assets under test.
         // swiftlint:disable no_magic_numbers
         let figmaRGB: [WorkspaceDisplayStatus: RGBA] = [
             .failed: RGBA(red: 232, green: 127, blue: 57, alpha: 1),
@@ -258,7 +253,6 @@ extension WorkspaceRowPresentationTests {
             .environment(\.colorScheme, scheme))
         renderer.scale = StatusRaster.scale
         let image = try #require(renderer.cgImage)
-        // 16 pt icon + 4 pt padding on each side, rendered at 3×.
         try #require(image.width == side && image.height == side)
         var pixels = [UInt8](repeating: 0, count: side * side * StatusRaster.channels)
         let colorSpace = try #require(CGColorSpace(name: CGColorSpace.sRGB))
@@ -285,8 +279,6 @@ extension WorkspaceRowPresentationTests {
             expected.red * expected.alpha, expected.green * expected.alpha,
             expected.blue * expected.alpha, expected.alpha
         ].map { Double($0) * StatusRaster.byteMaximum }
-        // A 48 px circle has radius 24; a 2 pt border leaves an 18 px inner radius.
-        // Leave a one-pixel tolerance at curved edges for antialiasing.
         #expect((0..<side * side).allSatisfy { index in
             let radius = hypot(
                 Double(index % side) + 0.5 - StatusRaster.center,
@@ -340,11 +332,6 @@ extension WorkspaceRowPresentationTests {
         }
     }
 
-    // With a hardware keyboard attached, iPadOS draws the focused sidebar row's
-    // selection as an accent-coloured halo once the row background is
-    // customised (ios#339), so the sidebar List must keep the default focus
-    // effect disabled. Scans the packaged copy of the source (see
-    // TestSourceInputs), never the checkout.
     @Test func sidebarListDisablesKeyboardFocusEffect() throws {
         let source = try String(
             contentsOf: TestSourceInputs.url(for: "Intent/Views/Workspaces/WorkspaceListSidebar.swift"),
@@ -357,11 +344,6 @@ extension WorkspaceRowPresentationTests {
         #expect(listModifiers.contains(".focusEffectDisabled()"))
     }
 
-    // The custom listRowBackground from ios#339 replaces the system row
-    // background that draws the visionOS gaze highlight, so the shared row
-    // helper must reapply the hover effect under a visionOS-only guard, shaped
-    // to the selection background's corner radius. Scans the packaged copy of
-    // the source (see TestSourceInputs), never the checkout.
     @Test func sidebarRowRestoresGazeHoverEffectOnVisionOS() throws {
         let source = try String(
             contentsOf: TestSourceInputs.url(for: "Intent/Views/Workspaces/WorkspaceListSidebar.swift"),
@@ -387,9 +369,6 @@ extension WorkspaceRowPresentationTests {
         #expect(!outsideGuard.contains(".hoverEffect("))
     }
 
-    // Regression: the gaze highlight sat inside the 8 pt row insets while the
-    // selection filled the whole cell, so the status dot looked like it bled
-    // out of the hover. visionOS moves the insets inside the hover shape.
     @Test func sidebarRowHoverCoversTheSelectionCellOnVisionOS() throws {
         let source = try String(
             contentsOf: TestSourceInputs.url(for: "Intent/Views/Workspaces/WorkspaceListSidebar.swift"),

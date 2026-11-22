@@ -4,8 +4,6 @@ import Foundation
 import Testing
 
 extension ConversationStoreIntegrationTests {
-    /// `deliverSubscriptionPush` invokes the registered handler synchronously
-    /// on the main actor, so the push is applied when this returns.
     private func deliver(
         _ push: SubscriptionPush,
         through fake: FakeConnectionManager
@@ -61,7 +59,6 @@ extension ConversationStoreIntegrationTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        // Seed a transcript with a slim-truncated tool_result block.
         fake.stubChatSnapshot(messages: [
             [
                 "id": "msg-1",
@@ -83,7 +80,6 @@ extension ConversationStoreIntegrationTests {
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
         #expect(store.messages.first?.contentBlocks[1].outputTruncation == .truncated)
 
-        // Hydrate: the daemon returns the FULL block (no truncation flags).
         fake.responseMap["agent.getMessageBlock"] = [
             "block": [
                 "type": "tool_result",
@@ -122,8 +118,6 @@ extension ConversationStoreIntegrationTests {
         ])
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
 
-        // The first fetch stays suspended until the overlapping caller has
-        // returned. Completed caching cannot mask broken in-flight coalescing.
         fake.pendingMethods.insert("agent.getMessageBlock")
         var firstFinished = false
         let first = Task {
@@ -158,7 +152,6 @@ extension ConversationStoreIntegrationTests {
         #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
         #expect(store.hydratingBlockKeys.isEmpty)
 
-        // A later request must use completed cache, not fetch a different body.
         fake.pendingMethods.remove("agent.getMessageBlock")
         fake.responseMap["agent.getMessageBlock"] = hydrationResponse(output: "unexpected refetch")
         await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
@@ -200,13 +193,10 @@ extension ConversationStoreIntegrationTests {
         await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
         #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
 
-        // A chat.subscribe (re)snapshot serving the truncated preview again
-        // re-seeds the transcript — the hydrated full block must survive it.
         await store.subscribeLiveChat(agentId: "agent-1")
         #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
         #expect(store.messages.first?.contentBlocks.first?.outputTruncation == .unreported)
 
-        // Same for a later snapshot on the live channel.
         deliver(
             SubscriptionPush(
                 subscriptionId: "sub-1",
@@ -249,13 +239,10 @@ extension ConversationStoreIntegrationTests {
         )
         await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
 
-        // Failure leaves the preview in place and the in-flight set empty so
-        // the user can retry.
         #expect(store.hydratingBlockKeys.isEmpty)
         #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
         #expect(store.messages.first?.contentBlocks.first?.outputTruncation == .truncated)
 
-        // Retry after the error succeeds.
         fake.errorMap.removeValue(forKey: "agent.getMessageBlock")
         fake.responseMap["agent.getMessageBlock"] = [
             "block": [
@@ -318,7 +305,6 @@ extension ConversationStoreIntegrationTests {
             "outputTruncated": true
         ]
         let slimMessage = slimMessage(containing: slimBlock)
-        // Seed the live channel (seq 0) so the following delta applies in order.
         try await seedLiveConversation(store, through: fake, snapshot: [slimMessage])
 
         fake.responseMap["agent.getMessageBlock"] = [
@@ -332,9 +318,6 @@ extension ConversationStoreIntegrationTests {
         await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
         #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full")
 
-        // A live delta re-upserting the slim (truncated) version of the
-        // already-hydrated block must not revert it (third re-merge point:
-        // applyChatDelta).
         deliver(
             SubscriptionPush(
                 subscriptionId: "sub-1",
@@ -364,7 +347,6 @@ extension ConversationStoreIntegrationTests {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
-        // 31 slim-truncated blocks in one message (cap is 30, FE parity).
         let blocks: [[String: Any]] = (0..<31).map { i in
             [
                 "type": "tool_result",
@@ -396,14 +378,10 @@ extension ConversationStoreIntegrationTests {
             await store.hydrateBlock(messageId: "msg-1", blockId: "b-\(i)")
         }
 
-        // The oldest entry was evicted; the rest remain cached.
         #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-0"))
         #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
         #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-30"))
-        // Eviction lost nothing visible: the full block was already merged
-        // into the transcript.
         #expect((store.messages.first?.contentBlocks.first?.output?.value as? String) == "full-0")
-        // An evicted block can be re-hydrated (new wire fetch).
         #expect(fake.paramsForMethod("agent.getMessageBlock").count == 31)
         fake.responseMap["agent.getMessageBlock"] = [
             "block": [
@@ -441,8 +419,6 @@ extension ConversationStoreIntegrationTests {
         ])
         await store.subscribeLiveChat(agentId: "agent-1", workspaceId: "ws-1")
 
-        // Hold the fetch in flight, reset (agent switch) mid-flight, then let
-        // it resume: the stale block must NOT be inserted into the fresh cache.
         fake.pendingMethods.insert("agent.getMessageBlock")
         let hydration = Task { await store.hydrateBlock(messageId: "msg-1", blockId: "b-1") }
         try await fake.waitForPendingRequests("agent.getMessageBlock")

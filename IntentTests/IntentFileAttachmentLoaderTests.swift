@@ -5,8 +5,6 @@ import Testing
 @testable import Textual
 import UIKit
 
-/// Covers markdown-image URL routing (which URLs the loader claims) and the
-/// remote-image attachment path, including tap routing into the lightbox.
 @MainActor
 struct IntentFileAttachmentLoaderTests {
     // MARK: - URL routing

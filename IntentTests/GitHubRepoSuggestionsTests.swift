@@ -52,8 +52,6 @@ struct GitHubRepoSuggestionsTests {
     }
 
     @Test func mergedDropsDuplicatesWithinRecents() {
-        // The registry is keyed by path, so two local clones of the same
-        // repo yield two entries with the same owner/name.
         let recents = [repo("intent-hq", "intentd"), repo("Intent-HQ", "IntentD")]
         let sections = GitHubRepoSuggestions.merged(
             recentRepos: recents,
@@ -107,8 +105,6 @@ struct GitHubRepoSuggestionsTests {
     }
 
     @Test func searchSurfacesOwnRepoHiddenByPrefixFilter() {
-        // Dedupe runs against the *displayed* rows, so a repo the local
-        // prefix filter hides can still come back via server-side search.
         let own = [repo("intent-hq", "intentd")]
         let search = [repo("intent-hq", "intentd")]
         let sections = GitHubRepoSuggestions.merged(

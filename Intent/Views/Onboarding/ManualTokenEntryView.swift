@@ -89,7 +89,7 @@ struct ManualTokenEntryView: View {
                 Button("Cancel", role: .cancel) { isValidating = false }
                 Button("Trust & Connect") { connectWithFingerprint() }
             } message: {
-                Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
+                Text("The server’s TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
             }
     }
 
@@ -145,7 +145,7 @@ struct ManualTokenEntryView: View {
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
             #if os(visionOS)
-            Text("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
+            Text("Tailcat addresses aren’t supported on visionOS yet — pair over your local network.")
                 .interFont(Constants.Typography.subtextXXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             #endif
@@ -154,9 +154,9 @@ struct ManualTokenEntryView: View {
 
     private var hostLabel: LocalizedStringKey {
         #if os(visionOS)
-        "HOST"
+        "Host"
         #else
-        "HOST / TAILCAT ADDRESS"
+        "Host / Tailcat Address"
         #endif
     }
 
@@ -169,7 +169,7 @@ struct ManualTokenEntryView: View {
     }
 
     private var portField: some View {
-        ManualConnectionField(label: "PORT") {
+        ManualConnectionField(label: "Port") {
             TextField("5181", text: $port, prompt: placeholder("5181"))
                 .interFont(Constants.Typography.bodySEmphasized)
                 .accessibilityLabel("Port")
@@ -180,7 +180,7 @@ struct ManualTokenEntryView: View {
     }
 
     private var tokenField: some View {
-        ManualConnectionField(label: "API TOKEN", verticalPadding: Constants.ManualTokenEntry.pasteVerticalPadding) {
+        ManualConnectionField(label: "API Token", verticalPadding: Constants.ManualTokenEntry.pasteVerticalPadding) {
             HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
                 tokenEditor
                 if token.isEmpty {
@@ -286,11 +286,9 @@ struct ManualTokenEntryView: View {
         }
         let input = ManualConnectionInput.classify(host)
         #if os(visionOS)
-        // Belt-and-braces behind the field explanation above: a pasted tc
-        // address fails fast here instead of spinning through the dialer.
         if case .tailcat = input {
             PairingDiagnostics.phase(.input, .failed, failure: DiagnosticFailure(origin: .localOperation, classification: .unavailable))
-            showError("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
+            showError("Tailcat addresses aren’t supported on visionOS yet — pair over your local network.")
             return
         }
         #endif

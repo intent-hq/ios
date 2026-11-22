@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Paged subscription snapshots (PROTOCOL §6.9): the snapshot push carries
-/// `nextToken`, later pages merge under the deltas that arrived meanwhile.
 @MainActor
 struct DeltaReconcilerPagingTests {
     private struct PageRow: Equatable {
@@ -80,7 +78,6 @@ struct DeltaReconcilerPagingTests {
     }
 
     @Test func aRowServedAgainKeepsTheLaterCopy() {
-        // comment.list rounds can serve a thread twice; the later row is newer.
         let reconciler = Self.makeReconciler()
         reconciler.applySnapshot(seq: 0, rawItems: [Self.row("t-1", "old")])
         reconciler.fillFromPage([Self.row("t-2", "two"), Self.row("t-1", "new")])
@@ -95,7 +92,6 @@ struct DeltaReconcilerPagingTests {
         #expect(reconciler.epoch == start + 1)
         reconciler.applySnapshot(seq: 5, rawItems: [])
         #expect(reconciler.epoch == start + 2)
-        // A new snapshot forgets the old removal, so its own pages may add the row.
         reconciler.fillFromPage([Self.row("a", "A")])
         #expect(reconciler.values().map(\.id) == ["a"])
         reconciler.reset()

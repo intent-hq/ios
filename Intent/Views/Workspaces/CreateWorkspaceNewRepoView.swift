@@ -53,7 +53,7 @@ struct CreateWorkspaceNewRepoView: View {
                     .accessibilityIdentifier("creation.newRepositoryError")
             }
             if isChecking {
-                ProgressView("Checking folder...")
+                ProgressView("Checking folder…")
             }
         }
         .disabled(isChecking)

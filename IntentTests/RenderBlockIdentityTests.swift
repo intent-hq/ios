@@ -2,12 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Deterministic identities for parsed render blocks: `groupContentBlocks`
-/// derives synthetic-segment and group ids from their source block (block id
-/// + segment index; group: block id + per-block ordinal + name), so
-/// re-parsing identical input yields identical ids and streaming deltas do
-/// not change the identity — and thus tear down the view State — of
-/// already-rendered segments and groups.
 struct RenderBlockIdentityTests {
     private func textBlock(_ id: String, _ text: String) -> ContentBlock {
         ContentBlock(id: id, type: .text, text: text)
@@ -76,9 +70,6 @@ struct RenderBlockIdentityTests {
     }
 
     @Test func groupIdStableAcrossOpenAndClose() {
-        // The still-open group (streaming) and the later-closed group derive
-        // the same id from the opening tag, so the group view isn't torn down
-        // when the close tag arrives.
         let open = MessageView.groupContentBlocks(
             [textBlock("b1", "<group:Setup>\nworking")],
             isStreaming: true
@@ -100,15 +91,10 @@ struct RenderBlockIdentityTests {
         let first = ids(blocks, isStreaming: true)
         let second = ids(blocks, isStreaming: true)
         #expect(first == second)
-        // The first segment reuses the source block's id, so completing the
-        // tag later doesn't re-identify the already-rendered leading run.
         #expect(first == ["b1"])
     }
 
     @Test func groupTagAppendedAfterPlainTextKeepsPrefixIdentity() {
-        // A block with no group tags passes through under its raw id; when a
-        // tag then streams into the same block, the leading text run must
-        // keep that identity instead of flipping to a synthetic segment id.
         let before = ids([textBlock("b1", "intro text")], isStreaming: true)
         let after = ids([textBlock("b1", "intro text\n<group:Setup>\nworking")], isStreaming: true)
         #expect(before == ["b1"])
@@ -117,11 +103,6 @@ struct RenderBlockIdentityTests {
     }
 }
 
-/// `ContentBlockView` / `ResponseGroupView` gate their bodies with
-/// `.equatable()`: the manual `==` of `ContentBlockBody` and
-/// `ResponseGroupBody` compares only the value inputs and ignores the
-/// closures the message rebuilds on every evaluation, so a streaming delta
-/// on one row never invalidates its siblings.
 @MainActor
 struct BlockBodyEquatableTests {
     private func textBlock(_ id: String, _ text: String) -> ContentBlock {
@@ -136,7 +117,6 @@ struct BlockBodyEquatableTests {
         ContentBlock(id: id, type: .toolResult, toolUseId: callId, output: AnyCodable(output))
     }
 
-    /// Every call hands the body fresh closure instances, as the message does.
     private func blockBody(
         _ block: ContentBlock,
         toolResult: ContentBlock? = nil,
@@ -304,9 +284,6 @@ struct BlockBodyEquatableTests {
     // MARK: Tail-only streaming delta
 
     @Test func tailOnlyStreamingDeltaLeavesEarlierBodiesEqual() {
-        // Two parses of one streaming message where only the last text block
-        // grew: the group and the finished text row compare equal (their
-        // bodies are not re-rendered), only the tail row does not.
         let before = [
             textBlock("b1", "<group:Setup>\nreading\n</group>\nfirst"),
             textBlock("b2", "second")

@@ -47,8 +47,6 @@ extension ConversationTranscriptScrollPolicyTests {
         }
 
         func finishLayout() {
-            // Replay the observed delayed coarse alignment. A final SwiftUI
-            // command replaces it; a native offset write leaves it pending.
             let span = geometry.containerHeight - ConversationTranscriptViewportAnchor.restorationMarkerHeight
             offset = rowContentY - pendingAlignment * span
         }

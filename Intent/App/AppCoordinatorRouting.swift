@@ -372,7 +372,7 @@ extension AppCoordinator {
         resetWorkspaceStore()
         selectedWorkspaceId = nil
         routeToConnectionFailure(
-            error: String(localized: "Could not forget this connection. Please try again."),
+            error: String(localized: "Couldn’t remove this connection. Try again."),
             retryPolicy: .manualLogOff
         )
     }

@@ -5,7 +5,6 @@ import Testing
 extension ConversationStoreTests {
     // MARK: - Marked question recovery (aroundMessageId seek, Phase 2)
 
-    /// A question-bearing assistant row as the daemon serves it.
     private func questionRow(id: String) -> [String: Any] {
         [
             "id": id,
@@ -57,7 +56,6 @@ extension ConversationStoreTests {
         #expect(store.pendingQuestionRecovery?.status == .found)
         #expect(store.pendingQuestionRecovery?.message?.id == "q1")
 
-        // A later reconcile for the same marker never re-seeks.
         pushMarker(store, "q1")
         try await expectNever("re-seek for the same marker") { seekRequests(fake).count > 1 }
     }
@@ -92,15 +90,11 @@ extension ConversationStoreTests {
         fake.stubChatSnapshot()
         let store = ConversationStore(connectionManager: fake)
         await store.subscribeLiveChat(agentId: "a", workspaceId: "w")
-        // PROTOCOL §5.5: an unknown aroundMessageId is -32602 naming the id
-        // (no data.code == "not-found" — the agent itself exists).
         fake.errorMap["agent.getConversation"] = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [NSLocalizedDescriptionKey: "unknown message id: q1"]
         )
-        // Shorter than the observation window below, so a retry wrongly scheduled
-        // after the terminal error would fire inside it (default delay is 250 ms).
         store.markedQuestionRetryDelays = [.milliseconds(10), .milliseconds(10)]
 
         pushMarker(store, "q1")
@@ -228,9 +222,6 @@ extension ConversationStoreTests {
 
 extension ConversationStoreTests {
     @Test func liveChatSnapshotThroughRegisteredHandlerSettlesInFlightSeek() async throws {
-        // Production path: chat.subscribe registers the push handler with the
-        // connection manager, and the snapshot arrives through that handler
-        // (not through handleStreamEvent).
         let fake = FakeConnectionManager()
         fake.stubChatSnapshot(subscriptionId: "sub-chat")
         let store = ConversationStore(connectionManager: fake)
@@ -352,8 +343,6 @@ extension ConversationStoreTests {
     }
 
     @Test func sendMessageMirrorsMessageMetadataOntoOptimisticRow() async throws {
-        // The optimistic user row carries the answer tag so the wizard gate
-        // sees the set as answered before the daemon clears the marker.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false]
         let store = ConversationStore(connectionManager: fake)
@@ -388,11 +377,6 @@ extension ConversationStoreTests {
     }
 
     @Test func queuedSendSeedsLocalQueueWithTaggedEntry() async throws {
-        // When the daemon auto-queues the wizard's answer (turn-startup race),
-        // the optimistic tagged row is removed; the queued entry — carrying
-        // the same question_answers tag — must be visible locally from the
-        // send result, before any agent:queue:updated lands, so the wizard
-        // gate still sees the marked set as answered.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.sendMessage"] = [
             "success": true,
@@ -424,7 +408,6 @@ extension ConversationStoreTests {
         #expect(store.queuedMessages.map(\.id) == ["q-1"])
         #expect(store.queuedMessages.first?.answeredQuestionsMessageId == "msg-q1")
 
-        // An agent:queue:updated that raced ahead of the result is not duplicated.
         try await store.sendMessage(
             agentId: "a",
             content: "Q: x\nA: y",

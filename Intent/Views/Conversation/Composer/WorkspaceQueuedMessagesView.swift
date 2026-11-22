@@ -46,7 +46,7 @@ private struct WorkspaceQueuedMessageRow: View {
     var body: some View {
         HStack(spacing: Layout.textActionSpacing - Layout.controlInset) {
             if editingId == message.id {
-                TextField("Edit message", text: $editText)
+                TextField("Edit Message", text: $editText)
                     .textFieldStyle(.plain)
                     .interFont(Constants.Typography.bodyS)
                     .tracking(Design.Typography.bodyTracking)

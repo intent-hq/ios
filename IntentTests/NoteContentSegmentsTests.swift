@@ -63,8 +63,6 @@ struct NoteContentSegmentsTests {
     }
 
     @Test func starBulletsStayMarkdown() {
-        // The daemon's task.update parser (parse_dash_checkbox) accepts only
-        // `-` bullets, so a `* [ ]` line must not become an interactive row.
         let content = "* [ ] Star bullet\n* [x] Star done"
         #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
     }

@@ -79,7 +79,6 @@ struct ContextMentionTests {
     // MARK: - Malformed base64/JSON fallback
 
     @Test func malformedBase64FallsBackToPipeParsing() {
-        // Starts with eyJ but is not valid base64.
         let segments = ContextMention.segments(from: "@context[eyJ%%%not-base64]")
         #expect(segments == [
             .mention(ContextMention(
@@ -92,7 +91,7 @@ struct ContextMentionTests {
     }
 
     @Test func base64OfInvalidJSONFallsBackToPipeParsing() {
-        let token = base64(#"{"broken"#) // valid base64, starts with eyJ, invalid JSON
+        let token = base64(#"{"broken"#)
         guard case .mention(let mention) = ContextMention.segments(from: "@context[\(token)]")[0] else {
             Issue.record("expected mention"); return
         }

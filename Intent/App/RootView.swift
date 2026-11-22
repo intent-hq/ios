@@ -21,7 +21,6 @@ struct RootView: View {
     @State private var composerCoverage = ComposerCoverage()
     @State private var readOnlyPillClearance = ReadOnlyPillClearance()
     @State private var connectionSwitcherOpen = false
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var navigation = RootNavigationState() // swiftlint:disable:this private_swiftui_state
     @State private var duoSidebarWidth = Constants.Root.sidebarIdealWidth
 
@@ -85,6 +84,7 @@ struct RootView: View {
                 launchContent
             }
         }
+        .modifier(NativeBrowserPresenter())
         #if DEBUG
         .modifier(DemoIPadProducerEntry())
         .modifier(DemoToastOverlay())

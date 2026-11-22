@@ -2,13 +2,11 @@ import Foundation
 @testable import Intent
 import Testing
 
-// Extracted wire fixtures intentionally mirror the daemon payloads inline.
 // swiftlint:disable no_magic_numbers
 
 // MARK: - Registration generation (recovery and replies outliving their registration)
 
 extension ConversationStoreLiveStateTests {
-    /// Agent A's seq-0 snapshot row.
     private var agentARow: [String: Any] {
         [
             "id": "msg-a1", "role": "user",
@@ -17,8 +15,6 @@ extension ConversationStoreLiveStateTests {
         ]
     }
 
-    /// Acks agent A's registration without a snapshot; its timeout fires and
-    /// the retry parks releasing `sub-a` (`chat.unsubscribe` suspended).
     private func parkRetryOfAgentAInUnsubscribe() async throws -> (ConversationStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -33,8 +29,6 @@ extension ConversationStoreLiveStateTests {
         return (store, fake)
     }
 
-    /// A retry parked in the release of agent A's stale registration must
-    /// not revive A once the transcript was rebound to agent B meanwhile.
     @Test func retryParkedInUnsubscribeDoesNotReviveAgentAAfterRebind() async throws {
         let (store, fake) = try await parkRetryOfAgentAInUnsubscribe()
 
@@ -53,8 +47,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.isLoading == false)
     }
 
-    /// Same retry, but the store was `reset()` while it waited: nothing may
-    /// re-register or restore the old binding's loading state.
     @Test func retryParkedInUnsubscribeDoesNotReviveTheBindingAfterReset() async throws {
         let (store, fake) = try await parkRetryOfAgentAInUnsubscribe()
 
@@ -71,9 +63,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.messages.isEmpty)
     }
 
-    /// Agent A's acked registration is detached the moment agent B registers:
-    /// A's late snapshot reaches neither the handler nor the push gate, so it
-    /// cannot seed B's channel or settle B's in-flight initial load.
     @Test func lateSnapshotOfPreviousRegistrationDoesNotSeedThePendingOne() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -108,8 +97,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.isLoading == false)
     }
 
-    /// Parks one same-agent registration, then resolves a newer one for the
-    /// same agent first (with its snapshot). Returns the parked task.
     private func startSupersededSameAgentRegistration(
         _ store: ConversationStore,
         _ fake: FakeConnectionManager
@@ -128,8 +115,6 @@ extension ConversationStoreLiveStateTests {
         return first
     }
 
-    /// An older same-agent ack that lands after the newer registration took
-    /// the channel is an orphan: released, never registered.
     @Test func olderSameAgentAckAfterTheNewerDoesNotReplaceTheLiveChannel() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -146,8 +131,6 @@ extension ConversationStoreLiveStateTests {
         #expect(fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-1"])
     }
 
-    /// An older same-agent failure that lands after the newer registration
-    /// took the channel must neither clear it nor schedule a retry.
     @Test func olderSameAgentFailureAfterTheNewerDoesNotClearTheLiveChannel() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -173,8 +156,6 @@ extension ConversationStoreLiveStateTests {
         )
     }
 
-    /// Seeds agent A, then parks A's gap recovery in the release of `sub-a`
-    /// (`chat.unsubscribe` suspended).
     private func parkGapRecoveryOfAgentAInUnsubscribe() async throws -> (ConversationStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -189,9 +170,6 @@ extension ConversationStoreLiveStateTests {
         return (store, fake)
     }
 
-    /// Recovery is owned per registration: agent A's gap recovery, parked in
-    /// the release of `sub-a`, neither blocks agent B's own gap recovery nor
-    /// touches B once A's release finishes.
     @Test func gapOfTheNewBindingRecoversWhileTheOldBindingsRecoveryIsParked() async throws {
         let (store, fake) = try await parkGapRecoveryOfAgentAInUnsubscribe()
 
@@ -200,22 +178,18 @@ extension ConversationStoreLiveStateTests {
         expectAgentBTranscriptIntact(store)
         #expect(!store.liveTranscript.resnapshotInProgress, "A's recovery does not mark B's registration")
 
-        // B's gap must open B's own recovery: the release of sub-b parks
-        // behind A's still-suspended release.
         fake.deliverSubscriptionPush(gapDelta(subscriptionId: "sub-b", seq: 7))
         try await fake.waitForPendingRequests("chat.unsubscribe", count: 2)
         #expect(store.liveTranscript.resnapshotInProgress)
         #expect(fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-a", "sub-b"])
         expectAgentBTranscriptIntact(store)
 
-        // A's release completes first: its recovery is superseded and does nothing.
         fake.resolvePending("chat.unsubscribe", with: [String: Any]())
         try await expectNever("a registration opened by agent A's superseded recovery") {
             fake.paramsForMethod("chat.subscribe").count > 2
         }
         #expect(store.liveTranscript.resnapshotInProgress, "B's recovery still owns the channel")
 
-        // B's release completes: exactly one replacement registration for B follows.
         fake.stubChatSnapshot(subscriptionId: "sub-b2", messages: [agentBRow])
         fake.resolvePending("chat.unsubscribe", with: [String: Any]())
         try await waitUntil("agent B's replacement registration") { fake.hasSubscriptionHandler(id: "sub-b2") }
@@ -228,8 +202,6 @@ extension ConversationStoreLiveStateTests {
         }
     }
 
-    /// A recovery scheduled for agent A's registration that only runs after
-    /// agent B registered must not release, re-register or unseed B.
     @Test func recoveryScheduledBeforeSupersessionDoesNothingWhenItRuns() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -250,8 +222,6 @@ extension ConversationStoreLiveStateTests {
         #expect(fake.hasSubscriptionHandler(id: "sub-b"))
         #expect(store.liveTranscript.chatSubscriptionId == "sub-b")
 
-        // The rebind's release of A is parked in flight: B is untouched
-        // while it is pending and after it resolves.
         try await fake.waitForPendingRequests("chat.unsubscribe")
         #expect(
             fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String } == ["sub-a"],
@@ -273,8 +243,6 @@ extension ConversationStoreLiveStateTests {
 // MARK: - Releasing the acked registration on unbind (rebind, reset, deinit)
 
 extension ConversationStoreLiveStateTests {
-    /// Seeds agent A on `sub-a`, then suspends `chat.unsubscribe` so the
-    /// release the unbind sends can be observed and settled by the test.
     private func seedAgentAWithUnsubscribeParked() async -> (ConversationStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -290,14 +258,10 @@ extension ConversationStoreLiveStateTests {
         fake.paramsForMethod("chat.unsubscribe").compactMap { $0["subscriptionId"] as? String }
     }
 
-    /// What `ConnectionManager.request` throws on a dead connection, before
-    /// any frame is built.
     private var notConnected: NSError {
         NSError(domain: "WebSocket", code: -4, userInfo: [NSLocalizedDescriptionKey: "Not connected"])
     }
 
-    /// `reset()` releases the acked registration once, without waiting; the
-    /// release failing late leaves the binding opened meanwhile untouched.
     @Test func resetReleasesTheAckedRegistrationWithoutTouchingTheNextBinding() async throws {
         let (store, fake) = await seedAgentAWithUnsubscribeParked()
 
@@ -322,9 +286,6 @@ extension ConversationStoreLiveStateTests {
         expectAgentBTranscriptIntact(store)
     }
 
-    /// Rebinding A→B releases A's registration independently of B's own:
-    /// B's snapshot lands while A's release is still parked, and A's release
-    /// resolving late changes nothing.
     @Test func rebindReleasesThePreviousRegistrationIndependentlyOfTheNewOne() async throws {
         let (store, fake) = await seedAgentAWithUnsubscribeParked()
 
@@ -346,8 +307,6 @@ extension ConversationStoreLiveStateTests {
         expectAgentBTranscriptIntact(store)
     }
 
-    /// A registration still in flight has nothing to release on `reset()`;
-    /// its late ack is released once, by the orphaned-ack path.
     @Test func resetOfAPendingRegistrationReleasesOnlyItsLateAck() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -369,7 +328,6 @@ extension ConversationStoreLiveStateTests {
         #expect(store.liveTranscript.chatSubscriptionId == nil)
     }
 
-    /// A rejected registration leaves nothing to release on `reset()`.
     @Test func resetOfARejectedRegistrationSendsNoUnsubscribe() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -384,8 +342,6 @@ extension ConversationStoreLiveStateTests {
         }
     }
 
-    /// The reconnect registration replaces the outage's registration without
-    /// releasing it: the daemon dropped it with the connection.
     @Test func reconnectDoesNotReleaseTheOutagesRegistration() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -408,9 +364,6 @@ extension ConversationStoreLiveStateTests {
         try await expectNever("a release of the outage's registration") { fake.didCallMethod("chat.unsubscribe") }
     }
 
-    /// `reset()` during an outage: the release meets the dead connection's
-    /// "Not connected" (thrown before any frame is built, so nothing reaches
-    /// the wire) and is neither retried nor followed by a registration.
     @Test func resetWhileDisconnectedDoesNotRetryTheRelease() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -432,8 +385,6 @@ extension ConversationStoreLiveStateTests {
         #expect(!store.liveTranscript.chatLive)
     }
 
-    /// Disposal during an outage: the release fails on the dead connection
-    /// and nothing outlives the transcript to retry it.
     @Test func deinitWhileDisconnectedDoesNotRetryTheRelease() async throws {
         let fake = FakeConnectionManager()
         var store: ConversationStore? = ConversationStore(connectionManager: fake)
@@ -455,8 +406,6 @@ extension ConversationStoreLiveStateTests {
         #expect(fake.subscriptionHandlerCount == 0)
     }
 
-    /// Disposing the transcript releases its acked registration; the release
-    /// outlives the transcript without retaining it.
     @Test func deinitReleasesTheAckedRegistration() async throws {
         let fake = FakeConnectionManager()
         var store: ConversationStore? = ConversationStore(connectionManager: fake)

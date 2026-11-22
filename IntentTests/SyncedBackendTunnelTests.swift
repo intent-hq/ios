@@ -33,8 +33,6 @@ extension ConnectionManagerTests {
         record.tcAddress = BackendSyncFixtures.route
         let imported = try #require(SyncedBackendConnectionMerge.merge(records: [record], into: []).connections.first)
         #expect(imported.server.certFingerprint == record.fingerprint)
-        // The fake tunnel terminates at a plaintext loopback fixture. The
-        // import's pin is asserted above; production dials keep that pin.
         try await manager.connect(
             hosts: imported.server.hosts,
             port: imported.server.port,

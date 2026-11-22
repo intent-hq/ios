@@ -17,7 +17,7 @@ struct NoteListView: View {
             }
         } else if noteStore.loadPhase.isAwaitingFirstLoad, noteStore.notes.isEmpty {
             ProgressView {
-                Text("Loading notes...").interFont(Constants.Typography.bodyS)
+                Text("Loading notes…").interFont(Constants.Typography.bodyS)
             }
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .availableWhenReconnected(isMissing: true, isCompact: isEmbedded)

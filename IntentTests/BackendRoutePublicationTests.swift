@@ -8,7 +8,6 @@ struct BackendRoutePublicationTests {
     @Test func routeLearnedAfterInitialRefreshFailurePublishesAndRotates() async throws {
         let store = try BackendSyncTestStore()
         defer { store.cleanUp() }
-        // The first refresh learns no route. Pairing still publishes successfully.
         let live = FakeConnectionManager()
         let target = server(route: nil)
         try live.connect(hosts: target.hosts, port: target.port, token: "local-token", certFingerprint: target.certFingerprint, tcAddress: nil)

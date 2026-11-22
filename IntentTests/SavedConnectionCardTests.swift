@@ -39,8 +39,6 @@ struct SavedConnectionCardTests {
         for color in expected {
             #expect(pixelCount(color, in: colors) > 20, "Missing rendered Saved color: \(color), \(scheme)")
         }
-        // Figma full-frame Outline/15% Black: light #00000026, dark #FFFFFF26.
-        // The exact alpha/tint catches a warm divider that a tolerant pixel histogram could miss.
         var red: CGFloat = 0
         var green: CGFloat = 0
         var blue: CGFloat = 0
@@ -52,7 +50,6 @@ struct SavedConnectionCardTests {
 
     @Test(.serialized, arguments: [ColorScheme.light, .dark])
     func renderedManualEmptySheetUsesDesignPalette(scheme: ColorScheme) async throws {
-        // Actual sheet, labels, fields and disabled button; no pairing action or live credentials.
         _ = TestKeychainStorage.installed
         let suiteName = "ManualPaletteTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -64,7 +61,6 @@ struct SavedConnectionCardTests {
             .environment(\.colorScheme, scheme)
             .environment(\.dynamicTypeSize, .large)
             .frame(width: 402, height: 633)
-        // ImageRenderer cannot flatten native text fields or lay out this sheet's scroll content.
         let colors = try await SyntheticBadgeHost.render(view, width: 402, height: 633) { hostView, _ in
             let renderer = UIGraphicsImageRenderer(bounds: hostView.bounds)
             var drawn = false
@@ -74,7 +70,6 @@ struct SavedConnectionCardTests {
             try #require(drawn)
             return try pixelColors(#require(image.cgImage))
         }
-        // Independent full-frame references: light 3051:54152, dark 2989:19990.
         let expected = scheme == .light
             ? [
                 [240, 240, 235], [8, 8, 8], [140, 140, 137], [82, 82, 80],

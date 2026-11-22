@@ -22,7 +22,6 @@ extension ConversationTranscriptScrollPolicyTests {
         )
     }
 
-    /// A landing read that repeats the same geometry (at rest) by default.
     func landing(
         _ geometry: ViewportGeometry?,
         previous: ViewportGeometry?? = nil,
@@ -50,13 +49,10 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(geometry(offsetY: 300, topInset: 10, bottomInset: 20).verticalInsets == 30)
     }
 
-    /// The landing is verified from two identical reads: no scroll view, no
-    /// previous read, or geometry still moving all keep polling.
     @Test func followLandingSettlesUntilTwoReadsAgree() {
         #expect(landing(nil) == .continue(.settling))
         #expect(landing(geometry(offsetY: 300), previous: .some(nil)) == .continue(.settling))
         #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 250)) == .continue(.settling))
-        // Insets changing (keyboard) count as movement too.
         #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 300, bottomInset: 20))
             == .continue(.settling))
     }
@@ -66,26 +62,15 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(landing(geometry(offsetY: 299.5)) == .finish(.landed))
         #expect(landing(geometry(offsetY: 299)) == .finish(.landed))
         #expect(landing(geometry(offsetY: 298)) != .finish(.landed))
-        // Content shorter than the container rests at a negative distance.
         #expect(landing(geometry(offsetY: 0, contentHeight: 400)) == .finish(.landed))
-        // A bounce short of the past-end threshold is at the bottom.
         #expect(landing(geometry(offsetY: 340)) == .finish(.landed))
     }
 
-    /// Regression (#281): Go to End's scroll came to rest 379 points above
-    /// the bottom because rows realized during the animation grew the
-    /// content, and the timer-ended follow copied that into the flag.
     @Test func followLandingShortIsScrolledAgain() {
         #expect(landing(geometry(offsetY: 0)) == .continue(.scrollAgain))
         #expect(landing(geometry(offsetY: 249)) == .continue(.scrollAgain))
     }
 
-    /// Regression (#304, #305): the last rows realized by the entry scroll,
-    /// or the sent row and thinking indicator after a send, grew the content
-    /// by less than the at-bottom band. The follow rested inside the band —
-    /// "at bottom", Go to End hidden — with the rows under the last message
-    /// below the viewport; a rest short of the bottom by more than layout
-    /// rounding is scrolled again even inside the band.
     @Test func followLandingShortInsideTheAtBottomBandIsScrolledAgain() {
         #expect(landing(geometry(offsetY: 298)) == .continue(.scrollAgain))
         #expect(landing(geometry(offsetY: 270)) == .continue(.scrollAgain))
@@ -95,31 +80,23 @@ extension ConversationTranscriptScrollPolicyTests {
             < Constants.Conversation.Transcript.atBottomThreshold)
     }
 
-    /// Regression (#271): rows re-measured shorter after the entry scroll
-    /// left the offset past the end, over a blank band.
     @Test func followLandingPastEndIsClamped() {
         #expect(landing(geometry(offsetY: 351)) == .continue(.clampPastEnd))
         #expect(landing(geometry(offsetY: 600)) == .continue(.clampPastEnd))
     }
 
-    /// Corrections are bounded and their exhaustion leaves the pin alone:
-    /// no forced follow ever shows Go to End without a gesture.
     @Test func followLandingCorrectionsAreBoundedAndThenGiveUp() {
         #expect(landing(geometry(offsetY: 0), correctionsLeft: 1) == .continue(.scrollAgain))
         #expect(landing(geometry(offsetY: 0), correctionsLeft: 0) == .finish(.giveUp))
         #expect(landing(geometry(offsetY: 600), correctionsLeft: 0) == .finish(.giveUp))
         #expect(landing(geometry(offsetY: 300), correctionsLeft: 0) == .finish(.landed))
         #expect(Constants.Conversation.Transcript.followLandingRetries > 0)
-        // The timeout leaves room for the first scroll and every correction
-        // to animate and then settle over two reads (#305).
         let rounds = Double(Constants.Conversation.Transcript.followLandingRetries + 1)
         let roundMilliseconds = Constants.Conversation.Transcript.scrollAnimationDuration * 1000
             + Double(2 * Constants.Conversation.Transcript.followLandingPollMilliseconds)
         #expect(rounds * roundMilliseconds < Double(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds))
     }
 
-    /// The accessibility value the UI tests read under demo data names the
-    /// outcome and the corrections spent, and reads pending in flight.
     @Test func forcedFollowLandingSummaryNamesOutcomeAndCorrections() {
         #expect(ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(outcome: nil, corrections: 0)
             == "lastForcedFollow=pending")
@@ -143,9 +120,6 @@ extension ConversationTranscriptScrollPolicyTests {
             < Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
     }
 
-    /// A gesture that started and ended between two landing polls left only
-    /// the raised flag behind; the landing yields to it rather than scrolling
-    /// the user back, even from a viewport at rest short of the bottom.
     @Test func followLandingYieldsToAGestureThatAlreadyEndedAway() {
         #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true) == .finish(.yieldToUser))
         #expect(landing(geometry(offsetY: 300), userIsScrolledAway: true) == .finish(.yieldToUser))
@@ -154,8 +128,6 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(landing(geometry(offsetY: 0), userIsScrolledAway: false) == .continue(.scrollAgain))
     }
 
-    /// An unknown distance never releases a scrolled-away state: every
-    /// automatic path stays suppressed until the geometry proves otherwise.
     @Test func unknownDistanceDoesNotFlipScrolledAwayBackToPinned() {
         #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
             hasInitiallyScrolled: true,
@@ -170,9 +142,6 @@ extension ConversationTranscriptScrollPolicyTests {
         ))
     }
 
-    /// The extracted policies share live inset-aware geometry and production
-    /// defaults: the past-end band, landing tolerance, and automatic-follow
-    /// band must still agree at their exact boundaries (#271, #304, #338).
     @Test(arguments: [
         (CGFloat(-51), false, LandingStep.continue(.clampPastEnd), RecoveryStep.continue(.settling)),
         (-50, false, .finish(.landed), .continue(.recover(pageOffsetY: -20))),

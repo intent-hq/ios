@@ -28,7 +28,7 @@ struct DeepLinkPairingView: View {
                     Button("Cancel", role: .cancel) { isValidating = false }
                     Button("Trust & Connect", action: trustAndConnect)
                 } message: {
-                    Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
+                    Text("The server’s TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
                 }
         }
     }
@@ -84,7 +84,7 @@ struct DeepLinkPairingView: View {
                 if isValidating {
                     HStack {
                         ProgressView()
-                        Text("Connecting...")
+                        Text("Connecting…")
                             .interFont(Constants.Typography.bodyS)
                     }
                 } else {
@@ -95,7 +95,7 @@ struct DeepLinkPairingView: View {
             .buttonStyle(IntentButtonStyle())
             .disabled(isValidating)
         } footer: {
-            Text("Only connect if you opened this link yourself, e.g. from your Intent desktop app.")
+            Text("Only connect if you opened this link yourself, for example from your Intent desktop app.")
                 .interFont(Constants.Typography.subtextXXS)
         }
     }

@@ -1,9 +1,12 @@
 import XCTest
 
-/// Exercises the real Settings routes with ephemeral saved machines and no daemon.
 nonisolated final class SettingsUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
     private static let maximumSwipes = 12
+
+    private static func header(_ title: String, in root: XCUIElement) -> XCUIElement {
+        root.staticTexts.matching(NSPredicate(format: "label ==[c] %@", title)).firstMatch
+    }
 
     @MainActor
     func testSettingsHasNoAppearanceControlsWithLightDarkScreenshots() {
@@ -11,13 +14,13 @@ nonisolated final class SettingsUITests: XCTestCase {
             let app = launch(themePreference: appearance.lowercased())
             openSettings(app)
             let settings = app.scrollViews["settings.scroll"]
-            XCTAssertTrue(settings.staticTexts["NEW CONNECTION"].exists)
-            XCTAssertFalse(settings.staticTexts["CONNECTIONS"].exists)
+            XCTAssertTrue(Self.header("New Connection", in: settings).exists)
+            XCTAssertFalse(Self.header("Connections", in: settings).exists)
             XCTAssertEqual(settings.staticTexts["settings.connection.name"].label, "Studio Mac")
             for name in ["Studio Mac", "Travel Mac"] {
                 XCTAssertFalse(settings.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch.exists)
             }
-            XCTAssertFalse(settings.staticTexts["APPEARANCE"].exists)
+            XCTAssertFalse(Self.header("Appearance", in: settings).exists)
             for choice in ["Light", "Dark", "System"] {
                 XCTAssertFalse(settings.buttons[choice].exists, "Theme controls belong only in the Home menu")
             }
@@ -44,8 +47,6 @@ nonisolated final class SettingsUITests: XCTestCase {
         openConnections(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
 
-        // Resuming this process must keep the user's selection. Backgrounding
-        // also gives the native scene its real restoration lifecycle.
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: Self.timeout))
         app.activate()
@@ -102,7 +103,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         acknowledgements.buttons.firstMatch.tap()
         XCTAssertTrue(acknowledgements.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        XCTAssertTrue(app.staticTexts["NEW CONNECTION"].exists)
+        XCTAssertTrue(Self.header("New Connection", in: app).exists)
         XCTAssertTrue(app.buttons["settings.close"].isHittable)
     }
 
@@ -121,7 +122,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["log-off.cancel"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        XCTAssertTrue(app.staticTexts["NEW CONNECTION"].exists)
+        XCTAssertTrue(Self.header("New Connection", in: app).exists)
     }
 
     @MainActor
@@ -142,7 +143,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         app.buttons["connection-sheet.close"].tap()
         XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
         scrollToTop(app)
-        XCTAssertTrue(app.staticTexts["NEW CONNECTION"].exists)
+        XCTAssertTrue(Self.header("New Connection", in: app).exists)
     }
 
     @MainActor

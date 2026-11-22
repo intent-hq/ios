@@ -6,11 +6,6 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// The Intent menu on visionOS: its action cards come forward in depth, the
-/// unread attention rows that lift out of the window plane are fully hidden
-/// while it is open, and the open menu temporarily covers the floating chat
-/// composer. The visionOS branches cannot run in the iOS test host, so the
-/// platform-neutral rules are pinned directly and the wiring through source.
 @MainActor
 @Suite(.serialized)
 struct WorkspaceActionMenuDepthTests {
@@ -24,8 +19,6 @@ struct WorkspaceActionMenuDepthTests {
     }
 
     @Test func openMenuHidesRaisedRowsEntirely() {
-        // Flattening or blurring is not enough: the row is invisible, takes
-        // no input and leaves the accessibility tree.
         let presentation = WorkspaceAttentionCuePresentation.resolve(needsInput: true, actionMenuOpen: true)
         #expect(presentation == .suppressed)
         #expect(presentation.isHidden)
@@ -40,8 +33,6 @@ struct WorkspaceActionMenuDepthTests {
     }
 
     @Test func activityArrivingWhileOpenStaysHiddenUntilDismissal() {
-        // A workspace raises attention while the menu is open: it must go
-        // straight to hidden, never through a raised frame.
         var workspace = Self.workspace(attention: nil)
         var sequence = [WorkspaceAttentionCuePresentation.resolve(for: workspace, actionMenuOpen: true)]
         workspace = Self.workspace(attention: "unread")
@@ -51,8 +42,6 @@ struct WorkspaceActionMenuDepthTests {
     }
 
     @Test func openAndDismissPreservesUnreadState() {
-        // Suppression is presentation only: the stored workspace (and its
-        // server-owned unread flag) is never touched.
         let workspace = Self.workspace(attention: "unread")
         for open in [true, false, true, false] {
             _ = WorkspaceAttentionCuePresentation.resolve(for: workspace, actionMenuOpen: open)
@@ -70,9 +59,6 @@ struct WorkspaceActionMenuDepthTests {
     }
 
     @Test func switchingWorkspaceRestoresOnlyStillApplicableRows() {
-        // The launcher closes on a workspace switch. Opening the workspace
-        // clears its unread flag server-side (workspace.markSeen), so its row
-        // returns resting; another still-unread row returns raised.
         let opened = Self.workspace(attention: nil, id: "opened")
         let other = Self.workspace(attention: "unread", id: "other")
         #expect(WorkspaceAttentionCuePresentation.resolve(for: opened, actionMenuOpen: false) == .resting)
@@ -82,7 +68,6 @@ struct WorkspaceActionMenuDepthTests {
     // MARK: - Action cards come forward
 
     @Test func actionCardsSitInFrontOfEveryRaisedRow() throws {
-        // The row lift constant is visionOS-only; read it from source.
         let layout = try Self.source("Intent/DesignSystem/Layout.swift")
         let declaration = try #require(layout.components(separatedBy: "static let attentionCueZOffset: CGFloat = ").dropFirst().first)
         let rowLift = try #require(Double(declaration.prefix { $0.isNumber || $0 == "." }))
@@ -90,7 +75,6 @@ struct WorkspaceActionMenuDepthTests {
     }
 
     @Test func actionCardDepthStaysRestrained() {
-        // HIG spatial layout: modest, comfortable depth, not a pop-out.
         #expect(WorkspaceActionMenuDepth.tileZOffset <= 32)
     }
 

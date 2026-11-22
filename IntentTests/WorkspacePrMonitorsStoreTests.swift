@@ -4,8 +4,6 @@ import Observation
 import Synchronization
 import Testing
 
-/// Integration tests for the workspace-keyed monitor pool feeding the list
-/// rows (one global prMonitor:* subscription, per-workspace seed + fold).
 @MainActor
 struct WorkspacePrMonitorsStoreTests {
     private func makeMonitorDict(
@@ -62,7 +60,6 @@ struct WorkspacePrMonitorsStoreTests {
 
         let subscribeParams = try #require(fake.paramsForMethod("events.subscribe").first)
         #expect(subscribeParams["eventTypes"] as? [String] == ["prMonitor:*"])
-        // Global subscription: no workspace filter, one rows-wide group.
         #expect(subscribeParams["workspaceId"] == nil)
         #expect(subscribeParams["replaceGroup"] as? String == "ios-pr-monitors-rows")
         #expect(fake.paramsForMethod("prMonitor.list").first?["workspaceId"] as? String == "ws-abc")
@@ -87,7 +84,6 @@ struct WorkspacePrMonitorsStoreTests {
         store.retain(workspaceId: "ws-def")
         await store.seed(workspaceId: "ws-def")
         #expect(fake.paramsForMethod("prMonitor.list").first?["workspaceId"] as? String == "ws-def")
-        // One global subscription serves both workspaces.
         #expect(fake.paramsForMethod("events.subscribe").isEmpty)
         #expect(store.monitors(for: "ws-abc").count == 1)
         #expect(store.monitors(for: "ws-def").count == 1)
@@ -149,7 +145,6 @@ struct WorkspacePrMonitorsStoreTests {
             ]
         ] as [String: Any])
 
-        // No bucket, no refetch for a workspace no row has seeded.
         try await expectNever("bucket or prMonitor.list refetch for an unseeded workspace") {
             !store.monitors(for: "ws-unseen").isEmpty || fake.didCallMethod("prMonitor.list")
         }
@@ -243,7 +238,6 @@ struct WorkspacePrMonitorsStoreTests {
         let store = await makeSeededStore(fake, monitors: [makeMonitorDict()])
         fake.clearRequestLog()
 
-        // Suspend prMonitor.list so a fold can land while one is in flight.
         fake.pendingMethods.insert("prMonitor.list")
         let refetchTask = Task { await store.refetch(workspaceId: "ws-abc") }
         try await fake.waitForPendingRequests("prMonitor.list")
@@ -260,8 +254,6 @@ struct WorkspacePrMonitorsStoreTests {
             store.monitors(for: "ws-abc").isEmpty
         }
 
-        // Replay the complete cancellation over the stale seed. No recovery
-        // read is needed, and the removed row must never reappear.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
         await refetchTask.value
         #expect(store.monitors(for: "ws-abc").isEmpty)

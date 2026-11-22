@@ -129,8 +129,6 @@ extension ConnectionManager {
         }
     }
 
-    /// Internal for
-    /// test visibility.
     func recordCertMismatches(_ observed: [HostCertMismatch]) {
         guard !observed.isEmpty else { return }
         var merged = certMismatches

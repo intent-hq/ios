@@ -36,7 +36,6 @@ extension BackendSessionRegistryTests {
         let original = try #require(factory.monitors.first)
         original.report(.satisfied)
 
-        // Control Center makes the scene inactive, not necessarily backgrounded.
         window.updateNetworkObservation(for: .inactive)
         original.report(.unsatisfied, reason: .notAvailable)
         #expect(availability.status == .unsatisfied(.notAvailable))
@@ -184,8 +183,6 @@ extension BackendSessionRegistryTests {
             currentBackendID: backend, target: backend, supportsMultipleWindows: true, opensSeparateBackendWindows: true
         ) == .rebindInPlace)
 
-        // The root must call rebind for the unchanged scene value, not wait
-        // for onChange, which never fires when the same machine is selected.
         window.rebind(to: backend)
 
         let selectedSession = try #require(window.session)
@@ -268,8 +265,6 @@ extension BackendSessionRegistryTests {
         let registry = makeRegistry()
         let nativeBackend = BackendID(UUID())
         let restored = BackendWindowSession(registry: registry)
-        // BackendWindowRoot restores its per-scene Home flag before binding
-        // the native BackendID. This must never attach, even momentarily.
         #expect(restored.restoreSavedMachines(true, isDemo: false))
         restored.bind(to: nativeBackend)
         defer { restored.release() }
@@ -291,7 +286,6 @@ extension BackendSessionRegistryTests {
         window.returnToSavedMachines()
         let home = try #require(window.session)
         let pairingConnection = try #require(home.connection as? FakeConnectionManager)
-        // A new pairing can have connected over the transient Home session.
         pairingConnection.simulateConnect()
         defer { window.release() }
 
@@ -310,8 +304,6 @@ extension BackendSessionRegistryTests {
         #expect(registry.attachmentCount(for: originalBackend) == 0)
     }
 
-    /// Pairing B from one of two windows on A rebinds that window, so the
-    /// window that stays on A must re-dial the hijacked shared connection.
     @Test(arguments: [false, true])
     func pairingAnotherBackendRedialsTheWindowThatStays(hasSurvivingWindow: Bool) throws {
         let registry = makeRegistry()
@@ -341,9 +333,6 @@ extension BackendSessionRegistryTests {
         }
     }
 
-    /// Where backends get separate windows, pairing B opens B's own window
-    /// and this window stays on A, so it re-dials its own hijacked
-    /// connection itself.
     @Test func pairingAnotherBackendRedialsThisWindowWhenTheTargetOpensItsOwnWindow() throws {
         let registry = makeRegistry()
         let own = persistence.upsertConnection(AppCoordinatorTests.makeConnection(port: 4242))

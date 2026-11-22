@@ -2,7 +2,6 @@
 import Foundation
 
 extension DemoFixtures {
-    // Fixture output intentionally models a long numbered source listing.
     // swiftlint:disable no_magic_numbers
     // swiftlint:disable:next large_tuple
     static let longConversationTruncatedToolCalls: [(id: String, file: String, symbol: String)] = [
@@ -31,7 +30,6 @@ extension DemoFixtures {
             .last ?? .leading
     }
 
-    // Nil means the requested fixture block does not exist, not an empty result block.
     // swiftlint:disable discouraged_optional_collection
     static func longConversationFullBlock(id blockId: String?) -> [String: Any]? {
         guard let call = longConversationTruncatedToolCalls.first(where: { "\($0.id)-result" == blockId }) else {

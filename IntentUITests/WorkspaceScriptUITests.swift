@@ -3,9 +3,6 @@ import XCTest
 nonisolated final class WorkspaceScriptUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
 
-    // iOS 27 native submenus drop action identifiers, including identifiers on Label.
-    // Match the exact demo names from DemoBrowserFixtures / DemoRepositoryScriptFixtures;
-    // keep row identifiers and observable launch/swipe behavior as the test contracts.
     private enum Fixture {
         static let server = "Web server"
         static let command = "Check project"
@@ -167,13 +164,11 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
 
     @MainActor
     func testVerticalDragOnScriptRowStillScrollsWorkspace() {
-        // Extra completed scripts provide real scroll range on tall screens at default text size.
         let app = launchWorkspace(longScriptList: true)
         openScriptsMenu(in: app)
         app.buttons[Fixture.command].tap()
         let row = app.buttons["workspace.script.demo-check"]
         revealResource(row, in: app)
-        // Leave the top scroll boundary before testing a downward drag.
         app.scrollViews["workspace.detail.scroll"].swipeUp()
         XCTAssertTrue(app.frame.contains(row.frame))
         let startingY = row.frame.minY
@@ -214,8 +209,6 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
 
     @MainActor
     private func revealResource(_ resource: XCUIElement, in app: XCUIApplication) {
-        // App-wide swipes can land in the persistent iPad sidebar. Scroll the
-        // resource's owning pane, including when its lazy row is not loaded yet.
         let detail = app.scrollViews["workspace.detail.scroll"]
         XCTAssertTrue(detail.waitForExistence(timeout: Self.timeout))
         for _ in 0..<5 where !resource.isHittable { detail.swipeUp() }
@@ -224,8 +217,6 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
 
     @MainActor
     private func revealActions(on resource: XCUIElement) {
-        // XCTest's swipeLeft can report an empty visible frame for a fully visible
-        // iPad resource row. Drag across the row, as the workspace swipe tests do.
         XCTAssertTrue(resource.isHittable)
         let start = resource.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
         let end = resource.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))

@@ -3,8 +3,6 @@ import Foundation
 import SwiftUI
 import Testing
 
-/// Behaviors the shared suggested-prompts cases (monorepo
-/// `docs/protocol/suggested-prompts.md`) showed iOS getting wrong.
 struct SuggestedPromptsParityTests {
     @Test(arguments: [
         "Intro\n<!-- suggested-prompts\nSome text the agent wrote\n```diff\n-->\n```\nOutro",
@@ -18,8 +16,6 @@ struct SuggestedPromptsParityTests {
     }
 
     @Test func blockClosesAfterAFencedRegion() {
-        // The fenced lines stay in the body (body-shaped, so no chips), and the
-        // later standalone closer still ends the block.
         let text = "Done.\n<!-- suggested-prompts\n```\n-->\n```\n-->"
         #expect(SuggestedPrompts.stripBlocks(from: text) == "Done.")
         #expect(SuggestedPrompts.parse(text).isEmpty)
@@ -47,13 +43,11 @@ struct SuggestedPromptsParityTests {
     }
 
     @Test func trimsDecodedByteOrderMarkLikeTheDesktop() {
-        // JS trim() removes U+FEFF; Foundation's whitespace set does not.
         let text = "&lt;!-- suggested-prompts\n&#xFEFF;\nok\n--&gt;"
         #expect(SuggestedPrompts.parse(text) == ["ok"])
     }
 
     @Test func delayPrefixNeverSpansADecodedLineBreak() {
-        // The desktop's `^delay:(\d+)\|(.*)$` fails when `.` meets a newline.
         let text = "&lt;!-- suggested-prompts\nL|delay:5|run&#10;tests\n--&gt;"
         #expect(SuggestedPrompts.parse(text) == ["delay:5|run\ntests"])
     }

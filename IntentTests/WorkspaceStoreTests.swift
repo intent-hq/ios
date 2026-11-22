@@ -91,9 +91,9 @@ struct WorkspaceStoreAgentParsingTests {
                 "count": 3,
                 "agents": [
                     ["id": "agent-ok", "name": "Good", "status": "idle"],
-                    ["name": "No ID", "status": "idle"],  // missing id
-                    ["id": "agent-no-name", "status": "idle"],  // missing name
-                    ["id": "agent-no-status", "name": "No Status"]  // missing status
+                    ["name": "No ID", "status": "idle"],
+                    ["id": "agent-no-name", "status": "idle"],
+                    ["id": "agent-no-status", "name": "No Status"]
                 ]
             ] as [String: Any]
         ]
@@ -136,7 +136,6 @@ struct WorkspaceStoreAgentParsingTests {
             ] as [String: Any]
         ]
         let workspace = WorkspaceStore.parseWorkspace(dict)
-        // count comes from dict, not array length
         #expect(workspace?.agentSummaryCount == 5)
         #expect(workspace?.agentSummaryAgents.count == 1)
     }
@@ -235,7 +234,6 @@ struct WorkspaceStoreLastActivityTests {
     }
 
     @Test func workspaceUpdatedDeltaIsAppliedVerbatimWithoutMonotonicGuard() {
-        // intentd guarantees monotonicity; the client applies whatever it sent.
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T14:00:00Z")]
 
@@ -283,8 +281,6 @@ struct WorkspaceStoreLastActivityTests {
         store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-03-01T16:00:00Z")
         #expect(store.workspaces[0].lastActivity == "2026-03-01T16:00:00Z")
 
-        // A later workspace.list / snapshot carrying an older value is the
-        // daemon's truth — no high-water mark is applied on top of it.
         store.publishFetchedWorkspaces([makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T12:00:00Z")])
         #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
     }
@@ -358,13 +354,10 @@ struct WorkspaceStoreChiefFilterTests {
     }
 
     @Test func deltaUpdatedChiefDoesNotInsertIt() async {
-        // The daemon re-reads the workspace for every workspace:* event, so a
-        // Chief-scoped event arrives as `updated: [<chief>]` for an unknown id.
         let store = await makeLiveStore(snapshot: [realRow])
         store.handleEvent("subscription.push", params: deltaPush(seq: 1, updated: [chiefRow]))
         #expect(store.workspaces.map(\.id) == ["ws-1"])
 
-        // The delta still advanced the sequence: the next one applies normally.
         store.handleEvent("subscription.push", params: deltaPush(
             seq: 2,
             added: [["id": "ws-2", "title": "Second"]]
@@ -396,8 +389,6 @@ struct WorkspaceStoreChiefFilterTests {
     }
 
     @Test func legacyWorkspaceUpdatedRefetchForChiefDoesNotInsertIt() async throws {
-        // Not live: a workspace:updated with a refetch-classified change triggers
-        // workspace.list; a list that still carries Chief is filtered too.
         let fake = FakeConnectionManager()
         fake.responseMap["workspace.list"] = ["workspaces": [chiefRow, realRow]]
         let store = WorkspaceStore(connectionManager: fake)
@@ -432,7 +423,6 @@ struct WorkspaceStoreChiefFilterTests {
         store.addOrUpdate(chief)
         #expect(store.workspaces.map(\.id) == ["ws-1"])
 
-        // Not seeded into the reconciler either: the next delta keeps it out.
         store.handleEvent("subscription.push", params: deltaPush(seq: 1, updated: [realRow]))
         #expect(store.workspaces.map(\.id) == ["ws-1"])
     }

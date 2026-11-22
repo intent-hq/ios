@@ -40,8 +40,6 @@ extension ConversationStartupRPCTests {
             first.currentProviderId == "auggie" && second.currentProviderId == "auggie"
                 && connection.pendingRequestCount("specialist.list") > 0
         }
-        // Release all recorded requests so the pre-fix duplicate produces a
-        // count failure rather than an orphaned fake continuation.
         connection.pendingMethods.remove("specialist.list")
         while connection.pendingRequestCount("specialist.list") > 0 {
             connection.resolvePending("specialist.list", with: try #require(connection.responseMap["specialist.list"]))

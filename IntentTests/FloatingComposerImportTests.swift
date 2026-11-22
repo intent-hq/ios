@@ -5,17 +5,10 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// The visionOS floating composer's lifecycle (`FloatingComposerLifecycle`)
-/// against a real photo import. A modal merely covering the chat must not
-/// cancel a picked photo/video import (it finishes and its attachment is
-/// waiting on dismissal); only a genuine withdrawal — navigation, loading,
-/// disappearance, or the question slot — cancels it, and at most once.
 @MainActor
 struct FloatingComposerImportTests {
     private static let workspaceId = "demo-ws-dashboard"
 
-    /// Starts a one-photo import whose load stays in flight until the
-    /// returned continuation is resumed.
     private func startGatedImport(
         in pipeline: ConversationAttachmentPipeline
     ) async throws -> (task: Task<Void, Never>, release: AsyncStream<Void>.Continuation) {

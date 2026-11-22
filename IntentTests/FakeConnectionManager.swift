@@ -4,20 +4,13 @@ import Foundation
 import Synchronization
 import Testing
 
-/// Thrown by `waitUntil` / `expectNever` so a missed or forbidden state
-/// transition aborts the test instead of letting it continue against a fake
-/// that never reached the awaited state (e.g. `resolvePending` on nothing).
 struct ConditionWaitFailure: Error, CustomStringConvertible {
     let description: String
 }
 
-/// Poll cadence shared by the bounded condition waits below.
 private let kConditionPollIntervalMilliseconds = 5
 private let kConditionPollInterval: Duration = .milliseconds(kConditionPollIntervalMilliseconds)
 
-/// Bounded poll until `condition` holds. Throws `ConditionWaitFailure` naming
-/// the call site on timeout. Use this instead of a fixed `Task.sleep` after
-/// spawning store work (ios#261).
 @MainActor
 func waitUntil(
     _ description: String,
@@ -28,8 +21,6 @@ func waitUntil(
     let deadline = ContinuousClock.now + timeout
     while ContinuousClock.now < deadline {
         if condition() { return }
-        // Required: the poll interval of this bounded condition wait, not a
-        // fixed delay — it returns as soon as `condition` holds.
         try await Task.sleep(for: kConditionPollInterval)
     }
     if condition() { return }
@@ -38,11 +29,6 @@ func waitUntil(
     )
 }
 
-/// Bounded negative observation window: polls `forbidden` for `window` and
-/// throws `ConditionWaitFailure` the first time it holds. For assertions that
-/// work must NOT have been spawned — positive ones must use `waitUntil`. The
-/// window is the same order as the sleeps it replaces, but a transient
-/// occurrence inside it now fails instead of slipping past a single check.
 @MainActor
 func expectNever(
     _ description: String,
@@ -57,8 +43,6 @@ func expectNever(
                 description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
             )
         }
-        // Required: this helper's contract is a timed observation window;
-        // the sleep is its poll interval.
         try await Task.sleep(for: kConditionPollInterval)
     } while ContinuousClock.now < deadline
     if forbidden() {
@@ -68,11 +52,6 @@ func expectNever(
     }
 }
 
-/// One-shot latch for scripting the order of racing fakes: `wait()` suspends
-/// until `open()` (returning immediately once open) and ignores cancellation,
-/// so a fake that must outlive its cancellation holds its lane until the test
-/// releases it — instead of guessing a `Task.sleep` long enough for the other
-/// candidate to win (ios#261).
 nonisolated final class TestGate: Sendable {
     private struct State {
         var isOpen = false
@@ -102,20 +81,11 @@ nonisolated final class TestGate: Sendable {
         }
     }
 
-    /// Runs `body`, opening the gate if the CALLING task is cancelled — the
-    /// test-level escape hatch for a `.timeLimit` test whose system under test
-    /// regressed into awaiting the gated fake: Swift Testing only cancels the
-    /// test cooperatively, and `wait()` ignores cancellation, so without this
-    /// such a regression would hang the runner instead of failing. Cancelling
-    /// a candidate task that is merely awaiting `wait()` does not open the gate.
     func opening<T>(onCancellationOf body: () async throws -> T) async rethrows -> T {
         try await withTaskCancellationHandler(operation: body) { open() }
     }
 }
 
-/// Suspends until the current task is cancelled. Replaces a long `Task.sleep`
-/// whose only job was to be cut short by cancellation (a raced loser that is
-/// released once the winner settles).
 nonisolated func suspendUntilCancelled() async {
     let gate = TestGate()
     await withTaskCancellationHandler {
@@ -125,9 +95,6 @@ nonisolated func suspendUntilCancelled() async {
     }
 }
 
-/// FakeConnectionManager is a plain class (not a subclass of ConnectionManager) that conforms
-/// to SessionConnectionManaging for testing purposes. It provides full control over connection
-/// state, request responses, and subscription push delivery.
 @MainActor
 class FakeConnectionManager: SessionConnectionManaging {
     struct ConnectionLogEntry {
@@ -150,7 +117,6 @@ class FakeConnectionManager: SessionConnectionManaging {
     var connectionState: ConnectionState {
         get { _connectionState.value }
         set {
-            // Like production: a drop clears the live principal but remembers it.
             if newValue == .connected {
                 currentPrincipal = currentPrincipal ?? lastConnectedPrincipal
             } else if let principal = currentPrincipal {
@@ -220,11 +186,9 @@ class FakeConnectionManager: SessionConnectionManaging {
         globalSubscriptionState = .subscribing(attempt: 1)
     }
 
-    /// Recorded `connect` calls, and the error to throw instead of connecting.
     var connectLog: [ConnectionLogEntry] = []
     var connectError: Error?
 
-    /// Recorded `updateCachedCredentials` calls.
     var updateCachedCredentialsLog: [ConnectionLogEntry] = []
 
     private(set) var disconnectCallCount = 0
@@ -292,41 +256,23 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     // MARK: - Request/Response Mocking
 
-    /// Map of method names to response values. If a method is not in this map, request() throws.
     var responseMap: [String: Any] = [
         "client.hello": ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": [String: Int]()]],
         "principal.me": ["id": "test-owner", "isAdministrator": true]
     ]
 
-    /// Per-method FIFO response queues. When non-empty for a method, each request()
-    /// pops the next response — takes precedence over responseMap. Useful for
-    /// pagination tests where consecutive calls return different pages.
     var responseQueueMap: [String: [Any]] = [:]
 
-    /// Map of method names to errors. If a method is in this map, request() throws the error.
     var errorMap: [String: Error] = [:]
 
-    /// Per-method FIFO error queues. When non-empty for a method, each request()
-    /// pops and throws the next error — takes precedence over errorMap and the
-    /// response maps. Useful for retry/fallback tests where only the first call
-    /// should fail.
     var errorQueueMap: [String: [Error]] = [:]
 
-    /// Recorded request log: [(method, params, timestamp)]
     var requestLog: [RequestLogEntry] = []
 
-    /// Methods whose requests suspend until `resolvePending(_:with:)` supplies the
-    /// payload (or `failPending(_:with:)` its error), so a test pins the exact
-    /// outcome an in-flight request resolves with — e.g. a stale list captured
-    /// before a state change — while later requests for the same method stay
-    /// suspended.
     var pendingMethods: Set<String> = []
-    /// Opt-in: throw `CancellationError` for requests made from a cancelled
-    /// task, as `ConnectionManager.awaitResponse` does.
     var failsCancelledRequests = false
     private var pendingContinuations: [String: [(id: UUID, continuation: CheckedContinuation<Any, Error>)]] = [:]
 
-    /// Resolve the oldest suspended request for `method` with `response`.
     func resolvePending(_ method: String, with response: sending Any) {
         guard var queue = pendingContinuations[method], !queue.isEmpty else { return }
         let pending = queue.removeFirst()
@@ -334,7 +280,6 @@ class FakeConnectionManager: SessionConnectionManaging {
         pending.continuation.resume(returning: response)
     }
 
-    /// Fail the oldest suspended request for `method` with `error`.
     func failPending(_ method: String, with error: Error) {
         guard var queue = pendingContinuations[method], !queue.isEmpty else { return }
         let pending = queue.removeFirst()
@@ -347,7 +292,6 @@ class FakeConnectionManager: SessionConnectionManaging {
         params: [String: Any] = [:],
         timeout _: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        // Like the real ConnectionManager, a request from an already-cancelled task fails at once.
         if failsCancelledRequests, Task.isCancelled { throw CancellationError() }
         requestLog.append(RequestLogEntry(method: method, params: params, timestamp: Date()))
 
@@ -410,10 +354,7 @@ class FakeConnectionManager: SessionConnectionManaging {
         eventHandlers.removeValue(forKey: id)
     }
 
-    /// Deliver a legacy event to all registered handlers (does NOT deliver subscription.push).
     func deliverEvent(method: String, params: Any) {
-        // Do not deliver subscription.push through legacy event handlers.
-        // ConnectionManager routes subscription.push separately via registerSubscriptionHandler.
         if method == "subscription.push" {
             return
         }
@@ -427,16 +368,9 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     private var subscriptionHandlers: [String: @MainActor (SubscriptionPush) -> Void] = [:]
 
-    /// Seq-0 conversation snapshot rows (and optional `snapshotMeta`) pushed
-    /// to a handler the moment it registers for that subscriptionId — the
-    /// fake's stand-in for the snapshot a live `chat.subscribe` owes after
-    /// its ack. Persistent like `responseMap`: every registration for the id
-    /// receives it. See `stubChatSnapshot`.
     var chatSnapshotMap: [String: [[String: Any]]] = [:]
     var chatSnapshotMetaMap: [String: [String: Any]] = [:]
 
-    /// Stubs `chat.subscribe` to ack with `subscriptionId` and push `messages`
-    /// as its seq-0 snapshot as soon as the store registers its handler.
     func stubChatSnapshot(
         subscriptionId: String = "sub-1",
         messages: [[String: Any]] = [],
@@ -463,7 +397,6 @@ class FakeConnectionManager: SessionConnectionManaging {
         }
     }
 
-    /// Every `unregisterSubscriptionHandler` id, in call order.
     private(set) var unregisteredSubscriptionIds: [String] = []
 
     func unregisterSubscriptionHandler(id: String) {
@@ -471,8 +404,6 @@ class FakeConnectionManager: SessionConnectionManaging {
         subscriptionHandlers.removeValue(forKey: id)
     }
 
-    /// Deliver a subscription.push to the handler registered for the given subscriptionId.
-    /// If no handler is registered, this is a no-op (mimics ConnectionManager behavior).
     func deliverSubscriptionPush(_ push: SubscriptionPush) {
         if let handler = subscriptionHandlers[push.subscriptionId] {
             handler(push)
@@ -481,23 +412,18 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     // MARK: - Test Helpers
 
-    /// Clear all request logs.
     func clearRequestLog() {
         requestLog.removeAll()
     }
 
-    /// Get all parameters for calls to a specific method.
     func paramsForMethod(_ method: String) -> [[String: Any]] {
         requestLog.filter { $0.method == method }.map { $0.params }
     }
 
-    /// Number of requests for `method` currently suspended by `pendingMethods`.
     func pendingRequestCount(_ method: String) -> Int {
         pendingContinuations[method]?.count ?? 0
     }
 
-    /// Bounded poll until at least `count` requests for `method` are suspended
-    /// by `pendingMethods` — i.e. resolvable via `resolvePending` / `failPending`.
     func waitForPendingRequests(
         _ method: String,
         count: Int = 1,
@@ -513,7 +439,6 @@ class FakeConnectionManager: SessionConnectionManaging {
         }
     }
 
-    /// Bounded poll until `method` has been requested at least `count` times.
     func waitForRequests(
         _ method: String,
         count: Int = 1,
@@ -531,43 +456,35 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     var eventHandlerIDs: Set<UUID> { Set(eventHandlers.keys) }
 
-    /// Count of registered event handlers.
     var eventHandlerCount: Int {
         eventHandlers.count
     }
 }
 
 extension FakeConnectionManager {
-    /// Check if a handler is registered for a given subscriptionId.
     func hasSubscriptionHandler(id: String) -> Bool {
         subscriptionHandlers[id] != nil
     }
 
-    /// Count of registered subscription handlers.
     var subscriptionHandlerCount: Int {
         subscriptionHandlers.count
     }
 
-    /// Check if a specific request method was called.
     func didCallMethod(_ method: String) -> Bool {
         requestLog.contains { $0.method == method }
     }
 }
 
 extension FakeConnectionManager {
-    /// Simulate a connection event (transition to .connected).
     func simulateConnect() {
         connectionState = .connected
     }
 
-    /// A reconnection that stopped for a reason the user must act on (revoked
-    /// access, a different person), as the real manager records it.
     func simulateStoppedReconnection() {
         reconnectStopReason = "Reconnection stopped."
         simulateDisconnect()
     }
 
-    /// Simulate a disconnection event (transition to .disconnected).
     func simulateDisconnect() {
         pairingAttemptID = nil
         admission = nil

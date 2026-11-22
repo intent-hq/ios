@@ -3,12 +3,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// `SuggestedPrompts` checked against the suggested-prompts block cases shared
-/// with the desktop app and the daemon (monorepo
-/// `docs/protocol/suggested-prompts.md`). The cases are an exact-byte copy
-/// under `IntentTests/Fixtures/suggested-prompts/`; CI verifies the copy
-/// against the monorepo commit named in `suggested-prompts.lock.json`, so an
-/// expected value only changes by re-exporting it from the monorepo.
 struct SuggestedPromptsContractTests {
     private static let consumer = "ios"
     private static let casesPath = "suggested-prompts/v1/cases.json"
@@ -45,8 +39,6 @@ struct SuggestedPromptsContractTests {
         }
     }
 
-    /// The contract's comparison form: CRLF as LF, trimmed, runs of 3+ line
-    /// feeds collapsed to 2.
     static func normalize(_ text: String) -> String {
         var scalars = String.UnicodeScalarView()
         var newlines = 0
@@ -91,9 +83,6 @@ struct SuggestedPromptsContractTests {
         }
     }
 
-    /// The transcript renders through `parse(contentBlocks:)`, which maps
-    /// block ranges back into each text block: every case must give the same
-    /// result as one block and split across two at its midpoint.
     @Test func contentBlockScanMatchesEverySharedCase() throws {
         for testCase in try cases() where testCase.divergence == nil {
             let middle = testCase.input.index(

@@ -140,7 +140,6 @@ extension ConversationViewModelTests {
     @Test func questionAttachmentsStayOutOfOrdinarySendsAndOtherQuestionSets() async throws {
         let (viewModel, fake) = makeFakeBackedVM()
         viewModel.store.messages = [questionMessage(id: "a2")]
-        // This set must remain pending across the ordinary user message below.
         viewModel.store.pendingQuestionsMessageId = "a2"
         let answers = try firstAnswer(viewModel)
         let attachments = viewModel.questionAttachments(for: "a1")

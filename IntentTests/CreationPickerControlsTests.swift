@@ -4,13 +4,11 @@ import SwiftUI
 import Testing
 import UIKit
 
-// Hosted picker inspection and its geometry fixtures intentionally live together.
 // swiftlint:disable type_body_length
 
 @MainActor
 @Suite(.serialized)
 struct CreationPickerControlsTests {
-    // Both production forms scroll; this canvas keeps every measured row mounted at accessibility sizes.
     private static let pickerHostHeight: CGFloat = 2400
     private static let pickerSettleTimeout: TimeInterval = 3
     private static let requiredStableFrameSamples = 3
@@ -200,8 +198,6 @@ struct CreationPickerControlsTests {
         ).hasNoMeaningfulVerticalOverlap)
     }
 
-    // Exercises the actual capture/association path, with healthy non-UIView AX metadata.
-    // CGRect-only fixtures cannot detect a broken pixel sensor or coordinate conversion.
     @Test(arguments: [
         "valid", "providerClipped", "modelClipped", "narrow", "short", "overlap",
         "outside", "missing", "unrelated", "ambiguous"
@@ -223,8 +219,6 @@ struct CreationPickerControlsTests {
         let model = Self.paintedControl(frame: modelRect, in: host)
         Self.applyRenderedFault(fault, provider: provider, model: model, host: host)
         let rendered = try Self.settledRenderedFixture(in: window)
-        // Capture can finish safe-area reflow. Convert only after the painted fixture has
-        // settled, keeping local, window-pixel and screen-space AX coordinates separate.
         let expectedFrames = [providerRect, modelRect].map { window.convert($0, from: host) }
         let metadata = expectedFrames.enumerated().map { index, frame in
             let element = UIAccessibilityElement(accessibilityContainer: host)
@@ -259,8 +253,6 @@ struct CreationPickerControlsTests {
                 try rendered.frames(associatedWith: axFrames)
             }
         case "missing", "unrelated", "ambiguous", "providerClipped", "modelClipped":
-            // The one-point clipped strip is resampled with its background;
-            // no complete card-color region remains, despite valid, unchanged AX bounds.
             #expect(throws: CreationPickerRenderedGeometry.ObservationError.missingOrAmbiguousRegion) {
                 try rendered.frames(associatedWith: axFrames)
             }
@@ -274,8 +266,6 @@ struct CreationPickerControlsTests {
             #expect(snapshot.hasValidVisibleControlGeometry == (fault == "valid"))
             if fault == "valid" {
                 for (actual, expected) in zip(measured, expectedFrames) {
-                    // A 1px interior edge can be blended by drawHierarchy's 1x capture.
-                    // Assert each edge, not just size, so flipping/offsetting the image fails.
                     #expect(abs(actual.minX - expected.minX) <= 1)
                     #expect(abs(actual.minY - expected.minY) <= 1)
                     #expect(abs(actual.maxX - expected.maxX) <= 1)
@@ -290,7 +280,6 @@ struct CreationPickerControlsTests {
         var previous: [CGRect] = []
         var stableSamples = 0
         var samples: [String] = []
-        // Slow image capture must still allow enough observations to establish stability.
         while Date() < deadline || samples.count < requiredStableFrameSamples {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
             window.layoutIfNeeded()
@@ -478,13 +467,11 @@ struct CreationPickerControlsTests {
         window: UIWindow,
         layout: PickerHostLayout
     ) throws -> SettledPickerElements {
-        // SwiftUI can finish Dynamic Type reflow after the host appears.
         let deadline = Date(timeIntervalSinceNow: pickerSettleTimeout)
         var previousFrames: (provider: CGRect, model: CGRect)?
         var stableFrameSamples = 0
         var samples: [String] = []
 
-        // Slow image capture must still allow enough observations to establish stability.
         while Date() < deadline || samples.count < requiredStableFrameSamples {
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
             window.layoutIfNeeded()
@@ -618,8 +605,6 @@ private enum PickerHostLayout: CaseIterable {
 
 private struct PickerElementSnapshot {
     private static let minimumAccessibilityFrameDimension: CGFloat = 44
-    // The hosted menu chrome renders about 34 points high. This floor detects clipping without
-    // claiming that the measured visible rectangle is the control's complete hit target.
     private static let minimumReadableVisibleControlDimension: CGFloat = 32
 
     let label: String?
@@ -666,8 +651,6 @@ private struct PickerLayoutSnapshot {
     let model: PickerElementSnapshot
 
     var hasNoMeaningfulVerticalOverlap: Bool {
-        // SwiftUI may fold a row caption into the accessibility frame, while List clips a
-        // menu button whose raw UIView bounds extend beyond its row. Compare what is visible.
         Self.hasNoMeaningfulVerticalOverlap(
             upper: provider.visibleControlFrame,
             lower: model.visibleControlFrame
@@ -687,7 +670,6 @@ private struct PickerLayoutSnapshot {
     }
 
     static func hasNoMeaningfulVerticalOverlap(upper: CGRect, lower: CGRect) -> Bool {
-        // Coordinate arithmetic can round a shared boundary by one representable value.
         let tolerance = max(upper.maxY.ulp, lower.minY.ulp)
         return upper.maxY <= lower.minY + tolerance
     }

@@ -53,7 +53,7 @@ struct DisconnectedView: View {
     @ViewBuilder
     private var connectionDescription: some View {
         if let connection = coordinator.windowConnection {
-            Text("Reconnecting to \(connection.server.name)...")
+            Text("Reconnecting to \(connection.server.name)…")
                 .interFont(Constants.Typography.bodyXS)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.center)
@@ -85,7 +85,7 @@ struct DisconnectedView: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(IntentButtonStyle())
-        .accessibilityHint("Return to your saved machines without forgetting this connection.")
+        .accessibilityHint("Return to your saved machines without removing this connection.")
         .accessibilityIdentifier("disconnected.home")
         .padding(.horizontal, Constants.Disconnected.horizontalPadding)
         .padding(.bottom, Constants.Disconnected.bottomPadding)

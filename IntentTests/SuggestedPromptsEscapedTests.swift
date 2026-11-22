@@ -2,13 +2,7 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// HTML-escaped blocks: history replayed to a fresh provider session is
-/// XML-escaped, and a model can copy `&lt;!-- suggested-prompts` ... `--&gt;`
-/// from it into its own reply. Mirrors the desktop's handling
-/// (cloudlands-fe#3633): the escaped spelling is a block too, closes only on
-/// the escaped closer, and its prompt lines are entity-decoded once.
 struct SuggestedPromptsEscapedTests {
-    /// Verbatim tail of the reply that leaked raw markup after a quota failover.
     private let failoverReply = """
         Report back when the PR is ready to merge.
 

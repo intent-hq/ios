@@ -15,9 +15,6 @@ enum AnyCodableDictionaryMatch {
     case value([String: Any])
 }
 
-/// Nonisolated so wire models can be decoded off MainActor. `@unchecked
-/// Sendable`: `value` is an immutable JSON container that is never mutated
-/// after construction.
 nonisolated struct AnyCodable: Codable, Equatable, @unchecked Sendable {
     let value: Any
 

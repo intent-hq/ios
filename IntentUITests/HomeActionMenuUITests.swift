@@ -60,7 +60,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     @MainActor
     func testMenuPlacementSurvivesDrawerRoundTrips() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Compact workspace page drawers")
-        // Opt in only when the selected simulator is in a vertical-bar display mode.
         let expectsVerticalBar = ProcessInfo.processInfo.environment["INTENT_UITEST_VERTICAL_BAR"] == "1"
         let app = launchHome(themePreference: "light")
         let launcher = app.buttons["intent.menu.open"]
@@ -120,7 +119,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         var composer = app.textViews["composer.textView"]
         XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
         let rail = app.buttons["ipad.rail.workspaces"]
-        let send = app.buttons["Send message"]
+        let send = app.buttons["Send Message"]
         XCTAssertTrue(rail.isHittable)
         XCTAssertFalse(app.buttons["intent.menu.open"].exists)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad expanded workspace conversation")
@@ -156,8 +155,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, draft)
         XCUIDevice.shared.orientation = .portrait
-        // The orientation notification precedes the retained pane's width update.
-        XCTAssertTrue(try app.buttons.matching(identifier: "Send message").waitForSingleHittableElement(timeout: Self.timeout).isEnabled)
+        XCTAssertTrue(try app.buttons.matching(identifier: "Send Message").waitForSingleHittableElement(timeout: Self.timeout).isEnabled)
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad portrait conversation with draft")
         try verifySendAndBack(in: app, draft: draft)
@@ -165,7 +163,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
 
     @MainActor
     private func verifySendAndBack(in app: XCUIApplication, draft: String) throws {
-        try app.buttons.matching(identifier: "Send message").singleHittableElement().tap()
+        try app.buttons.matching(identifier: "Send Message").singleHittableElement().tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", draft))
             .firstMatch.waitForExistence(timeout: Self.timeout))
         let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
@@ -236,16 +234,12 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     func testConnectionsTileOpensScreenAndAppearanceTileCyclesTheme() throws {
         let app = launchHome(themePreference: "dark")
         openMenu(app)
-        // Seed stored System through the Home tile before removing the launch override.
         XCTAssertEqual(reveal("appearance", in: app).value as? String, "Dark Mode")
         reveal("appearance", in: app).tap()
-        // Connections is then behind us, so the helper must also scroll back toward the start.
         _ = reveal("settings", in: app)
         reveal("connections", in: app).tap()
         XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
-        // Relaunch restores the home screen without depending on the connection sheet's detent.
         app.terminate()
-        // Argument-domain overrides mask later writes, so remove it before exercising live changes.
         app.launchArguments = ["--demo-data", "--demo-long-workspace-list"]
         app.launch()
         openMenu(app)
@@ -288,7 +282,6 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         appearance.tap()
         XCTAssertTrue(app.scrollViews["intent.menu.tiles"].exists)
         app.terminate()
-        // Read the new stored value without the legacy launch override masking it.
         app.launchArguments = ["--demo-data", "--demo-long-workspace-list"]
         app.launch()
         openMenu(app)
@@ -321,7 +314,6 @@ extension HomeActionMenuUITests {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-long-workspace-list", "-appThemePreference", themePreference]
         app.launch()
-        // Only the ordinary iPad shell keeps the global rail; the unfolded Duo uses the launcher.
         let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
         XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
         return app
@@ -463,7 +455,6 @@ extension HomeActionMenuUITests {
         let actions = app.buttons["conversation.actions.open"]
         XCTAssertTrue(waitUntilHittable(back))
         XCTAssertTrue(actions.isHittable)
-        // The open agent's workspace replaces the list in the sidebar.
         XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertLessThanOrEqual(agent.frame.maxX, composer.frame.minX)
         XCTAssertEqual(back.frame.midY, actions.frame.midY, accuracy: Self.scrollTolerance)

@@ -2,8 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Which tapped links iOS can't open, so the transcript shows a message
-/// instead of silently dropping the tap.
 struct UnopenableLinkTests {
     @Test(arguments: [
         "report.html",
@@ -48,12 +46,12 @@ struct UnopenableLinkTests {
         let url = try #require(URL(string: "reports/report.html"))
         let link = UnopenableLink(url: url, reason: .unsupportedLocation)
         #expect(link.target == "reports/report.html")
-        #expect(link.message == "This link can't be opened on this device.\n\nreports/report.html")
+        #expect(link.message == "This link can’t be opened on this device.\n\nreports/report.html")
     }
 
     @Test func browserFailureExplainsTheError() throws {
         let url = try #require(URL(string: "http://user@localhost:3000"))
         let link = UnopenableLink(url: url, reason: .browserFailed("Bad address."))
-        #expect(link.message == "The in-app browser couldn't open this link. Bad address.\n\nhttp://user@localhost:3000")
+        #expect(link.message == "The in-app browser couldn’t open this link. Bad address.\n\nhttp://user@localhost:3000")
     }
 }

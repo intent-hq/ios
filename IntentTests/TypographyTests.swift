@@ -31,7 +31,6 @@ struct TypographyTests {
             #expect(fixture.style.relativeTo == fixture.role)
             #expect(fixture.style.font == .custom(fixture.fontName, size: fixture.size, relativeTo: fixture.role))
 
-            // Exercise launch-time registration, not a test-only font registration path.
             let loadedFont = try #require(UIFont(name: fixture.style.face.rawValue, size: fixture.style.size))
             #expect(loadedFont.fontName == fixture.fontName)
             #expect(loadedFont.pointSize == fixture.size)
@@ -41,7 +40,6 @@ struct TypographyTests {
     @Test func largeCategoryRendersAtTheDesignSize() throws {
         for fixture in Self.fixtures {
             let actual = try renderedSize(font: fixture.style.font, category: .large)
-            // The fixed font is only a measurement reference, never the production API.
             let reference = try renderedSize(
                 font: .custom(fixture.fontName, fixedSize: fixture.size), category: .large
             )
@@ -95,7 +93,6 @@ struct TypographyTests {
         #expect(try renderedImage(markdown.interFont(style)) == renderedImage(explicit.interFont(style)))
     }
 
-    // Attachment layout is nonisolated; keep the font-resolution owner usable there.
     @Test nonisolated func uiKitFontsKeepTheirFaceAndScaleWithCurrentTraits() {
         let normal = UITraitCollection(preferredContentSizeCategory: .large)
         let accessible = UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge)
@@ -124,8 +121,6 @@ struct TypographyTests {
     }
 
     private func renderedSize(font: Font, category: DynamicTypeSize) throws -> CGSize {
-        // Measure the exact SwiftUI Font used by callers, not a parallel UIFontMetrics implementation.
-        // Unconstrained, single-line text avoids wrapping/truncation masking changes in glyph size.
         let renderer = ImageRenderer(
             content: Text(verbatim: "Inter Typography Ag09")
                 .font(font)

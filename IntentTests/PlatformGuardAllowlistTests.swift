@@ -1,17 +1,6 @@
 import Foundation
 import Testing
 
-/// Enforces the platform-guard allowlist from AGENTS.md § Platform guards:
-/// the visionOS `#if os(...)` guard and the TailcatKit `#if canImport(...)`
-/// guard may appear only in the files listed below. Adding a guard to any
-/// other file (or removing one from a listed file) must be a deliberate act —
-/// update the allowlist in IntentTests/PlatformGuardAllowlistTests.swift
-/// alongside the change. (The guard patterns are regexes tolerating
-/// whitespace around the parentheses, so a space-separated guard spelling
-/// cannot bypass the scan; the patterns' escaped spelling also keeps this
-/// file from matching its own scan.) The scan reads the copies of Intent/
-/// and IntentTests/ packaged into the test bundle (see TestSourceInputs),
-/// not the checkout.
 struct PlatformGuardAllowlistTests {
     private static let visionOSGuard = #"os\s*\(\s*visionOS\s*\)"#
     private static let tailcatKitGuard = #"canImport\s*\(\s*TailcatKit\s*\)"#
@@ -56,8 +45,6 @@ struct PlatformGuardAllowlistTests {
         "IntentTests/TailcatTunnelSessionTests.swift"
     ]
 
-    /// Paths relative to `repoRoot` of .swift files under its Intent/ and
-    /// IntentTests/ whose contents match the regex `pattern`.
     private func filesContaining(
         _ pattern: String, under repoRoot: URL = TestSourceInputs.root
     ) throws -> Set<String> {
@@ -135,11 +122,6 @@ struct PlatformGuardAllowlistTests {
         )
     }
 
-    /// Negative case: the scan reports a guard wherever it appears (including
-    /// the space-separated spelling) and nothing else, so an allowlist match
-    /// above is evidence of the tree's contents rather than of an empty or
-    /// unreadable scan. (The guard spellings are concatenated so this file's
-    /// packaged copy does not match its own scan.)
     @Test func scanReportsGuardedFilesOnly() throws {
         let fixture = FileManager.default.temporaryDirectory
             .appendingPathComponent("PlatformGuardScan-\(UUID().uuidString)")

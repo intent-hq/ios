@@ -130,8 +130,6 @@ extension AppCoordinatorTests {
         try await SyntheticBadgeHost.render(
             shell, width: CompactShellSize.wide, height: CompactShellSize.height, diagnostics: trace
         ) { host, window in
-            // The render host is deliberately non-key. This test exercises real
-            // input focus, so temporarily make its visible window the responder root.
             let previousKey = window.windowScene?.keyWindow
             window.makeKey()
             defer {
@@ -192,8 +190,6 @@ extension AppCoordinatorTests {
         #expect(coordinator.conversationRequestId == request)
         await IPadVisibilityDiagnostics.record("typing-closed", in: host, coordinator: coordinator, trace: trace)
         if detail == .workspace {
-            // A wide window shows the open agent's workspace in the sidebar; the list and its
-            // search stay reachable from the drawer layout.
             size.width = CompactShellSize.drawer
             try await waitUntil("the sidebar becomes a drawer", timeout: timeout) { coordinator.iPadNavigation.usesSidebarOverlay }
             try await recordFocusedSearch(in: host, coordinator: coordinator, trace: trace)
@@ -334,8 +330,6 @@ private extension AppCoordinatorTests {
         let timeout = Duration.seconds(CompactShellSize.timeout)
         #expect(editor.becomeFirstResponder())
         try await waitUntil("the editor becomes first responder", timeout: timeout) { editor.isFirstResponder }
-        // Editing callbacks publish their Binding on the main queue. Yield the
-        // executor so this verifies that real callback rather than starving it.
         try await waitUntil("the native editor publishes focus", timeout: timeout) {
             (editor.delegate as? SubmittableTextView.Coordinator)?.parent.isFocused == true
         }
@@ -389,7 +383,6 @@ private extension AppCoordinatorTests {
     static let draftSelection = NSRange(location: selectionLocation, length: selectionLength)
     static let narrow: CGFloat = 320
     static let wide: CGFloat = 1210
-    /// Wide enough for the regular shell, too narrow for a sidebar beside the detail.
     static let drawer: CGFloat = 800
     static let height: CGFloat = 900
     static let timeout: TimeInterval = 5

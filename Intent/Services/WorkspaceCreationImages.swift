@@ -44,7 +44,6 @@ import UniformTypeIdentifiers
     }
     typealias MediaLoader = @MainActor () async throws -> Media
 
-    // Keep MiB conversions visible in these named source, JPEG, and request limits.
     // swiftlint:disable no_magic_numbers
     nonisolated static let maximumSourceBytes = 30 * 1024 * 1024
     static let maximumJPEGBytes = 12 * 1024 * 1024

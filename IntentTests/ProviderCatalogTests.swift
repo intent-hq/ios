@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Tests for the shared provider/model catalog helpers on AgentStore:
-/// host.providerAuthStatus parsing, models.list parsing, and the
-/// provider/model params on agent.create.
 @MainActor
 struct ProviderCatalogTests {
     // MARK: - fetchProviders (host.providerAuthStatus)

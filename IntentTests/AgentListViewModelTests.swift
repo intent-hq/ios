@@ -151,8 +151,6 @@ struct AgentListViewModelTests {
 
     @Test @MainActor func foregroundAgents_needsUserOrder_blockerThenQuestionThenDiscussion() {
         let viewModel = AgentListViewModel()
-        // Recency is inverted relative to the expected order so the kind
-        // ranking, not the timestamp, decides.
         viewModel.agents = [
             makeAgent(id: "discussion", name: "Discussion", updatedAt: "2026-03-15T12:00:00Z", attentionRequestKind: "discussion"),
             makeAgent(id: "question", name: "Question", updatedAt: "2026-03-15T11:00:00Z", pendingQuestionsMessageId: "msg-1"),
@@ -207,7 +205,6 @@ struct AgentListViewModelTests {
         ]
         let delegates = viewModel.delegatedAgents(for: "parent")
         #expect(delegates.count == 2)
-        // Newest first
         #expect(delegates.first?.id == "child2")
     }
 

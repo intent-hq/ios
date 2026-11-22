@@ -50,7 +50,6 @@ nonisolated struct WorkspaceDiffPresentation: Sendable {
                       number > 0, number <= lines.count else { continue }
                 let text = lines[number - 1]
                 let displayed = Self.displayedContent(line)
-                // The builder's no-newline annotation is display-only, never lexer input.
                 guard displayed == text || displayed == text + "  ⟵ No newline at end of file" else { continue }
                 mappings.append(Mapping(row: RowID(hunk: hunkIndex, line: lineIndex), range: ranges[number - 1]))
             }

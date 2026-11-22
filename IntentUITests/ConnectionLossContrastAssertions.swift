@@ -1,7 +1,5 @@
 import XCTest
 
-/// Screenshot helpers check real source-to-overlay appearance.
-/// Run the owning Home test in light/dark and actual Reduce Transparency modes.
 extension ConnectionLossUITests {
     @MainActor
     func testDemoRelaunchAfterReturningHomeStartsAtWorkspaces() throws {
@@ -15,8 +13,6 @@ extension ConnectionLossUITests {
         let saved = app.buttons["pairing.saved-connections"]
         XCTAssertTrue(saved.waitForExistence(timeout: timeout))
 
-        // Backgrounding saves the scene's Home state. Foregrounding the same
-        // process must keep that explicit navigation, even in demo mode.
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(saved.waitForExistence(timeout: timeout))
@@ -25,8 +21,6 @@ extension ConnectionLossUITests {
         XCUIDevice.shared.press(.home)
         app.terminate()
 
-        // A fresh ordinary demo has no saved machines. Its old scene must
-        // reach demo loading/connection instead of restoring pairing again.
         app.launchArguments = ["--demo-data"]
         app.launch()
         XCTAssertTrue(app.staticTexts["Deflake payment integration tests"].firstMatch.waitForExistence(timeout: timeout))
@@ -65,7 +59,6 @@ extension ConnectionLossUITests {
         back.tap()
         XCTAssertTrue(saved.waitForExistence(timeout: timeout))
         XCTAssertFalse(back.exists)
-        // Release the abandoned user-initiated connection's data wait after leaving.
         try trigger("initial-data", in: directory)
         saved.tap()
         XCTAssertTrue(machine.waitForExistence(timeout: timeout))
@@ -83,7 +76,6 @@ extension ConnectionLossUITests {
         static let minimumWhiteLuminance = 0.9
         static let approvedGrayLuminance = 0.262
         static let grayTolerance = 0.02
-        // WCAG sRGB relative-luminance and contrast coefficients.
         static let luminanceOffset = 0.05
         static let redWeight = 0.2126
         static let greenWeight = 0.7152
@@ -104,7 +96,6 @@ extension ConnectionLossUITests {
         let sourcePixels = try subtitleLuminances(in: sourceImage, region: subtitle.frame)
         let overlayPixels = try subtitleLuminances(in: app.screenshot().image, region: subtitle.frame)
         let sourceIsLight = sourcePixels[sourcePixels.count / 2] > 0.5
-        // The median is the local backdrop; solid glyph interiors are the brightest pixels.
         let backdrop = overlayPixels[overlayPixels.count / 2]
         let foreground = try XCTUnwrap(overlayPixels.last)
         let contrast = (foreground + Contrast.luminanceOffset) / (backdrop + Contrast.luminanceOffset)

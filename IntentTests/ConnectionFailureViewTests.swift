@@ -4,11 +4,7 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Routing of connection-failure messages into the certificate-mismatch
-/// path (no auto-retry, "Re-pair Device" action, per-host mismatch list).
 struct ConnectionFailureViewTests {
-    /// Large text on a small phone must scroll instead of squeezing the failure
-    /// message and actions into a fixed-height stack. The host runs the real view.
     @Test @MainActor func accessibilityTextKeepsFailureContentScrollable() async throws {
         let fixtures = try BackendSessionRegistryTests()
         let session = fixtures.makeRegistry().makePairingSession()
@@ -55,9 +51,6 @@ struct ConnectionFailureViewTests {
         ))
     }
 
-    /// ios#251: a saved record refused for having no trusted pin lands on
-    /// the re-pair path — no auto-retry (which would re-dial the same
-    /// pin-less record), "Re-pair Device" offered, saved record kept.
     @Test func missingPinRefusalRoutesToCertPath() {
         let error = WebSocketTransportError.missingCertificatePin(host: "10.0.0.1")
         #expect(ConnectionFailureView.isCertificateMismatchMessage(error.localizedDescription))
@@ -74,9 +67,6 @@ struct ConnectionFailureViewTests {
 
     // MARK: - Auto-retry decision
 
-    /// ios#235: a failed Log Off (`.manualLogOff`) never auto-reconnects;
-    /// certificate failures route to re-pairing; only an ordinary failure
-    /// under `.automaticConnection` retries on its own.
     @Test func shouldAutoRetryOnlyForOrdinaryAutomaticFailures() {
         #expect(ConnectionFailureView.shouldAutoRetry(
             retryPolicy: .automaticConnection,
@@ -119,9 +109,6 @@ struct ConnectionFailureViewTests {
     }
 
     @Test func autoRetryDialsWindowBoundRecordNotAnotherSaved() {
-        // Two saved records; the window is bound to the second. Auto-retry
-        // must resolve the bound record — never whichever one a global
-        // pointer (e.g. the last-used pairing record) designates.
         let lastUsed = Self.makeConnection(port: 1)
         let bound = Self.makeConnection(port: 2)
 
@@ -134,9 +121,6 @@ struct ConnectionFailureViewTests {
     }
 
     @Test func autoRetryHasNoTargetWhenBoundRecordDeleted() {
-        // The bound record vanished mid-failure (deleted/tombstoned):
-        // nothing to dial — the view routes to pairing instead of dialing
-        // a surviving record for a different backend.
         let survivor = Self.makeConnection(port: 1)
 
         let result = ConnectionFailureView.autoRetryConnection(

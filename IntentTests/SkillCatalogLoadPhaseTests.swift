@@ -2,7 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// The skill catalog read is one `LoadPhase`: it cannot be loading and failed at once.
 @MainActor
 struct SkillCatalogLoadPhaseTests {
     private let workspaceId = "skills-\(UUID().uuidString)"
@@ -47,8 +46,6 @@ struct SkillCatalogLoadPhaseTests {
         #expect(store.loadPhase.hasLoaded)
     }
 
-    /// Skills do not change in a session, so a loaded catalog is served from
-    /// the cache instead of being refreshed: an outage cannot replace it.
     @Test func aLoadedCatalogSurvivesALaterOutage() async {
         let fake = FakeConnectionManager()
         fake.responseMap["skill.list"] = [["name": "kept", "description": "d", "location": "/k", "scope": "user"]]

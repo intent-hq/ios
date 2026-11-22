@@ -89,7 +89,6 @@ extension DemoFixtures {
     .stylesheet-note { display: block; color: var(--accent); font-weight: 600; }
     """.utf8)
 
-    // Chart geometry and bar heights are fixture data, not tunable constants.
     // swiftlint:disable no_magic_numbers
     private static let inlineReportChartBytes: Data = {
         let size = CGSize(width: 600, height: 300)

@@ -2,9 +2,6 @@
 import Testing
 import UIKit
 
-/// The composer's bare-Return submit rule (`ComposerSubmitPolicy`): visionOS
-/// is dictation-first — Return submits only while a hardware keyboard is
-/// connected — while iPad always submits and iPhone always inserts a newline.
 struct ComposerSubmitPolicyTests {
     // MARK: - visionOS: hardware-keyboard gated
 
@@ -25,8 +22,6 @@ struct ComposerSubmitPolicyTests {
     }
 
     @Test func visionOSRuleIgnoresIdiom() {
-        // Only the keyboard state matters on visionOS (compatibility idioms
-        // included).
         #expect(ComposerSubmitPolicy.returnSubmits(
             isVisionOS: true,
             idiom: .pad,
@@ -96,9 +91,6 @@ struct ComposerSubmitPolicyTests {
         #expect(regular.fontName == "Inter-Regular")
         #expect(regular.pointSize == 16)
 
-        // Apply inherited traits through UIKit's synchronous update path. Layout
-        // alone doesn't flush traits on a detached view. The production observer
-        // must refresh the font; this test never calls the font-update helper.
         window.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
         window.traitOverrides.legibilityWeight = .bold
         window.updateTraitsIfNeeded()

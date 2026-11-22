@@ -96,10 +96,8 @@ struct WorkspaceTransferStoreTests {
         case "version": fixture.target.responseMap["system.status"] = ["version": "older"]
         case "collision": fixture.target.responseMap["workspace.list"] = ["workspaces": [["id": "workspace", "status": "archived"]]]
         case "repeatedToken":
-            // A walk that cannot reach the last page fails closed.
             fixture.target.responseMap["workspace.list"] = ["workspaces": [["id": "other"]], "nextToken": "same"]
         case "pagedCollision":
-            // Bounded reads: the duplicate sits on the second page.
             fixture.target.responseQueueMap["workspace.list"] = [
                 ["workspaces": [["id": "other"]], "nextToken": "t1"],
                 ["workspaces": [["id": "workspace", "status": "archived"]], "nextToken": NSNull()]

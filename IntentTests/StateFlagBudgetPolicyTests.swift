@@ -1,16 +1,9 @@
 import Foundation
 import Testing
 
-/// Ratchets the stored Bool flags and optional `Task` handles per app type
-/// (including nested types and types declared inside extensions).
-/// Several of them moving together usually form an implicit state machine
-/// that belongs in an enum (see `CoalescedRead`, `ConversationTranscriptScrollState.EntryScroll`).
 struct StateFlagBudgetPolicyTests {
-    /// Unlisted types may hold this many flags.
     static let allowance = 4
 
-    /// Types already above the allowance. Counts may only go down; lower the
-    /// entry (or delete it at the allowance) when a type sheds flags.
     static let baseline: [String: Int] = [
         "Intent/Demo/DemoFixturesDesign.swift#DemoDesignFixtures": 5,
         "Intent/Demo/DemoScriptMonitorFixtures.swift#DemoScriptMonitorFixtures": 5,
@@ -72,7 +65,6 @@ struct StateFlagBudgetPolicyTests {
         expression.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
-    /// Flag counts keyed by `relative/path.swift#QualifiedTypeName` for sources under `Intent/`.
     static func flagCounts(under root: URL = TestSourceInputs.root) throws -> [String: Int] {
         let sourceRoot = root.appendingPathComponent("Intent")
         let enumerator = try #require(

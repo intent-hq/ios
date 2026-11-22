@@ -3,7 +3,6 @@ import Testing
 import UIKit
 
 struct InterFontTests {
-    // Read from the supplied static TTF name tables (PostScript name, name ID 6).
     nonisolated private static let postScriptNames = [
         "Inter-Thin", "Inter-ThinItalic",
         "Inter-ExtraLight", "Inter-ExtraLightItalic",
@@ -24,11 +23,9 @@ struct InterFontTests {
 
     @Test(arguments: postScriptNames)
     func fontLoadsByPostScriptNameWithoutFallback(_ postScriptName: String) throws {
-        // Do not manually register fonts here: this must exercise UIAppFonts at app launch.
         let font = try #require(UIFont(name: postScriptName, size: 17), "\(postScriptName) is not registered")
         #expect(font.fontName == postScriptName)
 
-        // Synchronized groups copy these resources to the app bundle root.
         let url = Bundle.main.bundleURL.appending(path: "\(postScriptName).ttf")
         let provider = try #require(CGDataProvider(url: url as CFURL), "Missing font resource: \(url.lastPathComponent)")
         let bundledFont = try #require(CGFont(provider))

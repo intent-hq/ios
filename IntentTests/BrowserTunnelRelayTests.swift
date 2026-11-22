@@ -3,7 +3,6 @@ import Foundation
 import Network
 import Testing
 
-// Literal payloads/ports identify stream and protocol boundaries in these fixtures.
 @MainActor
 struct BrowserTunnelRelayTests {
     private actor Wire: BrowserTunnelWebSocket {

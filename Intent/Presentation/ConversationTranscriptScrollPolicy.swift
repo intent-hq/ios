@@ -181,7 +181,6 @@ enum ConversationTranscriptScrollPolicy {
         !takenOverByGesture
     }
 
-    // Outcome order follows the follow state machine rather than spelling.
     // swiftlint:disable sorted_enum_cases
     enum FollowTerminal: Equatable {
         case executed(FollowLandingTerminal?)

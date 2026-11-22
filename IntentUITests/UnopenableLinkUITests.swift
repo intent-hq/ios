@@ -1,12 +1,10 @@
 import XCTest
 
-/// Taps transcript links the app can't open and checks that each tap shows
-/// the Can't Open Link message with the link target and a Copy Link action.
 nonisolated final class UnopenableLinkUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
         static let agentName = "Dashboard Implementor"
-        static let alertTitle = "Can't Open Link"
+        static let alertTitle = "Can’t Open Link"
         static let timeout: TimeInterval = 15
         static let launchTimeout: TimeInterval = 30
         static let maximumScrolls = 3
@@ -32,14 +30,14 @@ nonisolated final class UnopenableLinkUITests: XCTestCase {
             let transcript = openTranscript(in: app)
 
             let intentAlert = tapLink("Open the workspace settings", in: app, transcript: transcript)
-            XCTAssertTrue(alertText(intentAlert, contains: "This link can't be opened on this device."))
+            XCTAssertTrue(alertText(intentAlert, contains: "This link can’t be opened on this device."))
             XCTAssertTrue(alertText(intentAlert, contains: "intent://local/settings"))
             captureMedia(app, named: "Unopenable link message \(appearance)")
             intentAlert.buttons["Copy Link"].tap()
             XCTAssertTrue(intentAlert.waitForNonExistence(timeout: Fixture.timeout))
 
             let browserAlert = tapLink("Open the signed-in preview", in: app, transcript: transcript)
-            XCTAssertTrue(alertText(browserAlert, contains: "The in-app browser couldn't open this link."))
+            XCTAssertTrue(alertText(browserAlert, contains: "The in-app browser couldn’t open this link."))
             XCTAssertTrue(alertText(browserAlert, contains: "http://user@localhost:3000"))
             captureMedia(app, named: "In-app browser failure message \(appearance)")
             browserAlert.buttons["OK"].tap()
@@ -65,7 +63,6 @@ nonisolated final class UnopenableLinkUITests: XCTestCase {
         return transcript
     }
 
-    /// Taps the named link and returns the message it presents.
     @MainActor
     private func tapLink(_ label: String, in app: XCUIApplication, transcript: XCUIElement) -> XCUIElement {
         let link = app.links[label].firstMatch

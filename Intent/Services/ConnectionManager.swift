@@ -28,8 +28,8 @@ import os
         let certMismatchesBeforeAttempt: [HostCertMismatch]
     }
 
+    @ObservationIgnored var browserNavigationHandler: (([String: Any]) async -> [String: Any])?
     static let shared = ConnectionManager()
-
     var connectionState: ConnectionState = .disconnected {
         didSet {
             if connectionState == .connected { reconnectStopReason = nil }
@@ -410,8 +410,6 @@ extension ConnectionManager {
         subscriptionRouter.reset()
     }
 
-    /// Internal for test
-    /// visibility.
     func resetCertMismatchesIfTargetChanged(
         hosts: [String],
         port: Int,

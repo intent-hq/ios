@@ -59,7 +59,6 @@ extension ConversationStartupRPCTests {
         await other.loadModelCatalogIfNeeded()
         let connection = fixture.connection
         fixture.options.invalidate()
-        // Refresh the other window's metadata before failing this window's read.
         await other.refreshSelectableModels()
         #expect(other.currentProviderId == "auggie")
         let cached = fixture.options.models(for: "auggie")
@@ -99,8 +98,6 @@ extension ConversationStartupRPCTests {
                 && connection.traffic().pendingCount == 0
                 && (!interested || fixture.options.modelCatalog(for: "auggie").isFresh)
         }
-        // Include the separately scheduled label task, including its metadata
-        // retry after the reconnect bootstrap's detail request has failed.
         await viewModel.loadModelCatalogIfNeeded()
         let expectedModels = interested ? 1 : 0
         try await expectNever("model refresh without another selected window") {

@@ -152,7 +152,6 @@ struct ScrollViewFinder: UIViewRepresentable {
         }
 
         @objc private func handleTap() {
-            // Resolve child image/link taps before keyboard dismissal moves their layout.
             DispatchQueue.main.async {
                 UIApplication.shared.sendAction(
                     #selector(UIResponder.resignFirstResponder),

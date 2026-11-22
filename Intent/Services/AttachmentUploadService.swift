@@ -20,7 +20,6 @@ final class AttachmentUploadService {
         case unreadableFile
     }
 
-    // Keep MiB/GiB and minute conversions visible in these named protocol limits.
     // swiftlint:disable no_magic_numbers
     nonisolated static let maxSingleShotBytes = 25 * 1024 * 1024
     nonisolated static let maxAttachmentBytes = 1024 * 1024 * 1024
@@ -191,8 +190,6 @@ extension AttachmentUploadService {
     }
 
     // MARK: - Placement (nonisolated: hashing and disk reads stay off the
-    // main actor; only the RPCs hop — same pattern as WorkspaceFileImageLoader)
-
     @concurrent
     nonisolated private static func place(
         context: PlacementContext,
@@ -274,8 +271,6 @@ extension AttachmentUploadService {
         )
     }
 
-    /// Internal for test visibility (lets tests exercise the chunk math with
-    /// small payloads).
     static func placeChunked(
         connection: ConnectionManagerRouting,
         metadata: ChunkedPlacementMetadata,

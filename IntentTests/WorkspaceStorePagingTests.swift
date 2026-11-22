@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// WorkspaceStore against a bounded daemon (protocol "Paged workspace lists"
-/// and §6.9 "Paged snapshots"). A workspace missing from a loaded list reads
-/// as deleted, so a partial list must never be published.
 @MainActor
 struct WorkspaceStorePagingTests {
     private struct PageError: Error {}
@@ -18,7 +15,6 @@ struct WorkspaceStorePagingTests {
         let store = WorkspaceStore(connectionManager: fake)
         fake.responseQueueMap["workspace.list"] = [
             ["workspaces": Self.workspaces(1...200), "nextToken": "t1"],
-            // A non-administrator page can hold no rows and still continue.
             ["workspaces": [[String: Any]](), "nextToken": "t2"],
             ["workspaces": Self.workspaces(201...250), "nextToken": NSNull()]
         ]
@@ -65,14 +61,11 @@ struct WorkspaceStorePagingTests {
         await store.fetchAll()
         #expect(store.workspaces.count == 3)
 
-        // The daemon repeats its token, so the walk cannot reach the last page.
         fake.responseMap["workspace.list"] = ["workspaces": Self.workspaces(1...2), "nextToken": "same"]
         await store.fetchAll()
         #expect(store.workspaces.count == 3)
     }
 
-    /// Connected store with a complete 150-workspace list and a registered
-    /// `workspace.subscribe` handler (`sub-1`).
     private func liveStore() async throws -> (WorkspaceStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = WorkspaceStore(connectionManager: fake)
@@ -123,7 +116,6 @@ struct WorkspaceStorePagingTests {
         let (store, fake) = try await liveStore()
         fake.failsCancelledRequests = true
         let revisionBefore = store.workspacesRevision
-        // Hold the resubscribe so the backoff window can be observed.
         let backoff = TestGate()
         store.snapshotFiller.sleep = { delay in
             if delay >= .seconds(1) { await backoff.wait() }
@@ -135,7 +127,6 @@ struct WorkspaceStorePagingTests {
         ))
         try await waitUntil("walk gave up") { store.snapshotFiller.failures == 1 }
 
-        // A delta during the backoff must not publish the partial snapshot.
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             seq: 1,
@@ -175,7 +166,6 @@ struct WorkspaceStorePagingTests {
     @Test func localPatchDuringFillKeepsTheFreshSnapshotRow() async throws {
         let (store, fake) = try await liveStore()
         fake.pendingMethods = ["workspace.list"]
-        // The previous list says "Workspace 5"; the fresh snapshot renamed it.
         var fresh = Self.workspaces(1...100)
         fresh[4]["title"] = "Fresh title"
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", seq: 0, snapshot: fresh, nextToken: "t1"))
@@ -192,7 +182,6 @@ struct WorkspaceStorePagingTests {
         let ws5 = store.workspaces.first { $0.id == "ws-5" }
         #expect(ws5?.title == "Fresh title")
         #expect(ws5?.waiting == true)
-        // Rows from unread pages come from their page, not from the old list.
         #expect(store.workspaces.first { $0.id == "ws-120" }?.waiting == false)
         #expect(store.workspaces.count == 150)
     }

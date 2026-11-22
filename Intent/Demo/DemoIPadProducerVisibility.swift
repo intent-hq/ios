@@ -128,7 +128,6 @@ struct DemoIPadPaneGeometry: UIViewRepresentable {
     }
 }
 
-/// Temporary, opt-in accessibility discriminator; never used by ordinary demo launches.
 struct DemoIPadProducerEntry: ViewModifier {
     func body(content: Content) -> some View {
         if DemoMode.isEnabled, LaunchOptions.current.contains("--demo-ipad-producer-visibility") {

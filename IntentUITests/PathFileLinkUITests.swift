@@ -1,8 +1,5 @@
 import XCTest
 
-/// Taps a transcript link an agent wrote as a relative path (`reports/Demo report.html`)
-/// or an absolute path, and checks that it opens in the HTML viewer instead of the
-/// Can't Open Link message, with the report's relative PNG and stylesheet loaded from the workspace.
 nonisolated final class PathFileLinkUITests: XCTestCase {
     private enum Fixture {
         static let workspaceTitle = "Add usage analytics dashboard"
@@ -12,11 +9,9 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
         static let fileName = "Demo report.html"
         static let heading = "Usage analytics report"
         static let chartLabel = "Daily active users chart"
-        /// Hidden by the report's inline style; only the relative stylesheet shows it.
         static let stylesheetNote = "Styled by assets/report.css"
-        /// A broken image collapses to its alt text; the 600×300 chart is far taller.
         static let minimumChartHeight: CGFloat = 80
-        static let alertTitle = "Can't Open Link"
+        static let alertTitle = "Can’t Open Link"
         static let timeout: TimeInterval = 15
         static let launchTimeout: TimeInterval = 30
         static let maximumScrolls = 3
@@ -40,7 +35,6 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
         }
     }
 
-    /// An absolutely addressed report resolves its relative assets beside it, as absolute paths.
     @MainActor
     func testAbsoluteHTMLPathLinkLoadsItsRelativeAssets() {
         openReport(linkLabel: Fixture.absoluteLinkLabel, appearance: "light", screenshotName: "HTML viewer from absolute path link light")

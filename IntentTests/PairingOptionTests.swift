@@ -2,9 +2,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Tests for the platform-filtered pairing options: QR scanning requires a
-/// camera, which visionOS does not expose to third-party apps, so it must be
-/// excluded there and offered on iOS.
 struct PairingOptionTests {
     @Test func excludesQRScanWithoutCameraScanning() {
         let options = PairingOption.available(
@@ -45,8 +42,6 @@ struct PairingOptionTests {
     }
 
     @Test func connectTextUsesApprovedTypography() throws {
-        // Keep the approved Connect token mapping; the local modifier also honors Bold Text.
-        // TypographyTests and PairingDesignTests separately exercise rendering and scaling.
         let source = try pairingSource()
         let mappings = [
             (#"Text("Connect to Intent")"#, "heading2"),
@@ -57,7 +52,6 @@ struct PairingOptionTests {
         for (text, style) in mappings {
             #expect(source.contains("\(text) .interFont(Constants.Typography.\(style))"))
         }
-        // The additional caption is the visionOS pairing hint, checked below.
         #expect(source.components(separatedBy: ".interFont(Constants.Typography.").count - 1 == mappings.count + 1)
     }
 

@@ -1,23 +1,5 @@
 import Foundation
 
-/// Source scanner behind `CopyContextMenuPassthroughPolicyTests`.
-///
-/// It finds `Button` calls that render inline in a view and reports each one
-/// whose label never reaches `copyContextMenuPassthrough()`, directly or
-/// through a same-file helper (`func`, `var`, or `struct`) that applies it.
-/// The label is the `label:` closure or argument, or the trailing closure of
-/// `Button(action:)`; a title-only Button has none. A marker on the action,
-/// on a nested Button, or on the Button's own modifier chain does not count:
-/// it must sit inside the label so the Button is its SwiftUI ancestor (see
-/// `CopyContextMenuPassthroughMarker`). The one exception is
-/// `.buttonStyle(IntentButtonStyle(passesThroughCopyMenu: true))` directly on
-/// the Button's own modifier chain: that style puts the marker behind the
-/// whole styled pill, inside the Button.
-/// Buttons inside menus, dialogs, toolbars, and presented or pushed screens
-/// are skipped because they never render under the row's overlay.
-///
-/// The scan is lexical: comments, string literals, and regex literals are
-/// blanked first, then brackets are matched on what remains.
 enum CopyContextMenuButtonScanner {
     private typealias Byte = SwiftSourceLexer.Byte
 
@@ -30,12 +12,9 @@ enum CopyContextMenuButtonScanner {
 
     static let marker = "copyContextMenuPassthrough"
 
-    /// `.buttonStyle` argument (parentheses included) whose style applies the
-    /// marker: a literal `true` argument. Arguments with nested calls do not match.
     private static let passthroughStyle =
         #"^\(\s*IntentButtonStyle\s*\((?:[^()]*,\s*)?passesThroughCopyMenu\s*:\s*true\s*(?:,[^()]*)?\)\s*\)$"#
 
-    /// Callees whose closures render outside the row's view hierarchy.
     static let detachedContainers: Set<String> = [
         "Menu", "Preview", "ToolbarItem", "ToolbarItemGroup",
         "accessibilityActions", "alert", "confirmationDialog", "contextMenu", "fullScreenCover",
@@ -44,8 +23,6 @@ enum CopyContextMenuButtonScanner {
 
     struct Scan {
         let findings: [Finding]
-        /// False when a literal is unterminated or brackets do not pair up after
-        /// lexing: the lexer misread a construct, so findings cannot be trusted.
         let isReliable: Bool
     }
 
@@ -75,8 +52,6 @@ enum CopyContextMenuButtonScanner {
         return Scan(findings: findings, isReliable: lexed && brackets.isBalanced)
     }
 
-    /// Label source with nested Button calls blanked, so their markers do not
-    /// count for the outer Button.
     private static func labelText(_ label: Range<Int>, excluding calls: [ButtonCall], in code: [UInt8]) -> String {
         var bytes = Array(code[label])
         for nested in calls where label.contains(nested.start) {
@@ -93,16 +68,10 @@ enum CopyContextMenuButtonScanner {
         text.contains(marker) || helpers.contains { references(text, name: $0) }
     }
 
-    /// A bare use of `name`: not a member access, argument label, or longer identifier.
     private static func references(_ text: String, name: String) -> Bool {
         text.range(of: #"(?<![.\w])"# + name + #"\b(?!\s*:)"#, options: .regularExpression) != nil
     }
 
-    /// Same-file declarations whose bodies apply the marker, directly or via
-    /// another marked declaration.
-    /// A name counts only when every same-file declaration of it is marked, so
-    /// a common helper name (`header`, `label`) in two types cannot vouch for
-    /// the unmarked one.
     private static func markedHelpers(in code: [UInt8], brackets: SwiftSourceLexer.Brackets) -> Set<String> {
         let declarations = Dictionary(grouping: helperDeclarations(in: code, brackets: brackets), by: \.name)
         var marked: Set<String> = []
@@ -132,8 +101,6 @@ enum CopyContextMenuButtonScanner {
         }
     }
 
-    /// Opening brace of a declaration's body; nil for stored properties and
-    /// requirements without a body.
     private static func bodyOpener(after index: Int, kind: Substring, in code: [UInt8], brackets: SwiftSourceLexer.Brackets) -> Int? {
         var cursor = index
         while cursor < code.count {
@@ -154,14 +121,11 @@ enum CopyContextMenuButtonScanner {
     }
 
     private static func hasPassthroughStyle(after end: Int, in code: [UInt8], brackets: SwiftSourceLexer.Brackets) -> Bool {
-        // The style closest to the Button wins, so only the first one counts.
         guard let style = chainedModifiers(after: end, in: code, brackets: brackets).first(where: { $0.name == "buttonStyle" }),
               let arguments = style.arguments else { return false }
         return SwiftSourceLexer.text(code[arguments]).range(of: passthroughStyle, options: .regularExpression) != nil
     }
 
-    /// `.name(…) { … }` modifiers chained directly onto the expression that
-    /// ends at `end`, with each one's argument list (parentheses included).
     private static func chainedModifiers(
         after end: Int,
         in code: [UInt8],
@@ -195,13 +159,10 @@ enum CopyContextMenuButtonScanner {
 
     private struct ButtonCall {
         let start: Int
-        /// End (exclusive) of the argument list and every trailing closure.
         let end: Int
         let labels: [Range<Int>]
     }
 
-    /// Offsets of `Button(` / `Button {` calls (optionally `SwiftUI.`-qualified),
-    /// excluding longer identifiers (`IntentIconButton`) and other member accesses.
     private static func buttonStarts(in code: [UInt8]) -> [Int] {
         var starts: [Int] = []
         var index = 0
@@ -241,8 +202,6 @@ enum CopyContextMenuButtonScanner {
         return ButtonCall(start: start, end: closuresEnd, labels: labels)
     }
 
-    /// Plain and labeled (`label: {`) trailing closures from `start`, and the
-    /// offset just past the last one.
     private static func trailingClosures(
         from start: Int,
         in code: [UInt8],
@@ -268,8 +227,6 @@ enum CopyContextMenuButtonScanner {
         return (closures, end)
     }
 
-    /// Value range of the top-level `name:` argument in the argument list
-    /// `arguments` (parentheses included); nested calls and closures are skipped.
     private static func argumentValue(
         _ name: String,
         in arguments: Range<Int>,
@@ -302,8 +259,6 @@ enum CopyContextMenuButtonScanner {
         return (colon + 1)..<segment.upperBound
     }
 
-    /// Name of the call or modifier that owns `opener`: `alert` for both
-    /// `.alert(…) {` and `.alert(…, actions: {`, `Menu` for `Menu {`.
     private static func calleeName(before opener: Int, in code: [UInt8], brackets: SwiftSourceLexer.Brackets) -> String {
         var cursor = SwiftSourceLexer.skipWhitespaceBackward(from: opener - 1, in: code)
         if code[opener] == Byte.openBrace, cursor >= 0, code[cursor] == Byte.closeParen,

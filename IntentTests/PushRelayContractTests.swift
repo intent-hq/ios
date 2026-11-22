@@ -3,8 +3,6 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Contract checks against services/push-relay (README and test fixtures).
-/// Known-answer values were produced with Node's crypto, as the relay uses it.
 struct PushRelayContractTests {
     nonisolated private struct SoftwareSigner: RelaySigner {
         let key: P256.Signing.PrivateKey
@@ -21,7 +19,6 @@ struct PushRelayContractTests {
     private let signer: SoftwareSigner
 
     init() throws {
-        // Private scalar 0x01…0x20.
         signer = SoftwareSigner(key: try P256.Signing.PrivateKey(rawRepresentation: Data(UInt8(1)...UInt8(32))))
     }
 
@@ -61,6 +58,20 @@ struct PushRelayContractTests {
         #expect(running.headline == "1 running")
         #expect(running.displayRows.map(\.row.workspaceId) == ["old", "w1"])
         #expect(running.displayRows.map(\.style) == [.finished, .running])
+    }
+
+    @Test(arguments: [
+        (#""kind":"needs_attention","#, AgentActivityNoticeKind.needsAttention),
+        (#""kind":"review_required","#, .reviewRequired),
+        (#""kind":"from_a_newer_relay","#, .finished),
+        ("", .finished)
+    ])
+    func finishedRowCarriesTheRelaysNoticeKind(field: String, expected: AgentActivityNoticeKind) throws {
+        let json = #"{"rows":[],"runningCount":0,"updatedAt":1800000000,"finished":{"#
+            + field
+            + #""connectionId":"6F9619FF-8B86-D011-B42D-00C04FC964FF","workspaceId":"w1","title":"Fix reconnect"}}"#
+        let state = try JSONDecoder().decode(AgentActivityAttributes.ContentState.self, from: Data(json.utf8))
+        #expect(state.finished?.noticeKind == expected)
     }
 
     @Test func publicKeyAndDeviceIdMatchRelayDerivation() {

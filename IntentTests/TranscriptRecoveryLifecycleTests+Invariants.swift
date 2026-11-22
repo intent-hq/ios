@@ -1,9 +1,7 @@
 @testable import Intent
 import Testing
 
-/// `step`: one transition with the contract's invariants asserted on it.
 extension TranscriptRecoveryLifecycleTests {
-    /// Runs one transition, asserts the invariants and advances `state`.
     @discardableResult
     func step(_ state: inout State, _ event: Event, sourceLocation: SourceLocation = #_sourceLocation) -> [Effect] {
         let before = state
@@ -22,8 +20,6 @@ extension TranscriptRecoveryLifecycleTests {
         checkBudgetIdentity(before: before, event: event, after: after, effects: effects, sourceLocation: sourceLocation)
     }
 
-    /// Inactive transcripts have no task owner or deferred give-up. Only
-    /// marker realization may change until appearance activates the view.
     private func checkVisibility(before: State, event: Event, after: State, effects: [Effect], sourceLocation: SourceLocation) {
         if !after.isVisible {
             #expect(after.owner == .idle, "inactive transcript retained an owner", sourceLocation: sourceLocation)
@@ -63,15 +59,10 @@ extension TranscriptRecoveryLifecycleTests {
         #expect(effects == cancellations, "teardown must cancel follow before recovery, with no other effects", sourceLocation: sourceLocation)
     }
 
-    /// Well-formedness, single owner, stale identity, and scrolls issued by
-    /// owners only (invariants 1, 5).
     private func checkOwnership(before: State, event: Event, after: State, effects: [Effect], sourceLocation: SourceLocation) {
-        // Well-formed: a transferred fallback names the follow that owns.
         if case .transferred(let follow) = after.fallback {
             #expect(followOwner(of: after) == follow, "fallback transferred to a non-owner", sourceLocation: sourceLocation)
         }
-        // Single owner: the armed recovery is never also the owner, and a
-        // demoted one only exists under the follow that demoted it.
         if let armed = after.armedRecovery {
             #expect(after.owner != .recovery(armed.token), "armed recovery also owns", sourceLocation: sourceLocation)
             if case .demoted = armed {
@@ -79,12 +70,10 @@ extension TranscriptRecoveryLifecycleTests {
             }
         }
         #expect(after.nextTokenId >= before.nextTokenId, "token counter went backwards", sourceLocation: sourceLocation)
-        // Stale identity: a token that is not current changes nothing.
         if isStale(event, in: before) {
             #expect(after == before, "stale token changed state", sourceLocation: sourceLocation)
             #expect(effects.isEmpty, "stale token produced effects", sourceLocation: sourceLocation)
         }
-        // A scroll is only ever issued by an owner (invariants 1, 5).
         if effects.contains(where: isScroll) {
             #expect(after.owner != .idle, "scroll issued with no owner", sourceLocation: sourceLocation)
         }
@@ -98,8 +87,6 @@ extension TranscriptRecoveryLifecycleTests {
         }
     }
 
-    /// A give-up over an unrealized end resolves (invariant 2); the
-    /// realization gate (invariant 4).
     private func checkGiveUpResolution(
         before: State, event: Event, after: State, effects: [Effect], sourceLocation: SourceLocation
     ) {
@@ -116,17 +103,11 @@ extension TranscriptRecoveryLifecycleTests {
         }
     }
 
-    /// A terminal for the transferred follow discharges it, with the effect
-    /// of that terminal: Go to End once if it did not execute over a
-    /// still-unrealized end, nothing if it did or the end realized, and an
-    /// executed drain over an unrealized end re-arms (invariant 3).
     private func checkTransferDischarge(
         before: State, event: Event, after: State, effects: [Effect], sourceLocation: SourceLocation
     ) {
         guard before.isVisible, case .transferred(let follow) = before.fallback else { return }
         if case .followRequested = event {
-            // A replacing follow inherits the transfer; an ignored request
-            // (automatic under forced) leaves it with the same owner.
             if let owner = followOwner(of: after) {
                 #expect(after.fallback == .transferred(follow: owner), "follow request did not carry the transfer to the owner", sourceLocation: sourceLocation)
             } else {
@@ -146,8 +127,6 @@ extension TranscriptRecoveryLifecycleTests {
         }
     }
 
-    /// Go to End is shown at most once, and only by a give-up or the
-    /// terminal it was transferred to.
     private func checkGoToEndShownOnce(event: Event, effects: [Effect], sourceLocation: SourceLocation) {
         let shown = effects.filter { $0 == .showGoToEnd }.count
         #expect(shown <= 1, "Go to End shown twice", sourceLocation: sourceLocation)
@@ -162,11 +141,6 @@ extension TranscriptRecoveryLifecycleTests {
         }
     }
 
-    /// Budget identity and continuity (invariant 6): the reducer keeps no
-    /// count; the one outcome recorded is the terminal's own, once, by a
-    /// current terminal; demoting an owning recovery and restoring it keep
-    /// the same token and start no recovery task. Appearance, derealization,
-    /// and an executed drain over an unrealized end can arm a new episode.
     private func checkBudgetIdentity(
         before: State, event: Event, after: State, effects: [Effect], sourceLocation: SourceLocation
     ) {
@@ -214,8 +188,6 @@ extension TranscriptRecoveryLifecycleTests {
         case unexecuted
     }
 
-    /// How `event` terminates the follow a give-up was transferred to; nil
-    /// when it is not that follow's terminal.
     private func transferTerminal(_ event: Event, for follow: FollowToken) -> TransferTerminal? {
         switch event {
         case .followFinished(follow, .executed):
@@ -235,8 +207,6 @@ extension TranscriptRecoveryLifecycleTests {
         return false
     }
 
-    /// A token-bearing event whose token is not current; false for
-    /// token-less events.
     private func isStale(_ event: Event, in state: State) -> Bool {
         switch event {
         case .followDue(let token, _), .followFinished(let token, _):

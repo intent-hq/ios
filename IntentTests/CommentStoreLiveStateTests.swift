@@ -106,7 +106,6 @@ struct CommentStoreLiveStateTests {
         )
         await store.setTestReconciler(reconciler)
 
-        // First apply snapshot
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-1",
             "kind": "snapshot",
@@ -128,7 +127,6 @@ struct CommentStoreLiveStateTests {
 
         #expect(store.threads.count == 1)
 
-        // Now apply delta
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-1",
             "kind": "delta",
@@ -165,7 +163,6 @@ struct CommentStoreLiveStateTests {
         )
         await store.setTestReconciler(reconciler)
 
-        // Apply snapshot
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-1",
             "kind": "snapshot",
@@ -187,7 +184,6 @@ struct CommentStoreLiveStateTests {
 
         let initialCount = store.threads.count
 
-        // Apply delta with gap (seq 5 instead of 1)
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-1",
             "kind": "delta",
@@ -199,7 +195,6 @@ struct CommentStoreLiveStateTests {
             ]
         ])
 
-        // Thread count should remain unchanged (gap not applied)
         #expect(store.threads.count == initialCount)
     }
 
@@ -211,7 +206,6 @@ struct CommentStoreLiveStateTests {
         )
         await store.setTestReconciler(reconciler)
 
-        // Apply snapshot
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-1",
             "kind": "snapshot",
@@ -233,14 +227,12 @@ struct CommentStoreLiveStateTests {
 
         #expect(store.threads.count == 1)
 
-        // Simulate reconnect by creating new reconciler
         let newReconciler = DeltaReconciler<CommentThread>(
             getId: { dict in dict["threadId"] as? String },
             normalize: { dict in CommentThread.parseThread(dict) }
         )
         await store.setTestReconciler(newReconciler)
 
-        // New snapshot should replace old state
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-2",
             "kind": "snapshot",
@@ -272,7 +264,6 @@ struct CommentStoreLiveStateTests {
         )
         await store.setTestReconciler(reconciler)
 
-        // Malformed snapshot push (missing snapshot field)
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-1",
             "kind": "snapshot",
@@ -281,7 +272,6 @@ struct CommentStoreLiveStateTests {
 
         #expect(store.threads.isEmpty)
 
-        // Malformed delta push (missing delta field)
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-1",
             "kind": "delta",

@@ -14,8 +14,6 @@ nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
             case withheld
         }
 
-        /// Admission requests a reconnect candidate must answer before
-        /// `ConnectionManager` adopts it (`WebSocketAdmission`).
         private static let handshakeMethods: Set<String> = ["client.hello", "principal.me"]
 
         private struct HeldResponse {
@@ -89,18 +87,12 @@ nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
             state.withLock { $0.scriptedFailures[method] = count }
         }
 
-        /// Admission replies parked by `holdHandshakes()`; a non-zero count
-        /// means a replacement connection reached this server and is waiting.
         var heldHandshakeCount: Int { state.withLock { $0.heldResponses.count } }
 
-        /// Gate for asserting a transient reconnecting state: until
-        /// `releaseHandshakes()`, admission replies are parked, so no
-        /// replacement connection can be adopted however fast it dials.
         func holdHandshakes() {
             state.withLock { $0.holdsHandshakes = true }
         }
 
-        /// Opens the gate and delivers every parked admission reply in order.
         func releaseHandshakes() {
             let held = state.withLock { state in
                 defer {
@@ -292,7 +284,6 @@ nonisolated final class ManualHeartbeatClock: HeartbeatClock, @unchecked Sendabl
 }
 
 extension ConnectionManagerTests {
-    // Test polling bounds intentionally use short wall-clock durations.
     // swiftlint:disable no_magic_numbers
     private static let defaultSettleTimeout: Duration = .seconds(3)
     // swiftlint:enable no_magic_numbers
@@ -318,11 +309,6 @@ extension ConnectionManagerTests {
         }
     }
 
-    /// Holds `server`'s admission replies, runs `trigger`, and returns once a
-    /// replacement connection is parked at admission. Until the caller's
-    /// `server.releaseHandshakes()`, the manager cannot adopt a replacement,
-    /// so an intermediate "reconnecting" assertion cannot race a fast
-    /// recovery (ios#261).
     @MainActor static func awaitParkedReplacement(
         on server: RecoveryWebSocketServer,
         timeout: Duration = Self.defaultSettleTimeout,
@@ -343,9 +329,6 @@ extension ConnectionManagerTests {
         return false
     }
 
-    /// Bounded wait for the manager to reach `condition`; throws
-    /// `ConditionWaitFailure` naming the call site on timeout so the test
-    /// fails at the wait instead of at whichever assertion follows.
     @MainActor static func settle(
         timeout: Duration = Self.defaultSettleTimeout,
         sourceLocation: SourceLocation = #_sourceLocation,
