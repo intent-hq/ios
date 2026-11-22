@@ -200,8 +200,25 @@ extension ConversationTranscriptScrollUITests {
             return isInside(rect, opened.transcript)
         })
         assertStartupDividerGeometry(app, opened: opened)
+        add(transcriptScreenshot(in: app, named: "Unread divider after agent message"))
         let row = try startupVisibleRow(opened)
         try assertStartupViewportStays(app, opened: opened, row: row) {}
+    }
+
+    @MainActor
+    func testOwnSeenMessageOpensAtTheEndWithoutADivider() throws {
+        let app = try launchStartupConversation(metadataReady: true, holdSnapshot: true, seenOwnMessage: true)
+        addTeardownBlock { @MainActor [self] () async in finishStartup(app) }
+        let opened = enterLongConversation(in: app, context: "own seen message", waitForTranscript: false)
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { self.startupReport(app).contains("metadata=ready") })
+        try Data().write(to: startupSnapshotGate)
+        let last = message(in: app, containing: "Startup row 49.")
+        XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
+            self.startupReport(app).contains("positioned=true") && isInside(last, opened.transcript)
+        })
+        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "New messages")).firstMatch.exists)
+        XCTAssertTrue(startupReport(app).contains("anchor=none"), startupReport(app))
+        add(transcriptScreenshot(in: app, named: "No divider after own message"))
     }
 
     @MainActor
@@ -270,12 +287,15 @@ extension ConversationTranscriptScrollUITests {
     var startupSnapshotGate: URL { hooksRowTriggerFile.appendingPathExtension("snapshot") }
 
     @MainActor
-    func launchStartupConversation(metadataReady: Bool = false, holdSnapshot: Bool = false, appearance: String? = nil) throws -> XCUIApplication {
+    func launchStartupConversation(
+        metadataReady: Bool = false, holdSnapshot: Bool = false, seenOwnMessage: Bool = false, appearance: String? = nil
+    ) throws -> XCUIApplication {
         try? FileManager.default.removeItem(at: startupMetadataGate)
         try? FileManager.default.removeItem(at: startupSnapshotGate)
         if metadataReady { try Data().write(to: startupMetadataGate) }
         var arguments = ["--demo-startup-transcript", "--demo-agent-detail-trigger-file=" + startupMetadataGate.path]
         if holdSnapshot { arguments.append("--demo-chat-snapshot-trigger-file=" + startupSnapshotGate.path) }
+        if seenOwnMessage { arguments.append("--demo-startup-seen-own-message") }
         return launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile, extraArguments: arguments + (appearance.map { ["-appThemePreference", $0] } ?? []))
     }
 

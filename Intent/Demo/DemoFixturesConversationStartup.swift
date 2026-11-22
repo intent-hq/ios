@@ -7,6 +7,7 @@ extension DemoFixtures {
     }
 
     static var usesStartupTranscript: Bool { startupTranscriptRequested(by: LaunchOptions.current.arguments) }
+    static var startupSeenMessageIsOwn: Bool { LaunchOptions.current.arguments.contains("--demo-startup-seen-own-message") }
     static let startupSeenMessageId = "startup-row-25"
     private static let startupRowCount = 50
 
@@ -20,8 +21,10 @@ extension DemoFixtures {
 
     static var startupTranscriptMessages: [[String: Any]] {
         (0..<startupRowCount).map { index in
-            [
-                "id": "startup-row-\(index)", "agentId": longConversationAgentId, "role": "assistant",
+            let id = "startup-row-\(index)"
+            return [
+                "id": id, "agentId": longConversationAgentId,
+                "role": startupSeenMessageIsOwn && id == startupSeenMessageId ? "user" : "assistant",
                 "contentBlocks": [
                     [
                         "id": "startup-text-\(index)", "type": "text",

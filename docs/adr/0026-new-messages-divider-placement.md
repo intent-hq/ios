@@ -32,13 +32,16 @@ different from unlatched.
 
 ### 2. When there is no divider at entry
 
-Applies to: `NewMessagesDivider.resolveAnchor(messageIds:lastSeenMessageId:)`
+Applies to: `NewMessagesDivider.resolveAnchor(messageIds:lastSeenMessageId:userMessageIds:)`
 
 `resolveAnchor` returns the id of the message the divider renders after. It
 returns `nil` (no divider, entry scrolls to the bottom as before) when:
 
 - there is no marker;
 - the marker is at the newest message, so nothing is unseen;
+- the marker is the user's own message (`role == .user`). A send marks seen, so
+  this is the common "sent, left, came back" case; everything below is the
+  reply to that message, and a divider under it tells the user nothing;
 - the marker dangles: its id is not in the transcript (for example the row was
   dropped by an `agent.editAndRegenerate` truncation).
 

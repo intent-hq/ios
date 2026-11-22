@@ -4,13 +4,15 @@ import Foundation
 enum NewMessagesDivider {
     static func resolveAnchor(
         messageIds: [String],
-        lastSeenMessageId: String?
+        lastSeenMessageId: String?,
+        userMessageIds: Set<String> = []
     ) -> String? {
         guard let marker = lastSeenMessageId, !marker.isEmpty, !messageIds.isEmpty else {
             return nil
         }
         guard let markerIndex = messageIds.firstIndex(of: marker) else { return nil }
         if markerIndex == messageIds.count - 1 { return nil }
+        if userMessageIds.contains(marker) { return nil }
         return marker
     }
 

@@ -57,9 +57,11 @@ extension ConversationViewModel {
 
     func latchNewMessagesDividerAnchorIfNeeded() {
         guard newMessagesDividerLatch == .unlatched else { return }
+        let messages = store.messages
         newMessagesDividerLatch = .latched(anchorId: NewMessagesDivider.resolveAnchor(
-            messageIds: store.messages.map(\.id),
-            lastSeenMessageId: store.lastSeenMessageId
+            messageIds: messages.map(\.id),
+            lastSeenMessageId: store.lastSeenMessageId,
+            userMessageIds: Set(messages.lazy.filter { $0.role == .user }.map(\.id))
         ))
     }
 

@@ -274,6 +274,8 @@ CAPTURES = {
         "testTranscriptTapDismissesKeyboardAndPreservesDraft": ("Workspace composer resting placement",),
     },
     "ConversationTranscriptScrollUITests": {
+        "testReadyMetadataPositionsLongUnreadEntryAtTheAuthoritativeDivider": ("Unread divider after agent message",),
+        "testOwnSeenMessageOpensAtTheEndWithoutADivider": ("No divider after own message",),
         "testControlledEndDerealizationIsRecoveredByTheRealRecoveryPath": ("Transcript recovered release",),
         "testBlankEndSeveralScreensDeepIsRecovered": ("Transcript recovered deep-release",),
         "testLoadingStatusShowsIdleDelayAndRestoresComposer": (

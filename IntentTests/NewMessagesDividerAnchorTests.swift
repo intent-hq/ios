@@ -39,6 +39,22 @@ struct NewMessagesDividerAnchorTests {
     @Test func nilForEmptyTranscript() {
         #expect(NewMessagesDivider.resolveAnchor(messageIds: [], lastSeenMessageId: "m1") == nil)
     }
+
+    @Test func nilWhenMarkerIsOwnMessage() {
+        #expect(NewMessagesDivider.resolveAnchor(
+            messageIds: ids,
+            lastSeenMessageId: "m2",
+            userMessageIds: ["m2"]
+        ) == nil)
+    }
+
+    @Test func anchorsWhenOnlyLaterMessagesAreOwn() {
+        #expect(NewMessagesDivider.resolveAnchor(
+            messageIds: ids,
+            lastSeenMessageId: "m2",
+            userMessageIds: ["m1", "m3"]
+        ) == "m2")
+    }
 }
 
 struct NewMessagesDividerLatchedTests {
