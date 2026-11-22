@@ -24,7 +24,14 @@ nonisolated final class ConversationGoalUITests: XCTestCase {
         ]
         app.launch()
         let workspace = app.buttons["workspace.row.demo-ws-agent-design"]
-        XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        let workspaces = app.buttons["ipad.rail.workspaces"]
+        if workspaces.exists {
+            XCTAssertTrue(workspaces.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+            if !workspaces.isSelected { workspaces.tap() }
+            XCTAssertTrue(workspaces.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
+        }
+        XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-design"]
         XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
