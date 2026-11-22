@@ -112,7 +112,7 @@ struct ConversationGoalTests {
     }
 
     @Test(arguments: [
-        (GoalCommandNotice.Action.set, "Ship", "Goal set: Ship"),
+        (GoalCommandNotice.Action.set, String?.some("Ship"), "Goal set: Ship"),
         (.updated, "Ship", "Goal updated: Ship"),
         (.unchanged, "Ship", "Goal unchanged: Ship"),
         (.cleared, nil, "Goal removed."),
