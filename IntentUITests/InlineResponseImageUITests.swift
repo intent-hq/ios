@@ -401,14 +401,6 @@ extension InlineResponseImageUITests {
 
         let preview = app.images["Image preview"].firstMatch
         XCTAssertTrue(preview.waitForExistence(timeout: Fixture.timeout))
-        assertGalleryPosition(1, of: preview)
-        attachGalleryScreenshot("Image viewer, image 1 of 3")
-
-        preview.swipeLeft()
-        assertGalleryPosition(2, of: preview)
-        attachGalleryScreenshot("Image viewer, image 2 of 3")
-
-        preview.swipeLeft()
         assertGalleryPosition(3, of: preview)
         attachGalleryScreenshot("Image viewer, image 3 of 3")
 
@@ -416,6 +408,17 @@ extension InlineResponseImageUITests {
         assertGalleryPosition(3, of: preview)
 
         preview.swipeRight()
+        assertGalleryPosition(2, of: preview)
+        attachGalleryScreenshot("Image viewer, image 2 of 3")
+
+        preview.swipeRight()
+        assertGalleryPosition(1, of: preview)
+        attachGalleryScreenshot("Image viewer, image 1 of 3")
+
+        preview.swipeRight()
+        assertGalleryPosition(1, of: preview)
+
+        preview.swipeLeft()
         assertGalleryPosition(2, of: preview)
 
         preview.swipeDown()
