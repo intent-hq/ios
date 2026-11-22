@@ -192,10 +192,11 @@ struct ConversationGoalEditor: View {
 
     @ToolbarContentBuilder private var editorToolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button("Cancel", action: onCancel)
+            IntentIconButton(icon: .close, label: "Cancel", action: onCancel)
                 .disabled(isSaving)
                 .accessibilityIdentifier("goalEditor.cancel")
         }
+        .intentToolbarSurface()
         ToolbarItem(placement: .confirmationAction) {
             if isSaving {
                 ProgressView().accessibilityLabel("Saving goal")
