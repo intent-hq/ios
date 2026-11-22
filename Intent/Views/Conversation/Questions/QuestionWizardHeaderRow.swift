@@ -42,7 +42,7 @@ struct QuestionWizardHeaderRow: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: questionIconSide, height: questionIconSide)
-                .foregroundStyle(Theme.primary(for: colorScheme))
+                .foregroundStyle(Theme.accentForeground(for: colorScheme))
                 .accessibilityHidden(true)
             Text("Questions")
                 .interFont(Constants.Typography.subtextXXS.withFace(.medium))
@@ -93,13 +93,13 @@ struct QuestionWizardHeaderRow: View {
 
     private func segmentColor(_ segment: Int) -> Color {
         if segment < index {
-            return Theme.primary(for: colorScheme).opacity(
+            return Theme.accentForeground(for: colorScheme).opacity(
                 colorSchemeContrast == .increased
                     ? Layout.completedSegmentIncreasedOpacity
                     : Layout.completedSegmentOpacity
             )
         }
-        if segment == index { return Theme.primary(for: colorScheme) }
+        if segment == index { return Theme.accentForeground(for: colorScheme) }
         return Theme.mutedForeground(
             for: colorScheme,
             contrast: colorSchemeContrast

@@ -133,7 +133,7 @@ struct QuestionStepView: View {
 
     private func optionBackground(selected: Bool) -> Color {
         selected
-            ? Theme.primary(for: colorScheme).opacity(
+            ? Theme.accent.opacity(
                 colorSchemeContrast == .increased ? Layout.selectedHighContrastOpacity : Layout.selectedOpacity
             )
             : Theme.background(for: colorScheme).opacity(Layout.optionBackgroundOpacity)
@@ -143,7 +143,7 @@ struct QuestionStepView: View {
         RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius)
             .strokeBorder(
                 selected
-                    ? Theme.primary(for: colorScheme)
+                    ? Theme.accentForeground(for: colorScheme)
                     : Theme.border(for: colorScheme, contrast: colorSchemeContrast)
                         .opacity(colorSchemeContrast == .increased ? 1 : Layout.standardBorderOpacity),
                 lineWidth: selected || colorSchemeContrast == .increased
@@ -154,7 +154,7 @@ struct QuestionStepView: View {
     @ViewBuilder
     private func checkbox(_ selected: Bool) -> some View {
         RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.checkboxCornerRadius)
-            .fill(selected ? Theme.primary(for: colorScheme) : Color.clear)
+            .fill(selected ? Theme.accent : Color.clear)
             .frame(width: checkboxSide, height: checkboxSide)
             .overlay(
                 RoundedRectangle(
@@ -178,7 +178,7 @@ struct QuestionStepView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: actionIconSide, height: actionIconSide)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.onAccent)
                         .accessibilityHidden(true)
                 }
             }

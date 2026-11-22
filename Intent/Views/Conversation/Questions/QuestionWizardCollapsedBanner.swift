@@ -75,7 +75,7 @@ struct QuestionWizardCollapsedBanner: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: questionIconSide, height: questionIconSide)
-                    .foregroundStyle(Theme.primary(for: colorScheme))
+                    .foregroundStyle(Theme.accentForeground(for: colorScheme))
                 Text("Questions")
                     .interFont(Constants.Typography.subtextXXS.withFace(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -84,10 +84,10 @@ struct QuestionWizardCollapsedBanner: View {
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .padding(.horizontal, Layout.countBadgeHorizontalPadding)
                     .padding(.vertical, Layout.countBadgeVerticalPadding)
-                    .background(Capsule().fill(Theme.primary(for: colorScheme).opacity(Layout.badgeFillOpacity)))
+                    .background(Capsule().fill(Theme.accent.opacity(Layout.badgeFillOpacity)))
                     .overlay(
                         Capsule().strokeBorder(
-                            Theme.primary(for: colorScheme).opacity(Layout.countBadgeBorderOpacity),
+                            Theme.accentForeground(for: colorScheme).opacity(Layout.countBadgeBorderOpacity),
                             lineWidth: Layout.countBadgeBorderWidth
                         )
                     )
