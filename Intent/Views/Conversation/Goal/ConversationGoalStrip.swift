@@ -177,7 +177,7 @@ struct ConversationGoalEditor: View {
                 .accessibilityLabel("Goal")
                 .accessibilityHint("Describe what done looks like. Save an empty goal to remove it.")
                 .accessibilityIdentifier("goalEditor.text")
-            Text("\(characterCount)/\(ConversationGoal.maximumLength)")
+            Text(verbatim: "\(characterCount)/\(ConversationGoal.maximumLength)")
                 .interFont(Constants.Typography.subtextXXS)
                 .monospacedDigit()
                 .foregroundStyle(Design.Palette.secondaryForeground(for: colorScheme, contrast: contrast))
