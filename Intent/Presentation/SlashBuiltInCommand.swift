@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct SlashBuiltInCommand: Identifiable, Hashable, Sendable {
+struct SlashBuiltInCommand: Identifiable, Hashable, Sendable {
     let name: String
     let description: String
 
@@ -21,7 +21,7 @@ nonisolated struct SlashBuiltInCommand: Identifiable, Hashable, Sendable {
     }
 }
 
-nonisolated enum SlashCompletionEntry: Identifiable, Hashable, Sendable {
+enum SlashCompletionEntry: Identifiable, Hashable, Sendable {
     case command(SlashBuiltInCommand)
     case skill(SkillInfo)
 
