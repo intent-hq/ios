@@ -5,10 +5,12 @@ struct ConversationGoalPill: View {
     let onSave: (String) async -> String?
     let onRemove: () async -> Void
     @State private var state = ConversationGoalPillState.idle
+    @ScaledMetric(relativeTo: .footnote) private var maximumWidth = Constants.Conversation.Design.Goal.pillMaximumWidth
 
     var body: some View {
         Button(action: edit) {
-            WorkspaceStatusPill(icon: .mapPin, text: Text("Goal"))
+            WorkspaceStatusPill(icon: .mapPin, text: Text(verbatim: goal))
+                .frame(maxWidth: maximumWidth, alignment: .leading)
         }
         .buttonStyle(IntentContentButtonStyle())
         .disabled(state.isRemoving)

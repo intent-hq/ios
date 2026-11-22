@@ -128,6 +128,7 @@ extension Constants.Conversation.Design {
 
 extension Constants.Conversation.Design {
     enum Goal {
+        static let pillMaximumWidth: CGFloat = 220
         static let editorMinimumHeight: CGFloat = 160
         static let editorSpacing: CGFloat = 12
     }
