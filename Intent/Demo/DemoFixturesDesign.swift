@@ -228,7 +228,8 @@ final class DemoDesignFixtures {
 
     func event(for method: String, params: [String: Any]) -> [String: Any]? { // swiftlint:disable:this discouraged_optional_collection
         if scenario == .goal, params["agentId"] as? String == Self.agentId, ["agent.sendMessage", "agent.setGoal"].contains(method) {
-            return ["type": "agent:updated", "data": ["agentId": Self.agentId, "goal": goal ?? NSNull()]]
+            let data: [String: Any] = ["agentId": Self.agentId, "goal": goal as Any? ?? NSNull()]
+            return ["type": "agent:updated", "data": data]
         }
         if params["agentId"] as? String == Self.agentId,
            ["agent.sendMessage", "agent.dismissQuestions"].contains(method) {

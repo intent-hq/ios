@@ -27,7 +27,7 @@ struct ConversationGoalTests {
         func capabilities(_ value: Any?) -> ConnectionCapabilities {
             var advertised: [String: Any] = [:]
             if let value { advertised["conversationGoal"] = value }
-            return ConnectionCapabilities(hello: ["server": ["protocolVersion": "15.0", "capabilities": advertised]])
+            return ConnectionCapabilities(hello: ["server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": advertised]])
         }
         #expect(capabilities(1).supportsConversationGoal)
         #expect(!capabilities(nil).supportsConversationGoal)

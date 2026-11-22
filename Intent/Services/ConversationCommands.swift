@@ -126,17 +126,17 @@ extension ConversationCommands {
             throw ConversationSendError.invalidAcknowledgement
         }
         guard let command = GoalCommandResult(command: response["command"]) else { return nil }
-        agentDetails.updateFields(agentId: agentId, fields: ["goal": command.goal ?? NSNull()])
+        agentDetails.updateFields(agentId: agentId, fields: ["goal": command.goal as Any? ?? NSNull()])
         return command
     }
 
     func setGoal(agentId: String, workspaceId: String, goal: String?) async throws -> GoalCommandResult {
         let result = try await connectionManager.request(
             "agent.setGoal",
-            params: ["agentId": agentId, "workspaceId": workspaceId, "goal": goal ?? NSNull()]
+            params: ["agentId": agentId, "workspaceId": workspaceId, "goal": goal as Any? ?? NSNull()]
         )
         guard let command = GoalCommandResult(setGoalResponse: result) else { throw ConversationSendError.invalidAcknowledgement }
-        agentDetails.updateFields(agentId: agentId, fields: ["goal": command.goal ?? NSNull()])
+        agentDetails.updateFields(agentId: agentId, fields: ["goal": command.goal as Any? ?? NSNull()])
         return command
     }
 

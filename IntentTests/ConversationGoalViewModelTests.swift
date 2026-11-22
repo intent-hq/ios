@@ -5,7 +5,7 @@ import Testing
 @MainActor
 struct ConversationGoalViewModelTests {
     private static let goalCapabilities = ConnectionCapabilities(hello: [
-        "server": ["protocolVersion": "15.0", "capabilities": ["conversationGoal": 1]]
+        "server": ["protocolVersion": ProtocolFixtures.currentProtocolVersion, "capabilities": ["conversationGoal": 1]]
     ])
 
     private func makeGoalVM(supported: Bool = true) async -> (viewModel: ConversationViewModel, fake: FakeConnectionManager) {
