@@ -105,7 +105,18 @@ nonisolated final class ConversationGoalUITests: XCTestCase {
 
         let composer = app.textViews["composer.textView"]
         composer.tap()
-        composer.typeText("/goal Rehearse the rollback")
+        composer.typeText("/")
+        let goalChip = app.buttons["composer.command.goal"]
+        XCTAssertTrue(goalChip.waitForExistence(timeout: Self.timeout), "The slash chips offer the built-in /goal")
+        XCTAssertEqual(goalChip.label, "/goal, built-in command")
+        let firstSkill = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "composer.skill.")).firstMatch
+        if firstSkill.waitForExistence(timeout: Self.timeout) {
+            XCTAssertLessThan(goalChip.frame.minX, firstSkill.frame.minX, "The built-in is listed before skills")
+        }
+        capture(app, name: "Goal command chip \(appearance)")
+        goalChip.tap()
+        XCTAssertTrue(waitForValue(composer, "/goal "), "Tapping the chip inserts /goal")
+        composer.typeText("Rehearse the rollback")
         app.buttons["composer.send"].tap()
         XCTAssertTrue(text.waitForExistence(timeout: Self.timeout), "A /goal send sets the goal")
         XCTAssertEqual(text.label, "Goal: Rehearse the rollback")

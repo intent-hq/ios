@@ -459,6 +459,7 @@ $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
 $(SRCROOT)/Intent/Presentation/QuestionWizardPresentation.swift
 $(SRCROOT)/Intent/Presentation/RetainedIPadPane.swift
+$(SRCROOT)/Intent/Presentation/SlashBuiltInCommand.swift
 $(SRCROOT)/Intent/Presentation/SlashSkillContext.swift
 $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift

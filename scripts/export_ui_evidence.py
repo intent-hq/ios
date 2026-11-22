@@ -374,7 +374,7 @@ CAPTURES = {
         "testGoalStripExpandsEditsRemovesAndFollowsGoalCommands": tuple(
             f"Goal {state} {appearance}"
             for appearance in ("light", "dark")
-            for state in ("strip collapsed", "strip expanded", "editor", "strip after command")
+            for state in ("strip collapsed", "strip expanded", "editor", "command chip", "strip after command")
         ),
     },
     "TurnFailureNoticeUITests": {

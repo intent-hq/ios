@@ -61,6 +61,9 @@ struct MessageInputView: View {
             maxSelectionCount: viewModel.photoPickerMaxSelectionCount,
             matching: viewModel.photoPickerFilter
         )
+        .onChange(of: goalCommandAvailable, initial: true) { _, available in
+            skillCompletion.builtInCommands = available ? [.goal] : []
+        }
         .onChange(of: viewModel.selectedPhotoItems) { _, _ in
             viewModel.loadSelectedPhotos()
         }
@@ -133,6 +136,10 @@ private extension MessageInputView {
                 #endif
             }
         }
+    }
+
+    private var goalCommandAvailable: Bool {
+        viewModel.supportsConversationGoal && viewModel.connection.connectionState == .connected
     }
 
     @ViewBuilder var skillChips: some View {
