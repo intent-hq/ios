@@ -61,7 +61,6 @@ struct ConversationGoalStrip: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .frame(minHeight: Design.minimumTapTarget, alignment: .leading)
-                .accessibilityLabel("Goal: \(goal)")
                 .accessibilityIdentifier("goalStrip.text")
         } else {
             Button { state.toggleExpansion() } label: {
@@ -88,14 +87,23 @@ struct ConversationGoalStrip: View {
                 identifier: "goalStrip.toggle"
             ) { state.toggleExpansion() }
             .accessibilityValue(state.isExpanded ? "Expanded" : "Collapsed")
-            actionButton(icon: .edit, label: "Edit goal", identifier: "goalStrip.edit") {
-                state.beginEditing(goal: goal)
+            HStack(spacing: Goal.actionSpacing) {
+                actionButton(icon: .edit, label: "Edit goal", identifier: "goalStrip.edit") {
+                    state.beginEditing(goal: goal)
+                }
+                actionButton(icon: .close, label: "Remove goal", identifier: "goalStrip.remove", action: remove)
             }
-            actionButton(icon: .close, label: "Remove goal", identifier: "goalStrip.remove") {
-                Task { await onRemove() }
-            }
+            .disabled(state.isRemoving)
+            .requiresLiveConnection()
         }
-        .requiresLiveConnection()
+    }
+
+    private func remove() {
+        guard state.beginRemoving() else { return }
+        Task {
+            await onRemove()
+            state.finishRemoving()
+        }
     }
 
     private func actionButton(icon: ImageResource, label: String, identifier: String, action: @escaping () -> Void) -> some View {

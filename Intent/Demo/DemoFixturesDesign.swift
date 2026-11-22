@@ -57,6 +57,7 @@ final class DemoDesignFixtures {
     private(set) var providerId = "auggie"
     private(set) var reasoningEffort: String?
     var goal: String?
+    var pendingGoalEvent: String??
     var sentMessages: [[String: Any]] = []
     private var queuedMessages: [[String: Any]] = []
     private var sequence = 0
@@ -227,8 +228,9 @@ final class DemoDesignFixtures {
     }
 
     func event(for method: String, params: [String: Any]) -> [String: Any]? { // swiftlint:disable:this discouraged_optional_collection
-        if scenario == .goal, params["agentId"] as? String == Self.agentId, ["agent.sendMessage", "agent.setGoal"].contains(method) {
-            let data: [String: Any] = ["agentId": Self.agentId, "goal": goal as Any? ?? NSNull()]
+        if let written = pendingGoalEvent {
+            pendingGoalEvent = nil
+            let data: [String: Any] = ["agentId": Self.agentId, "goal": written as Any? ?? NSNull()]
             return ["type": "agent:updated", "data": data]
         }
         if params["agentId"] as? String == Self.agentId,

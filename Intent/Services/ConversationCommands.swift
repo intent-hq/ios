@@ -117,7 +117,7 @@ extension ConversationCommands {
         )
     }
 
-    func sendGoalCommand(agentId: String, workspaceId: String, content: String) async throws -> GoalCommandResult? {
+    func sendGoalCommand(agentId: String, workspaceId: String, content: String) async throws -> GoalSendOutcome {
         let result = try await connectionManager.request(
             "agent.sendMessage",
             params: ["agentId": agentId, "workspaceId": workspaceId, "content": content, "interpretCommands": true]
@@ -125,9 +125,11 @@ extension ConversationCommands {
         guard let response = result as? [String: Any], response["success"] as? Bool == true else {
             throw ConversationSendError.invalidAcknowledgement
         }
-        guard let command = GoalCommandResult(command: response["command"]) else { return nil }
+        guard let command = GoalCommandResult(command: response["command"]) else {
+            return .delivered(queued: response["queued"] as? Bool == true)
+        }
         agentDetails.updateFields(agentId: agentId, fields: ["goal": command.goal as Any? ?? NSNull()])
-        return command
+        return .command(command)
     }
 
     func setGoal(agentId: String, workspaceId: String, goal: String?) async throws -> GoalCommandResult {

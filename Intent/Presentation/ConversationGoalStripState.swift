@@ -9,14 +9,17 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
     case collapsed
     case editing(ConversationGoalDraft)
     case expanded
+    case removing
     case saving(ConversationGoalDraft)
 
     var isExpanded: Bool { self == .expanded }
 
+    var isRemoving: Bool { self == .removing }
+
     var isEditorPresented: Bool {
         switch self {
         case .editing, .saving: true
-        case .collapsed, .expanded: false
+        case .collapsed, .expanded, .removing: false
         }
     }
 
@@ -28,7 +31,7 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
     var draft: ConversationGoalDraft? {
         switch self {
         case let .editing(draft), let .saving(draft): draft
-        case .collapsed, .expanded: nil
+        case .collapsed, .expanded, .removing: nil
         }
     }
 
@@ -41,12 +44,12 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
         switch self {
         case .collapsed: self = .expanded
         case .expanded: self = .collapsed
-        case .editing, .saving: break
+        case .editing, .removing, .saving: break
         }
     }
 
     mutating func beginEditing(goal: String) {
-        guard !isEditorPresented else { return }
+        guard !isEditorPresented, !isRemoving else { return }
         self = .editing(ConversationGoalDraft(text: goal))
     }
 
@@ -76,5 +79,16 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
         } else {
             self = .collapsed
         }
+    }
+
+    mutating func beginRemoving() -> Bool {
+        guard !isEditorPresented, !isRemoving else { return false }
+        self = .removing
+        return true
+    }
+
+    mutating func finishRemoving() {
+        guard isRemoving else { return }
+        self = .collapsed
     }
 }

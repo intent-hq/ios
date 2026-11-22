@@ -43,7 +43,10 @@ extension DemoDesignFixtures {
         } else {
             action = goal == nil ? "set" : "updated"
         }
-        if action != "shown", action != "unchanged" { goal = next }
+        if action != "shown", action != "unchanged" {
+            goal = next
+            pendingGoalEvent = .some(next)
+        }
         var result: [String: Any] = ["action": action, "goal": goal as Any? ?? NSNull()]
         if isCommand || action != "unchanged" {
             let id = "demo-design-goal-\(sentMessages.count)"

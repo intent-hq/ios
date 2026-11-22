@@ -15,7 +15,7 @@ extension ConversationViewModel {
             goalError = ConversationGoal.attachmentsError
             return false
         }
-        guard pendingGoalCommand != content else { return false }
+        guard pendingGoalCommand == nil else { return false }
         pendingGoalCommand = content
         defer { if pendingGoalCommand == content { pendingGoalCommand = nil } }
         let textRevision = composerTextRevision

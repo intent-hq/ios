@@ -257,6 +257,7 @@ private extension MessageInputView {
             || viewModel.hasPendingAttachments)
             && !viewModel.isUploadingFiles
             && !viewModel.isLoadingPhotos
+            && viewModel.pendingGoalCommand == nil
             && isConnectionReadyForSending
             && allowsSending
     }

@@ -88,6 +88,7 @@ import SwiftUI
     }
     var pendingQuestionRecovery: PendingQuestionRecovery?
     var goal: String?
+    @ObservationIgnored var goalRevision = 0
 
     let connectionManager: ConnectionManagerRouting
     @ObservationIgnored let liveTranscript: ConversationLiveTranscript

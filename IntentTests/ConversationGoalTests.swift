@@ -164,6 +164,20 @@ struct ConversationGoalTests {
         #expect(state.draft?.failure == nil, "Typing clears the failure")
     }
 
+    @Test func stripStateGuardsRemoval() {
+        var state = ConversationGoalStripState.expanded
+        #expect(state.beginRemoving())
+        #expect(state.isRemoving)
+        #expect(!state.beginRemoving(), "A second tap while removing is ignored")
+        state.toggleExpansion()
+        state.beginEditing(goal: "Ship it")
+        #expect(state == .removing, "Expanding and editing wait for the removal")
+        state.finishRemoving()
+        #expect(state == .collapsed)
+        state.beginEditing(goal: "Ship it")
+        #expect(!state.beginRemoving(), "Removing is unavailable while the editor is open")
+    }
+
     @Test func stripStateLeavesTheLengthCheckToTheDaemon() {
         var state = ConversationGoalStripState.collapsed
         let long = String(repeating: "a", count: ConversationGoal.maximumLength + 1)

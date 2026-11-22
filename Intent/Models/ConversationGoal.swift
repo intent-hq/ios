@@ -68,6 +68,11 @@ nonisolated enum ConversationGoal {
     }
 }
 
+nonisolated enum GoalSendOutcome: Equatable, Sendable {
+    case command(GoalCommandResult)
+    case delivered(queued: Bool)
+}
+
 nonisolated struct GoalCommandResult: Equatable, Sendable {
     let action: String
     let goal: String?

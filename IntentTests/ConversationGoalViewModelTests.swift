@@ -98,12 +98,52 @@ struct ConversationGoalViewModelTests {
     @Test func resultWithoutCommandIsAnOrdinaryDelivery() async {
         let (viewModel, fake) = await makeGoalVM()
         fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false, "messageId": "m1"]
+        fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "name": "Test", "workspaceId": "test-ws", "isResponding": true]]
         viewModel.store.goal = "Ship it"
         viewModel.messageText = "/goal Ship the beta"
         #expect(await viewModel.sendGoalCommand("/goal Ship the beta"))
         #expect(viewModel.messageText.isEmpty, "The daemon delivered the text, so the composer clears")
         #expect(viewModel.store.goal == "Ship it", "Only a command result changes the goal")
+        #expect(viewModel.store.isStreaming, "A delivered message shows the thinking state from the daemon")
         #expect(viewModel.goalError == nil)
+    }
+
+    @Test func staleAgentGetDoesNotOverwriteALiveGoalUpdate() async throws {
+        let (viewModel, fake) = await makeGoalVM()
+        let store = viewModel.store
+        fake.pendingMethods.insert("agent.get")
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "test-agent") }
+        try await fake.waitForPendingRequests("agent.get")
+        store.handleStreamEvent("events.event", params: agentUpdated(["agentId": "test-agent", "goal": "B"]))
+        fake.resolvePending("agent.get", with: ["agent": ["id": "test-agent", "name": "Test", "workspaceId": "test-ws", "goal": "A"]] as [String: Any])
+        await refresh.value
+        #expect(store.goal == "B")
+    }
+
+    @Test func staleAgentGetDoesNotRestoreARemovedGoal() async throws {
+        let (viewModel, fake) = await makeGoalVM()
+        let store = viewModel.store
+        store.goal = "A"
+        fake.pendingMethods.insert("agent.get")
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "test-agent") }
+        try await fake.waitForPendingRequests("agent.get")
+        store.handleStreamEvent("events.event", params: agentUpdated(["agentId": "test-agent", "goal": NSNull()]))
+        fake.resolvePending("agent.get", with: ["agent": ["id": "test-agent", "name": "Test", "workspaceId": "test-ws", "goal": "A"]] as [String: Any])
+        await refresh.value
+        #expect(store.goal == nil)
+    }
+
+    @Test func aSecondGoalCommandWaitsForTheFirst() async throws {
+        let (viewModel, fake) = await makeGoalVM()
+        fake.pendingMethods.insert("agent.sendMessage")
+        let first = Task { await viewModel.sendGoalCommand("/goal Ship it") }
+        try await fake.waitForPendingRequests("agent.sendMessage")
+        #expect(viewModel.pendingGoalCommand == "/goal Ship it")
+        #expect(!(await viewModel.sendGoalCommand("/goal Something else")))
+        fake.resolvePending("agent.sendMessage", with: ["success": true, "queued": false, "command": ["name": "goal", "action": "set", "goal": "Ship it"]] as [String: Any])
+        #expect(await first.value)
+        #expect(viewModel.pendingGoalCommand == nil)
+        #expect(fake.paramsForMethod("agent.sendMessage").count == 1)
     }
 
     @Test func goalCommandFailureKeepsComposerAndReportsTheDaemonMessage() async {

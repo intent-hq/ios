@@ -30,13 +30,14 @@ extension ConversationStore {
         )
         let issuedLiveVersion = liveStateVersion ?? liveTranscript.liveStateVersion
         let boundAtIssue = self.agentId
+        let goalRevisionAtIssue = goalRevision
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId, workspaceId: workspaceId, refresh: refresh) {
                 guard !Task.isCancelled, activation == eventRegistrationGeneration,
                       binding == agentBindingGeneration, isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
                 applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: issuedLiveVersion)
                 applyFetchedMarkers(state, revisions: revisions)
-                if goal != state.goal { goal = state.goal }
+                if goalRevision == goalRevisionAtIssue, goal != state.goal { goal = state.goal }
                 resolveWorkspaceFromDetail()
                 metadataReadyForEntry = !workspaceAuthority.hasFailed && connectionManager.globalSubscriptionState == .subscribed
                 notifyEntryStateChanged()

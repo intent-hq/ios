@@ -236,8 +236,8 @@ extension ConversationStore {
         if !ignoringMarkers.contains("dismissedQuestionsMessageId"), let dismissedId = data["dismissedQuestionsMessageId"] as? String {
             dismissedQuestionsMessageId = dismissedId
         }
-        if data.keys.contains("goal"), data["agentId"] as? String == agentId {
-            goal = ConversationGoal.parse(data["goal"])
+        if data.keys.contains("goal"), let eventAgentId = data["agentId"] as? String, eventAgentId == agentId {
+            applyGoal(ConversationGoal.parse(data["goal"]), for: eventAgentId)
         }
         if !ignoringMarkers.contains("lastSeenMessageId"), let seenId = data["lastSeenMessageId"] as? String {
             lastSeenMessageId = seenId

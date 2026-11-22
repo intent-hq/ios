@@ -84,7 +84,7 @@ import SwiftUI
     }
     var dismissQuestionsError: String?
     var goalError: String?
-    @ObservationIgnored var pendingGoalCommand: String?
+    var pendingGoalCommand: String?
 
     let attachmentPipeline: ConversationAttachmentPipeline
     @ObservationIgnored var questionAttachmentPipelines: [String: ConversationAttachmentPipeline] = [:]
