@@ -105,7 +105,7 @@ struct SpecialistStepView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: selectionIconSize, height: selectionIconSize)
-                    .foregroundStyle(Theme.primary(for: colorScheme))
+                    .foregroundStyle(Theme.accentForeground(for: colorScheme))
                     .accessibilityHidden(true)
             }
         }

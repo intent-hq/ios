@@ -251,7 +251,6 @@ $(SRCROOT)/Intent/Assets.xcassets/ThemeDestructive.colorset
 $(SRCROOT)/Intent/Assets.xcassets/ThemeForeground.colorset
 $(SRCROOT)/Intent/Assets.xcassets/ThemeMuted.colorset
 $(SRCROOT)/Intent/Assets.xcassets/ThemeMutedForeground.colorset
-$(SRCROOT)/Intent/Assets.xcassets/ThemePrimary.colorset
 $(SRCROOT)/Intent/Assets.xcassets/ThemeSidebar.colorset
 $(SRCROOT)/Intent/Assets.xcassets/ThemeSidebarSelection.colorset
 $(SRCROOT)/Intent/Assets.xcassets/Thinking.imageset

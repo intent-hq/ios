@@ -142,7 +142,6 @@ struct AgentActivityRowView: View {
         HStack(alignment: .firstTextBaseline, spacing: AgentActivityStyle.rowSpacing) {
             Group {
                 if style != .running {
-                    // The text says what the agent waits for; only the check needs its own label.
                     AgentActivityNoticeMark(kind: row.noticeKind)
                         .accessibilityHidden(row.noticeKind != .finished)
                 } else {

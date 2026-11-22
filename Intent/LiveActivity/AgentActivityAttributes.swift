@@ -25,8 +25,6 @@ nonisolated struct AgentActivityRow: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// The relay's notice kind on a finished row. Kinds this build does not know
-/// decode as `.finished`, so a newer relay never breaks the card.
 nonisolated enum AgentActivityNoticeKind: String, Codable, Hashable, Sendable {
     case finished
     case needsAttention = "needs_attention"

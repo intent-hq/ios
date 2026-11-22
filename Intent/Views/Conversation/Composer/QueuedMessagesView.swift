@@ -81,7 +81,7 @@ struct QueuedMessagesView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: actionIconSide, height: actionIconSide)
-                .foregroundStyle(Theme.primary(for: colorScheme))
+                .foregroundStyle(Theme.accentForeground(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
                     height: Constants.Conversation.QueuedMessage.actionButtonSide
@@ -139,7 +139,7 @@ struct QueuedMessagesView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: actionIconSide, height: actionIconSide)
-                .foregroundStyle(Theme.primary(for: colorScheme))
+                .foregroundStyle(Theme.accentForeground(for: colorScheme))
                 .frame(
                     width: Constants.Conversation.QueuedMessage.actionButtonSide,
                     height: Constants.Conversation.QueuedMessage.actionButtonSide

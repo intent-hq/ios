@@ -144,10 +144,10 @@ struct QuestionWizardFooterRow: View {
                     .frame(width: actionIconSide, height: actionIconSide)
                     .accessibilityHidden(true)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.onAccent)
             .padding(.horizontal, Layout.nextButtonHorizontalPadding)
             .padding(.vertical, Layout.nextButtonVerticalPadding)
-            .background(Capsule().fill(Theme.primary(for: colorScheme)))
+            .background(Capsule().fill(Theme.accent))
             .frame(
                 minWidth: Constants.Accessibility.minimumTapTarget,
                 minHeight: Constants.Accessibility.minimumTapTarget

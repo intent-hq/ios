@@ -289,12 +289,12 @@ private extension MessageInputView {
                         .resizable()
                         .scaledToFit()
                         .frame(width: controlIconSide * sendArrowScale, height: controlIconSide * sendArrowScale)
-                        .foregroundStyle(Theme.card(for: colorScheme))
+                        .foregroundStyle(hasSendableContent ? Theme.onAccent : Theme.card(for: colorScheme))
                         .frame(width: controlIconSide, height: controlIconSide)
                         .background {
                             Circle().fill(
                                 hasSendableContent
-                                    ? Theme.primary(for: colorScheme)
+                                    ? Theme.accent
                                     : Theme.mutedForeground(for: colorScheme)
                             )
                         }
@@ -338,7 +338,7 @@ private extension MessageInputView {
                 .foregroundStyle(
                     dictation.isActive
                         ? Theme.destructive(for: colorScheme)
-                        : Theme.primary(for: colorScheme)
+                        : Theme.accentForeground(for: colorScheme)
                 )
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,

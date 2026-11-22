@@ -25,8 +25,11 @@ enum Theme {
         resolvedColor(UIColor(resource: .themeSidebarSelection), for: scheme)
     }
 
-    static func primary(for scheme: ColorScheme) -> Color {
-        resolvedColor(UIColor(resource: .themePrimary), for: scheme)
+    static let accent = Constants.Pairing.accent
+    static let onAccent = Constants.Pairing.onAccent
+
+    static func accentForeground(for scheme: ColorScheme) -> Color {
+        scheme == .dark ? accent : foreground(for: scheme)
     }
 
     static func muted(for scheme: ColorScheme) -> Color {
