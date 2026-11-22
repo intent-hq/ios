@@ -9,10 +9,12 @@ struct AttachmentReferenceImageView: View {
     let workspaceId: String
     let attachmentId: String
     let style: Style
+    var galleryItemID: String?
     var loader: AttachmentImageLoader?
     @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.conversationComposerFocus) private var composerFocus
+    @Environment(\.conversationImageGallery) private var gallery
     @State private var image: UIImage?
     @State private var failed = false
     @State private var attempt = 0
@@ -58,7 +60,7 @@ struct AttachmentReferenceImageView: View {
             .imageSaveAlert()
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
-                ImageLightboxView(image: image)
+                GalleryImageLightbox(itemID: galleryItemID ?? attachmentId, image: image, gallery: galleryItemID == nil ? nil : gallery)
                     .coversConversationComposers()
             }
         } else if failed {

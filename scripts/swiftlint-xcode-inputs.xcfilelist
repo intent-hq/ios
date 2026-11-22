@@ -484,6 +484,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/CodeBlockView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/CompactMarkdownStyle.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ContentBlockView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ContextMentionChipView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/ConversationImageGallery.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/HTMLFileResources.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/HTMLFileWebView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/HTMLLinkPreviewView.swift

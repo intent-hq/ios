@@ -4,6 +4,7 @@ struct ImageAttachmentThumbnail: View {
     let block: ContentBlock
     let workspaceId: String
     @Environment(\.conversationComposerFocus) private var composerFocus
+    @Environment(\.conversationImageGallery) private var gallery
     @State private var lightboxPresented = false
 
     static let side: CGFloat = Constants.Conversation.ImageThumbnail.attachmentSide
@@ -13,7 +14,8 @@ struct ImageAttachmentThumbnail: View {
             AttachmentReferenceImageView(
                 workspaceId: workspaceId,
                 attachmentId: attachmentId,
-                style: .thumbnail
+                style: .thumbnail,
+                galleryItemID: block.id
             )
         } else if let uiImage = ContentBlockView.decodeImage(block) {
             let imageData = ContentBlockView.decodeImageData(block)
@@ -31,7 +33,7 @@ struct ImageAttachmentThumbnail: View {
             .imageSaveAlert()
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
-                ImageLightboxView(image: uiImage, data: imageData)
+                GalleryImageLightbox(itemID: block.id, image: uiImage, data: imageData, gallery: gallery)
                     .coversConversationComposers()
             }
         } else {
