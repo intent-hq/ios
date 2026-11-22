@@ -28,7 +28,6 @@ enum Theme {
     static let accent = Constants.Pairing.accent
     static let onAccent = Constants.Pairing.onAccent
 
-    /// Brand lime lacks contrast on the light canvas, so light mode tints glyphs with the foreground.
     static func accentForeground(for scheme: ColorScheme) -> Color {
         scheme == .dark ? accent : foreground(for: scheme)
     }
