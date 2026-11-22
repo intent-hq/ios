@@ -98,13 +98,14 @@ struct ConversationGoalViewModelTests {
     @Test func resultWithoutCommandIsAnOrdinaryDelivery() async {
         let (viewModel, fake) = await makeGoalVM()
         fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false, "messageId": "m1"]
-        fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "name": "Test", "workspaceId": "test-ws", "isResponding": true]]
+        fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "name": "Test", "workspaceId": "test-ws", "goal": "Ship it"]]
+        let readsBefore = fake.paramsForMethod("agent.get").count
         viewModel.store.goal = "Ship it"
         viewModel.messageText = "/goal Ship the beta"
         #expect(await viewModel.sendGoalCommand("/goal Ship the beta"))
         #expect(viewModel.messageText.isEmpty, "The daemon delivered the text, so the composer clears")
         #expect(viewModel.store.goal == "Ship it", "Only a command result changes the goal")
-        #expect(viewModel.store.isStreaming, "A delivered message shows the thinking state from the daemon")
+        #expect(fake.paramsForMethod("agent.get").count == readsBefore + 1, "A delivered message refreshes the daemon's turn state")
         #expect(viewModel.goalError == nil)
     }
 

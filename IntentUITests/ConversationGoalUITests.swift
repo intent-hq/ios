@@ -31,10 +31,14 @@ nonisolated final class ConversationGoalUITests: XCTestCase {
             if !workspaces.isSelected { workspaces.tap() }
             XCTAssertTrue(workspaces.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         }
-        XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
-        workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-design"]
-        XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
+        if !(agent.exists && agent.isHittable) {
+            let expand = app.buttons["ipad.sidebar.expand"]
+            if expand.exists, !workspace.isHittable { expand.tap() }
+            XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
+            workspace.tap()
+        }
+        XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         agent.tap()
         XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
     }
