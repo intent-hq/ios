@@ -1,39 +1,24 @@
 import SwiftUI
 
 struct GoalCommandNoticeView: View {
+    private typealias Design = Constants.Conversation.Design
+
     let notice: GoalCommandNotice
     @Environment(\.colorScheme) var colorScheme
-    @ScaledMetric(relativeTo: .caption2) private var iconSize: CGFloat = 11
 
     var body: some View {
-        HStack(spacing: Constants.Conversation.DividerNotice.outerSpacing) {
-            line
-            HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.DividerNotice.labelSpacing) {
-                Image(.pin)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: iconSize, height: iconSize)
-                    .accessibilityHidden(true)
-                Text(notice.label)
-                    .interFont(Constants.Typography.subtextXXS)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .layoutPriority(1)
-            line
+        WakeCardHeaderRow(icon: .pin) {
+            Text(notice.label)
+                .interFont(Constants.Typography.bodyXS)
+                .tracking(Design.Typography.smallTracking)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, Constants.Conversation.DividerNotice.verticalPadding)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(notice.label)
         .accessibilityIdentifier("goalNotice")
-    }
-
-    private var line: some View {
-        Rectangle()
-            .fill(Theme.border(for: colorScheme))
-            .frame(height: Constants.Conversation.DividerNotice.lineHeight)
-            .frame(minWidth: Constants.Conversation.DividerNotice.minimumLineWidth, maxWidth: .infinity)
     }
 }
