@@ -6,8 +6,8 @@ nonisolated struct ConversationGoalDraft: Equatable, Sendable {
 }
 
 nonisolated enum ConversationGoalPillState: Equatable, Sendable {
-    case idle
     case editing(ConversationGoalDraft)
+    case idle
     case removing
     case saving(ConversationGoalDraft)
 
