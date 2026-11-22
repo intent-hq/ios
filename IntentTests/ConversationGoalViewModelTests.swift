@@ -95,17 +95,31 @@ struct ConversationGoalViewModelTests {
         #expect(viewModel.goalError == nil)
     }
 
+    @Test func resultWithoutCommandIsAnOrdinaryDelivery() async {
+        let (viewModel, fake) = await makeGoalVM()
+        fake.responseMap["agent.sendMessage"] = ["success": true, "queued": false, "messageId": "m1"]
+        viewModel.store.goal = "Ship it"
+        viewModel.messageText = "/goal Ship the beta"
+        #expect(await viewModel.sendGoalCommand("/goal Ship the beta"))
+        #expect(viewModel.messageText.isEmpty, "The daemon delivered the text, so the composer clears")
+        #expect(viewModel.store.goal == "Ship it", "Only a command result changes the goal")
+        #expect(viewModel.goalError == nil)
+    }
+
     @Test func goalCommandFailureKeepsComposerAndReportsTheDaemonMessage() async {
         let (viewModel, fake) = await makeGoalVM()
         fake.errorMap["agent.sendMessage"] = NSError(
             domain: "WebSocket",
             code: -32_602,
-            userInfo: [NSLocalizedDescriptionKey: "goal is too long (max 1000 characters)"]
+            userInfo: [
+                NSLocalizedDescriptionKey: "goal is too long (max 1000 characters)",
+                NSError.intentErrorDataCodeKey: "goal-too-long"
+            ]
         )
         viewModel.messageText = "/goal too long"
         #expect(!(await viewModel.sendGoalCommand("/goal too long")))
         #expect(viewModel.messageText == "/goal too long")
-        #expect(viewModel.goalError?.contains("goal is too long (max 1000 characters)") == true)
+        #expect(viewModel.goalError == ConversationGoal.tooLongError)
         #expect(viewModel.store.goal == nil)
         #expect(viewModel.store.sendAttempts.isEmpty)
     }
@@ -175,11 +189,29 @@ struct ConversationGoalViewModelTests {
         #expect(viewModel.goalError == nil)
     }
 
-    @Test func saveGoalRejectsOverlongTextWithoutCallingTheDaemon() async {
+    @Test func saveGoalLeavesTheLengthCheckToTheDaemon() async {
         let (viewModel, fake) = await makeGoalVM()
+        fake.errorMap["agent.setGoal"] = NSError(
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSLocalizedDescriptionKey: "goal is too long", NSError.intentErrorDataCodeKey: "goal-too-long"]
+        )
         let failure = await viewModel.saveGoal(String(repeating: "a", count: ConversationGoal.maximumLength + 1))
-        #expect(failure?.contains("\(ConversationGoal.maximumLength)") == true)
-        #expect(!fake.didCallMethod("agent.setGoal"))
+        #expect(failure == ConversationGoal.tooLongError)
+        #expect(fake.paramsForMethod("agent.setGoal").count == 1)
+    }
+
+    @Test func removeOnARetiredAgentExplainsWhy() async {
+        let (viewModel, fake) = await makeGoalVM()
+        fake.errorMap["agent.setGoal"] = NSError(
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSLocalizedDescriptionKey: "agent is retired", NSError.intentErrorDataCodeKey: "agent-retired"]
+        )
+        viewModel.store.goal = "Ship it"
+        await viewModel.removeGoal()
+        #expect(viewModel.goalError == ConversationGoal.retiredError)
+        #expect(viewModel.store.goal == "Ship it")
     }
 
     @Test func saveGoalFailureKeepsTheGoal() async {

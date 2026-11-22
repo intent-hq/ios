@@ -139,7 +139,7 @@ struct ConversationGoalEditor: View {
 
     private typealias Design = Constants.Conversation.Design
 
-    private var characterCount: Int { text.trimmingCharacters(in: .whitespacesAndNewlines).count }
+    private var characterCount: Int { ConversationGoal.length(text) }
 
     var body: some View {
         NavigationStack {

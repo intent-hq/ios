@@ -21,7 +21,7 @@ extension DemoDesignFixtures {
     func goalCommandResponse(params: [String: Any]) -> Any? {
         guard scenario == .goal, params["interpretCommands"] as? Bool == true,
               let content = params["content"] as? String, ConversationGoal.isCommand(content) else { return nil }
-        let statement = String(content.trimmingCharacters(in: .whitespacesAndNewlines).dropFirst(ConversationGoal.commandName.count))
+        let statement = String(ConversationGoal.trimmed(content).dropFirst(ConversationGoal.commandName.count))
         var command = applyGoal(ConversationGoal.normalized(statement), isCommand: true)
         command["name"] = "goal"
         return ["success": true, "queued": false, "command": command]

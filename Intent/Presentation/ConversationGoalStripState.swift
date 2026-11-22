@@ -33,8 +33,8 @@ nonisolated enum ConversationGoalStripState: Equatable, Sendable {
     }
 
     var canSave: Bool {
-        guard case let .editing(draft) = self else { return false }
-        return draft.text.trimmingCharacters(in: .whitespacesAndNewlines).count <= ConversationGoal.maximumLength
+        if case .editing = self { return true }
+        return false
     }
 
     mutating func toggleExpansion() {

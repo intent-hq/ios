@@ -33,12 +33,8 @@ extension ConversationViewModel {
     }
 
     func saveGoal(_ text: String) async -> String? {
-        let goal = ConversationGoal.normalized(text)
-        if let goal, goal.count > ConversationGoal.maximumLength {
-            return "The goal is too long. Keep it to \(ConversationGoal.maximumLength) characters or fewer."
-        }
         do {
-            _ = try await store.setGoal(agentId: agentId, workspaceId: workspaceId, goal: goal)
+            _ = try await store.setGoal(agentId: agentId, workspaceId: workspaceId, goal: ConversationGoal.normalized(text))
             return nil
         } catch {
             return Self.goalFailureMessage(error)
@@ -50,7 +46,6 @@ extension ConversationViewModel {
     }
 
     nonisolated static func goalFailureMessage(_ error: Error) -> String {
-        let detail = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        return detail.isEmpty ? "The goal was not changed. Try again." : "The goal was not changed. \(detail)"
+        ConversationGoal.failureMessage(for: error)
     }
 }

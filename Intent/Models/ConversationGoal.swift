@@ -5,12 +5,15 @@ nonisolated enum ConversationGoal {
     static let commandName = "/goal"
     static let attachmentsError = "/goal does not take attachments. Remove the attachments and send it again."
 
+    static let retiredError = "This agent is retired, so its goal can't change. Restore the agent first."
+    static let tooLongError = "The goal is too long. Keep it to \(maximumLength) characters or fewer."
+
     static func isCommand(_ content: String) -> Bool {
-        let scalars = content.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars
+        let scalars = trimmed(content).unicodeScalars
         let name = commandName.unicodeScalars
         guard scalars.starts(with: name) else { return false }
         guard let next = scalars.dropFirst(name.count).first else { return true }
-        return CharacterSet.whitespacesAndNewlines.contains(next)
+        return next.properties.isWhitespace
     }
 
     static func parse(_ value: Any?) -> String? {
@@ -18,13 +21,32 @@ nonisolated enum ConversationGoal {
         return text
     }
 
-    static func normalized(_ text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+    static func trimmed(_ text: String) -> String {
+        let scalars = text.unicodeScalars
+        guard let first = scalars.firstIndex(where: { !$0.properties.isWhitespace }),
+              let last = scalars.lastIndex(where: { !$0.properties.isWhitespace }) else { return "" }
+        return String(scalars[first...last])
     }
 
-    static func isTooLong(_ text: String) -> Bool {
-        (normalized(text)?.count ?? 0) > maximumLength
+    static func normalized(_ text: String) -> String? {
+        let value = trimmed(text)
+        return value.isEmpty ? nil : value
+    }
+
+    static func length(_ text: String) -> Int {
+        trimmed(text).unicodeScalars.count
+    }
+
+    static func failureMessage(for error: Error) -> String {
+        let failure = error as NSError
+        switch failure.intentErrorDataCode {
+        case "goal-too-long": return tooLongError
+        case "goal-attachments-not-allowed": return attachmentsError
+        case "agent-retired": return retiredError
+        default:
+            let detail = failure.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            return detail.isEmpty ? "The goal was not changed. Try again." : "The goal was not changed. \(detail)"
+        }
     }
 
     static func linkedText(_ goal: String) -> AttributedString {

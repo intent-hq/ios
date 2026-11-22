@@ -10,6 +10,9 @@ struct ConversationGoalTests {
         ("/goal", true),
         ("\t/goal  ", true),
         ("/goal\tship it", true),
+        ("\u{3000}/goal\u{00A0}ship it\u{2029}", true),
+        ("/goal\u{0085}ship it", true),
+        ("/goal\u{200B}ship it", false),
         ("/Goal x", false),
         ("/goals x", false),
         ("/goal: x", false),
@@ -53,8 +56,22 @@ struct ConversationGoalTests {
     @Test func normalizedTrimsAndTreatsBlankAsRemoval() {
         #expect(ConversationGoal.normalized("  Ship it \n") == "Ship it")
         #expect(ConversationGoal.normalized(" \n ") == nil)
-        #expect(!ConversationGoal.isTooLong(String(repeating: "a", count: ConversationGoal.maximumLength)))
-        #expect(ConversationGoal.isTooLong(String(repeating: "a", count: ConversationGoal.maximumLength + 1)))
+        #expect(ConversationGoal.normalized("\u{3000}Ship it\u{0085}") == "Ship it")
+        #expect(ConversationGoal.normalized("\u{200B}Ship it") == "\u{200B}Ship it", "Zero-width space is not White_Space")
+        #expect(ConversationGoal.length("  e\u{301} ") == 2, "Length counts Unicode scalar values after trimming")
+    }
+
+    @Test func failureMessagesBranchOnTheDataCode() {
+        func failure(_ code: String?, _ message: String = "daemon text") -> NSError {
+            var info: [String: Any] = [NSLocalizedDescriptionKey: message]
+            if let code { info[NSError.intentErrorDataCodeKey] = code }
+            return NSError(domain: "WebSocket", code: -32_602, userInfo: info)
+        }
+        #expect(ConversationGoal.failureMessage(for: failure("goal-too-long")) == ConversationGoal.tooLongError)
+        #expect(ConversationGoal.failureMessage(for: failure("goal-attachments-not-allowed")) == ConversationGoal.attachmentsError)
+        #expect(ConversationGoal.failureMessage(for: failure("agent-retired")) == ConversationGoal.retiredError)
+        #expect(ConversationGoal.failureMessage(for: failure(nil, "agent not found")) == "The goal was not changed. agent not found")
+        #expect(ConversationGoal.failureMessage(for: failure(nil, " ")) == "The goal was not changed. Try again.")
     }
 
     @Test func commandResultsParseBothResponseShapes() {
@@ -147,10 +164,13 @@ struct ConversationGoalTests {
         #expect(state.draft?.failure == nil, "Typing clears the failure")
     }
 
-    @Test func stripStateRefusesOverlongDrafts() {
+    @Test func stripStateLeavesTheLengthCheckToTheDaemon() {
         var state = ConversationGoalStripState.collapsed
-        state.beginEditing(goal: String(repeating: "a", count: ConversationGoal.maximumLength + 1))
-        #expect(!state.canSave)
-        #expect(state.beginSaving() == nil)
+        let long = String(repeating: "a", count: ConversationGoal.maximumLength + 1)
+        state.beginEditing(goal: long)
+        #expect(state.canSave)
+        #expect(state.beginSaving() == long)
+        state.finishSaving(failure: ConversationGoal.tooLongError)
+        #expect(state.draft == ConversationGoalDraft(text: long, failure: ConversationGoal.tooLongError))
     }
 }
