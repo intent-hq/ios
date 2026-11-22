@@ -60,6 +60,20 @@ struct PushRelayContractTests {
         #expect(running.displayRows.map(\.style) == [.finished, .running])
     }
 
+    @Test(arguments: [
+        (#""kind":"needs_attention","#, AgentActivityNoticeKind.needsAttention),
+        (#""kind":"review_required","#, .reviewRequired),
+        (#""kind":"from_a_newer_relay","#, .finished),
+        ("", .finished)
+    ])
+    func finishedRowCarriesTheRelaysNoticeKind(field: String, expected: AgentActivityNoticeKind) throws {
+        let json = #"{"rows":[],"runningCount":0,"updatedAt":1800000000,"finished":{"#
+            + field
+            + #""connectionId":"6F9619FF-8B86-D011-B42D-00C04FC964FF","workspaceId":"w1","title":"Fix reconnect"}}"#
+        let state = try JSONDecoder().decode(AgentActivityAttributes.ContentState.self, from: Data(json.utf8))
+        #expect(state.finished?.noticeKind == expected)
+    }
+
     @Test func publicKeyAndDeviceIdMatchRelayDerivation() {
         #expect(signer.publicKeyX963.count == 65)
         #expect(signer.publicKey == "BFFcPW6545a5BNP-yn9U_c0MwemXvzddylFa0KbDtANfRTa-OlDzGPv5pUdZAqIhUCvvDVfgjFOyzApW8X2fk1Q")
