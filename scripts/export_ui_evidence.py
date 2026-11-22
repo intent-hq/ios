@@ -306,6 +306,9 @@ CAPTURES = {
         "testAssistantImageBlockOpensWithKeyboardAndPreservesDraft": (
             "assistant image block with keyboard open", "Saved response image in lightbox",
         ),
+        "testImageViewerSwipesBetweenConversationImages": (
+            "Image viewer, image 1 of 3", "Image viewer, image 2 of 3", "Image viewer, image 3 of 3",
+        ),
         "testPDFCardAndLinkOpenViewerAndShare": (
             "Inline PDF card and link", "PDF viewer from inline card",
             "PDF viewer from text link", "PDF share sheet", "PDF unavailable with close and retry",

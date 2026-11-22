@@ -1,5 +1,5 @@
 #if DEBUG
-import Foundation
+import UIKit
 
 extension DemoFixtures {
     static let inlineImageAgentId = "demo-agent-implementor"
@@ -15,6 +15,9 @@ extension DemoFixtures {
         }
         if LaunchOptions.current.contains("--demo-assistant-image-block") {
             return imageBlockConversation(role: "assistant")
+        }
+        if LaunchOptions.current.contains("--demo-image-gallery") {
+            return imageGalleryConversation
         }
         let response = LaunchOptions.current.contains("--demo-inline-image-keyboard")
             ? inlineImageSavedPreviewText : inlineImageResponseText
@@ -33,6 +36,52 @@ extension DemoFixtures {
             ]
         ]
     }
+
+    private static var imageGalleryConversation: [[String: Any]] {
+        func imageBlock(_ index: Int) -> [String: Any] {
+            ["type": "image", "data": galleryImagePNG(index).base64EncodedString(), "mimeType": "image/png"]
+        }
+        return [
+            [
+                "id": "demo-image-gallery-user",
+                "role": "user",
+                "timestamp": transcriptIso(minutesAgo: 2),
+                "contentBlocks": [
+                    ["type": "text", "text": "Two attached screenshots."],
+                    imageBlock(0),
+                    imageBlock(1)
+                ]
+            ],
+            [
+                "id": "demo-image-gallery-assistant",
+                "role": "assistant",
+                "timestamp": transcriptIso(minutesAgo: 1),
+                "contentBlocks": [
+                    ["type": "text", "text": "Here is the updated layout."],
+                    imageBlock(2)
+                ]
+            ]
+        ]
+    }
+
+    // swiftlint:disable no_magic_numbers
+    private static func galleryImagePNG(_ index: Int) -> Data {
+        let size = CGSize(width: 600, height: 400)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let colors: [UIColor] = [.systemBlue, .systemGreen, .systemOrange]
+        return UIGraphicsImageRenderer(size: size, format: format).pngData { context in
+            colors[index % colors.count].setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            let label = NSAttributedString(string: "\(index + 1)", attributes: [
+                .font: UIFont.systemFont(ofSize: 180, weight: .bold),
+                .foregroundColor: UIColor.white
+            ])
+            let labelSize = label.size()
+            label.draw(at: CGPoint(x: (size.width - labelSize.width) / 2, y: (size.height - labelSize.height) / 2))
+        }
+    }
+    // swiftlint:enable no_magic_numbers
 
     private static func imageBlockConversation(role: String) -> [[String: Any]] {
         [
