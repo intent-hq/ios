@@ -23,7 +23,7 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             reveal(browser, in: app)
             capture(app, "ipad-tool-before-\(appearance)")
             drag(browser, into: app)
-            let close = app.buttons["Close main browser"]
+            let close = app.buttons["Browser actions"]
             XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
             XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
             XCTAssertEqual(composer.value as? String, "Keep this draft beside the preview")
@@ -42,6 +42,7 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             agent.tap()
             XCTAssertEqual(composer.value as? String, editedDraft)
             close.tap()
+            app.buttons["Close browser"].tap()
             XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
             XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
             XCTAssertGreaterThan(composer.frame.minX, app.frame.width / 3)
@@ -101,7 +102,7 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
     private func verifyWorkspaceSwitch(afterDragging browser: XCUIElement, in app: XCUIApplication) {
         reveal(browser, in: app)
         drag(browser, into: app)
-        let close = app.buttons["Close main browser"]
+        let close = app.buttons["Browser actions"]
         XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
         app.buttons["conversation.back"].tap()
         app.buttons["ipad.rail.workspaces"].tap()
