@@ -82,6 +82,7 @@ struct WorkspaceBrowserView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var addressBar: some View {
