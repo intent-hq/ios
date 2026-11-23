@@ -18,7 +18,7 @@ struct WorkspaceResourceActions<Actions: View>: View {
 
 struct WorkspaceResourceShortcuts: View {
     let workspaceId: String
-    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AppCoordinator.self) private var coordinator: AppCoordinator?
     @Environment(BackendSession.self) private var session
     @State private var agentStore: AgentStore?
     @State private var showsSpecialistPicker = false
@@ -67,7 +67,7 @@ struct WorkspaceResourceShortcuts: View {
         .alert("Terminal unavailable", isPresented: Binding(
             get: {
                 terminalStore.errorMessage(workspaceId: workspaceId) != nil && selectedTerminal == nil
-                    && !coordinator.isShowingIPadTerminal(workspaceId: workspaceId)
+                    && coordinator?.isShowingIPadTerminal(workspaceId: workspaceId) != true
             },
             set: { if !$0 { clearTerminalError() } }
         )) {

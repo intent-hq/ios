@@ -112,7 +112,7 @@ private struct WorkspaceActionConfirmations: ViewModifier {
 private struct WorkspaceDetailAlerts: ViewModifier {
     let presentation: WorkspaceDetailPresentation
     let workspaceId: String
-    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AppCoordinator.self) private var coordinator: AppCoordinator?
     @Environment(BackendSession.self) private var session
 
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
@@ -122,7 +122,7 @@ private struct WorkspaceDetailAlerts: ViewModifier {
             .alert("Terminal unavailable", isPresented: Binding(
                 get: {
                     terminalStore.errorMessage(workspaceId: workspaceId) != nil && presentation.selectedTerminal == nil
-                        && !coordinator.isShowingIPadTerminal(workspaceId: workspaceId)
+                        && coordinator?.isShowingIPadTerminal(workspaceId: workspaceId) != true
                 },
                 set: { if !$0 { terminalStore.clearError(workspaceId: workspaceId) } }
             )) {

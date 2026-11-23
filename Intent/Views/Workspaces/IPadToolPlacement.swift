@@ -86,13 +86,13 @@ struct WorkspaceTerminalPresentation: ViewModifier {
     @Binding var terminal: MobileTerminal?
     let workspaceName: String
     var onDismiss: () -> Void = {}
-    @Environment(AppCoordinator.self) private var coordinator
+    @Environment(AppCoordinator.self) private var coordinator: AppCoordinator?
     @Environment(BackendSession.self) private var session
 
     func body(content: Content) -> some View {
         content
             .onChange(of: terminal?.id, initial: true) {
-                if let terminal, coordinator.placeIPadTool(.terminal(terminal)) { self.terminal = nil }
+                if let terminal, coordinator?.placeIPadTool(.terminal(terminal)) == true { self.terminal = nil }
             }
             .fullScreenCover(item: coverBinding, onDismiss: onDismiss) { terminal in
                 MobileTerminalView(terminal: terminal, workspaceName: workspaceName, store: session.mobileTerminalStore)
@@ -102,7 +102,7 @@ struct WorkspaceTerminalPresentation: ViewModifier {
 
     private var coverBinding: Binding<MobileTerminal?> {
         Binding(
-            get: { terminal.flatMap { coordinator.canPlaceIPadTool(.terminal($0)) ? nil : $0 } },
+            get: { terminal.flatMap { coordinator?.canPlaceIPadTool(.terminal($0)) == true ? nil : $0 } },
             set: { terminal = $0 }
         )
     }
