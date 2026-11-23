@@ -139,6 +139,7 @@ struct ImageLightboxView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
+                    .accessibilityHidden(true)
             }
         case .failed:
             ImageDecodeFailureView()
@@ -242,6 +243,9 @@ struct ImageLightboxView: View {
         .accessibilityLabel("Close image")
     }
 
+}
+
+extension ImageLightboxView {
     // MARK: - Loading
 
     private func loadWindow() async {
