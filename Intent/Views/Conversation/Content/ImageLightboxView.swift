@@ -267,6 +267,27 @@ struct ImageLightboxView: View {
             let loader = session?.attachmentImageLoader ?? .shared
             guard let image = try? await loader.image(workspaceId: workspaceId, attachmentId: attachmentId) else { return .failed }
             return .image(image, nil)
+        case let .markdown(url, workspaceId, _):
+            guard let image = await loadMarkdownImage(url, workspaceId: workspaceId) else { return .failed }
+            return .image(image, nil)
+        }
+    }
+
+    private func loadMarkdownImage(_ url: URL, workspaceId: String) async -> UIImage? {
+        let fileLoader = session?.workspaceFileImageLoader ?? .shared
+        switch MarkdownImageRoute.route(for: url) {
+        case let .workspaceAsset(link?):
+            guard case let .image(image) = try? await fileLoader.assetMedia(
+                workspaceId: link.workspaceId,
+                assetId: link.assetId
+            ) else { return nil }
+            return image
+        case let .intentFile(link):
+            return try? await fileLoader.image(workspaceId: link.workspaceId ?? workspaceId, path: link.path)
+        case .remote:
+            return try? await RemoteImageLoader.shared.image(for: url)
+        case .workspaceAsset(nil), .fallback:
+            return nil
         }
     }
 

@@ -57,7 +57,11 @@ extension DemoFixtures {
                 "role": "assistant",
                 "timestamp": transcriptIso(minutesAgo: 1),
                 "contentBlocks": [
-                    ["type": "text", "text": "Here is the updated layout."],
+                    [
+                        "type": "text",
+                        "text": "Here is the saved preview.\n\n"
+                            + "![Saved preview](workspace-asset://\(statusImageWorkspaceId)/\(statusImageAssetId))"
+                    ],
                     imageBlock(2)
                 ]
             ]

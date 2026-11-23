@@ -165,6 +165,7 @@ struct ContentBlockBody: View, Equatable {
                 MarkdownTextView(text: text, onOpenURL: openTextURL, workspaceId: workspaceId, linkStyle: .chat)
             }
         }
+        .environment(\.markdownImageGalleryBlockID, block.id)
         .fullScreenCover(item: $pdfLink) { link in
             PDFLinkPreviewView(link: link)
                 .coversConversationComposers()

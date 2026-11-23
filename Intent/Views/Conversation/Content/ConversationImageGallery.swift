@@ -5,11 +5,17 @@ struct ImageLightboxItem: Identifiable, Equatable {
         case loaded(UIImage, Data?)
         case inline(ContentBlock)
         case attachment(workspaceId: String, attachmentId: String)
+        case markdown(URL, workspaceId: String, blockId: String)
     }
 
     let id: String
     var messageId: String?
     let source: Source
+
+    func isMarkdownImage(_ url: URL, inBlock blockId: String) -> Bool {
+        if case let .markdown(itemURL, _, itemBlockId) = source { return itemURL == url && itemBlockId == blockId }
+        return false
+    }
 
     var loadKey: String {
         switch source {
@@ -19,6 +25,8 @@ struct ImageLightboxItem: Identifiable, Equatable {
             "\(id)|\(block.dataTruncation.isTruncated)|\(block.data?.count ?? 0)"
         case let .attachment(workspaceId, attachmentId):
             "\(workspaceId)|\(attachmentId)"
+        case let .markdown(url, workspaceId, _):
+            "\(workspaceId)|\(url.absoluteString)"
         }
     }
 
@@ -35,11 +43,50 @@ struct ConversationImageGallery {
     var items: [ImageLightboxItem] {
         var seen = Set<String>()
         return store.messages.flatMap { message in
-            message.contentBlocks.compactMap { block in
-                Self.item(for: block, messageId: message.id, workspaceId: workspaceId)
+            message.contentBlocks.flatMap { block -> [ImageLightboxItem] in
+                if block.type == .text, message.role != .user {
+                    return Self.markdownItems(in: block, messageId: message.id, workspaceId: workspaceId)
+                }
+                return Self.item(for: block, messageId: message.id, workspaceId: workspaceId).map { [$0] } ?? []
             }
         }
         .filter { seen.insert($0.id).inserted }
+    }
+
+    func markdownItemID(for url: URL, inBlock blockId: String) -> String? {
+        items.first { $0.isMarkdownImage(url, inBlock: blockId) }?.id
+    }
+
+    private static let codeFence = /(?ms)^[ \t]*(`{3,}|~{3,}).*?^[ \t]*\1[ \t]*$/
+    private static let inlineCode = /`[^`\n]*`/
+    private static let markdownImage = /!\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+"[^"]*")?\s*\)/
+
+    static func markdownItems(in block: ContentBlock, messageId: String, workspaceId: String) -> [ImageLightboxItem] {
+        guard let text = block.resolvedText, text.contains("![") else { return [] }
+        let prose = ContentBlockView.stripSuggestedPrompts(text)
+            .replacing(codeFence, with: "")
+            .replacing(inlineCode, with: "")
+        return prose.matches(of: markdownImage).enumerated().compactMap { index, match in
+            guard let url = URL(string: String(match.output.1)), isMarkdownImage(url) else { return nil }
+            return ImageLightboxItem(
+                id: "\(block.id)#image-\(index)",
+                messageId: messageId,
+                source: .markdown(url, workspaceId: workspaceId, blockId: block.id)
+            )
+        }
+    }
+
+    private static func isMarkdownImage(_ url: URL) -> Bool {
+        switch MarkdownImageRoute.route(for: url) {
+        case let .workspaceAsset(link?):
+            !WorkspaceVideo.isVideo(path: link.assetId) && !WorkspacePDF.isPDF(path: link.assetId)
+        case let .intentFile(link):
+            link.isImage
+        case .remote:
+            true
+        case .workspaceAsset(nil), .fallback:
+            false
+        }
     }
 
     static func item(for block: ContentBlock, messageId: String?, workspaceId: String) -> ImageLightboxItem? {
@@ -65,6 +112,7 @@ struct ConversationImageGallery {
 
 extension EnvironmentValues {
     @Entry var conversationImageGallery: ConversationImageGallery?
+    @Entry var markdownImageGalleryBlockID: String?
 }
 
 struct GalleryImageLightbox: View {

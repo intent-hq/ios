@@ -401,19 +401,23 @@ extension InlineResponseImageUITests {
 
         let preview = app.images["Image preview"].firstMatch
         XCTAssertTrue(preview.waitForExistence(timeout: Fixture.timeout))
-        assertGalleryPosition(3, of: preview)
-        attachGalleryScreenshot("Image viewer, image 3 of 3")
+        assertGalleryPosition(4, of: preview)
+        attachGalleryScreenshot("Image viewer, image 4 of 4")
 
         preview.swipeLeft()
+        assertGalleryPosition(4, of: preview)
+
+        preview.swipeRight()
         assertGalleryPosition(3, of: preview)
+        attachGalleryScreenshot("Image viewer, response image 3 of 4")
 
         preview.swipeRight()
         assertGalleryPosition(2, of: preview)
-        attachGalleryScreenshot("Image viewer, image 2 of 3")
+        attachGalleryScreenshot("Image viewer, image 2 of 4")
 
         preview.swipeRight()
         assertGalleryPosition(1, of: preview)
-        attachGalleryScreenshot("Image viewer, image 1 of 3")
+        attachGalleryScreenshot("Image viewer, image 1 of 4")
 
         preview.swipeRight()
         assertGalleryPosition(1, of: preview)
@@ -427,7 +431,7 @@ extension InlineResponseImageUITests {
 
     @MainActor
     private func assertGalleryPosition(_ position: Int, of preview: XCUIElement) {
-        let expected = "Image \(position) of 3"
+        let expected = "Image \(position) of 4"
         let reached = waitUntil(timeout: Fixture.timeout) {
             (preview.value as? String)?.hasPrefix(expected) == true
         }
