@@ -139,13 +139,12 @@ struct MarkdownTextView: View {
             .tint(textColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
-                if let galleryItemID = item.galleryItemID {
-                    GalleryImageLightbox(itemID: galleryItemID, image: item.image, gallery: imageGallery)
-                        .coversConversationComposers()
-                } else {
-                    ImageLightboxView(image: item.image)
-                        .coversConversationComposers()
-                }
+                GalleryImageLightbox(
+                    itemID: item.galleryItemID ?? item.id.uuidString,
+                    image: item.image,
+                    gallery: item.galleryItemID == nil ? nil : imageGallery
+                )
+                .coversConversationComposers()
             }
             .fullScreenCover(item: $videoItem) { item in
                 VideoLightboxView(video: item.video)
