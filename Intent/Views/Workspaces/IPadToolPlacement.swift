@@ -119,7 +119,7 @@ struct IPadWorkspaceToolView: View {
             if isFullScreen {
                 Color.clear
             } else {
-                content(onClose: close, onFullScreen: { isFullScreen = true })
+                content(onClose: close) { isFullScreen = true }
             }
         }
         .fullScreenCover(isPresented: $isFullScreen, onDismiss: closeEndedTerminal) {

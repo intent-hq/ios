@@ -52,11 +52,9 @@ struct WorkspaceDetailPresentations: ViewModifier {
                 }
             )
             .onChange(of: presentation.selectedBrowser) { _, _ in presentSelectedBrowser() }
-            .modifier(WorkspaceTerminalPresentation(
-                terminal: $presentation.selectedTerminal,
-                workspaceName: workspaceName,
-                onDismiss: { terminalStore.clearError(workspaceId: workspaceId) }
-            ))
+            .modifier(WorkspaceTerminalPresentation(terminal: $presentation.selectedTerminal, workspaceName: workspaceName) {
+                terminalStore.clearError(workspaceId: workspaceId)
+            })
             .modifier(WorkspaceDetailAlerts(presentation: presentation, workspaceId: workspaceId))
     }
 
