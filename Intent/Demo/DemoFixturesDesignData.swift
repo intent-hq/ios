@@ -83,6 +83,7 @@ extension DemoDesignFixtures {
             "createdAt": Self.timestamp, "updatedAt": Self.timestamp, "lastActivity": Self.timestamp,
             "lastMessageRole": "assistant",
             "model": modelId, "provider": providerId, "reasoningEffort": reasoningEffort as Any? ?? NSNull(),
+            "goal": goal as Any? ?? NSNull(),
             "metadata": [
                 "pendingQuestionsMessageId": pendingQuestionId,
                 "dismissedQuestionsMessageId": questionsDismissed ? Self.questionMessageId : "",
@@ -180,6 +181,7 @@ extension DemoDesignFixtures {
         if hasQuestions {
             rows.append(Self.message(id: Self.questionMessageId, role: "assistant", blocks: questionBlocks))
         }
+        if scenario == .goal { rows.append(Self.goalNotice(id: "demo-design-goal-set", action: "set", goal: Self.initialGoal)) }
         if scenario == .watcher { rows.append(Self.watcherMessage) }
         if scenario == .automatedMessages { rows += Self.automatedMessages }
         return rows

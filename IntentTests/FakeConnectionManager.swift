@@ -134,6 +134,7 @@ class FakeConnectionManager: SessionConnectionManaging {
     }
 
     var currentPrincipal: ConnectionPrincipal? = .demoOwner
+    var capabilities: ConnectionCapabilities = .unknown
     var reconnectStopReason: String?
     var admission: ConnectionAdmission?
     var pairingAttemptID: UUID?

@@ -80,6 +80,10 @@ struct ConversationColumnView: View {
         )
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
+            value: viewModel.conversationGoal
+        )
+        .animation(
+            .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
             value: viewModel.activeAgentHooks.map(\.hookId)
         )
         .animation(
@@ -148,8 +152,7 @@ struct ConversationColumnView: View {
         if composerHost == .inline, !viewModel.showsLoadingState, composerVisible || usesPhoneQuestionPresentation {
             VStack(spacing: 0) {
                 if usesWorkspaceDesign, viewModel.showsWorkspaceStatusPills {
-                    WorkspaceStatusPillsRow(viewModel: viewModel)
-                    .padding(.horizontal, stickyHorizontalInset)
+                    WorkspaceStatusPillsRow(viewModel: viewModel, horizontalInset: stickyHorizontalInset)
                     .padding(.top, Design.Composer.keyboardBottomSpacing)
                     .padding(.bottom, workspaceQueueVisible ? Design.Status.composerSpacing : 0)
                 }
@@ -346,6 +349,16 @@ extension ConversationColumnView {
         if !usesWorkspaceDesign, !viewModel.showsLoadingState { Divider() }
 
         MonitoredScriptsRow(viewModel: viewModel, showsRow: !usesWorkspaceDesign)
+        if !usesWorkspaceDesign, !viewModel.showsLoadingState, let goal = viewModel.conversationGoal {
+            ConversationGoalPill(
+                goal: goal,
+                onSave: { await viewModel.saveGoal($0) },
+                onRemove: { await viewModel.removeGoal() }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Design.horizontalInset)
+            .padding(.vertical, Design.Status.composerSpacing)
+        }
         if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
                 AgentWaitingView(

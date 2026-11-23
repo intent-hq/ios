@@ -17,6 +17,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case context
     case conversation
     case empty
+    case goal
     case history
     case mermaid
     case mermaidHistory = "mermaid-history"
@@ -55,7 +56,9 @@ final class DemoDesignFixtures {
     private(set) var modelId = "default-model"
     private(set) var providerId = "auggie"
     private(set) var reasoningEffort: String?
-    private var sentMessages: [[String: Any]] = []
+    var goal: String?
+    var pendingGoalEvent: String??
+    var sentMessages: [[String: Any]] = []
     private var queuedMessages: [[String: Any]] = []
     private var sequence = 0
     private var failedBackgroundRead = false
@@ -64,6 +67,7 @@ final class DemoDesignFixtures {
     init(scenario: DemoDesignScenario) {
         self.scenario = scenario
         isStreaming = scenario == .streaming || scenario == .queue
+        if scenario == .goal { goal = Self.initialGoal }
         if scenario == .queue {
             queuedMessages = ["Hmm all these graders seem to be", "Keep the existing composer unchanged"].enumerated().map { index, text in
                 ["id": "demo-queue-\(index)", "content": text, "queuedAt": Self.timestamp, "position": index]
@@ -114,7 +118,9 @@ final class DemoDesignFixtures {
             sequence = 0
             return ["subscriptionId": DemoFixtures.chatSubscriptionId(agentId: Self.agentId)]
         case "agent.sendMessage":
-            return sendMessageResponse(params: params)
+            return goalCommandResponse(params: params) ?? sendMessageResponse(params: params)
+        case "agent.setGoal":
+            return setGoalResponse(params: params)
         case "agent.stop":
             isStreaming = false
             return ["success": true]
@@ -166,7 +172,7 @@ final class DemoDesignFixtures {
         switch method {
         case "prMonitor.list":
             let matchesAgent = params["agentId"] == nil || params["agentId"] as? String == Self.agentId
-            return ["monitors": matchesAgent && scenario == .conversation && !monitorCancelled ? [monitor] : []]
+            return ["monitors": matchesAgent && (scenario == .conversation || scenario == .goal) && !monitorCancelled ? [monitor] : []]
         case "prMonitor.cancel" where params["monitorId"] as? String == Self.monitorId:
             monitorCancelled = true
             return ["success": true]
@@ -211,7 +217,7 @@ final class DemoDesignFixtures {
 
     func subscriptionPush(for method: String, params: [String: Any]) -> SubscriptionPush? {
         guard params["agentId"] as? String == Self.agentId,
-              ["chat.subscribe", "agent.sendMessage", "agent.sendQueuedMessageNow", "agent.stop"].contains(method) else { return nil }
+              ["chat.subscribe", "agent.sendMessage", "agent.sendQueuedMessageNow", "agent.stop", "agent.setGoal"].contains(method) else { return nil }
         if method != "chat.subscribe" { sequence += 1 }
         return SubscriptionPush(
             subscriptionId: DemoFixtures.chatSubscriptionId(agentId: Self.agentId),
@@ -222,6 +228,11 @@ final class DemoDesignFixtures {
     }
 
     func event(for method: String, params: [String: Any]) -> [String: Any]? { // swiftlint:disable:this discouraged_optional_collection
+        if let written = pendingGoalEvent {
+            pendingGoalEvent = nil
+            let data: [String: Any] = ["agentId": Self.agentId, "goal": written as Any? ?? NSNull()]
+            return ["type": "agent:updated", "data": data]
+        }
         if params["agentId"] as? String == Self.agentId,
            ["agent.sendMessage", "agent.dismissQuestions"].contains(method) {
             return [

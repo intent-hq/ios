@@ -68,7 +68,7 @@ extension DemoFixturesTests {
         } else {
             #expect(viewModel.pendingQuestions == nil)
         }
-        #expect(viewModel.monitoredPrStore.activeMonitors.count == (scenario == .conversation ? 1 : 0))
+        #expect(viewModel.monitoredPrStore.activeMonitors.count == ([.conversation, .goal].contains(scenario) ? 1 : 0))
     }
 
     private func assertClaudeToolDetails(_ viewModel: ConversationViewModel) throws {

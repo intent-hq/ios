@@ -194,6 +194,10 @@ final class AgentDetailStore {
         patch(agentId: agentId, fields: [:], metadata: fields)
     }
 
+    func updateFields(agentId: String, fields: [String: Any]) {
+        patch(agentId: agentId, fields: fields, metadata: [:])
+    }
+
     func reset() {
         connectionEpoch &+= 1
         summaries.reset()
@@ -382,5 +386,5 @@ extension AgentDetailStore {
         "pendingProposals", "proposalResolutions", "specialist"
     ]
     private static let markerKeys: Set<String> = ["pendingQuestionsMessageId", "dismissedQuestionsMessageId", "lastSeenMessageId"]
-    private static let fieldKeys: Set<String> = ["name", "model", "provider", "status", "isStreaming", "isResponding", "turnInFlight"]
+    private static let fieldKeys: Set<String> = ["name", "model", "provider", "status", "isStreaming", "isResponding", "turnInFlight", "goal"]
 }

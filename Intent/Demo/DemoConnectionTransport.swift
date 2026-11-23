@@ -27,10 +27,14 @@ final class DemoConnectionTransport: ConnectionRequestTransport {
     }
 
     var capabilities: ConnectionCapabilities {
-        guard scriptMonitors?.supportsMonitors == true else { return .unknown }
-        return ConnectionCapabilities(hello: [
-            "server": ["protocolVersion": "15.0", "capabilities": ["scriptMonitors": 2, "scriptActiveLists": 1]]
-        ])
+        var advertised: [String: Int] = [:]
+        if scriptMonitors?.supportsMonitors == true {
+            advertised["scriptMonitors"] = 2
+            advertised["scriptActiveLists"] = 1
+        }
+        if DemoFixtures.designScenario?.scenario == .goal { advertised["conversationGoal"] = 1 }
+        guard !advertised.isEmpty else { return .unknown }
+        return ConnectionCapabilities(hello: ["server": ["protocolVersion": "15.0", "capabilities": advertised]])
     }
 
     func stop() {

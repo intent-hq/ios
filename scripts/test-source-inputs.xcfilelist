@@ -295,6 +295,7 @@ $(SRCROOT)/Intent/Demo/DemoFixturesConversationStartup.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesData.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesDesign.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesDesignData.swift
+$(SRCROOT)/Intent/Demo/DemoFixturesDesignGoal.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesHistory.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesInlinePDF.swift
@@ -377,6 +378,7 @@ $(SRCROOT)/Intent/Models/CommentThread.swift
 $(SRCROOT)/Intent/Models/ContentBlock+Identity.swift
 $(SRCROOT)/Intent/Models/ContentBlock.swift
 $(SRCROOT)/Intent/Models/ContextMention.swift
+$(SRCROOT)/Intent/Models/ConversationGoal.swift
 $(SRCROOT)/Intent/Models/ConversationMessage.swift
 $(SRCROOT)/Intent/Models/ConversationSendAttempt.swift
 $(SRCROOT)/Intent/Models/EventWakeAttribution.swift
@@ -427,6 +429,7 @@ $(SRCROOT)/Intent/Presentation/AgentConversationPresentation.swift
 $(SRCROOT)/Intent/Presentation/BoundedMarkdownCache.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStep.swift
+$(SRCROOT)/Intent/Presentation/ConversationGoalPillState.swift
 $(SRCROOT)/Intent/Presentation/ConversationModelSelection.swift
 $(SRCROOT)/Intent/Presentation/ConversationPresentation.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
@@ -456,6 +459,7 @@ $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
 $(SRCROOT)/Intent/Presentation/QuestionWizardPresentation.swift
 $(SRCROOT)/Intent/Presentation/RetainedIPadPane.swift
+$(SRCROOT)/Intent/Presentation/SlashBuiltInCommand.swift
 $(SRCROOT)/Intent/Presentation/SlashSkillContext.swift
 $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
@@ -530,6 +534,7 @@ $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Hydration.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript+Subscribe.swift
 $(SRCROOT)/Intent/Services/ConversationLiveTranscript.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Commands.swift
+$(SRCROOT)/Intent/Services/ConversationStore+Goal.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Lifecycle.swift
 $(SRCROOT)/Intent/Services/ConversationStore+SendRecovery.swift
 $(SRCROOT)/Intent/Services/ConversationStore+Startup.swift
@@ -675,6 +680,7 @@ $(SRCROOT)/Intent/ViewModels
 $(SRCROOT)/Intent/ViewModels/AgentListIndex.swift
 $(SRCROOT)/Intent/ViewModels/AgentListViewModel.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Commands.swift
+$(SRCROOT)/Intent/ViewModels/ConversationViewModel+Goal.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Lifecycle.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+Questions.swift
 $(SRCROOT)/Intent/ViewModels/ConversationViewModel+ScriptMonitors.swift
@@ -785,12 +791,15 @@ $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceCreationProposalView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceLinkedTextView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/WorkspaceTextFileView.swift
 $(SRCROOT)/Intent/Views/Conversation/ConversationConnectionStatusBlock.swift
+$(SRCROOT)/Intent/Views/Conversation/Goal
+$(SRCROOT)/Intent/Views/Conversation/Goal/ConversationGoalPill.swift
 $(SRCROOT)/Intent/Views/Conversation/IPadAssistantSidebar.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices
 $(SRCROOT)/Intent/Views/Conversation/Notices/AgentMessageAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/AttentionNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/CapHeightIconSlot.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/EventWakeBannerView.swift
+$(SRCROOT)/Intent/Views/Conversation/Notices/GoalCommandNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/HookWakeAttributionView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/ModelChangeNoticeView.swift
 $(SRCROOT)/Intent/Views/Conversation/Notices/NewMessagesDividerView.swift
@@ -1092,6 +1101,8 @@ $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
 $(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationDeltaCompatibilityTests.swift
 $(SRCROOT)/IntentTests/ConversationDesignTests.swift
+$(SRCROOT)/IntentTests/ConversationGoalTests.swift
+$(SRCROOT)/IntentTests/ConversationGoalViewModelTests.swift
 $(SRCROOT)/IntentTests/ConversationHistoryTests.swift
 $(SRCROOT)/IntentTests/ConversationIncrementalDeltaTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift

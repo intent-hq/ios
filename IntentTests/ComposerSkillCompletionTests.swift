@@ -144,6 +144,66 @@ struct ComposerSkillCompletionTests {
         #expect(completion.selectedSkill == nil)
     }
 
+    @Test func builtInGoalIsListedFirstAndInsertedWithEnter() async {
+        let completion = await makeCompletion()
+        completion.builtInCommands = [.goal]
+        let editor = SkillCompletionTextView()
+        editor.text = "  /"
+        editor.selectedRange = NSRange(location: 3, length: 0)
+        completion.update(from: editor)
+        #expect(completion.entries.map(\.name) == ["goal", "code-review", "release-notes"])
+        #expect(completion.selectedEntry == .command(.goal))
+        #expect(completion.selectedSkill == nil)
+        completion.moveSelection(by: -1)
+        #expect(completion.selectedSkill?.name == "release-notes", "Selection wraps across built-ins and skills")
+        completion.moveSelection(by: 1)
+        #expect(completion.acceptSelection())
+        #expect(editor.text == "  /goal ")
+    }
+
+    @Test(arguments: [("/", true), ("/go", true), ("/GO", true), ("/review", false), ("set /go", false), ("\n /g", true)])
+    func builtInIsOfferedOnlyAtThePromptStartForAPrefix(draft: String, offered: Bool) async {
+        let completion = await makeCompletion()
+        completion.builtInCommands = [.goal]
+        let editor = SkillCompletionTextView()
+        editor.text = draft
+        editor.selectedRange = NSRange(location: draft.utf16.count, length: 0)
+        completion.update(from: editor)
+        #expect(completion.context != nil)
+        #expect(completion.commandMatches == (offered ? [.goal] : []))
+    }
+
+    @Test func builtInHidesASameNamedSkillAndWorksBeforeSkillsLoad() async {
+        let connection = FakeConnectionManager()
+        connection.responseMap["skill.list"] = ["goal", "review"].map { name in
+            ["name": name, "description": "", "location": "/\(name)/SKILL.md", "scope": "user"]
+        }
+        let completion = ComposerSkillCompletion()
+        completion.builtInCommands = [.goal]
+        let editor = SkillCompletionTextView()
+        editor.text = "/g"
+        editor.selectedRange = NSRange(location: 2, length: 0)
+        completion.update(from: editor)
+        #expect(completion.entries == [.command(.goal)], "The built-in is available before the catalog loads")
+        await completion.catalog.load(workspaceId: "workspace", agentId: "shadow-agent", connection: connection)
+        #expect(completion.matches.isEmpty, "A skill named goal is hidden by the built-in")
+        editor.text = "/"
+        editor.selectedRange = NSRange(location: 1, length: 0)
+        completion.update(from: editor)
+        #expect(completion.entries.map(\.name) == ["goal", "review"])
+    }
+
+    @Test func builtInIsAbsentWhenNotEnabled() async {
+        let completion = await makeCompletion()
+        let editor = SkillCompletionTextView()
+        editor.text = "/go"
+        editor.selectedRange = NSRange(location: 3, length: 0)
+        completion.update(from: editor)
+        #expect(completion.commandMatches.isEmpty)
+        #expect(!completion.insert(.goal))
+        #expect(editor.text == "/go")
+    }
+
     private func makeCompletion() async -> ComposerSkillCompletion {
         let connection = FakeConnectionManager()
         connection.responseMap["skill.list"] = ["code-review", "release-notes"].map { name in

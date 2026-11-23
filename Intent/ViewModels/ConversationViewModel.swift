@@ -83,6 +83,8 @@ import SwiftUI
         optionsStore.specialists.first { $0.id == currentSpecialistId }
     }
     var dismissQuestionsError: String?
+    var goalError: String?
+    var pendingGoalCommand: String?
 
     let attachmentPipeline: ConversationAttachmentPipeline
     @ObservationIgnored var questionAttachmentPipelines: [String: ConversationAttachmentPipeline] = [:]
