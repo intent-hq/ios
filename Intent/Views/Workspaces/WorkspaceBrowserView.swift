@@ -191,6 +191,7 @@ struct WorkspaceBrowserView: View {
             backIdentifier: "browser.main.close",
             titleIdentifier: "browser.main.title",
             leadingIcon: .close,
+            bottomPadding: Constants.Conversation.Design.Header.verticalPadding,
             usesConversationLayout: true,
             onBack: onClose
         ) {
