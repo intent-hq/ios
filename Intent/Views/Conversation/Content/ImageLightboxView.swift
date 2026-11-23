@@ -242,7 +242,6 @@ struct ImageLightboxView: View {
         .buttonStyle(IntentContentButtonStyle())
         .accessibilityLabel("Close image")
     }
-
 }
 
 extension ImageLightboxView {
