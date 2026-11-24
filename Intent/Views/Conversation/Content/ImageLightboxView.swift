@@ -133,14 +133,7 @@ struct ImageLightboxView: View {
     private func pageContent(for item: ImageLightboxItem, isCurrent: Bool) -> some View {
         switch loadedImages[item.loadKey] {
         case let .image(image, _):
-            if isCurrent {
-                zoomableImage(image)
-            } else {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .accessibilityHidden(true)
-            }
+            pageImage(image, isCurrent: isCurrent)
         case .failed:
             ImageDecodeFailureView()
                 .environment(\.colorScheme, .dark)
@@ -150,14 +143,14 @@ struct ImageLightboxView: View {
         }
     }
 
-    private func zoomableImage(_ image: UIImage) -> some View {
+    private func pageImage(_ image: UIImage, isCurrent: Bool) -> some View {
         Image(uiImage: image)
             .resizable()
             .scaledToFit()
-            .scaleEffect(scale * gestureScale)
+            .scaleEffect(isCurrent ? scale * gestureScale : 1)
             .offset(
-                x: offset.width + dragTranslation.width,
-                y: offset.height + dragTranslation.height
+                x: isCurrent ? offset.width + dragTranslation.width : 0,
+                y: isCurrent ? offset.height + dragTranslation.height : 0
             )
             .accessibilityLabel("Image preview")
             .accessibilityValue(accessibilityValue)
