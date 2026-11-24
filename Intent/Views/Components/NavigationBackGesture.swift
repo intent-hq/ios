@@ -86,16 +86,23 @@ struct WorkspaceVerticalNavigationToolbar<Actions: View>: ToolbarContent {
 }
 
 extension ToolbarContent {
-    @ToolbarContentBuilder
-    func intentToolbarSurface() -> some ToolbarContent {
+    func intentToolbarSurface() -> IntentToolbarSurface<Self> {
+        IntentToolbarSurface(content: self)
+    }
+}
+
+struct IntentToolbarSurface<Content: ToolbarContent>: ToolbarContent {
+    let content: Content
+
+    var body: some ToolbarContent {
         #if os(iOS)
         if #available(iOS 26.0, *) {
-            sharedBackgroundVisibility(.hidden)
+            content.sharedBackgroundVisibility(.hidden)
         } else {
-            self
+            content
         }
         #else
-        self
+        content
         #endif
     }
 }
