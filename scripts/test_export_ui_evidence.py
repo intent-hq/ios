@@ -49,7 +49,7 @@ class ExportTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.output = self.root / "output"
         self.env = {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2",
                     "GITHUB_OUTPUT": str(self.root / "github-output")}
@@ -355,6 +355,21 @@ class ExportTests(unittest.TestCase):
                                       record(test="WorkspaceChangesUITests/testUnreviewedCapture()")])
         self.assertEqual(self.export(source), {"review": 1, "agent-groups": 0, "recovery": 0})
         self.assertEqual(self.manifest()["files"][0]["capture"], "nested-file-tree")
+
+    def test_agent_group_allowlist_matches_every_capture_in_the_suite(self):
+        suite = "WorkspaceAgentGroupsUITests"
+        source = (ROOT / "IntentUITests" / f"{suite}.swift").read_text()
+        methods = dict(re.findall(
+            r"^    (?:private )?func (\w+)(\([^\n]*\n.*?^    })", source, re.MULTILINE | re.DOTALL
+        ))
+        captured = {
+            test: {"agent-group-evidence-" + name
+                   for name in re.findall(r'capture\(app, name: "([^"\\]+)"\)', body)}
+            for test, body in methods.items() if test.startswith("test")
+        }
+        captured = {test: names for test, names in captured.items() if names}
+        self.assertIn("testLargeWorkspaceStaysResponsiveWhileExpandingAndScrolling", captured)
+        self.assertEqual(captured, {test: set(names) for test, names in evidence.CAPTURES[suite].items()})
 
     def test_ipad_empty_detail_allowlist_matches_its_fixture_captures(self):
         suite = "IPadWorkspaceSidebarUITests"
