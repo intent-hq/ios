@@ -12,7 +12,7 @@ struct CopyContextMenuPassthroughPolicyTests {
         "Transcript/WorkspaceConversationHeader.swift": (1, "Header above the transcript."),
         "Content/ChatImageActions.swift": (2, "Image Save/Copy items render only inside menus."),
         "Content/HTMLLinkPreviewView.swift": (2, "Full-screen preview presented from a row."),
-        "Content/ImageLightboxView.swift": (7, "Full-screen lightbox presented from a row."),
+        "Content/ImageLightboxView.swift": (8, "Full-screen lightbox presented from a row."),
         "Content/PDFLightboxView.swift": (1, "Full-screen lightbox presented from a row."),
         "Content/PDFLinkPreviewView.swift": (2, "Full-screen preview presented from a row."),
         "Content/TextLinkPreviewView.swift": (1, "Full-screen preview presented from a row."),

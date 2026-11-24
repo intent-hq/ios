@@ -61,6 +61,10 @@ struct ConversationTranscriptView: View {
                 }
             }
         }
+        .environment(
+            \.conversationImageGallery,
+            ConversationImageGallery(store: viewModel.store, workspaceId: viewModel.workspaceId)
+        )
         #if DEBUG
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             logKeyboardGeometry("will-show", notification: notification)

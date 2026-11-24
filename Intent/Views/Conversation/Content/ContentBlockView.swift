@@ -68,6 +68,7 @@ struct ContentBlockBody: View, Equatable {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.conversationComposerFocus) private var composerFocus
+    @Environment(\.conversationImageGallery) private var imageGallery
     @ScaledMetric(relativeTo: .caption) private var contentIconSide: CGFloat = 12
     var disclosure = TranscriptDisclosure()
     private var thinkingExpanded: Bool {
@@ -164,6 +165,7 @@ struct ContentBlockBody: View, Equatable {
                 MarkdownTextView(text: text, onOpenURL: openTextURL, workspaceId: workspaceId, linkStyle: .chat)
             }
         }
+        .environment(\.markdownImageGalleryBlockID, block.id)
         .fullScreenCover(item: $pdfLink) { link in
             PDFLinkPreviewView(link: link)
                 .coversConversationComposers()
@@ -253,7 +255,8 @@ struct ContentBlockBody: View, Equatable {
             AttachmentReferenceImageView(
                 workspaceId: workspaceId,
                 attachmentId: attachmentId,
-                style: .inline
+                style: .inline,
+                galleryItemID: block.id
             )
         } else if let uiImage = ContentBlockView.decodeImage(block) {
             let imageData = ContentBlockView.decodeImageData(block)
@@ -281,7 +284,7 @@ struct ContentBlockBody: View, Equatable {
             }
             .imageSaveAlert()
             .fullScreenCover(isPresented: $lightboxPresented) {
-                ImageLightboxView(image: uiImage, data: imageData)
+                GalleryImageLightbox(itemID: block.id, image: uiImage, data: imageData, gallery: imageGallery)
                     .coversConversationComposers()
             }
             .onChange(of: block.dataTruncation) { _, truncation in

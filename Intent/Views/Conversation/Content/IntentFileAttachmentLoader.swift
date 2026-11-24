@@ -60,7 +60,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     ) async throws -> AnyAttachment {
         switch MarkdownImageRoute.route(for: url) {
         case .workspaceAsset(let link):
-            return await assetAttachment(link: link, text: text)
+            return await assetAttachment(link: link, text: text, url: url)
         case .intentFile(let link):
             if WorkspacePDF.isPDF(path: link.path) {
                 return await pdfAttachment(link: link)
@@ -68,7 +68,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
             if WorkspaceVideo.isVideo(path: link.path) {
                 return await videoAttachment(link: link, text: text)
             }
-            return await imageAttachment(link: link, text: text)
+            return await imageAttachment(link: link, text: text, url: url)
         case .remote:
             if let attachment = await remoteImageAttachment(for: url, text: text) {
                 return attachment
@@ -79,7 +79,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         }
     }
 
-    private func imageAttachment(link: IntentFileLink, text: String) async -> AnyAttachment {
+    private func imageAttachment(link: IntentFileLink, text: String, url: URL) async -> AnyAttachment {
         guard link.isImage, let resolvedWorkspaceId = link.workspaceId ?? workspaceId else {
             return AnyAttachment(
                 IntentFileFailureAttachment(altText: text) as any Textual.Attachment
@@ -88,7 +88,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         do {
             let image = try await fileImage(resolvedWorkspaceId, link.path)
             return AnyAttachment(
-                IntentFileImageAttachment(image: image, altText: text)
+                IntentFileImageAttachment(image: image, altText: text, sourceURL: url)
                     as any Textual.Attachment
             )
         } catch {
@@ -126,14 +126,16 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         ) as any Textual.Attachment)
     }
 
-    private func assetAttachment(link: WorkspaceAssetLink?, text: String) async -> AnyAttachment {
+    private func assetAttachment(link: WorkspaceAssetLink?, text: String, url: URL) async -> AnyAttachment {
         guard let link else {
             return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
         }
         do {
             switch try await assetMedia(link.workspaceId, link.assetId) {
             case .image(let image):
-                return AnyAttachment(IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment)
+                return AnyAttachment(
+                    IntentFileImageAttachment(image: image, altText: text, sourceURL: url) as any Textual.Attachment
+                )
             case .video(let video):
                 return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
                     link.assetId : text) as any Textual.Attachment)
@@ -162,7 +164,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     func remoteImageAttachment(for url: URL, text: String) async -> AnyAttachment? {
         guard let image = try? await remoteImage(url) else { return nil }
         return AnyAttachment(
-            IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment
+            IntentFileImageAttachment(image: image, altText: text, sourceURL: url) as any Textual.Attachment
         )
     }
 }
@@ -170,6 +172,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
 struct IntentFileImageAttachment: Attachment {
     let image: UIImage
     let altText: String
+    var sourceURL: URL?
 
     var description: String { altText }
 

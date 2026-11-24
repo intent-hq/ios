@@ -387,6 +387,68 @@ extension InlineResponseImageUITests {
 
 extension InlineResponseImageUITests {
     @MainActor
+    func testImageViewerSwipesBetweenConversationImages() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-images", "--demo-image-gallery"]
+        app.launch()
+        openWorkspace(in: app)
+        let agent = app.staticTexts[Fixture.agentName].firstMatch
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        agent.tap()
+        let thumbnail = app.buttons["Attached image"].firstMatch
+        XCTAssertTrue(thumbnail.waitForExistence(timeout: Fixture.timeout))
+        thumbnail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let preview = app.images["Image preview"].firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout: Fixture.timeout))
+        assertGalleryPosition(4, of: preview)
+        attachGalleryScreenshot("Image viewer, image 4 of 4")
+
+        preview.swipeLeft()
+        assertGalleryPosition(4, of: preview)
+
+        preview.swipeRight()
+        assertGalleryPosition(3, of: preview)
+        attachGalleryScreenshot("Image viewer, response image 3 of 4")
+
+        preview.swipeRight()
+        assertGalleryPosition(2, of: preview)
+        attachGalleryScreenshot("Image viewer, image 2 of 4")
+
+        preview.swipeRight()
+        assertGalleryPosition(1, of: preview)
+        attachGalleryScreenshot("Image viewer, image 1 of 4")
+
+        preview.swipeRight()
+        assertGalleryPosition(1, of: preview)
+
+        preview.swipeLeft()
+        assertGalleryPosition(2, of: preview)
+
+        preview.swipeDown()
+        XCTAssertTrue(preview.waitForNonExistence(timeout: Fixture.timeout), "Swiping down must still close the viewer")
+    }
+
+    @MainActor
+    private func assertGalleryPosition(_ position: Int, of preview: XCUIElement) {
+        let expected = "Image \(position) of 4"
+        let reached = waitUntil(timeout: Fixture.timeout) {
+            (preview.value as? String)?.hasPrefix(expected) == true
+        }
+        XCTAssertTrue(reached, "Expected \(expected), found \(String(describing: preview.value))")
+    }
+
+    @MainActor
+    private func attachGalleryScreenshot(_ name: String) {
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+}
+
+extension InlineResponseImageUITests {
+    @MainActor
     func testTextLinkOpensViewerAndRetriesMissingFile() {
         let app = XCUIApplication()
         app.launchArguments += ["--demo-data", "--demo-inline-text"]

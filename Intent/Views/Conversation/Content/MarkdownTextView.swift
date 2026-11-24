@@ -14,6 +14,8 @@ struct MarkdownTextView: View {
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.assistantMessageStreaming) private var isStreaming
     @Environment(\.conversationComposerFocus) private var composerFocus
+    @Environment(\.conversationImageGallery) private var imageGallery
+    @Environment(\.markdownImageGalleryBlockID) private var imageGalleryBlockID
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
     @State private var videoItem: VideoItem?
@@ -114,7 +116,7 @@ struct MarkdownTextView: View {
             .textual.onAttachmentTap { attachment in
                 if let image = Self.lightboxImage(for: attachment) {
                     composerFocus?.wrappedValue = false
-                    lightboxItem = LightboxItem(image: image)
+                    lightboxItem = LightboxItem(image: image, galleryItemID: galleryItemID(for: attachment))
                 } else if let video = Self.playbackVideo(for: attachment) {
                     videoItem = VideoItem(video: video)
                 } else if let pdf = Self.previewPDF(for: attachment) {
@@ -137,8 +139,12 @@ struct MarkdownTextView: View {
             .tint(textColor)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in
-                ImageLightboxView(image: item.image)
-                    .coversConversationComposers()
+                GalleryImageLightbox(
+                    itemID: item.galleryItemID ?? item.id.uuidString,
+                    image: item.image,
+                    gallery: item.galleryItemID == nil ? nil : imageGallery
+                )
+                .coversConversationComposers()
             }
             .fullScreenCover(item: $videoItem) { item in
                 VideoLightboxView(video: item.video)
@@ -183,6 +189,12 @@ struct MarkdownTextView: View {
               let scheme = components.scheme?.lowercased(), ["http", "https"].contains(scheme),
               let host = components.host, WorkspaceBrowserURL.isLocalHost(host) else { return nil }
         return try store.open(workspaceId: workspaceId, url: url.absoluteString)
+    }
+
+    private func galleryItemID(for attachment: AnyAttachment) -> String? {
+        guard let imageGallery, let imageGalleryBlockID,
+              let url = (attachment.base as? IntentFileImageAttachment)?.sourceURL else { return nil }
+        return imageGallery.markdownItemID(for: url, inBlock: imageGalleryBlockID)
     }
 
     static func lightboxImage(for attachment: AnyAttachment) -> UIImage? {
@@ -261,6 +273,7 @@ struct MarkdownTextView: View {
 private struct LightboxItem: Identifiable {
     let id = UUID()
     let image: UIImage
+    var galleryItemID: String?
 }
 
 private struct VideoItem: Identifiable {
