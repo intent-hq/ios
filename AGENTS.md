@@ -77,7 +77,7 @@ Run the matching checks after changing tooling:
 | Source-list updater / shared enumeration (`scripts/source-lists.sh`) | `scripts/test-update-source-lists.sh`; `scripts/test-check-swiftlint-inputs.sh`; `scripts/test-generate-test-inputs.sh` |
 | CI / test selection | `python3 scripts/test_ci_simulator.py`; `python3 scripts/test_ui_smoke_tests.py`; `python3 scripts/test_ui_full_tests.py` |
 | Runner / capture selection | `python3 scripts/test_select_macos_runner.py`; `python3 scripts/test_select_fixture_capture_repetitions.py` |
-| Evidence exporter | `python3 scripts/test_export_ui_evidence.py` (on macOS, prefix with `TMPDIR=/private/tmp`); `scripts/test_run_commit_tests.sh` (the runner calls its command line) |
+| Evidence exporter | `python3 scripts/test_export_ui_evidence.py`; `scripts/test_run_commit_tests.sh` (the runner calls its command line) |
 | SwiftLint wrapper / input checker | `scripts/test-swiftlint.sh`; `scripts/test-check-swiftlint-inputs.sh`; Linux setup/runtime checks are in the [lint guide](README.md#strict-lint-on-linux) |
 | Xcode Cloud preparation | `scripts/test-ci-post-clone.sh` |
 | Comment ratchet | `python3 scripts/test_comment_budget.py`; `python3 scripts/comment_budget.py check` |
