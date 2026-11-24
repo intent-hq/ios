@@ -81,7 +81,9 @@ EOF
 # dyld's abort lines first (so with STUB_THEN only the later invocation does);
 # STUB_RESIST_DETACHED=1 points the STUB_RESIST child's stdout/stderr at
 # /dev/null, like xcodebuild's SIGTERM-immune DTServiceHub, which does not
-# hold the log pipe.
+# hold the log pipe. STUB_SDK_TAIL=<n> makes -showsdks print n more SDK lines
+# after a short pause, so a reader that stops at the first match closes the
+# pipe while the stub is still writing (ios#673).
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
@@ -93,7 +95,13 @@ for arg in "$@"; do
   prev=$arg
 done
 case " $* " in
-  *" -showsdks "*) echo "Simulator - iOS -sdk iphonesimulator"; echo "Simulator - visionOS -sdk xrsimulator"; exit 0 ;;
+  *" -showsdks "*)
+    echo "Simulator - iOS -sdk iphonesimulator"; echo "Simulator - visionOS -sdk xrsimulator"
+    if [ -n "${STUB_SDK_TAIL:-}" ]; then
+      sleep 0.2
+      for i in $(seq 1 "$STUB_SDK_TAIL"); do echo "Simulator - padding $i -sdk padding$i"; done
+    fi
+    exit 0 ;;
   *" -enumerate-tests "*)
     if [ -n "${STUB_ENUMERATE_FAIL:-}" ]; then
       echo "xcodebuild: error: Unable to enumerate tests (stub)"
@@ -1185,6 +1193,9 @@ assert_eq "production Release build adds only the configuration, not testability
 status=$(run_filtered releasevision "" build-visionos BUILD_CONFIGURATION=Release)
 assert_eq "Release visionOS build exits 0" "$status" 0
 assert_eq "Release visionOS still checks the SDK first" "$(argv_line releasevision 1)" 'argv: [-showsdks]'
+status=$(run_filtered slowsdks "" build-visionos STUB_SDK_TAIL=5000)
+assert_eq "visionOS SDK probe survives SDK output that continues after the match" "$status" 0
+assert_lacks "visionOS SDK probe does not report a present SDK as missing" "$(cat "$work/slowsdks.out")" "is not installed"
 assert_eq "Release visionOS keeps its destination and signing, without testability" "$(argv_line releasevision 2)" \
   'argv: [build] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [generic/platform=visionOS Simulator] [CODE_SIGN_IDENTITY=] [CODE_SIGNING_REQUIRED=NO] [CODE_SIGNING_ALLOWED=NO] [-configuration] [Release]'
 for sub in build-for-testing test-ios test-ios-unit test-without-building test-without-building-unit; do
