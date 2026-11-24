@@ -163,11 +163,14 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     @MainActor
     private func cancelAttachmentPickers(in app: XCUIApplication) {
         for picker in ["Photos", "Files"] {
-            app.buttons["composer.attachment"].tap()
+            let attachment = app.buttons["composer.attachment"]
+            XCTAssertTrue(attachment.wait(for: \.isHittable, toEqual: true, timeout: Self.elementTimeout))
+            attachment.tap()
             app.buttons[picker].tap()
             let cancel = app.buttons["Cancel"]
             XCTAssertTrue(cancel.waitForExistence(timeout: Self.elementTimeout))
             cancel.tap()
+            XCTAssertTrue(cancel.waitForNonExistence(timeout: Self.elementTimeout))
             XCTAssertTrue(app.textViews["creation.prompt"].waitForExistence(timeout: Self.elementTimeout))
         }
     }

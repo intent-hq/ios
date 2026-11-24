@@ -543,6 +543,10 @@ CAPTURES = {
         "testNestedFoldersPreserveCollapseUntilRepositoryChanges": ("nested-file-tree",),
     },
     "WorkspaceAgentGroupsUITests": {
+        "testLargeWorkspaceStaysResponsiveWhileExpandingAndScrolling": (
+            "agent-group-evidence-Large workspace with 1200 top-level agents",
+            "agent-group-evidence-Large delegated group after scrolling",
+        ),
         "testSectionsLoadOnExpansionAndKeepNestedChildrenWithTheirParent": (
             "agent-group-evidence-Agent groups collapsed with counts",
             "agent-group-evidence-Nested delegated children expanded",

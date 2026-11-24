@@ -361,7 +361,7 @@ pick_simulator() {
 }
 
 ensure_visionos_sdk() {
-  if ! xcodebuild -showsdks 2>/dev/null | grep -q 'xrsimulator'; then
+  if ! xcodebuild -showsdks 2>/dev/null | grep 'xrsimulator' >/dev/null; then
     die "visionOS simulator SDK (xrsimulator) is not installed for the selected Xcode.
 Install it with: xcodebuild -downloadPlatform visionOS
 Refusing to build: without the platform, xcodebuild would silently fall back to iphoneos."

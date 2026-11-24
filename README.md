@@ -647,9 +647,6 @@ flows; `scripts/export_ui_evidence.py` is the complete allowlist. Missing images
 are not proof that a view was captured. `ios-agent-group-evidence` and
 `ios-transcript-recovery-evidence` remain separate artifacts. Run
 `python3 scripts/test_export_ui_evidence.py` to check the export contract.
-On macOS, use `TMPDIR=/private/tmp python3 scripts/test_export_ui_evidence.py`
-to avoid the fixture's symlinked temporary-path mismatch
-([ios#671](https://github.com/intent-hq/ios/issues/671)).
 
 Final diagnostic attachments use XCTest teardown, since an assertion with
 `continueAfterFailure = false` can bypass Swift `defer`. The Linux CI job runs
