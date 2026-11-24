@@ -120,8 +120,8 @@ struct BackgroundHooksRow: View {
                 )
                 .frame(height: Layout.timeBarHeight)
                 .id(nextRunAt)
-                .padding(.horizontal, Layout.timeBarInset)
-                .padding(.bottom, Layout.timeBarInset)
+                .padding(.horizontal, Layout.timeBarHorizontalInset)
+                .padding(.bottom, Layout.timeBarBottomInset)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))

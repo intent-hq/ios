@@ -198,7 +198,8 @@ extension Constants.Conversation.StatusStrip {
         static let chipTopPadding: CGFloat = 4
         static let chipBottomPadding: CGFloat = 6
         static let chipBackgroundOpacity: Double = 0.3
-        static let timeBarInset: CGFloat = 3
+        static let timeBarHorizontalInset: CGFloat = 8
+        static let timeBarBottomInset: CGFloat = 2
         static let timeBarOpacity: Double = 0.5
         static let timeBarHeight: CGFloat = 1
     }
