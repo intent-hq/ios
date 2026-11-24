@@ -99,12 +99,25 @@ struct ContentBlockLinkTests {
     }
 
     @Test(arguments: [
-        ("intent://local/file/image.png", UnopenableLink.Reason.unsupportedIntentLink),
-        ("intent://local/linked/file/image.PNG", .unsupportedIntentLink),
-        ("intent://local/file/movie.mp4", .unsupportedIntentLink),
-        ("intent://local/linked/file/movie.MP4", .unsupportedIntentLink),
-        ("intent://local/file/movie.webm", .unsupportedIntentLink),
-        ("intent://local/file/../notes.txt", .unsupportedIntentLink),
+        ("intent://local/file/.intent/artifacts/pr1107/03-settings-scrolled-light.png", "current",
+         ".intent/artifacts/pr1107/03-settings-scrolled-light.png"),
+        ("intent://local/linked/file/image.PNG", "linked", "image.PNG"),
+        ("intent://local/file/Shot%20%231.jpeg", "current", "Shot #1.jpeg"),
+        ("intent://local/file/movie.mp4", "current", "movie.mp4"),
+        ("intent://local/linked/file/movie.MP4", "linked", "movie.MP4"),
+        ("intent://local/file/movie.webm", "current", "movie.webm"),
+        ("reports/chart.png", "current", "reports/chart.png"),
+        ("file:///Users/me/movie.mp4", "current", "/Users/me/movie.mp4")
+    ])
+    func mediaLinksOpenInViewer(address: String, expectedWorkspace: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .media(
+            .init(workspaceId: expectedWorkspace, path: expectedPath)
+        ))
+    }
+
+    @Test(arguments: [
+        ("intent://local/file/../notes.txt", UnopenableLink.Reason.unsupportedIntentLink),
         ("intent://local/linked/file/%2E%2E/notes.txt", .unsupportedIntentLink),
         ("intent://local/file/reports%2Fnotes.txt", .unsupportedIntentLink),
         ("intent://remote/file/notes.txt", .unsupportedIntentLink),
@@ -127,9 +140,7 @@ struct ContentBlockLinkTests {
         ("C:/Users/me/report.html", .unsupportedLocation),
         ("file://server/share/report.html", .unsupportedLocation),
         ("file:report.html", .unsupportedLocation),
-        ("file:///tmp/../report.pdf", .unsupportedLocation),
-        ("reports/chart.png", .unsupportedLocation),
-        ("file:///Users/me/movie.mp4", .unsupportedLocation)
+        ("file:///tmp/../report.pdf", .unsupportedLocation)
     ])
     func unopenableLinksShowAMessage(address: String, reason: UnopenableLink.Reason) throws {
         let url = try #require(URL(string: address))

@@ -11,8 +11,12 @@ struct WorkspaceFilePreview: View {
     @Environment(\.dismiss) private var dismiss
 
     init(link: TextLinkPreviewView.Link, connection: any ConnectionManagerRouting) {
+        self.init(link: link, loader: WorkspaceFileImageLoader(connection: connection))
+    }
+
+    init(link: TextLinkPreviewView.Link, loader: WorkspaceFileImageLoader) {
         self.link = link
-        _loader = State(initialValue: WorkspaceFileImageLoader(connection: connection))
+        _loader = State(initialValue: loader)
     }
 
     private var isImage: Bool {
