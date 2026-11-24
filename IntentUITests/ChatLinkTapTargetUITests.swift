@@ -4,6 +4,7 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
     private enum Outcome {
         case text
         case html
+        case image
         case message
     }
 
@@ -16,6 +17,7 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
             ("Open the missing text file", .text),
             ("Open the HTML report", .html),
             ("Open the HTML report by absolute path", .html),
+            ("Open the usage chart", .image),
             ("Open the workspace settings", .message),
             ("Open the signed-in preview", .message)
         ]
@@ -141,6 +143,9 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
             close(app.buttons["text.close"].firstMatch, context: context)
         case .html:
             close(app.buttons["html.close"].firstMatch, context: context)
+        case .image:
+            XCTAssertTrue(app.images["Image preview"].waitForExistence(timeout: Fixture.timeout), "\(context) must show the image")
+            close(app.buttons["Close image"].firstMatch, context: context)
         case .message:
             let alert = app.alerts[Fixture.alertTitle].firstMatch
             XCTAssertTrue(alert.waitForExistence(timeout: Fixture.timeout), "\(context) must open the link")

@@ -69,6 +69,7 @@ struct ContentBlockBody: View, Equatable {
     @Environment(\.workspaceTranscriptDesign) private var workspaceDesign
     @Environment(\.conversationComposerFocus) private var composerFocus
     @Environment(\.conversationImageGallery) private var imageGallery
+    @Environment(BackendSession.self) private var session: BackendSession?
     @ScaledMetric(relativeTo: .caption) private var contentIconSide: CGFloat = 12
     var disclosure = TranscriptDisclosure()
     private var thinkingExpanded: Bool {
@@ -79,6 +80,7 @@ struct ContentBlockBody: View, Equatable {
     @State private var pdfLink: PDFLinkPreviewView.Link?
     @State private var textLink: TextLinkPreviewView.Link?
     @State private var htmlLink: HTMLLinkPreviewView.Link?
+    @State private var mediaLink: TextLinkPreviewView.Link?
     @State private var unopenableLink: UnopenableLink?
     @State private var lightboxPendingHydration = false
 
@@ -178,6 +180,10 @@ struct ContentBlockBody: View, Equatable {
             HTMLLinkPreviewView(link: link)
                 .coversConversationComposers()
         }
+        .fullScreenCover(item: $mediaLink) { link in
+            WorkspaceFilePreview(link: link, loader: session?.workspaceFileImageLoader ?? .shared)
+                .coversConversationComposers()
+        }
         .unopenableLinkAlert($unopenableLink)
     }
 
@@ -189,6 +195,9 @@ struct ContentBlockBody: View, Equatable {
             textLink = link
         case .html(let link):
             htmlLink = link
+        case .media(let link):
+            composerFocus?.wrappedValue = false
+            mediaLink = link
         case let .note(noteId, targetWorkspaceId):
             if let onNavigateToNote {
                 onNavigateToNote(noteId, targetWorkspaceId, "Note")
@@ -354,6 +363,7 @@ extension ContentBlockBody {
         case pdf(PDFLinkPreviewView.Link)
         case text(TextLinkPreviewView.Link)
         case html(HTMLLinkPreviewView.Link)
+        case media(TextLinkPreviewView.Link)
         case note(id: String, workspaceId: String)
         case unopenable(UnopenableLink.Reason)
         case system
@@ -368,9 +378,10 @@ extension ContentBlockBody {
             if ["html", "htm"].contains(URL(fileURLWithPath: link.path).pathExtension.lowercased()) {
                 return .html(.init(workspaceId: target, path: link.path))
             }
-            if !link.isImage, !WorkspaceVideo.isVideo(path: link.path) {
-                return .text(.init(workspaceId: target, path: link.path))
+            if link.isImage || WorkspaceVideo.isVideo(path: link.path) {
+                return .media(.init(workspaceId: target, path: link.path))
             }
+            return .text(.init(workspaceId: target, path: link.path))
         }
         if let link = NoteDetailView.parseIntentNoteLink(url) {
             return .note(id: link.id, workspaceId: link.workspaceId ?? workspaceId)

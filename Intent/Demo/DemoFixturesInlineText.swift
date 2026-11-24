@@ -22,6 +22,7 @@ extension DemoFixtures {
             "[Open the missing text file](intent://local/file/docs/Missing%20notes.txt)",
             "[Open the HTML report](reports/Demo%20report.html)",
             "[Open the HTML report by absolute path](/Users/demo/dashboard/reports/Demo%20report.html)",
+            "[Open the usage chart](intent://local/file/reports/images/usage-chart.png)",
             "[Open the workspace settings](intent://local/settings)",
             "[Open the signed-in preview](http://user@localhost:3000)",
             "The notes are ready to review and share."
