@@ -34,8 +34,12 @@ struct CompactMarkdownStyle: StructuredText.Style {
     let tableCellStyle = CompactTableCellStyle()
     let thematicBreakStyle = CompactThematicBreakStyle()
 
-    init(mermaidSources: [String: String] = [:], pendingMermaidLanguage: String? = nil) {
-        codeBlockStyle = MermaidCodeBlockStyle(sources: mermaidSources, pendingLanguage: pendingMermaidLanguage)
+    init(
+        mermaidSources: [String: String] = [:],
+        visualSources: [String: String] = [:],
+        pending: MermaidMarkdownContent.PendingDiagram? = nil
+    ) {
+        codeBlockStyle = MermaidCodeBlockStyle(sources: mermaidSources, visuals: visualSources, pending: pending)
     }
 }
 
@@ -105,18 +109,26 @@ struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
 
 struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
     let sources: [String: String]
-    let pendingLanguage: String?
+    let visuals: [String: String]
+    let pending: MermaidMarkdownContent.PendingDiagram?
 
     @ViewBuilder
     func makeBody(configuration: Configuration) -> some View {
         if let row = StandaloneLinkRow(languageHint: configuration.languageHint) {
             StandaloneLinkRowView(row: row)
-        } else if let language = configuration.languageHint, language == pendingLanguage {
-            MermaidStreamingPlaceholder()
+        } else if let pending, configuration.languageHint == pending.language {
+            MermaidStreamingPlaceholder(title: pending.isVisual ? "Generating visual" : "Generating diagram")
                 .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
         } else if let language = configuration.languageHint, let source = sources[language] {
             Overflow { overflow in
                 MermaidDiagramView(source: source)
+                    .frame(width: overflow.containerWidth)
+            }
+            .textual.textSelection(.disabled)
+            .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
+        } else if let language = configuration.languageHint, let source = visuals[language] {
+            Overflow { overflow in
+                InlineVisualView(source: source)
                     .frame(width: overflow.containerWidth)
             }
             .textual.textSelection(.disabled)

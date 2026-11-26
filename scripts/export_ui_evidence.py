@@ -227,6 +227,12 @@ CAPTURES = {
         "testIPadQuestionsKeepNextAndRailAvailable": ("iPad question actions beside persistent rail",),
         "testMenuCardsStayReachableWithLargestText": ("Menu largest text",),
     },
+    "ConversationInlineVisualUITests": {
+        "testInlineVisualRendersInteractiveHTMLInBothAppearances": (
+            "inline-visual-light", "inline-visual-light-after-slider",
+            "inline-visual-dark", "inline-visual-dark-after-slider",
+        ),
+    },
     "ConversationMermaidUITests": {
         "testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit": ("mermaid-history-grown",),
         "testDiagramHistoryReopensAndGoToEndShowsLastAnswer": (

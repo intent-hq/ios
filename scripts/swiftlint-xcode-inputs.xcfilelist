@@ -497,6 +497,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/HTMLLinkPreviewView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageAttachmentThumbnail.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageDecodeFailureView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ImageLightboxView.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/InlineVisualView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileAttachmentLoader.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFilePDFAttachment.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/IntentFileVideoAttachment.swift
@@ -1247,6 +1248,7 @@ $(SRCROOT)/IntentUITests/ConnectionLossUITests.swift
 $(SRCROOT)/IntentUITests/ConnectionSwitcherUITests.swift
 $(SRCROOT)/IntentUITests/ConversationActionsUITests.swift
 $(SRCROOT)/IntentUITests/ConversationGoalUITests.swift
+$(SRCROOT)/IntentUITests/ConversationInlineVisualUITests.swift
 $(SRCROOT)/IntentUITests/ConversationMarkdownTableUITests.swift
 $(SRCROOT)/IntentUITests/ConversationMermaidUITests.swift
 $(SRCROOT)/IntentUITests/ConversationToolActivityUITests.swift

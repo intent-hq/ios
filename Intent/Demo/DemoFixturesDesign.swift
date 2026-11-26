@@ -19,6 +19,7 @@ enum DemoDesignScenario: String, CaseIterable {
     case empty
     case goal
     case history
+    case inlineVisual = "inline-visual"
     case mermaid
     case mermaidHistory = "mermaid-history"
     case questionCards = "question-cards"
