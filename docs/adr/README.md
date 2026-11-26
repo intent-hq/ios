@@ -217,6 +217,7 @@ What callers and future changes must respect. Omit when the decisions say it all
 | [0121](0121-workspace-text-file-viewer.md) | The workspace text file viewer uses TextKit 2 with fixed-height lines |
 | [0122](0122-transcript-notice-cards.md) | Transcript notice and wake cards |
 | [0123](0123-row-content-prepared-on-main-actor.md) | Row content is prepared on the main actor before row providers run |
+| [0223](0223-office-document-quick-look.md) | Office and iWork files open in Quick Look |
 
 ### `Intent/Views/Conversation`: `Questions`, `StatusStrip`, `Transcript`
 

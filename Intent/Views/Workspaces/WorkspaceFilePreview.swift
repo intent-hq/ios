@@ -4,8 +4,7 @@ struct WorkspaceFilePreview: View {
     @ScaledMetric(relativeTo: .title) private var emptyStateIconSize: CGFloat = 48
     let link: TextLinkPreviewView.Link
     @State private var loader: WorkspaceFileImageLoader
-    @State private var image: UIImage?
-    @State private var video: WorkspaceVideo?
+    @State private var media: WorkspaceFileMedia?
     @State private var failure: Failure?
     @State private var attempt = 0
     @Environment(\.dismiss) private var dismiss
@@ -23,13 +22,17 @@ struct WorkspaceFilePreview: View {
         IntentFileLink(workspaceId: link.workspaceId, path: link.path).isImage
     }
 
+    private var isDocument: Bool {
+        WorkspaceDocument.isDocument(path: link.path)
+    }
+
     var body: some View {
         Group {
             if WorkspacePDF.isPDF(path: link.path) {
                 PDFLinkPreviewView(link: .init(workspaceId: link.workspaceId, path: link.path), loaderOverride: loader)
             } else if ["html", "htm"].contains(URL(fileURLWithPath: link.path).pathExtension.lowercased()) {
                 HTMLLinkPreviewView(link: link, loaderOverride: loader)
-            } else if isImage || WorkspaceVideo.isVideo(path: link.path) {
+            } else if isImage || isDocument || WorkspaceVideo.isVideo(path: link.path) {
                 mediaPreview
             } else {
                 TextLinkPreviewView(link: link, loaderOverride: loader)
@@ -39,35 +42,42 @@ struct WorkspaceFilePreview: View {
 
     @ViewBuilder
     private var mediaPreview: some View {
-        if let image {
+        switch media {
+        case .image(let image):
             ImageLightboxView(image: image)
-        } else if let video {
+        case .video(let video):
             VideoLightboxView(video: video)
-        } else {
-            NavigationStack {
-                Group {
-                    if let failure {
-                        failureView(failure)
-                    } else {
-                        ProgressView("Loading file…")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    }
-                }
-                .navigationTitle(link.name)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        IntentIconButton(icon: .close, label: "Close file") { dismiss() }
-                    }
-                    .intentToolbarSurface()
+        case .document(let document):
+            DocumentLightboxView(document: document)
+        case .pdf, .text, nil:
+            loadingPreview
+        }
+    }
+
+    private var loadingPreview: some View {
+        NavigationStack {
+            Group {
+                if let failure {
+                    failureView(failure)
+                } else {
+                    ProgressView("Loading file…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .task(id: attempt) { await loadMedia() }
-            .onReconnect {
-                guard let failure, failure.canRetry else { return }
-                loader.forgetFailure(workspaceId: link.workspaceId, path: link.path)
-                attempt += 1
+            .navigationTitle(link.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    IntentIconButton(icon: .close, label: "Close file") { dismiss() }
+                }
+                .intentToolbarSurface()
             }
+        }
+        .task(id: attempt) { await loadMedia() }
+        .onReconnect {
+            guard let failure, failure.canRetry else { return }
+            loader.forgetFailure(workspaceId: link.workspaceId, path: link.path)
+            attempt += 1
         }
     }
 
@@ -94,19 +104,23 @@ struct WorkspaceFilePreview: View {
     private func loadMedia() async {
         failure = nil
         do {
-            if isImage {
-                let loaded = try await loader.image(workspaceId: link.workspaceId, path: link.path)
-                try Task.checkCancellation()
-                image = loaded
-            } else {
-                let loaded = try await loader.video(workspaceId: link.workspaceId, path: link.path)
-                try Task.checkCancellation()
-                video = loaded
-            }
+            let loaded = try await fetchMedia()
+            try Task.checkCancellation()
+            media = loaded
         } catch {
             guard !Task.isCancelled else { return }
             failure = Failure(error, isImage: isImage, path: link.path)
         }
+    }
+
+    private func fetchMedia() async throws -> WorkspaceFileMedia {
+        if isImage {
+            return .image(try await loader.image(workspaceId: link.workspaceId, path: link.path))
+        }
+        if isDocument {
+            return .document(try await loader.document(workspaceId: link.workspaceId, path: link.path))
+        }
+        return .video(try await loader.video(workspaceId: link.workspaceId, path: link.path))
     }
 }
 

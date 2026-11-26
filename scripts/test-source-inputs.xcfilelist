@@ -297,6 +297,7 @@ $(SRCROOT)/Intent/Demo/DemoFixturesDesign.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesDesignData.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesDesignGoal.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesHistory.swift
+$(SRCROOT)/Intent/Demo/DemoFixturesInlineDocument.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesInlineImages.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesInlinePDF.swift
 $(SRCROOT)/Intent/Demo/DemoFixturesInlineText.swift
@@ -611,6 +612,7 @@ $(SRCROOT)/Intent/Services/WorkspaceChangesStore.swift
 $(SRCROOT)/Intent/Services/WorkspaceCreationImages.swift
 $(SRCROOT)/Intent/Services/WorkspaceCreationVideoSubmission.swift
 $(SRCROOT)/Intent/Services/WorkspaceDiffLoader.swift
+$(SRCROOT)/Intent/Services/WorkspaceDocument.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader+Documents.swift
 $(SRCROOT)/Intent/Services/WorkspaceFileImageLoader.swift
 $(SRCROOT)/Intent/Services/WorkspaceFilesStore.swift
@@ -767,6 +769,7 @@ $(SRCROOT)/Intent/Views/Conversation/Content/CompactMarkdownStyle.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ContentBlockView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ContextMentionChipView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/ConversationImageGallery.swift
+$(SRCROOT)/Intent/Views/Conversation/Content/DocumentLightboxView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/HTMLFileResources.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/HTMLFileWebView.swift
 $(SRCROOT)/Intent/Views/Conversation/Content/HTMLLinkPreviewView.swift
@@ -1470,6 +1473,7 @@ $(SRCROOT)/IntentTests/WorkspaceDiffRootTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffRowsTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffSyntaxTests.swift
 $(SRCROOT)/IntentTests/WorkspaceDiffTests.swift
+$(SRCROOT)/IntentTests/WorkspaceDocumentLoaderTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFallbackRefreshTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileEntryTests.swift
 $(SRCROOT)/IntentTests/WorkspaceFileImageLoaderTests.swift

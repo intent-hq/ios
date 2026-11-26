@@ -7,6 +7,7 @@ extension WorkspaceFileImageLoader {
         case .video(let video): decodedCost(of: video.poster)
         case .pdf(let pdf): decodedCost(of: pdf.thumbnail)
         case .text(let file): file.byteCount * 2
+        case .document: 0
         }
     }
 
@@ -60,6 +61,24 @@ extension WorkspaceFileImageLoader {
         }
         guard case .text(let file) = media else { throw LoadError.notUTF8Text }
         return file
+    }
+
+    func document(workspaceId: String, path: String) async throws -> WorkspaceDocument {
+        let key = "document\u{0}" + Self.fileKey(workspaceId: workspaceId, path: path)
+        let media = try await cachedMedia(key: key) { [chunkRequester] in
+            .document(try await WorkspaceDocument.load(path: path) { handle in
+                try await Self.writeFileBytes(
+                    chunkRequester: chunkRequester,
+                    workspaceId: workspaceId,
+                    path: path,
+                    to: handle,
+                    limit: WorkspaceDocument.maxBytes,
+                    length: Self.pdfChunkLength
+                )
+            })
+        }
+        guard case .document(let document) = media else { throw LoadError.malformedResponse }
+        return document
     }
 
     func pdf(workspaceId: String, path: String) async throws -> WorkspacePDF {

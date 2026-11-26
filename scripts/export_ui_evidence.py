@@ -320,6 +320,17 @@ CAPTURES = {
             "Text viewer after toggling wrapping",
         ),
     },
+    "DocumentLinkUITests": {
+        "testSpreadsheetLinkOpensDocumentViewer": (
+            "Spreadsheet viewer from text link light", "Spreadsheet viewer from text link dark",
+        ),
+        "testSpreadsheetShareKeepsOriginalName": (
+            "Spreadsheet share sheet",
+        ),
+        "testMissingSpreadsheetShowsUnavailableWithRetryAndClose": (
+            "Spreadsheet unavailable with close and retry",
+        ),
+    },
     "PathFileLinkUITests": {
         "testRelativeHTMLPathLinkOpensHTMLViewer": (
             "HTML viewer from relative path link light", "HTML viewer from relative path link dark",

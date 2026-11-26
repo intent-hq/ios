@@ -2,19 +2,20 @@
 
 - Status: Accepted
 - Recorded: 2026-11-20 (moved from code comments; the decisions are older)
-- Applies to: `DemoFixtures` inline-media members (`Intent/Demo/DemoFixturesInlineImages.swift`, `Intent/Demo/DemoFixturesInlinePDF.swift`, `Intent/Demo/DemoFixturesInlineText.swift`, `Intent/Demo/DemoFixturesTranscriptVideo.swift`)
+- Applies to: `DemoFixtures` inline-media members (`Intent/Demo/DemoFixturesInlineImages.swift`, `Intent/Demo/DemoFixturesInlinePDF.swift`, `Intent/Demo/DemoFixturesInlineText.swift`, `Intent/Demo/DemoFixturesInlineDocument.swift`, `Intent/Demo/DemoFixturesTranscriptVideo.swift`)
 
 ## Context
 
-UI tests need transcripts that link images, PDFs, text files, HTML reports, and
-video. These fixtures must not change the default demo or need a network.
+UI tests need transcripts that link images, PDFs, text files, HTML reports,
+spreadsheets, and video. These fixtures must not change the default demo or need a network.
 
 ## Decisions
 
 ### 1. Each inline-media scenario is opt-in
 
 Applies to: `DemoFixtures.inlineImageConversationRequested(by:)`,
-`DemoFixtures.usesInlinePDF`, `DemoFixtures.usesInlineText`
+`DemoFixtures.usesInlinePDF`, `DemoFixtures.usesInlineText`,
+`DemoFixtures.usesInlineDocument`
 
 Each scenario needs its own launch argument, so existing demo screenshots and
 transcript fixtures stay unchanged.
@@ -86,3 +87,13 @@ The video is a two-second H.264 MP4, 160×90: a yellow square on a steel-blue
 background. It was generated once with ffmpeg `color` + `drawbox`, `libx264`,
 `yuv420p`, `+faststart`. Inline bytes keep the opt-in demo independent of the
 network and of bundle lookup.
+
+### 10. The spreadsheet is inline XLSX bytes
+
+Applies to: `DemoFixtures.inlineSpreadsheetBytes`
+
+The spreadsheet is a one-sheet XLSX with a header row and four quarters. It was
+generated once with Python `zipfile` from five hand-written XML parts. Foundation
+cannot write a ZIP archive, so the file cannot be generated in memory the way the
+PDF is. Inline bytes keep the opt-in demo independent of the network and of
+bundle lookup.

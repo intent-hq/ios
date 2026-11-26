@@ -41,7 +41,9 @@ struct ContentBlockLinkTests {
         ("intent://local/file/report", "current", "report"),
         ("intent://local/file/archive.zip", "current", "archive.zip"),
         ("intent://local/file/database.sqlite", "current", "database.sqlite"),
-        ("intent://local/file/page.html.txt", "current", "page.html.txt")
+        ("intent://local/file/page.html.txt", "current", "page.html.txt"),
+        ("intent://local/file/budget.xlsx.txt", "current", "budget.xlsx.txt"),
+        ("intent://local/file/budget.xlsx/child", "current", "budget.xlsx/child")
     ])
     func textLinksOpenInViewer(address: String, expectedWorkspace: String, expectedPath: String) throws {
         let url = try #require(URL(string: address))
@@ -112,6 +114,26 @@ struct ContentBlockLinkTests {
     func mediaLinksOpenInViewer(address: String, expectedWorkspace: String, expectedPath: String) throws {
         let url = try #require(URL(string: address))
         #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .media(
+            .init(workspaceId: expectedWorkspace, path: expectedPath)
+        ))
+    }
+
+    @Test(arguments: [
+        ("intent://local/file/reports/Budget%202026.xlsx", "current", "reports/Budget 2026.xlsx"),
+        ("intent://local/linked/file/budget.XLSX", "linked", "budget.XLSX"),
+        ("intent://local/file/legacy.xls", "current", "legacy.xls"),
+        ("intent://local/file/proposal.docx", "current", "proposal.docx"),
+        ("intent://local/file/memo.doc", "current", "memo.doc"),
+        ("intent://local/file/deck.pptx", "current", "deck.pptx"),
+        ("intent://local/file/deck.ppt", "current", "deck.ppt"),
+        ("intent://local/file/budget.numbers", "current", "budget.numbers"),
+        ("intent://local/file/letter.pages", "current", "letter.pages"),
+        ("intent://local/file/deck.key", "current", "deck.key"),
+        ("reports/budget.xlsx", "current", "reports/budget.xlsx")
+    ])
+    func officeDocumentLinksOpenInViewer(address: String, expectedWorkspace: String, expectedPath: String) throws {
+        let url = try #require(URL(string: address))
+        #expect(ContentBlockBody.textURLRoute(for: url, workspaceId: "current") == .document(
             .init(workspaceId: expectedWorkspace, path: expectedPath)
         ))
     }
