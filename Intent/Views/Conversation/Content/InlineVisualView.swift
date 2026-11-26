@@ -242,7 +242,6 @@ struct InlineVisualWebView: UIViewRepresentable {
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.allowsLinkPreview = false
-        webView.accessibilityIdentifier = "inlineVisual.webview"
         webView.overrideUserInterfaceStyle = dark ? .dark : .light
         coordinator.webView = webView
         webView.loadHTMLString(Self.document(source: source, dark: dark), baseURL: nil)

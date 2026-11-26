@@ -21,7 +21,7 @@ nonisolated final class ConversationInlineVisualUITests: XCTestCase {
             XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
             agent.tap()
 
-            let webView = app.webViews["inlineVisual.webview"].firstMatch
+            let webView = app.webViews["inlineVisual"].firstMatch
             XCTAssertTrue(webView.waitForExistence(timeout: Self.timeout))
             let goToEnd = app.buttons["transcript.goToEnd"].firstMatch
             if goToEnd.exists { goToEnd.tap() }
