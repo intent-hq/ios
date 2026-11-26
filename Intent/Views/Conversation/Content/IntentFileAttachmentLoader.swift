@@ -139,7 +139,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
             case .video(let video):
                 return AnyAttachment(IntentFileVideoAttachment(video: video, name: text.isEmpty ?
                     link.assetId : text) as any Textual.Attachment)
-            case .pdf, .text:
+            case .document, .pdf, .text:
                 return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
             }
         } catch {

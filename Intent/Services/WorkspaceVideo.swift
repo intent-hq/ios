@@ -95,6 +95,7 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
 }
 
 nonisolated enum WorkspaceFileMedia: Sendable {
+    case document(WorkspaceDocument)
     case image(UIImage)
     case pdf(WorkspacePDF)
     case text(WorkspaceTextFile)
@@ -103,7 +104,7 @@ nonisolated enum WorkspaceFileMedia: Sendable {
     var hasTemporaryFile: Bool {
         switch self {
         case .image: false
-        case .video, .pdf, .text: true
+        case .document, .video, .pdf, .text: true
         }
     }
 }

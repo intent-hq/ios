@@ -195,7 +195,7 @@ struct ContentBlockBody: View, Equatable {
             textLink = link
         case .html(let link):
             htmlLink = link
-        case .media(let link):
+        case .media(let link), .document(let link):
             composerFocus?.wrappedValue = false
             mediaLink = link
         case let .note(noteId, targetWorkspaceId):
@@ -364,6 +364,7 @@ extension ContentBlockBody {
         case text(TextLinkPreviewView.Link)
         case html(HTMLLinkPreviewView.Link)
         case media(TextLinkPreviewView.Link)
+        case document(TextLinkPreviewView.Link)
         case note(id: String, workspaceId: String)
         case unopenable(UnopenableLink.Reason)
         case system
@@ -380,6 +381,9 @@ extension ContentBlockBody {
             }
             if link.isImage || WorkspaceVideo.isVideo(path: link.path) {
                 return .media(.init(workspaceId: target, path: link.path))
+            }
+            if WorkspaceDocument.isDocument(path: link.path) {
+                return .document(.init(workspaceId: target, path: link.path))
             }
             return .text(.init(workspaceId: target, path: link.path))
         }

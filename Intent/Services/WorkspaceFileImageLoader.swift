@@ -185,6 +185,7 @@ final class WorkspaceFileImageLoader {
         failedVideoKeys.remove(videoKey)
         failedKeys.remove("pdf\u{0}" + key)
         failedKeys.remove("text\u{0}" + key)
+        failedKeys.remove("document\u{0}" + key)
     }
 
     func forgetAssetFailure(workspaceId: String, assetId: String) {

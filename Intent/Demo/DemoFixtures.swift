@@ -284,6 +284,7 @@ extension DemoFixtures {
         if usesTranscriptVideo, agentId == "demo-agent-implementor" { return transcriptVideoMessages }
         if usesInlinePDF, agentId == "demo-agent-implementor" { return inlinePDFMessages }
         if usesInlineText, agentId == "demo-agent-implementor" { return inlineTextMessages }
+        if usesInlineDocument, agentId == "demo-agent-implementor" { return inlineDocumentMessages }
         if inlineImageConversationRequested(by: LaunchOptions.current.arguments),
            agentId == inlineImageAgentId { return inlineImageConversationMessages }
         if agentId == assistantAgentId { return assistantMessages }
@@ -296,6 +297,7 @@ extension DemoFixtures {
         if let response = transcriptVideoResponse(for: method, params: params) { return response }
         if let response = inlinePDFResponse(for: method, params: params) { return response }
         if let response = inlineTextResponse(for: method, params: params) { return response }
+        if let response = inlineDocumentResponse(for: method, params: params) { return response }
         if let response = DemoWorkspaceActionFixtures.response(for: method, params: params) { return response }
         if let response = designScenario?.response(for: method, params: params)
             ?? DemoTerminalFixtures.response(for: method, params: params)
