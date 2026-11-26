@@ -128,7 +128,7 @@ struct MermaidCodeBlockStyle: StructuredText.CodeBlockStyle {
             .textual.blockSpacing(.init(top: 0, bottom: Constants.Markdown.baseFontSize))
         } else if let language = configuration.languageHint, let source = visuals[language] {
             Overflow { overflow in
-                InlineVisualView(source: source)
+                InlineVisualView(source: source, fenceKey: language)
                     .frame(width: overflow.containerWidth)
             }
             .textual.textSelection(.disabled)

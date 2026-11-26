@@ -2,9 +2,9 @@ import SwiftUI
 import WebKit
 
 enum InlineVisualPhase: Equatable {
+    case failed
     case loading
     case rendered(CGFloat)
-    case failed
 
     var height: CGFloat? {
         guard case .rendered(let height) = self else { return nil }
@@ -14,7 +14,7 @@ enum InlineVisualPhase: Equatable {
 
 enum InlineVisualAppearance {
     static let minimumHeight: CGFloat = 96
-    static let maximumInlineHeight: CGFloat = 1_600
+    static let maximumInlineHeight: CGFloat = 1600
     static let maximumStateBytes = 65_536
 }
 
@@ -28,25 +28,27 @@ final class InlineVisualSessionStore {
 
     func height(for source: String) -> CGFloat? { heights[source] }
 
-    func state(for source: String) -> String? { states[source] }
+    func state(for key: String) -> String? { states[key] }
 
     func recordHeight(_ height: CGFloat, for source: String) {
         if heights[source] == nil, heights.count >= Self.maximumEntries { heights.removeAll() }
         heights[source] = height
     }
 
-    func recordState(_ json: String, for source: String) {
+    func recordState(_ json: String, for key: String) {
         guard json.utf8.count <= InlineVisualAppearance.maximumStateBytes,
               (try? JSONSerialization.jsonObject(with: Data(json.utf8), options: .fragmentsAllowed)) != nil
         else { return }
-        if states[source] == nil, states.count >= Self.maximumEntries { states.removeAll() }
-        states[source] = json
+        if states[key] == nil, states.count >= Self.maximumEntries { states.removeAll() }
+        states[key] = json
     }
 }
 
 struct InlineVisualView: View {
     let source: String
+    let fenceKey: String
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.markdownImageGalleryBlockID) private var blockID
     @State private var phase = InlineVisualPhase.loading
     @State private var attempt = 0
     @ScaledMetric(relativeTo: .caption) private var controlIconSide: CGFloat = 12
@@ -68,7 +70,12 @@ struct InlineVisualView: View {
                 Divider().allowsHitTesting(false)
                 retryButton
             } else {
-                InlineVisualWebView(source: source, dark: colorScheme == .dark, phase: $phase)
+                InlineVisualWebView(
+                    source: source,
+                    stateKey: blockID.map { "\($0)#\(fenceKey)" },
+                    dark: colorScheme == .dark,
+                    phase: $phase
+                )
                     .id(attempt)
                     .frame(height: height)
                     .overlay {
@@ -142,6 +149,7 @@ struct InlineVisualWebView: UIViewRepresentable {
     }()
 
     let source: String
+    let stateKey: String?
     let dark: Bool
     @Binding var phase: InlineVisualPhase
 
@@ -209,7 +217,7 @@ struct InlineVisualWebView: UIViewRepresentable {
     })();
     """
 
-    func makeCoordinator() -> Coordinator { Coordinator(source: source, phase: $phase) }
+    func makeCoordinator() -> Coordinator { Coordinator(source: source, stateKey: stateKey, dark: dark, phase: $phase) }
 
     func makeUIView(context: Context) -> WKWebView {
         let coordinator = context.coordinator
@@ -222,7 +230,7 @@ struct InlineVisualWebView: UIViewRepresentable {
         controller.add(coordinator, contentWorld: Self.hostWorld, name: Self.sizeHandler)
         controller.add(coordinator, contentWorld: .page, name: Self.stateHandler)
         controller.addUserScript(WKUserScript(
-            source: Self.bridgeScript(savedState: InlineVisualSessionStore.shared.state(for: source)),
+            source: Self.bridgeScript(savedState: stateKey.flatMap { InlineVisualSessionStore.shared.state(for: $0) }),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true,
             in: .page
@@ -245,7 +253,6 @@ struct InlineVisualWebView: UIViewRepresentable {
         webView.overrideUserInterfaceStyle = dark ? .dark : .light
         coordinator.webView = webView
         webView.loadHTMLString(Self.document(source: source, dark: dark), baseURL: nil)
-        coordinator.dark = dark
         return webView
     }
 
@@ -274,12 +281,15 @@ struct InlineVisualWebView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         let source: String
+        let stateKey: String?
+        var dark: Bool
         var phase: Binding<InlineVisualPhase>
-        var dark: Bool?
         weak var webView: WKWebView?
 
-        init(source: String, phase: Binding<InlineVisualPhase>) {
+        init(source: String, stateKey: String?, dark: Bool, phase: Binding<InlineVisualPhase>) {
             self.source = source
+            self.stateKey = stateKey
+            self.dark = dark
             self.phase = phase
         }
 
@@ -313,8 +323,8 @@ struct InlineVisualWebView: UIViewRepresentable {
                 webView?.scrollView.isScrollEnabled = height > InlineVisualAppearance.maximumInlineHeight
                 phase.wrappedValue = .rendered(height)
             case InlineVisualWebView.stateHandler:
-                guard let json = message.body as? String else { return }
-                InlineVisualSessionStore.shared.recordState(json, for: source)
+                guard let stateKey, let json = message.body as? String else { return }
+                InlineVisualSessionStore.shared.recordState(json, for: stateKey)
             default:
                 return
             }
