@@ -3,6 +3,9 @@ import XCTest
 nonisolated final class ConversationInlineVisualUITests: XCTestCase {
     private static let timeout: TimeInterval = 20
     private static let minimumRenderedHeight: CGFloat = 120
+    private static let thumbOffset: CGFloat = 0.28
+    private static let dragEndOffset: CGFloat = 1.2
+    private static let dragHold: TimeInterval = 0.1
 
     @MainActor
     func testInlineVisualRendersInteractiveHTMLInBothAppearances() {
@@ -34,7 +37,10 @@ nonisolated final class ConversationInlineVisualUITests: XCTestCase {
 
             let slider = webView.sliders.firstMatch
             XCTAssertTrue(slider.waitForExistence(timeout: Self.timeout))
-            slider.adjust(toNormalizedSliderPosition: 1)
+            slider.coordinate(withNormalizedOffset: CGVector(dx: Self.thumbOffset, dy: 0.5)).press(
+                forDuration: Self.dragHold,
+                thenDragTo: slider.coordinate(withNormalizedOffset: CGVector(dx: Self.dragEndOffset, dy: 0.5))
+            )
             XCTAssertTrue(webView.staticTexts["40 libraries"].firstMatch.waitForExistence(timeout: Self.timeout))
             capture(app, name: "inline-visual-\(appearance)-after-slider")
             app.terminate()
