@@ -46,6 +46,9 @@ struct AttachmentReferenceVideoView<Fallback: View>: View {
                     .copyContextMenuPassthrough()
             }
             .buttonStyle(IntentContentButtonStyle())
+            .contextMenu {
+                AttachmentFileActionMenuItems(url: video.url, kind: .video)
+            }
             .accessibilityLabel("Video: \(name)")
             .accessibilityHint("Play full screen")
             .fullScreenCover(isPresented: $lightboxPresented) {
