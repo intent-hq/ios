@@ -82,5 +82,4 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
         XCTAssertTrue(element.appears(timeout: Fixture.timeout))
         XCTAssertTrue(element.isHittable)
     }
-
 }

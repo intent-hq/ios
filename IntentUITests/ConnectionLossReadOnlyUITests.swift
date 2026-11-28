@@ -67,5 +67,4 @@ extension ConnectionLossUITests {
         tap(app.staticTexts["Workspace agent design"].firstMatch, in: app)
         tap(app.staticTexts["Continue Spec Writer"].firstMatch, in: app)
     }
-
 }

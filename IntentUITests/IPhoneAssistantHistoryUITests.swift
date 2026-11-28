@@ -87,5 +87,4 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
         XCTAssertTrue(alert.appears(timeout: Self.timeout))
         alert.buttons["Delete"].tap()
     }
-
 }
