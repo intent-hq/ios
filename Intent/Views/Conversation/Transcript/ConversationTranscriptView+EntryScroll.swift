@@ -157,7 +157,11 @@ extension ConversationTranscriptView {
         case .skip:
             return
         case .preserveViewport:
-            scrollState.preservePresentedViewport(distanceToBottom: scrollMomentumProxy.distanceToBottom)
+            scrollState.preservePresentedViewport(distanceToBottom: ConversationTranscriptScrollPolicy.preservedEntryDistanceToBottom(
+                scrollMomentumProxy.distanceToBottom,
+                endRecoveryArmed: lifecycle.currentRecovery != nil,
+                isInteracting: isUserInteracting
+            ))
         case .waitForScrollView:
             scrollState.entryScroll = .awaitingScrollView
             DispatchQueue.main.asyncAfter(
