@@ -10,10 +10,24 @@ extension XCUIApplication {
     }
 }
 
+private enum Settle {
+    static let pollInterval: TimeInterval = 0.1
+    static let maximumWait: TimeInterval = 2
+}
+
 extension XCUIElement {
     @discardableResult
     func appears(timeout: TimeInterval) -> Bool {
-        exists || waitForExistence(timeout: timeout)
+        guard exists || waitForExistence(timeout: timeout) else { return false }
+        var previous = frame
+        let deadline = Date().addingTimeInterval(min(timeout, Settle.maximumWait))
+        while Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(Settle.pollInterval))
+            let current = frame
+            if current == previous { break }
+            previous = current
+        }
+        return true
     }
 
     @discardableResult
