@@ -213,12 +213,9 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let detail = app.scrollViews["workspace.detail.scroll"]
         XCTAssertTrue(detail.appears(timeout: Self.timeout))
         XCTAssertTrue(resource.appears(timeout: Self.timeout))
-        var visible = detail.frame.intersection(app.frame).insetBy(dx: 0, dy: Self.revealMargin)
-        let navigationBar = app.navigationBars.firstMatch
-        if navigationBar.exists, navigationBar.frame.maxY + Self.revealMargin > visible.minY {
-            let top = navigationBar.frame.maxY + Self.revealMargin
-            visible = CGRect(x: visible.minX, y: top, width: visible.width, height: visible.maxY - top)
-        }
+        let bounds = detail.frame.intersection(app.frame)
+        let top = bounds.minY + bounds.height / 4
+        let visible = CGRect(x: bounds.minX, y: top, width: bounds.width, height: bounds.maxY - Self.revealMargin - top)
         let center = detail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         for _ in 0..<8 where !visible.contains(resource.frame) {
             let target = resource.frame.midY - visible.midY
