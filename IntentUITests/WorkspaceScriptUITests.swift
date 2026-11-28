@@ -2,6 +2,7 @@ import XCTest
 
 nonisolated final class WorkspaceScriptUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
+    private static let revealMargin: CGFloat = 24
 
     private enum Fixture {
         static let server = "Web server"
@@ -170,7 +171,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let row = app.buttons["workspace.script.demo-check"]
         revealResource(row, in: app)
         app.scrollViews["workspace.detail.scroll"].swipeUp()
-        XCTAssertTrue(app.frame.contains(row.frame))
+        revealResource(row, in: app)
         let startingY = row.frame.minY
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 80)))
@@ -211,7 +212,25 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     private func revealResource(_ resource: XCUIElement, in app: XCUIApplication) {
         let detail = app.scrollViews["workspace.detail.scroll"]
         XCTAssertTrue(detail.appears(timeout: Self.timeout))
-        for _ in 0..<5 where !resource.isHittable { detail.swipeUp() }
+        XCTAssertTrue(resource.appears(timeout: Self.timeout))
+        var visible = detail.frame.intersection(app.frame).insetBy(dx: 0, dy: Self.revealMargin)
+        let navigationBar = app.navigationBars.firstMatch
+        if navigationBar.exists, navigationBar.frame.maxY + Self.revealMargin > visible.minY {
+            let top = navigationBar.frame.maxY + Self.revealMargin
+            visible = CGRect(x: visible.minX, y: top, width: visible.width, height: visible.maxY - top)
+        }
+        let center = detail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        for _ in 0..<8 where !visible.contains(resource.frame) {
+            let target = resource.frame.midY - visible.midY
+            let step = min(abs(target), visible.height / 3)
+            center.press(
+                forDuration: 0.05,
+                thenDragTo: center.withOffset(CGVector(dx: 0, dy: target > 0 ? -step : step)),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.2
+            )
+        }
+        XCTAssertTrue(visible.contains(resource.frame), "\(resource.frame) must be fully visible in \(visible)")
         XCTAssertTrue(resource.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
     }
 
