@@ -545,3 +545,36 @@ extension InlineResponseImageUITests {
         XCTAssertTrue(close.disappears(timeout: Fixture.timeout))
     }
 }
+
+extension InlineResponseImageUITests {
+    @MainActor
+    func testUserImageLongPressOffersCopyAndShare() {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data", "--demo-inline-images", "--demo-user-image-block"]
+        app.launch()
+        openWorkspace(in: app)
+        let agent = app.staticTexts[Fixture.agentName].firstMatch
+        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        agent.tap()
+        let thumbnail = app.buttons["Attached image"].firstMatch
+        XCTAssertTrue(thumbnail.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { thumbnail.isHittable })
+        thumbnail.press(forDuration: 1)
+
+        for action in ["Save Image", "Copy Image", "Share Image"] {
+            XCTAssertTrue(
+                app.buttons[action].firstMatch.waitForExistence(timeout: Fixture.timeout),
+                "Long-pressing a chat image must offer \(action)"
+            )
+        }
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Chat image copy and share menu"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.buttons["Share Image"].firstMatch.tap()
+        XCTAssertTrue(
+            app.otherElements["ActivityListView"].firstMatch.waitForExistence(timeout: Fixture.timeout),
+            "Share Image must open the system share sheet"
+        )
+    }
+}

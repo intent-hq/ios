@@ -3,6 +3,7 @@ import SwiftUI
 
 struct VideoLightboxView: View {
     let video: WorkspaceVideo
+    let name: String
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
     @State private var audioLease: UUID?
@@ -14,23 +15,18 @@ struct VideoLightboxView: View {
         VideoPlayer(player: player)
             .background(.black)
             .safeAreaInset(edge: .top, alignment: .trailing) {
-                Button(action: close) {
-                    Image(.close)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: closeIconSide, height: closeIconSide)
-                        .foregroundStyle(.white)
-                        .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
-                        .background(.black, in: Circle())
-                        .frame(
-                            minWidth: Constants.Accessibility.minimumTapTarget,
-                            minHeight: Constants.Accessibility.minimumTapTarget
-                        )
-                        .contentShape(.rect)
-                        .accessibilityHidden(true)
+                HStack(spacing: 0) {
+                    VideoShareLink(video: video, name: name) {
+                        actionIcon(.upload)
+                    }
+                    .buttonStyle(IntentContentButtonStyle())
+                    .accessibilityLabel("Share video")
+                    Button(action: close) {
+                        actionIcon(.close)
+                    }
+                    .buttonStyle(IntentContentButtonStyle())
+                    .accessibilityLabel("Close video")
                 }
-                .buttonStyle(IntentContentButtonStyle())
-                .accessibilityLabel("Close video")
                 .padding(Constants.Conversation.ImageLightbox.actionContainerPadding)
             }
             .accessibilityAction(.escape, close)
@@ -47,6 +43,22 @@ struct VideoLightboxView: View {
             .alert("Could not start video playback", isPresented: $playbackFailed) {
                 Button("Close", role: .cancel, action: close)
             }
+    }
+
+    private func actionIcon(_ resource: ImageResource) -> some View {
+        Image(resource)
+            .resizable()
+            .scaledToFit()
+            .frame(width: closeIconSide, height: closeIconSide)
+            .foregroundStyle(.white)
+            .padding(Constants.Conversation.ImageLightbox.actionButtonPadding)
+            .background(.black, in: Circle())
+            .frame(
+                minWidth: Constants.Accessibility.minimumTapTarget,
+                minHeight: Constants.Accessibility.minimumTapTarget
+            )
+            .contentShape(.rect)
+            .accessibilityHidden(true)
     }
 
     private func close() {

@@ -1,5 +1,6 @@
 import Photos
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum ImageInfoFormat {
     static func dimensionsText(for image: UIImage) -> String {
@@ -140,6 +141,10 @@ struct ImageActionMenuItems: View {
         } label: {
             Label("Copy Image", image: "Copy")
         }
+        let shareImage = ShareableChatImage(image: image)
+        ShareLink(item: shareImage, preview: SharePreview("Image", image: shareImage)) {
+            Label("Share Image", image: "Upload")
+        }
         Section {
             Text(ImageInfoFormat.dimensionsText(for: image))
             if let bytes = originalData?.count ?? image.pngData()?.count {
@@ -199,5 +204,84 @@ struct SquareImageThumbnail: View {
                         lineWidth: Constants.Conversation.ImageThumbnail.borderWidth
                     )
             )
+    }
+}
+
+struct ShareableChatImage: Transferable {
+    let image: UIImage
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .png) { shareable in
+            await MainActor.run { shareable.image.pngData() } ?? Data()
+        }
+    }
+}
+
+enum ChatAttachmentPasteboard {
+    struct Contents: Sendable {
+        let data: Data
+        let typeIdentifier: String
+    }
+
+    @concurrent
+    static func contents(of url: URL) async -> Contents? {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        let type = UTType(filenameExtension: url.pathExtension) ?? .data
+        return Contents(data: data, typeIdentifier: type.identifier)
+    }
+
+    static func copyFile(at url: URL, to pasteboard: UIPasteboard = .general) async -> Bool {
+        guard let contents = await contents(of: url) else { return false }
+        pasteboard.setData(contents.data, forPasteboardType: contents.typeIdentifier)
+        return true
+    }
+}
+
+struct VideoShareLink<Label: View>: View {
+    let video: WorkspaceVideo
+    let name: String
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        ShareLink(item: (try? video.shareFile(named: name)) ?? video.url, label: label)
+    }
+}
+
+struct VideoAttachmentActionMenuItems: View {
+    let video: WorkspaceVideo
+    let name: String
+
+    var body: some View {
+        AttachmentCopyButton(url: video.url, title: "Copy Video")
+        VideoShareLink(video: video, name: name) {
+            Label("Share Video", image: "Upload")
+        }
+    }
+}
+
+struct PDFAttachmentActionMenuItems: View {
+    let pdf: WorkspacePDF
+
+    var body: some View {
+        AttachmentCopyButton(url: pdf.shareURL, title: "Copy PDF")
+        ShareLink(item: pdf.shareURL) {
+            Label("Share PDF", image: "Upload")
+        }
+    }
+}
+
+private struct AttachmentCopyButton: View {
+    let url: URL
+    let title: LocalizedStringKey
+
+    var body: some View {
+        Button {
+            Task { [url] in
+                let copied = await ChatAttachmentPasteboard.copyFile(at: url)
+                HapticManager.notification(copied ? .success : .error)
+            }
+        } label: {
+            Label(title, image: "Copy")
+        }
     }
 }

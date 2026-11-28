@@ -292,8 +292,12 @@ CAPTURES = {
         "testSentVideoPosterOpensFullScreenPlayback": (
             "Sent video poster", "Sent video full-screen playback",
         ),
+        "testSentVideoOffersCopyAndShare": (
+            "Sent video copy and share menu", "Sent video full-screen share button",
+        ),
     },
     "InlineResponseImageUITests": {
+        "testUserImageLongPressOffersCopyAndShare": ("Chat image copy and share menu",),
         "testSavedAndMissingImagesPreserveResponseAndLightboxAfterReopening": (
             "Inline image response, entry 1", "Inline image response, entry 2", "Saved response image in lightbox",
         ),

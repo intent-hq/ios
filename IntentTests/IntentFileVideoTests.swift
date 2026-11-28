@@ -247,6 +247,34 @@ struct IntentFileVideoTests {
         }
     }
 
+    @Test(arguments: [
+        ("Recording.mp4", "mp4", "Recording.mp4"),
+        ("Recording.MOV", "mov", "Recording.mov"),
+        ("Demo walkthrough", "mp4", "Demo walkthrough.mp4"),
+        ("v1.2 release", "mp4", "v1.2 release.mp4"),
+        ("  Q3: demo.mp4 ", "mp4", "Q3- demo.mp4"),
+        ("a/b\\c\nd.mp4", "mp4", "a-b-c-d.mp4"),
+        ("..hidden.mp4", "mp4", "hidden.mp4"),
+        ("   ", "mp4", "Video.mp4"),
+        (String(repeating: "x", count: 300) + ".mp4", "mp4", String(repeating: "x", count: 200) + ".mp4")
+    ])
+    func videoExportFileNameIsASafeSingleComponent(_ name: String, pathExtension: String, expected: String) {
+        #expect(WorkspaceVideo.exportFileName(for: name, pathExtension: pathExtension) == expected)
+    }
+
+    @Test func sharedVideoUsesItsDisplayNameAndIsRemovedWithTheVideo() async throws {
+        let bytes = try await Self.videoBytes()
+        var video: WorkspaceVideo? = try await WorkspaceVideo.prepare(data: bytes, path: "clip.mp4")
+        let shared = try #require(try video?.shareFile(named: "Recording.mp4"))
+        #expect(shared.lastPathComponent == "Recording.mp4")
+        #expect(try video?.shareFile(named: "Recording.mp4") == shared)
+        #expect(FileManager.default.contentsEqual(atPath: shared.path, andPath: try #require(video?.url).path))
+        video = nil
+        try await waitUntil("shared video copy removed with the video") {
+            !FileManager.default.fileExists(atPath: shared.path)
+        }
+    }
+
     @Test func unavailableVideoSymbolPreservesItsSquareAspectRatio() throws {
         let placeholder = IntentFileVideoFailureAttachment(name: "unsupported-demo.webm")
         let renderer = ImageRenderer(content: placeholder.body)

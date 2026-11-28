@@ -57,13 +57,14 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             defer { for view in toRestore { view.isUserInteractionEnabled = true } }
 
             let below = window.hitTest(convert(point, to: window), with: event)
+            if below is CopyContextMenuPassthroughMarker.MarkerView { return nil }
             if let below,
-                let marker = below.passthroughMarkerDescendant(
+                below.passthroughMarkerDescendant(
                     containing: convert(point, to: below),
                     with: event,
                     excluding: self
-                ) {
-                return marker
+                ) != nil {
+                return nil
             }
             if let below, !isDescendant(of: below) { return below }
             if let below, isDescendant(of: below),

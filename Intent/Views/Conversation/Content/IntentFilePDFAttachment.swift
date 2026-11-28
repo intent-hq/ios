@@ -23,6 +23,9 @@ struct IntentFilePDFAttachment: Attachment {
         .padding(Constants.Conversation.ImageThumbnail.cornerRadius)
         .frame(width: SquareImageThumbnail.transcriptSide, height: SquareImageThumbnail.transcriptSide)
         .background(.background, in: .rect(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
+        .contextMenu {
+            PDFAttachmentActionMenuItems(pdf: pdf)
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("PDF: \(pdf.name), \(pdf.pageCount) pages")
         .accessibilityHint("Open PDF full screen")
