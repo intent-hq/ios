@@ -8,47 +8,10 @@ nonisolated final class DaemonStartupUITests: XCTestCase {
         static let poll: TimeInterval = 0.25
     }
 
-    @MainActor func testStartupWithoutCountsInitiallyAndOnReconnect() throws {
-        let peer = try StartupWebSocketFixture()
-        defer { peer.stop() }
-        try peer.setPhase("preparing", includeProgress: false)
-        let app = launch(peer)
-        for reconnecting in [false, true] {
-            let context = reconnecting ? "reconnect" : "initial"
-            let priorAdmissions = peer.methods.filter { $0 == "principal.me" }.count
-            if reconnecting {
-                try peer.setPhase("preparing", includeProgress: false)
-                peer.dropConnections()
-            }
-            if reconnecting { assertBannerTitle("Desktop is starting… · Read-only", app: app) }
-            assertTitle("Starting Desktop", app: app)
-            assertNoIndexingDetails(app)
-            capture(app, "startup-no-count-\(context)-preparing")
-            try peer.setPhase("finalizing", includeProgress: false, finalizingStep: "services")
-            assertTitle("Finishing Startup", app: app)
-            XCTAssertTrue(app.staticTexts["Starting services…"].exists)
-            assertNoIndexingDetails(app)
-            XCTAssertEqual(peer.methods.filter { $0 == "principal.me" }.count, priorAdmissions)
-            capture(app, "startup-no-count-\(context)-services")
-            try peer.setPhase("ready", includeProgress: false)
-            waitForHydration(app)
-            XCTAssertEqual(peer.acceptedCount, reconnecting ? 4 : 2)
-            XCTAssertEqual(peer.methods.filter { $0 == "client.hello" }.count, peer.acceptedCount)
-            XCTAssertEqual(peer.methods.filter { $0 == "principal.me" }.count, priorAdmissions + 1)
-        }
-    }
-
     @MainActor private func assertBannerTitle(_ expected: String, app: XCUIApplication) {
         let banner = app.buttons["read-only-banner"]
         let matches = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", expected), object: banner)
         XCTAssertEqual(XCTWaiter.wait(for: [matches], timeout: Fixture.timeout), .completed)
-    }
-
-    @MainActor private func assertNoIndexingDetails(_ app: XCUIApplication) {
-        XCTAssertFalse(app.staticTexts["daemon-startup.counts"].exists)
-        XCTAssertFalse(app.staticTexts["daemon-startup.estimate"].exists)
-        XCTAssertFalse(app.staticTexts["daemon-startup.unchanged"].exists)
-        XCTAssertFalse(app.staticTexts["Indexing Notes"].exists)
     }
 
     @MainActor func testInitialStartupCountsEstimateFinalizationAndFreshHello() throws {

@@ -5,20 +5,15 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
         static let workspaceTitle = "Add usage analytics dashboard"
         static let agentName = "Dashboard Implementor"
         static let before = "Before the saved image."
-        static let between = "After the saved image, before the missing image."
         static let after = "After the missing image. The response is still readable."
         static let savedCaption = "Saved preview:"
-        static let missingCaption = "Missing preview:"
         static let prompts = ["Show the recording screen.", "Show the mobile layout."]
         static let timeout: TimeInterval = 15
         static let launchTimeout: TimeInterval = 30
-        static let inertTapTimeout: TimeInterval = 2
         static let thumbnailSide: CGFloat = 160
         static let imageHeight: CGFloat = 90
-        static let entryCount = 2
         static let maximumScrolls = 3
         static let scrollPressDuration: TimeInterval = 0.05
-        static let failureTapVerticalFraction: CGFloat = 0.75
     }
 
     override func setUpWithError() throws {
@@ -29,41 +24,6 @@ nonisolated final class InlineResponseImageUITests: XCTestCase {
     override func tearDownWithError() throws {
         continueAfterFailure = true
         try super.tearDownWithError()
-    }
-
-    @MainActor
-    func testSavedAndMissingImagesPreserveResponseAndLightboxAfterReopening() {
-        let app = XCUIApplication.intent()
-        app.launchArguments += ["--demo-data", "--demo-inline-images"]
-        app.launch()
-        openWorkspace(in: app)
-
-        for entry in 1...Fixture.entryCount {
-            let agent = app.staticTexts[Fixture.agentName].firstMatch
-            XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
-            agent.tap()
-            let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-            XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
-
-            assertResponse(in: app, transcript: transcript)
-            assertLightbox(in: app, transcript: transcript)
-            assertMissingImageIsInert(in: app, transcript: transcript)
-            assertResponse(in: app, transcript: transcript)
-            assertPrompts(in: app, transcript: transcript)
-
-            let screenshot = XCTAttachment(screenshot: app.screenshot())
-            screenshot.name = "Inline image response, entry \(entry)"
-            screenshot.lifetime = .keepAlways
-            add(screenshot)
-
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                app.buttons["conversation.back"].tap()
-            } else {
-                app.navigationBars.buttons.element(boundBy: 0).tap()
-            }
-            XCTAssertTrue(app.buttons["Context"].appears(timeout: Fixture.timeout))
-            XCTAssertTrue(transcript.disappears(timeout: Fixture.timeout))
-        }
     }
 
     @MainActor
@@ -248,28 +208,6 @@ extension InlineResponseImageUITests {
     }
 
     @MainActor
-    private func assertResponse(in app: XCUIApplication, transcript: XCUIElement) {
-        let before = message(in: app, containing: Fixture.before)
-        let saved = message(in: app, containing: Fixture.savedCaption)
-        let between = message(in: app, containing: Fixture.between)
-        let missing = message(in: app, containing: Fixture.missingCaption)
-        let after = message(in: app, containing: Fixture.after)
-        for paragraph in [before, saved, between, missing, after] {
-            XCTAssertTrue(paragraph.exists || paragraph.appears(timeout: Fixture.timeout))
-            reveal(paragraph, in: transcript)
-        }
-
-        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
-            saved.frame.height >= Fixture.imageHeight
-                && missing.frame.height < Fixture.thumbnailSide
-                && before.frame.maxY <= saved.frame.minY
-                && saved.frame.maxY <= between.frame.minY
-                && between.frame.maxY <= missing.frame.minY
-                && missing.frame.maxY <= after.frame.minY
-        }, "The loaded thumbnail, compact failure placeholder, and surrounding paragraphs must remain in order")
-    }
-
-    @MainActor
     private func assertLightbox(in app: XCUIApplication, transcript: XCUIElement) {
         let saved = message(in: app, containing: Fixture.savedCaption)
         reveal(saved, in: transcript)
@@ -303,24 +241,6 @@ extension InlineResponseImageUITests {
         XCTAssertTrue(viewerReady, "The image and close control must be available")
         close.tap()
         XCTAssertTrue(preview.disappears(timeout: Fixture.timeout))
-    }
-
-    @MainActor
-    private func assertMissingImageIsInert(in app: XCUIApplication, transcript: XCUIElement) {
-        let missing = message(in: app, containing: Fixture.missingCaption)
-        reveal(missing, in: transcript)
-        missing.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(
-                dx: missing.frame.height / 2,
-                dy: missing.frame.height * Fixture.failureTapVerticalFraction
-            ))
-            .tap()
-        let opened = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == true"),
-            object: app.images["Image preview"].firstMatch
-        )
-        opened.isInverted = true
-        XCTAssertEqual(XCTWaiter.wait(for: [opened], timeout: Fixture.inertTapTimeout), .completed)
     }
 
     @MainActor

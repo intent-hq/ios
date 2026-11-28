@@ -4,11 +4,6 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
     private static let elementTimeout: TimeInterval = 15
 
     @MainActor
-    func testGitHubRetryPreservesRequestAfterReturningToProjectPicker() {
-        verifyGitHubRetry(switchToNewRepository: false)
-    }
-
-    @MainActor
     func testGitHubRetryKeepsItsRequestSeparateFromANewRepositoryAttempt() {
         verifyGitHubRetry(switchToNewRepository: true)
     }

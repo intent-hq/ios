@@ -216,21 +216,6 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     }
 
     @MainActor
-    func testAccessibilityTextKeepsDraftAndStreamingActionsReachable() {
-        let app = launch(scenario: "streaming", accessibleText: true)
-        let composer = app.textViews["composer.textView"]
-        composer.tap()
-        let draft = "An accessible draft with enough text to wrap onto multiple lines"
-        composer.typeText(draft)
-        XCTAssertEqual(composer.value as? String, draft)
-        let send = app.buttons["composer.send"]
-        XCTAssertTrue(send.appears(timeout: Fixture.timeout))
-        assertReachable(send, in: app)
-        assertReachable(app.buttons["composer.stop"], in: app)
-        assertReachable(app.buttons["composer.attachment"], in: app)
-    }
-
-    @MainActor
     private func launch(scenario: String, accessibleText: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication.intent()

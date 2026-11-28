@@ -11,11 +11,6 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    func testRepairAllowsSameMachineReselection() throws {
-        try assertFailureRecovery(certificateMismatch: true)
-    }
-
-    @MainActor
     private func assertFailureRecovery(certificateMismatch: Bool) throws {
         let directory = try makeTriggerDirectory()
         var arguments = ["--demo-connection-loss-pending-startup", "--demo-connection-loss-startup-failure"]

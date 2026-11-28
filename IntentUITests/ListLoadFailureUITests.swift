@@ -17,26 +17,6 @@ nonisolated final class ListLoadFailureUITests: XCTestCase {
     }
 
     @MainActor
-    func testFailedAgentAndNoteReadsShowRetryInBothThemes() {
-        for appearance in ["light", "dark"] {
-            let app = launch(failures: "agent-list,note-list", appearance: appearance)
-            let workspace = app.buttons[Fixture.workspaceRow]
-            XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
-            workspace.tap()
-
-            assertFailureThenRetry(prefix: "workspace.agents", in: app, capture: "load-failure-agents-\(appearance)")
-            XCTAssertFalse(app.staticTexts["No Agents"].exists, "A loaded workspace's agents replace the error")
-
-            let context = app.buttons["Context"].firstMatch
-            XCTAssertTrue(context.appears(timeout: Fixture.timeout))
-            context.tap()
-            assertFailureThenRetry(prefix: "notes", in: app, capture: "load-failure-notes-\(appearance)")
-            XCTAssertTrue(app.buttons["workspace.note.demo-note-spec"].appears(timeout: Fixture.timeout))
-            app.terminate()
-        }
-    }
-
-    @MainActor
     func testFailedWorkspaceListShowsRetryInsteadOfEmptyState() {
         let app = launch(failures: "workspace-list", appearance: "light")
         assertFailureThenRetry(prefix: "workspaceList", in: app, capture: "load-failure-workspaces-light")

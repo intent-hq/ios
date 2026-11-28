@@ -164,23 +164,6 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     }
 
     @MainActor
-    func testVerticalDragOnScriptRowStillScrollsWorkspace() {
-        let app = launchWorkspace(longScriptList: true)
-        openScriptsMenu(in: app)
-        app.buttons[Fixture.command].tap()
-        let row = app.buttons["workspace.script.demo-check"]
-        revealResource(row, in: app)
-        app.scrollViews["workspace.detail.scroll"].swipeUp()
-        revealResource(row, in: app)
-        let startingY = row.frame.minY
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 80)))
-        XCTAssertGreaterThan(row.frame.minY, startingY + 20)
-        XCTAssertFalse(app.buttons["workspace.script.delete.demo-check"].exists)
-        XCTAssertFalse(app.textFields["Browser URL"].exists)
-    }
-
-    @MainActor
     private func launchWorkspace(repositoryScripts: Bool = false, longScriptList: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication.intent()

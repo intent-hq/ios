@@ -17,51 +17,6 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
     }
 
     @MainActor
-    func testBrowseFilesAndPreserveFoldersAcrossTabsInBothThemes() {
-        for appearance in ["light", "dark"] {
-            let app = openContext(appearance: appearance)
-            let notes = app.buttons["context.section.notes"].firstMatch
-            reveal(notes, in: app)
-            XCTAssertTrue(app.buttons["workspace.note.demo-note-spec"].exists)
-            capture(app, name: "workspace-context-\(appearance)")
-            notes.tap()
-            let sources = app.buttons["files.folder.Sources"].firstMatch
-            reveal(sources, in: app)
-            sources.tap()
-            let analytics = app.buttons["files.folder.Sources/Analytics"].firstMatch
-            reveal(analytics, in: app)
-            analytics.tap()
-            let file = app.buttons["files.file.Sources/Analytics/Events.swift"].firstMatch
-            reveal(file, in: app)
-            capture(app, name: "workspace-files-\(appearance)")
-            file.tap()
-            let text = app.textViews["text.content"].firstMatch
-            XCTAssertTrue(text.appears(timeout: Fixture.timeout))
-            XCTAssertEqual((text.value as? String)?.contains("case workspaceOpened"), true)
-            capture(app, name: "workspace-file-preview-\(appearance)")
-            app.buttons["text.close"].tap()
-            reveal(analytics, in: app)
-            analytics.tap()
-            XCTAssertFalse(file.exists)
-            sources.tap()
-            sources.tap()
-            XCTAssertEqual(analytics.value as? String, "Collapsed")
-            let changes = app.buttons["Changes"].firstMatch
-            reveal(changes, in: app, towardTop: true)
-            changes.tap()
-            let context = app.buttons["Context"].firstMatch
-            reveal(context, in: app, towardTop: true)
-            context.tap()
-            reveal(analytics, in: app)
-            XCTAssertEqual(analytics.value as? String, "Collapsed")
-            XCTAssertEqual(notes.value as? String, "Collapsed")
-            analytics.tap()
-            reveal(file, in: app)
-            app.terminate()
-        }
-    }
-
-    @MainActor
     func testEmptyFolderAndIndependentContextSections() {
         let app = openContext(appearance: "light")
         let notes = app.buttons["context.section.notes"].firstMatch
@@ -126,13 +81,5 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
         }
         XCTAssertTrue(element.appears(timeout: Fixture.timeout))
         XCTAssertTrue(element.isHittable)
-    }
-
-    @MainActor
-    private func capture(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
     }
 }

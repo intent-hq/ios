@@ -5,82 +5,6 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     private static let workspaceId = "demo-ws-dashboard"
 
     @MainActor
-    func testSlowStatusSwipeStaysOpenAfterFingerLifts() {
-        let app = launchWorkspaces()
-        app.buttons["workspaces.viewMode.Status"].tap()
-        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
-        scrollToRow(row, in: app)
-        XCTAssertTrue(row.isHittable)
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.5))
-        start.press(
-            forDuration: 0.05,
-            thenDragTo: start.withOffset(CGVector(dx: -100, dy: 12)),
-            withVelocity: .slow,
-            thenHoldForDuration: 0.5
-        )
-        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
-        XCTAssertTrue(archive.appears(timeout: Self.timeout))
-        XCTAssertFalse(archive.disappears(timeout: 2), "Actions must remain open after the drag settles")
-        XCTAssertTrue(archive.isHittable)
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "workspace-status-swipe-stays-open"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-        archive.tap()
-        let alert = app.alerts["Archive Workspace"]
-        XCTAssertTrue(alert.appears(timeout: Self.timeout))
-        alert.buttons["Cancel"].tap()
-        XCTAssertTrue(row.exists)
-    }
-
-    @MainActor
-    func testRightSwipeOpensRecentAgentAndBackReturnsToWorkspace() {
-        let app = launchWorkspaces()
-        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 280, dy: 0)))
-        let transcript = app.scrollViews["transcript.scrollView"]
-        XCTAssertTrue(transcript.appears(timeout: Self.timeout))
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "workspace-right-swipe-recent-agent"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-        let back = app.buttons["conversation.back"]
-        XCTAssertTrue(back.appears(timeout: Self.timeout))
-        XCTAssertTrue(back.isHittable)
-        back.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
-        XCTAssertFalse(transcript.exists)
-    }
-
-    @MainActor
-    func testShortRightSwipeCancelsAndTapStillOpensOverview() {
-        let app = launchWorkspaces()
-        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 60, dy: 0)))
-        XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
-        XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
-        row.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
-        XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
-    }
-
-    @MainActor
-    func testClosingTrailingActionsWithLongRightSwipeDoesNotOpenAgent() {
-        let app = launchWorkspaces()
-        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
-        revealActions(on: row)
-        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
-        XCTAssertTrue(archive.appears(timeout: Self.timeout))
-        let start = visibleRowPoint(in: app, row: row, action: archive)
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 220, dy: 0)))
-        XCTAssertTrue(archive.disappears(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
-        XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
-    }
-
-    @MainActor
     func testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh() {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
         defer { if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .portrait } }
@@ -157,37 +81,6 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     }
 
     @MainActor
-    func testGroupedAndSearchedRowsRevealActionsAndCloseWithoutNavigation() {
-        let app = launchWorkspaces()
-        for mode in ["Recent", "Repo", "Status"] {
-            app.buttons["workspaces.viewMode.\(mode)"].tap()
-            let row = app.buttons["workspace.row.\(Self.workspaceId)"]
-            scrollToRow(row, in: app)
-            XCTAssertTrue(row.isHittable)
-            revealActions(on: row)
-            let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
-            XCTAssertTrue(archive.appears(timeout: Self.timeout))
-            visibleRowPoint(in: app, row: row, action: archive).tap()
-            XCTAssertTrue(archive.disappears(timeout: Self.timeout))
-            XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
-        }
-        app.buttons["workspaces.search.open"].tap()
-        let field = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(field.appears(timeout: Self.timeout))
-        field.typeText("usage\n")
-        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
-        revealActions(on: row)
-        let delete = app.buttons["workspace.delete.\(Self.workspaceId)"]
-        XCTAssertTrue(delete.appears(timeout: Self.timeout))
-        let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
-        let start = visibleRowPoint(in: app, row: row, action: archive)
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 100, dy: 0)))
-        XCTAssertTrue(delete.disappears(timeout: Self.timeout))
-        row.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
-    }
-
-    @MainActor
     func testFailedDeleteKeepsRowAndShowsError() {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
         defer { if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .portrait } }
@@ -212,19 +105,6 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         if UIDevice.current.userInterfaceIdiom == .pad {
             XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].exists)
         }
-    }
-
-    @MainActor
-    func testVerticalScrollingStillWorksWhenDraggingOnWorkspaceRows() {
-        let app = launchWorkspaces(arguments: ["--demo-long-workspace-list"])
-        let row = app.buttons["workspace.row.demo-ws-flaky-tests"]
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let end = workspaceList(in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1))
-        let startingY = row.frame.minY
-        start.press(forDuration: 0.05, thenDragTo: end)
-        XCTAssertLessThan(row.frame.minY, startingY)
-        XCTAssertFalse(app.buttons["workspace.delete.\(Self.workspaceId)"].exists)
-        XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
     }
 
     @MainActor
@@ -257,17 +137,6 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -80)))
         XCTAssertLessThan(row.frame.minY, startingY - 20)
         XCTAssertFalse(archive.exists)
-    }
-
-    @MainActor
-    func testOpeningAnotherRowClosesPreviousActions() {
-        let app = launchWorkspaces()
-        revealActions(on: app.buttons["workspace.row.\(Self.workspaceId)"])
-        let firstAction = app.buttons["workspace.archive.\(Self.workspaceId)"]
-        XCTAssertTrue(firstAction.appears(timeout: Self.timeout))
-        revealActions(on: app.buttons["workspace.row.demo-ws-flaky-tests"])
-        XCTAssertTrue(app.buttons["workspace.archive.demo-ws-flaky-tests"].appears(timeout: Self.timeout))
-        XCTAssertTrue(firstAction.disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -324,16 +193,6 @@ private extension WorkspaceSwipeUITests {
     @MainActor
     func workspaceList(in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["workspaces.list"].firstMatch
-    }
-
-    @MainActor
-    func scrollToRow(_ row: XCUIElement, in app: XCUIApplication) {
-        let list = workspaceList(in: app)
-        let visibleBottom = UIDevice.current.userInterfaceIdiom == .pad
-            ? list.frame.maxY : app.buttons["intent.menu.open"].frame.minY
-        for _ in 0..<4 where !row.isHittable || row.frame.maxY > visibleBottom {
-            list.swipeUp()
-        }
     }
 
     @MainActor

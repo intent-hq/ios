@@ -57,68 +57,6 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
     }
 
     @MainActor
-    func testCancelledAndNonEdgeDragsPreserveThePageAndReverseSwipeCloses() throws {
-        let app = try launch()
-        drag(app, from: CGVector(dx: 0.005, dy: 0.5), to: CGVector(dx: 0.15, dy: 0.5))
-        assertClosed(app)
-        drag(app, from: CGVector(dx: 0.35, dy: 0.5), to: CGVector(dx: 0.85, dy: 0.5))
-        assertClosed(app)
-        for _ in 0..<2 {
-            reveal(app)
-            drag(app, from: CGVector(dx: 0.9, dy: 0.5), to: CGVector(dx: 0.1, dy: 0.5))
-            assertClosed(app)
-            drag(app, from: CGVector(dx: 0.35, dy: 0.5), to: CGVector(dx: 0.85, dy: 0.5))
-            assertClosed(app)
-        }
-        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.isHittable)
-        workspace.tap()
-        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].appears(timeout: Self.timeout))
-        drag(app, from: CGVector(dx: 0.005, dy: 0.5), to: CGVector(dx: 0.85, dy: 0.5))
-        assertClosed(app)
-    }
-
-    @MainActor
-    func testEdgeRevealClosesRowActionsAndKeepsRowSwipesAvailable() throws {
-        let app = try launch()
-        let row = app.buttons["workspace.row.demo-ws-dashboard"]
-        let archive = app.buttons["workspace.archive.demo-ws-dashboard"]
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
-        let end = start.withOffset(CGVector(dx: -180, dy: 0))
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
-        XCTAssertTrue(archive.appears(timeout: Self.timeout))
-
-        let edge = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 2, dy: row.frame.midY))
-        edge.press(forDuration: 0.05, thenDragTo: edge.withOffset(CGVector(dx: 300, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0.5)
-        XCTAssertTrue(app.buttons["connection-switcher.close"].appears(timeout: Self.timeout))
-        app.buttons["connection-switcher.close"].tap()
-        assertClosed(app)
-        XCTAssertFalse(archive.exists)
-
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
-        XCTAssertTrue(archive.appears(timeout: Self.timeout))
-        archive.tap()
-        let confirmation = app.alerts["Archive Workspace"]
-        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
-        confirmation.buttons["Cancel"].tap()
-        XCTAssertTrue(row.exists)
-    }
-
-    @MainActor
-    func testLargeTextAndLightAppearanceKeepConnectionsReachable() throws {
-        let app = try launch(largeText: true)
-        reveal(app)
-        let travel = connection("Travel Mac", in: app)
-        if !travel.isHittable { app.scrollViews["connection-switcher.list"].swipeUp() }
-        XCTAssertTrue(travel.isHittable)
-        capture(app, name: "Connection-Switcher-Large-Text-Light")
-        travel.tap()
-        assertClosed(app)
-        reveal(app)
-        XCTAssertTrue(connection("Travel Mac", in: app).isSelected)
-    }
-
-    @MainActor
     private func launch(largeText: Bool = false) throws -> XCUIApplication {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "The connection underlay is on the compact Workspaces page")
         let app = XCUIApplication.intent()

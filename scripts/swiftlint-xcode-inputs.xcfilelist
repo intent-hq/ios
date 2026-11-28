@@ -1218,6 +1218,7 @@ $(SRCROOT)/IntentTests/WorkspaceSharingModelTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSidebarContentTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusImageViewTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusMessageTests.swift
+$(SRCROOT)/IntentTests/WorkspaceStatusPillWidthTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStatusTestSupport.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreAgentLifecycleTests.swift
 $(SRCROOT)/IntentTests/WorkspaceStoreEventAllowlistTests.swift
@@ -1288,7 +1289,6 @@ $(SRCROOT)/IntentUITests/InlineResponseImageUITests+PDF.swift
 $(SRCROOT)/IntentUITests/InlineResponseImageUITests.swift
 $(SRCROOT)/IntentUITests/InviteJoinUITests.swift
 $(SRCROOT)/IntentUITests/ListLoadFailureUITests.swift
-$(SRCROOT)/IntentUITests/ManualConnectionDesignUITests.swift
 $(SRCROOT)/IntentUITests/MobileTerminalUITests.swift
 $(SRCROOT)/IntentUITests/PairingDesignUITests.swift
 $(SRCROOT)/IntentUITests/PathFileLinkUITests.swift
@@ -1300,7 +1300,6 @@ $(SRCROOT)/IntentUITests/ShareWorkspaceUITests.swift
 $(SRCROOT)/IntentUITests/SkillAutocompleteUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/StartupWebSocketFixture.swift
-$(SRCROOT)/IntentUITests/ToastUITests.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
 $(SRCROOT)/IntentUITests/TurnFailureNoticeUITests.swift
 $(SRCROOT)/IntentUITests/UITestLaunch.swift

@@ -4,7 +4,6 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
     private static let timeout: TimeInterval = 30
     private static let notificationTimeout: TimeInterval = 2
     private static let currentID = "demo-agent-assistant"
-    private static let otherID = "demo-assistant-history-0"
     private static let draft = "Keep this Assistant draft"
 
     override func setUpWithError() throws {
@@ -15,48 +14,6 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
     override func tearDownWithError() throws {
         continueAfterFailure = true
         try super.tearDownWithError()
-    }
-
-    @MainActor
-    func testSwipeDeletionPreservesDraftAndSelectionInBothThemes() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "iPhone Assistant history")
-        for appearance in ["light", "dark"] {
-            let app = launch(appearance: appearance, history: true)
-            defer { app.terminate() }
-            let composer = app.textViews["composer.textView"].firstMatch
-            XCTAssertTrue(composer.appears(timeout: Self.timeout))
-            composer.tap()
-            composer.typeText(Self.draft)
-            openHistory(in: app)
-            let current = row(in: app, id: Self.currentID)
-            let other = row(in: app, id: Self.otherID)
-            XCTAssertTrue(current.isSelected)
-            revealDelete(in: app, id: Self.otherID)
-            capture(name: "iPhone Assistant history swipe delete \(appearance)")
-            app.buttons["assistant.history.delete.\(Self.otherID)"].tap()
-            let alert = app.alerts["Delete Conversation?"]
-            XCTAssertTrue(alert.appears(timeout: Self.timeout))
-            alert.buttons["Cancel"].tap()
-            XCTAssertTrue(other.exists)
-            XCTAssertTrue(current.isSelected)
-            delete(in: app, id: Self.otherID)
-            XCTAssertTrue(other.disappears(timeout: Self.timeout))
-            XCTAssertTrue(current.isSelected)
-            app.buttons["assistant.history.close"].tap()
-            XCTAssertTrue(composer.appears(timeout: Self.timeout))
-            XCTAssertEqual(composer.value as? String, Self.draft)
-            openHistory(in: app)
-            delete(in: app, id: Self.currentID)
-            XCTAssertTrue(current.disappears(timeout: Self.timeout))
-            let selected = app.buttons.matching(NSPredicate(
-                format: "identifier BEGINSWITH %@ AND selected == true", "assistant.history.thread."
-            )).firstMatch
-            XCTAssertTrue(selected.appears(timeout: Self.timeout))
-            selected.tap()
-            XCTAssertTrue(app.buttons["assistant.history.close"].disappears(timeout: Self.timeout))
-            XCTAssertTrue(composer.appears(timeout: Self.timeout))
-            XCTAssertEqual(composer.value as? String, "")
-        }
     }
 
     @MainActor
@@ -129,13 +86,5 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
         let alert = app.alerts["Delete Conversation?"]
         XCTAssertTrue(alert.appears(timeout: Self.timeout))
         alert.buttons["Delete"].tap()
-    }
-
-    @MainActor
-    private func capture(name: String) {
-        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = name
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
     }
 }

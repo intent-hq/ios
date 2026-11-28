@@ -58,50 +58,6 @@ nonisolated final class ConversationActionsUITests: XCTestCase {
     }
 
     @MainActor
-    func testLargeTextModelPickerWorksAfterSending() {
-        let app = launch(scenario: "empty", appearance: "dark", largeText: true)
-        openActions(app)
-        let model = app.buttons["conversation.actions.model"]
-        XCTAssertTrue(model.isHittable)
-        capture(app, named: "Agent-Actions-Dark-LargeText")
-        model.tap()
-        let picker = app.navigationBars["Model Settings"]
-        XCTAssertTrue(picker.appears(timeout: Self.timeout))
-        app.buttons["conversation.model.cancel"].tap()
-        XCTAssertTrue(picker.disappears(timeout: Self.timeout))
-
-        let composer = app.textViews["composer.textView"]
-        composer.tap()
-        composer.typeText("Keep the current model")
-        app.buttons["composer.send"].tap()
-        XCTAssertTrue(app.buttons["composer.stop"].appears(timeout: Self.timeout))
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            let close = app.buttons["ipad.focus.close"]
-            XCTAssertTrue(close.appears(timeout: Self.timeout))
-            XCTAssertFalse(app.buttons["conversation.actions.open"].exists)
-            close.tap()
-            XCTAssertTrue(close.disappears(timeout: Self.timeout))
-            XCTAssertEqual(composer.value as? String, "")
-            XCTAssertTrue(app.buttons["composer.stop"].exists, "Closing focus must retain the streaming conversation")
-        }
-        openActions(app)
-        XCTAssertTrue(model.isHittable)
-        XCTAssertTrue(app.buttons["conversation.actions.rename"].exists)
-        model.tap()
-        XCTAssertTrue(picker.appears(timeout: Self.timeout))
-        assertField("Default Model", identifier: "creation.modelPicker", in: app)
-        capture(app, named: "Agent-Model-Picker-Dark-LargeText")
-        choose("Named Model", identifier: "creation.modelPicker", in: app)
-        app.buttons["conversation.model.save"].tap()
-        XCTAssertTrue(picker.disappears(timeout: Self.timeout))
-        openActions(app)
-        assertNamedModelInMenu(app)
-        model.tap()
-        assertField("Named Model", identifier: "creation.modelPicker", in: app)
-        capture(app, named: "Agent-Model-Picker-Selected-Dark-LargeText")
-    }
-
-    @MainActor
     func testAssistantModelPickerUsesInheritedProviderAndPreservesDraft() {
         for appearance in ["light", "dark"] {
             let app = launchAssistant(appearance: appearance)

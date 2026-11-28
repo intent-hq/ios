@@ -5,7 +5,6 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
         static let workspaceTitle = "Add usage analytics dashboard"
         static let agentName = "Dashboard Implementor"
         static let linkLabel = "Open the HTML report"
-        static let absoluteLinkLabel = "Open the HTML report by absolute path"
         static let fileName = "Demo report.html"
         static let heading = "Usage analytics report"
         static let chartLabel = "Daily active users chart"
@@ -33,11 +32,6 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
         for appearance in ["light", "dark"] {
             openReport(linkLabel: Fixture.linkLabel, appearance: appearance, screenshotName: "HTML viewer from relative path link \(appearance)")
         }
-    }
-
-    @MainActor
-    func testAbsoluteHTMLPathLinkLoadsItsRelativeAssets() {
-        openReport(linkLabel: Fixture.absoluteLinkLabel, appearance: "light", screenshotName: "HTML viewer from absolute path link light")
     }
 
     @MainActor

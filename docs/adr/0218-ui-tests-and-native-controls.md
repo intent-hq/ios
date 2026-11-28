@@ -39,6 +39,6 @@ XCTest reports accessibility state that does not always match what a touch does.
 - `DiagnosticExportUITests`, `QuestionWizardUITests`: `PopoverDismissRegion`
 - `AssistantNavigationUITests`, `WorkspaceScriptUITests`: label matching in submenus
 - `IPadFocusInteractionTestSupport`, `IPadSidebarUITests`, `WorkspaceSearchUITests`: hittability and traversal limits
-- `ManualConnectionDesignUITests`: `referenceFrame`; `PairingDesignUITests`: sheet scale
+- `PairingDesignUITests`: sheet scale
 - `ConversationMermaidUITests`, `WorkspaceListMenuUITests`: `addTeardownBlock`
 - `WorkspaceBackgroundUITests`, `AppStoreScreenshotTests`: orientation
