@@ -18,6 +18,7 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let app = openAssistant(arguments: ["--demo-assistant-proposal"])
         let apply = app.buttons["proposal.apply"]
         XCTAssertTrue(apply.appears(timeout: Self.timeout))
+        XCTAssertTrue(apply.wait(for: \.isEnabled, toEqual: true, timeout: Self.timeout))
         let item = app.buttons["proposal.item.demo-ws-flaky-tests"]
         XCTAssertTrue(item.isSelected)
         XCTAssertEqual(item.value as? String, "On")
@@ -44,7 +45,9 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let dismiss = app.buttons["proposal.dismiss"]
         XCTAssertTrue(dismiss.appears(timeout: Self.timeout))
         dismiss.tap()
-        app.buttons["Dismiss proposal"].tap()
+        let confirm = app.buttons["Dismiss proposal"]
+        XCTAssertTrue(confirm.appears(timeout: Self.timeout))
+        confirm.tap()
         let outcome = app.staticTexts["proposal.outcome"]
         XCTAssertTrue(outcome.appears(timeout: Self.timeout))
         XCTAssertEqual(outcome.label, "Dismissed")
@@ -68,6 +71,7 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let apply = app.buttons["proposal.apply"]
         XCTAssertTrue(apply.appears(timeout: Self.timeout))
+        XCTAssertTrue(apply.wait(for: \.isEnabled, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(apply.label, "Create")
         captureSwitches(in: app, name: "Workspace proposal review")
         apply.tap()
@@ -87,6 +91,7 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal", "--demo-workspace-proposal-retry"])
         let apply = app.buttons["proposal.apply"]
         XCTAssertTrue(apply.appears(timeout: Self.timeout))
+        XCTAssertTrue(apply.wait(for: \.isEnabled, toEqual: true, timeout: Self.timeout))
         apply.tap()
         XCTAssertTrue(app.staticTexts["proposal.error"].appears(timeout: Self.timeout))
         XCTAssertEqual(apply.label, "Retry")
@@ -140,6 +145,7 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let apply = app.buttons["proposal.apply"]
         XCTAssertTrue(apply.appears(timeout: Self.timeout))
+        XCTAssertTrue(apply.wait(for: \.isEnabled, toEqual: true, timeout: Self.timeout))
         tapPadding(of: apply)
         let outcome = app.staticTexts["proposal.outcome"]
         XCTAssertTrue(outcome.appears(timeout: Self.timeout))

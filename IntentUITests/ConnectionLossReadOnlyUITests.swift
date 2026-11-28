@@ -193,6 +193,7 @@ extension ConnectionLossUITests {
         dismissMenu(in: app)
         XCTAssertTrue(app.buttons["conversation.back"].isEnabled, "Back (R1.13)")
         tap(app.buttons["conversation.back"], in: app)
+        XCTAssertTrue(app.buttons["conversation.back"].disappears(timeout: LossFixture.timeout))
 
         tap(app.buttons["Workspace actions"], in: app)
         for label in ["Create New Agent", "Archive", "Delete"] {
