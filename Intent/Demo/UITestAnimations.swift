@@ -2,9 +2,9 @@ import SwiftUI
 import UIKit
 
 enum UITestAnimations {
-    static let environmentKey = "INTENT_UI_TEST_ANIMATIONS"
-    static let disabled = isDisabled(by: LaunchOptions.current)
-    static let layerSpeed: Float = 100
+    nonisolated static let environmentKey = "INTENT_UI_TEST_ANIMATIONS"
+    nonisolated static let disabled = isDisabled(by: LaunchOptions.current)
+    nonisolated static let layerSpeed: Float = 100
 
     nonisolated static func isDisabled(by options: LaunchOptions) -> Bool {
         #if DEBUG
