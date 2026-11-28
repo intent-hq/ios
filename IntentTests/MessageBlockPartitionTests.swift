@@ -219,6 +219,27 @@ struct MessagePlainTextContentTests {
         #expect(MessageView.assistantCopyText(from: blocks) == "Answer.\n\ntail")
     }
 
+    @Test func assistantCopyStripsLeadingBrowserCompleteMarker() {
+        let blocks = [
+            ContentBlock(
+                type: .text,
+                text: "::browser-complete{title=\"Played {the} recording\"}[Watch the demo](https://example.com). Done."
+            ),
+            ContentBlock(type: .text, text: #"::browser-complete{title="Played \"{the}\" recording"}Watch it."#),
+            ContentBlock(type: .text, text: "Use `::browser-complete{title=\"x\"}` to finish.")
+        ]
+        #expect(
+            MessageView.assistantCopyText(from: blocks)
+                == "[Watch the demo](https://example.com). Done.\n\nWatch it.\n\n"
+                + "Use `::browser-complete{title=\"x\"}` to finish."
+        )
+    }
+
+    @Test func assistantCopyKeepsUnterminatedBrowserCompleteMarker() {
+        let blocks = [ContentBlock(type: .text, text: "::browser-complete{title=\"Played\nNext line")]
+        #expect(MessageView.assistantCopyText(from: blocks) == "::browser-complete{title=\"Played\nNext line")
+    }
+
     @Test func assistantCopyStripsSuggestedPromptsSpanningTextBlocks() {
         let blocks = [
             ContentBlock(type: .text, text: "Answer.\n<!-- suggested-prompts\nRun the te"),

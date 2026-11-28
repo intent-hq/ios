@@ -31,7 +31,7 @@ struct ContentBlockView: View {
     }
 
     static func stripSuggestedPrompts(_ text: String) -> String {
-        var result = SuggestedPrompts.stripBlocks(from: text)
+        var result = SuggestedPrompts.stripBlocks(from: BrowserCompleteMarker.strip(from: text))
 
         result = result.replacingOccurrences(
             of: "<!--(?![ \\t]*suggested-prompts[ \\t]*(\\r?\\n|$))[\\s\\S]*?-->",

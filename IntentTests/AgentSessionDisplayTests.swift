@@ -62,6 +62,17 @@ extension AgentSessionTests {
         #expect(agent.displayMessage == raw)
     }
 
+    @Test func displayMessageStripsLeadingBrowserCompleteMarker() {
+        let raw = "\n::browser-complete{title=\"Played the recording\"}\nWatch the demo."
+        let agent = makeAgent(lastAgentResponse: raw)
+        #expect(agent.displayMessage == "Watch the demo.")
+    }
+
+    @Test func displayMessageReturnsNilWhenOnlyBrowserCompleteMarker() {
+        let agent = makeAgent(lastAgentResponse: "::browser-complete{title=\"Done\"}")
+        #expect(agent.displayMessage == nil)
+    }
+
     @Test func displayMessageReturnsNilWhenOnlyTags() {
         let raw = "<group:X></group:X>"
         let agent = makeAgent(lastAgentResponse: raw)
