@@ -73,7 +73,7 @@ extension Constants {
         }
 
         static func defaultBackground(for scheme: ColorScheme) -> Color {
-            scheme == .dark ? Constants.Pairing.background(for: scheme) : Theme.background(for: scheme)
+            Constants.WorkspaceList.canvas(for: scheme)
         }
 
         static func defaultForeground(for scheme: ColorScheme) -> Color {

@@ -19,7 +19,7 @@ extension Constants.Conversation.Design {
         static let onAccent = Constants.Pairing.onAccent
 
         static func background(for scheme: ColorScheme) -> Color {
-            scheme == .dark ? Constants.Pairing.background(for: scheme) : Theme.background(for: scheme)
+            Constants.WorkspaceList.canvas(for: scheme)
         }
 
         static func surface(for scheme: ColorScheme) -> Color {
