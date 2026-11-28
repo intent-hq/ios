@@ -19,11 +19,12 @@ extension XCUIElement {
     @discardableResult
     func appears(timeout: TimeInterval) -> Bool {
         guard exists || waitForExistence(timeout: timeout) else { return false }
-        var previous = frame
+        let probe = firstMatch
+        var previous = probe.frame
         let deadline = Date().addingTimeInterval(min(timeout, Settle.maximumWait))
         while Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(Settle.pollInterval))
-            let current = frame
+            let current = probe.frame
             if current == previous { break }
             previous = current
         }
