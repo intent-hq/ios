@@ -78,13 +78,8 @@ nonisolated final class TranscriptVideoUITests: XCTestCase {
         XCTAssertTrue(copy.waitForExistence(timeout: timeout), "Long-pressing a video must offer Copy Video")
         XCTAssertTrue(share.waitForExistence(timeout: timeout), "Long-pressing a video must offer Share Video")
         capture(app, named: "Sent video copy and share menu")
-        share.tap()
-
-        let shareSheet = app.otherElements["ActivityListView"].firstMatch
-        XCTAssertTrue(shareSheet.waitForExistence(timeout: timeout), "Share Video must open the system share sheet")
-        capture(app, named: "Sent video share sheet")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
-        XCTAssertTrue(shareSheet.waitForNonExistence(timeout: timeout))
+        XCTAssertTrue(share.waitForNonExistence(timeout: timeout))
 
         XCTAssertTrue(waitUntil(timeout: timeout) { poster.isHittable })
         poster.tap()

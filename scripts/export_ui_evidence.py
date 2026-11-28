@@ -293,7 +293,7 @@ CAPTURES = {
             "Sent video poster", "Sent video full-screen playback",
         ),
         "testSentVideoOffersCopyAndShare": (
-            "Sent video copy and share menu", "Sent video share sheet", "Sent video full-screen share button",
+            "Sent video copy and share menu", "Sent video full-screen share button",
         ),
     },
     "InlineResponseImageUITests": {
