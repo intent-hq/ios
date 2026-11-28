@@ -27,7 +27,7 @@ extension ConversationTranscriptScrollUITests {
 
         swipeDown(transcript, times: 3)
         XCTAssertTrue(
-            goToEnd.waitForExistence(timeout: 5),
+            goToEnd.appears(timeout: 5),
             "Go to End did not appear after scrolling the transcript up"
         )
 
@@ -41,23 +41,23 @@ extension ConversationTranscriptScrollUITests {
         ) else { return }
         assertAtEnd(endRow, in: opened, context: "after Go to End")
         XCTAssertTrue(
-            goToEnd.waitForNonExistence(timeout: 5),
+            goToEnd.disappears(timeout: 5),
             "Go to End stayed visible after tapping it — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened)
         )
 
         swipeDown(transcript, times: 3)
         XCTAssertTrue(
-            goToEnd.waitForExistence(timeout: 5),
+            goToEnd.appears(timeout: 5),
             "Go to End did not reappear after scrolling up a second time"
         )
         var swipesLeft = 12
-        while swipesLeft > 0, !goToEnd.waitForNonExistence(timeout: 1) {
+        while swipesLeft > 0, !goToEnd.disappears(timeout: 1) {
             transcript.swipeUp()
             swipesLeft -= 1
         }
         XCTAssertTrue(
-            goToEnd.waitForNonExistence(timeout: 5),
+            goToEnd.disappears(timeout: 5),
             "Go to End stayed visible after scrolling back to the bottom"
         )
         XCTAssertTrue(
@@ -90,14 +90,14 @@ extension ConversationTranscriptScrollUITests {
 
         try Data().write(to: hooksRowTriggerFile)
         XCTAssertTrue(
-            hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout),
+            hooksRow.appears(timeout: Fixture.hooksRowTimeout),
             "hooks row never appeared under the transcript after the trigger file was created"
         )
         let hookChip = app.descendants(matching: .any)
             .containing(NSPredicate(format: "label CONTAINS %@", Fixture.hookName))
             .firstMatch
         XCTAssertTrue(
-            hookChip.waitForExistence(timeout: 5),
+            hookChip.appears(timeout: 5),
             "hook chip never appeared in the hooks row"
         )
         XCTAssertTrue(

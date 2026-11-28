@@ -6,7 +6,7 @@ nonisolated final class CreateWorkspacePreferencesUITests: XCTestCase {
     @MainActor
     func testCancelledFormRemembersAgentSettings() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-settings"]
         app.launch()
         openForm(in: app)
@@ -16,7 +16,7 @@ nonisolated final class CreateWorkspacePreferencesUITests: XCTestCase {
         app.buttons["creation.providerPicker"].tap()
         app.buttons["Codex"].tap()
         let model = app.buttons["creation.modelPicker"]
-        XCTAssertTrue(model.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(model.appears(timeout: Self.elementTimeout))
         model.tap()
         app.buttons["Named Model"].tap()
         app.buttons["creation.reasoningPicker"].tap()
@@ -49,21 +49,21 @@ nonisolated final class CreateWorkspacePreferencesUITests: XCTestCase {
         app.buttons["creation.back"].tap()
         app.buttons["creation.branchBack"].tap()
         app.buttons["creation.close"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Self.elementTimeout))
     }
 
     @MainActor
     private func openForm(in app: XCUIApplication) {
         app.openHomeAction("workspace")
         let repository = app.buttons["creation.repository.nova-labs/console"]
-        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(repository.appears(timeout: Self.elementTimeout))
         repository.tap()
         app.buttons["Next"].tap()
         let branch = app.buttons["creation.branch.main"]
-        XCTAssertTrue(branch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(branch.appears(timeout: Self.elementTimeout))
         branch.tap()
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.buttons["creation.specialistPicker"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.buttons["creation.specialistPicker"].appears(timeout: Self.elementTimeout))
     }
 
     @MainActor

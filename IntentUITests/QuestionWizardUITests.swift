@@ -7,10 +7,10 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     func testAnswersStayStackedAcrossKeyboardSelectionAndBack() throws {
         let app = try openQuestions(scenario: "question-cards", collapsed: false)
         tap(app.buttons["question.skip"])
-        XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Short answers"].appears(timeout: Self.timeout))
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
-        XCTAssertTrue(second.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(second.appears(timeout: Self.timeout))
         assertStackedCards(first, second)
         tap(first)
         XCTAssertTrue(app.staticTexts["Short answers"].exists, "Selecting must wait for explicit Next")
@@ -18,13 +18,13 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         assertStackedCards(first, second)
 
         tap(answerField(in: app))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.timeout))
         assertStackedCards(first, second)
         attachScreenshot("question-cards-stacked-keyboard", in: app)
         tapQuestionAction("question.next", in: app)
-        XCTAssertTrue(app.staticTexts["Detailed answers"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Detailed answers"].appears(timeout: Self.timeout))
         tapQuestionAction("question.back", in: app)
-        XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Short answers"].appears(timeout: Self.timeout))
         XCTAssertEqual(first.value as? String, "Selected")
         XCTAssertTrue(app.keyboards.firstMatch.isHittable)
         assertStackedCards(first, second)
@@ -34,9 +34,9 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
     func testLongAnswersScrollVerticallyWithoutClipping() throws {
         let app = try openQuestions(scenario: "question-cards", collapsed: false)
         tapQuestionAction("question.skip", in: app)
-        XCTAssertTrue(app.staticTexts["Short answers"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Short answers"].appears(timeout: Self.timeout))
         tapQuestionAction("question.skip", in: app)
-        XCTAssertTrue(app.staticTexts["Detailed answers"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Detailed answers"].appears(timeout: Self.timeout))
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
         XCTAssertLessThan(first.frame.maxY, second.frame.minY)
@@ -45,7 +45,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
 
         let editor = answerField(in: app)
         tap(editor)
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.timeout))
         let scroll = app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch
         let send = app.buttons["question.next"]
         let header = app.staticTexts["Detailed answers"]
@@ -81,7 +81,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         let app = try openQuestions(scenario: "questions", collapsed: false)
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
-        XCTAssertTrue(second.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(second.appears(timeout: Self.timeout))
         attachScreenshot("questions-default-phone", in: app)
         XCTAssertLessThan(first.frame.maxY, second.frame.minY, "Both answers must stack in the real phone host")
         XCTAssertEqual(first.frame.minX, second.frame.minX)
@@ -101,7 +101,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertLessThan(first.frame.maxY, second.frame.minY)
         XCTAssertEqual(first.value as? String, "Selected")
         tap(answerField(in: app))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.timeout))
         XCTAssertLessThan(first.frame.maxY, second.frame.minY, "The two-answer reference must also fit vertically above the keyboard")
         XCTAssertTrue(app.buttons["question.next"].isHittable)
         attachScreenshot("questions-vertical-keyboard", in: app)
@@ -119,7 +119,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(app.buttons["question.option.0"])
         XCTAssertTrue(app.staticTexts["Question One"].exists)
         tap(app.buttons["question.next"])
-        XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Question Two"].appears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["question.back"].isHittable)
         tapOption(0, in: app)
         tapOption(1, in: app)
@@ -128,38 +128,38 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
 
         tap(app.buttons["Write your own answer"])
         let editor = answerField(in: app)
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout), "The plus button must focus the native field")
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.timeout), "The plus button must focus the native field")
         tap(editor)
         editor.typeText("Only after review")
         XCTAssertEqual(editor.value as? String, "Only after review")
         tap(app.buttons["question.collapse"])
-        XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["question.answer"].appears(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["question.next"].exists, "The collapsed panel must be hidden from accessibility")
         XCTAssertTrue(app.textViews["composer.textView"].isHittable)
         assertKeyboardClosed(in: app)
         XCTAssertEqual(composer.value as? String, "Keep this draft")
         attachScreenshot("questions-collapsed-with-draft", in: app)
         tap(app.buttons["question.answer"])
-        XCTAssertTrue(app.buttons["question.next"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["question.next"].appears(timeout: Self.timeout))
         XCTAssertEqual(editor.value as? String, "Only after review", "Collapsing must preserve the answer draft")
         XCTAssertEqual(app.buttons["question.option.0"].value as? String, "Selected")
         attachScreenshot("questions-reopened-with-draft", in: app)
         tap(app.buttons["question.next"])
-        XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Question Two"].appears(timeout: Self.timeout))
         XCTAssertEqual(app.buttons["question.option.0"].value as? String, "Selected")
         XCTAssertEqual(app.buttons["question.option.1"].value as? String, "Selected")
         tap(app.buttons["question.back"])
         XCTAssertEqual(editor.value as? String, "Only after review", "Back must preserve the typed answer")
         XCTAssertFalse(app.buttons["question.back"].exists)
         tap(app.buttons["question.next"])
-        XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Question Two"].appears(timeout: Self.timeout))
         tap(app.buttons["question.next"])
 
         assertSentMessage(in: app, contains: [
             "A: Yes, confirmed, (Other) Only after review",
             "A: Local tests, Hosted benchmark"
         ])
-        XCTAssertTrue(app.buttons["question.next"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["question.next"].disappears(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["question.answer"].exists, "Submitting must remove the pending banner")
     }
 
@@ -174,7 +174,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         let submit = app.buttons["question.freeText.submit"]
         tap(editor)
         let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(keyboard.appears(timeout: Self.timeout))
         editor.typeText(" \n")
         XCTAssertFalse(submit.exists, "Whitespace alone must not offer submission")
         let firstAnswer = "Use the staging repository\nand keep production unchanged"
@@ -184,17 +184,17 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         )
         XCTAssertEqual(XCTWaiter.wait(for: [typedAnswer], timeout: Self.timeout), .completed)
         XCTAssertEqual(editor.value as? String, " \n" + firstAnswer, "Return must preserve multiline answers")
-        XCTAssertTrue(submit.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(submit.appears(timeout: Self.timeout))
         XCTAssertEqual(submit.label, "Next")
         XCTAssertTrue(submit.isHittable)
         XCTAssertLessThanOrEqual(submit.frame.maxY, keyboard.frame.minY)
         attachScreenshot("questions-custom-answer-next", in: app)
         tap(submit)
 
-        XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Question Two"].appears(timeout: Self.timeout))
         XCTAssertFalse(submit.exists, "The next question starts with an empty custom answer")
         editor.typeText("Run the focused checks")
-        XCTAssertTrue(submit.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(submit.appears(timeout: Self.timeout))
         XCTAssertEqual(submit.label, "Send")
         XCTAssertTrue(submit.isHittable)
         XCTAssertLessThanOrEqual(submit.frame.maxY, keyboard.frame.minY)
@@ -205,7 +205,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
             "A: (Other) " + firstAnswer,
             "A: (Other) Run the focused checks"
         ])
-        XCTAssertTrue(submit.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(submit.disappears(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["question.answer"].exists)
         assertKeyboardClosed(in: app)
     }
@@ -216,10 +216,10 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(app.buttons["question.answer"])
         tap(app.buttons["question.option.0"])
         tap(app.buttons["question.next"])
-        XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Question Two"].appears(timeout: Self.timeout))
         tap(app.buttons["question.back"])
         tap(app.buttons["question.skip"])
-        XCTAssertTrue(app.staticTexts["Question Two"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Question Two"].appears(timeout: Self.timeout))
         tap(app.buttons["question.skip"])
         assertSentMessage(in: app, contains: [
             "Q: Can I access the repository?\nA: (skipped)",
@@ -235,7 +235,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(waitUntilVisible(lastTool, in: transcript, timeout: Self.timeout))
         tap(app.buttons["question.dismiss"])
         let confirmation = app.sheets["Dismiss questions?"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
         XCTAssertTrue(confirmation.buttons["Dismiss questions"].isHittable)
         let cancel = confirmation.buttons["Cancel"]
         if cancel.exists {
@@ -243,13 +243,13 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         } else {
             cancelQuestionPopover(in: app)
         }
-        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.disappears(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["question.answer"].appears(timeout: Self.timeout))
         tap(app.buttons["question.dismiss"])
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
         tap(confirmation.buttons["Dismiss questions"])
-        XCTAssertTrue(app.buttons["question.answer"].waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["question.answer"].disappears(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].firstMatch.appears(timeout: Self.timeout))
         attachScreenshot("questions-dismissed-transcript", in: app)
         XCTAssertTrue(isVisible(lastTool, in: transcript), "The transcript tail must remain visible after dismissal")
     }
@@ -263,7 +263,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         let draft = "Keep this draft\nfor later"
         composer.typeText(draft)
         let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(keyboard.appears(timeout: Self.timeout))
         XCTAssertTrue(keyboard.isHittable)
         attachScreenshot("questions-pending-keyboard", in: app)
         assertPendingBannerSideMargins(in: app, outerInset: 8)
@@ -297,7 +297,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         tap(app.buttons["question.next"])
         tap(app.buttons["question.skip"])
         assertSentMessage(in: app, contains: ["A: (Other) A separate\nanswer", "A: (skipped)"])
-        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(composer.appears(timeout: Self.timeout))
         assertKeyboardClosed(in: app)
         tap(composer)
         XCTAssertLessThanOrEqual(composer.frame.maxY, keyboard.frame.minY)
@@ -315,12 +315,12 @@ extension QuestionWizardUITests {
         tap(app.buttons["question.next"])
         let editor = answerField(in: app)
         tap(editor)
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.timeout))
         editor.typeText("Run the focused checks")
         tap(app.buttons["question.freeText.submit"])
 
-        XCTAssertTrue(app.buttons["question.answer"].waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["question.answer"].disappears(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         let transcript = app.scrollViews["transcript.scrollView"]
         let endRow = EndRow.thinkingIndicator(in: app)
         let opened = OpenConversation(
@@ -333,9 +333,9 @@ extension QuestionWizardUITests {
 
     @MainActor
     private func assertKeyboardClosed(in app: XCUIApplication) {
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout), "Finishing questions must dismiss the keyboard")
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout), "Finishing questions must dismiss the keyboard")
         let composer = app.textViews["composer.textView"]
-        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(composer.appears(timeout: Self.timeout))
         XCTAssertEqual(composer.value(forKey: "hasKeyboardFocus") as? Bool, false, "The main composer must wait for an explicit tap to focus")
         let reopened = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true"), object: app.keyboards.firstMatch)
         reopened.isInverted = true
@@ -379,26 +379,26 @@ extension QuestionWizardUITests {
                 dy: point.y - dismissRegion.frame.minY
             ))
             .tap()
-        XCTAssertTrue(dismissRegion.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(dismissRegion.disappears(timeout: Self.timeout))
     }
 
     @MainActor
     private func openQuestions(scenario: String = "question-flow", collapsed: Bool = true) throws -> XCUIApplication {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "Workspace phone presentation")
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=\(scenario)"]
         app.launch()
         tap(app.staticTexts["Workspace agent design"].firstMatch)
         tap(app.staticTexts["Continue Spec Writer"].firstMatch)
-        XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["question.answer"].appears(timeout: Self.timeout))
         if !collapsed { tap(app.buttons["question.answer"]) }
         return app
     }
 
     @MainActor
     private func tap(_ element: XCUIElement) {
-        XCTAssertTrue(element.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(element.appears(timeout: Self.timeout))
         element.tap()
     }
 
@@ -409,7 +409,7 @@ extension QuestionWizardUITests {
     @MainActor
     private func tapQuestionAction(_ identifier: String, in app: XCUIApplication) {
         let button = app.buttons[identifier]
-        XCTAssertTrue(button.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(button.appears(timeout: Self.timeout))
         let scroll = app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch
         if scroll.exists {
             for _ in 0..<4 {
@@ -426,7 +426,7 @@ extension QuestionWizardUITests {
     @MainActor
     private func tapOption(_ index: Int, in app: XCUIApplication) {
         let option = app.buttons["question.option.\(index)"]
-        XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(option.appears(timeout: Self.timeout))
         if !option.isHittable {
             app.scrollViews.containing(.button, identifier: "question.option.0").firstMatch.swipeUp()
         }
@@ -439,7 +439,7 @@ extension QuestionWizardUITests {
             NSPredicate(format: "label CONTAINS %@", fragment)
         })
         let sent = app.descendants(matching: .any).matching(predicate).firstMatch
-        XCTAssertTrue(sent.waitForExistence(timeout: Self.timeout), "Submitted answers were not echoed by the demo RPC")
+        XCTAssertTrue(sent.appears(timeout: Self.timeout), "Submitted answers were not echoed by the demo RPC")
         attachScreenshot("questions-submitted-transcript", in: app)
         let transcript = app.scrollViews["transcript.scrollView"]
         XCTAssertTrue(transcript.frame.intersects(sent.frame), "Submitted answers must be visible without scrolling")

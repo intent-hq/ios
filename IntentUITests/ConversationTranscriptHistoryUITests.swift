@@ -134,18 +134,18 @@ nonisolated final class ConversationTranscriptHistoryUITests: XCTestCase {
         XCTAssertNotNil(consumer)
         cover.tap()
         let back = app.buttons["demo.conversation.return"]
-        XCTAssertTrue(back.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(back.appears(timeout: Fixture.settleTimeout))
         back.tap()
-        XCTAssertTrue(opened.transcript.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(opened.transcript.appears(timeout: Fixture.settleTimeout))
         XCTAssertEqual((cover.value as? String)?.components(separatedBy: "consumer=").last, consumer)
         assertRestsAtBottom(lastRow: opened.lastMessage, named: "last message", endRow: .lastSuggestedPrompt(in: app), in: opened, context: "retained history return", allowPreservedEntry: true)
         XCTAssertTrue(followReport(in: opened).contains("historyCount=30"), "A retained store must keep loaded history")
 
         let conversationBack = app.buttons["conversation.back"]
         if conversationBack.exists { conversationBack.tap() } else { app.navigationBars.buttons.element(boundBy: 0).tap() }
-        XCTAssertTrue(app.buttons[Fixture.overviewOnlyButton].waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(app.buttons[Fixture.overviewOnlyButton].appears(timeout: Fixture.settleTimeout))
         app.staticTexts[Fixture.agentName].firstMatch.tap()
-        XCTAssertTrue(opened.transcript.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(opened.transcript.appears(timeout: Fixture.settleTimeout))
         assertRestsAtBottom(lastRow: opened.lastMessage, named: "last message", endRow: .lastSuggestedPrompt(in: app), in: opened, context: "fresh history entry", allowPreservedEntry: true)
     }
 

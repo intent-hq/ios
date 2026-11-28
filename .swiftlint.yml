@@ -203,6 +203,23 @@ custom_rules:
       - typeidentifier
       - identifier
     severity: error
+  ui_test_launch_helpers:
+    name: "Use UI Test Launch Helpers"
+    # waitForExistence and waitForNonExistence poll once a second, so even an
+    # element that is already on screen costs a full second; the helpers in
+    # UITestLaunch.swift check first. XCUIApplication.intent() turns off
+    # animations so XCTest's idle waits return quickly.
+    regex: '\.waitFor(?:Non)?Existence(?=\s*\()|\bXCUIApplication(?=\s*\(\s*\))'
+    message: "Use element.appears(timeout:) / element.disappears(timeout:) and XCUIApplication.intent() from IntentUITests/UITestLaunch.swift."
+    match_kinds:
+      - identifier
+      - typeidentifier
+    included:
+      - '/IntentUITests/'
+    excluded:
+      - '/IntentUITests/UITestLaunch\.swift$'
+      - '/IntentUITests/SnapshotHelper\.swift$'
+    severity: error
   launch_options_only:
     name: "Read Launch Options Through LaunchOptions"
     # Test targets may set up their own launches; only app code is checked.

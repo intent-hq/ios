@@ -6,11 +6,11 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
     @MainActor
     func testSavedBlocksBackgroundNavigationAndRestoresItAfterDismissal() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data"]
         app.launch()
         let search = app.buttons["workspaces.search.open"]
-        XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(search.appears(timeout: Self.timeout))
         let backgroundPoint = app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: search.frame.midX, dy: search.frame.midY))
         openSaved(in: app)
@@ -20,7 +20,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         if !app.staticTexts["saved-connections.title"].exists { openSaved(in: app) }
 
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].disappears(timeout: Self.timeout))
         capture(app, named: "saved-close-cleanup")
         openSaved(in: app)
         let close = app.buttons["connection-sheet.close"].frame
@@ -34,16 +34,16 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         start.press(forDuration: 0.1, thenDragTo: origin.withOffset(
             CGVector(dx: app.frame.midX, dy: app.frame.maxY - 10)
         ))
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].disappears(timeout: Self.timeout))
         capture(app, named: "saved-swipe-cleanup")
         search.tap()
-        XCTAssertTrue(app.textFields["workspaces.search.field"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textFields["workspaces.search.field"].appears(timeout: Self.timeout))
     }
 
     @MainActor
     private func openSaved(in app: XCUIApplication) {
         app.openHomeAction("connections")
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].appears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -61,7 +61,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         token.tap()
         token.typeText("SYNTHETIC-TOKEN")
         let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(keyboard.appears(timeout: Self.timeout))
         let editingTitleY = title.frame.minY
         let keyboardY = keyboard.frame.minY
         app.buttons["Show API token"].tap()
@@ -79,7 +79,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         XCTAssertEqual(visible.value as? String, "SYNTHETIC-TOKEN-KEPT")
         capture(app, named: "token-visibility-keeps-focus")
         app.buttons["Done"].tap()
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(keyboard.disappears(timeout: Self.timeout))
         let dismissedTitleY = title.frame.minY
         app.buttons["Hide API token"].tap()
         XCTAssertFalse(keyboard.exists)
@@ -108,14 +108,14 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         token.typeText(typed)
         capture(app, named: "keyboard")
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         XCTAssertEqual(token.value as? String, String(repeating: "•", count: typed.count))
         XCTAssertTrue(app.buttons["manual.connect"].isEnabled)
         XCTAssertFalse(app.buttons["Paste API token"].exists)
         assertReference(in: app)
         capture(app, named: "filled")
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["manual.title"].disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -126,7 +126,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         XCTAssertEqual(app.secureTextFields["manual.token"].label, "API Token")
         try app.performAccessibilityAudit(for: .sufficientElementDescription)
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["manual.title"].disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -139,17 +139,17 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         app.secureTextFields["manual.token"].tap()
         app.secureTextFields["manual.token"].typeText("SYNTHETIC-NOT-A-CREDENTIAL")
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["manual.connect"].isEnabled)
         app.buttons["manual.connect"].tap()
         let error = app.staticTexts["manual.error"]
-        XCTAssertTrue(error.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(error.appears(timeout: Self.timeout))
         XCTAssertEqual(error.label, "Invalid port number")
         XCTAssertTrue(app.textFields["manual.host"].isEnabled)
         XCTAssertTrue(app.secureTextFields["manual.token"].isEnabled)
         capture(app, named: "invalid-port")
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["manual.title"].disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -168,14 +168,14 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         token.typeText("SYNTHETIC-NOT-A-CREDENTIAL")
         capture(app, named: "large-text-keyboard")
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         let connect = app.buttons["manual.connect"]
         scrollTo(connect, in: app)
         XCTAssertTrue(connect.isEnabled)
         capture(app, named: "large-text-bottom")
         XCTAssertTrue(app.buttons["connection-sheet.close"].isHittable)
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(app.staticTexts["manual.title"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["manual.title"].disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -198,7 +198,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
     private func assertReference(in app: XCUIApplication) {
         let appFrame = app.frame
         let scroll = app.scrollViews.containing(.button, identifier: "manual.connect").firstMatch
-        XCTAssertTrue(scroll.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(scroll.appears(timeout: Self.timeout))
         let scrollFrame = scroll.frame
         let scale = scrollFrame.width / appFrame.width
         XCTAssertGreaterThanOrEqual(scale, 0.9)
@@ -239,16 +239,16 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock { try FileManager.default.removeItem(at: directory) }
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path, "--demo-connection-loss-stopped"]
             + arguments
         app.launch()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Self.timeout))
         try Data().write(to: directory.appendingPathComponent("loss"))
-        XCTAssertTrue(app.buttons["connection-loss.home"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["connection-loss.home"].appears(timeout: Self.timeout))
         app.buttons["connection-loss.home"].tap()
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Manual Connection")).firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["manual.title"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["manual.title"].appears(timeout: Self.timeout))
         return app
     }
 

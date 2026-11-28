@@ -22,7 +22,7 @@ extension ConversationTranscriptScrollUITests {
             allowPreservedEntry: true
         )
         XCTAssertTrue(
-            composer.waitForExistence(timeout: Fixture.elementTimeout),
+            composer.appears(timeout: Fixture.elementTimeout),
             "composer text view not found"
         )
         let bottomBeforeKeyboard = transcript.frame.maxY

@@ -74,13 +74,13 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             XCTAssertTrue(app.buttons["ipad.rail.appearance"].isHittable)
         }
         let manual = app.buttons["settings.pairing.manual"]
-        XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(manual.appears(timeout: Self.timeout))
         let settings = app.scrollViews["settings.scroll"]
         for _ in 0..<3 where !manual.isHittable { settings.swipeUp() }
         capture(app, name: "iPad accessibility Settings")
         XCTAssertTrue(manual.isHittable, app.debugDescription)
         manual.tap()
-        XCTAssertTrue(app.textFields["manual.host"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textFields["manual.host"].appears(timeout: Self.timeout))
         capture(app, name: "iPad accessibility manual pairing")
         XCTAssertTrue(app.buttons["ipad.pairing.cancel"].isHittable, app.debugDescription)
         app.buttons["ipad.pairing.cancel"].tap()
@@ -97,18 +97,18 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         let app = launch(appearance: "light", extraArguments: ["--demo-conversation-reselection-trigger-file=\(trigger.path)"])
         defer { app.terminate() }
         let workspace = app.buttons["workspace.row.demo-ws-flaky-tests"]
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-deflake"]
-        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.appears(timeout: Self.timeout))
         agent.tap()
         let composer = app.textViews["composer.textView"]
-        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(composer.appears(timeout: Self.timeout))
         composer.tap()
         composer.typeText(Self.draft)
         let child = app.buttons["watched-agent-demo-agent-deflake-capture"]
         app.buttons["ipad.focus.close"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         XCTAssertTrue(child.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         child.tap()
         let childTitle = app.staticTexts["Capture Race Fixer, Agent"]
@@ -117,7 +117,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         app.buttons["ipad.rail.workspaces"].tap()
         XCTAssertTrue(childTitle.isHittable, "Section changes must retain the pushed conversation")
         try Data().write(to: trigger)
-        XCTAssertTrue(childTitle.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(childTitle.disappears(timeout: Self.timeout))
         XCTAssertTrue(agent.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
@@ -161,13 +161,13 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(try app.buttons.matching(identifier: "composer.send").singleHittableElement().isHittable)
         XCTAssertTrue(try app.buttons.matching(identifier: "composer.attachment").singleHittableElement().isHittable)
         let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(keyboard.appears(timeout: Self.timeout))
         XCTAssertLessThanOrEqual(close.frame.maxY, keyboard.frame.minY)
         try verifyBlockedTypingBackground(in: app, controls: background, panel: panel)
         let transcript = try app.scrollViews.matching(identifier: "transcript.scrollView").singleHittableElement()
         transcript.coordinate(withNormalizedOffset: CGVector(dx: Self.transcriptTapX, dy: 0.5)).tap()
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout), "Hiding the keyboard must restore the normal pane")
+        XCTAssertTrue(keyboard.disappears(timeout: Self.timeout))
+        XCTAssertTrue(close.disappears(timeout: Self.timeout), "Hiding the keyboard must restore the normal pane")
         XCTAssertEqual(composer.value as? String, Self.draft)
         capture(app, name: "iPad focused typing keyboard hidden \(appearance)")
         try composerTap.activate(in: app)
@@ -179,7 +179,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         close.tap()
-        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.disappears(timeout: Self.timeout))
         capture(app, name: "iPad typing restored \(appearance)")
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
         XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
@@ -200,7 +200,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertTrue(entry.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         let close = app.buttons["agent-history.close"]
         close.tap()
-        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.disappears(timeout: Self.timeout))
         if reopensConversation { openConversation(in: app) }
     }
 
@@ -214,13 +214,13 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         workspace.tap()
         let heading = app.staticTexts["workspace.title.heading"]
         XCTAssertTrue(heading.wait(for: \.label, toEqual: "Fix websocket reconnect storm", timeout: Self.timeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         capture(app, name: "iPad first workspace selected \(appearance)")
     }
 
     @MainActor
     private func captureMainScreens(in app: XCUIApplication, appearance: String) {
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         showWorkspaceList(in: app)
         for mode in ["Repo", "Status", "Recent"] {
             let control = app.buttons["workspaces.viewMode.\(mode)"]
@@ -230,7 +230,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         }
         capture(app, name: "iPad workspace \(appearance)")
         app.buttons["ipad.sidebar.collapse"].tap()
-        XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["ipad.sidebar.expand"].appears(timeout: Self.timeout))
         capture(app, name: "iPad collapsed \(appearance)")
         app.buttons["ipad.sidebar.expand"].tap()
         let sections = [
@@ -243,7 +243,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
             XCTAssertTrue(app.buttons["ipad.rail.\(section)"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
             capture(app, name: "iPad \(label) \(appearance)")
             XCTAssertTrue(app.buttons[control].wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
-            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
             app.buttons["ipad.rail.workspaces"].tap()
         }
     }
@@ -251,7 +251,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     @MainActor
     private func verifySections(in app: XCUIApplication) throws {
         app.buttons["ipad.rail.assistant"].tap()
-        XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].appears(timeout: Self.timeout))
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, "")
         app.buttons["ipad.rail.workspaces"].tap()
         let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
@@ -267,7 +267,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
     private func verifyPairingCancellation(in app: XCUIApplication, appearance: String) throws {
         app.buttons["settings.pairing.scan"].tap()
         let cancel = app.buttons["ipad.pairing.cancel"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(cancel.appears(timeout: Self.timeout))
         XCTAssertFalse(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.contains { $0.isHittable })
         XCTAssertTrue(app.buttons["ipad.rail.connections"].isHittable)
         capture(app, name: "iPad QR \(appearance)")
@@ -275,7 +275,7 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
         XCTAssertEqual(try app.textViews.matching(identifier: "composer.textView").singleHittableElement().value as? String, Self.draft)
         app.buttons["settings.pairing.manual"].tap()
         let host = app.textFields["manual.host"]
-        XCTAssertTrue(host.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(host.appears(timeout: Self.timeout))
         host.tap()
         host.typeText("example.local")
         XCTAssertTrue(cancel.isHittable)
@@ -288,26 +288,26 @@ nonisolated final class IPadSidebarUITests: XCTestCase {
 
     @MainActor
     private func launch(appearance: String, accessibility: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "-appThemePreference", appearance] + extraArguments
         if accessibility {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
         let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
-        XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons[navigation].appears(timeout: Self.timeout))
         return app
     }
 
     @MainActor
     private func openConversation(in app: XCUIApplication) {
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.appears(timeout: Self.timeout))
         agent.tap()
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -342,7 +342,7 @@ extension IPadSidebarUITests {
         let reopensConversation = showWorkspaceList(in: app)
         app.buttons["workspaces.search.open"].tap()
         let search = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(search.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(search.appears(timeout: Self.timeout))
         search.typeText("payment")
         app.buttons["workspaces.search.cancel"].tap()
         if reopensConversation { openConversation(in: app) }
@@ -458,9 +458,9 @@ extension IPadSidebarUITests {
             let app = launch(appearance: appearance, extraArguments: ["--demo-ipad-pane-geometry"])
             openConversation(in: app)
             let header = app.buttons["conversation.back"]
-            XCTAssertTrue(header.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(header.appears(timeout: Self.timeout))
             let transcript = app.scrollViews["transcript.scrollView"]
-            XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(transcript.appears(timeout: Self.timeout))
             let headerFrame = header.frame
             transcript.swipeDown()
             XCTAssertEqual(header.frame, headerFrame)
@@ -476,7 +476,7 @@ extension IPadSidebarUITests {
                 app.buttons["ipad.rail.settings"].tap()
                 app.buttons["ipad.rail.workspaces"].tap()
             }
-            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Self.timeout))
             app.terminate()
         }
     }

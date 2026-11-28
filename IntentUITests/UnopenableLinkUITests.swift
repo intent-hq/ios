@@ -24,7 +24,7 @@ nonisolated final class UnopenableLinkUITests: XCTestCase {
     @MainActor
     func testUnopenableLinksShowMessageWithCopyLink() {
         for appearance in ["light", "dark"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             app.launchArguments += ["--demo-data", "--demo-inline-text", "-appThemePreference", appearance]
             app.launch()
             let transcript = openTranscript(in: app)
@@ -34,14 +34,14 @@ nonisolated final class UnopenableLinkUITests: XCTestCase {
             XCTAssertTrue(alertText(intentAlert, contains: "intent://local/settings"))
             captureMedia(app, named: "Unopenable link message \(appearance)")
             intentAlert.buttons["Copy Link"].tap()
-            XCTAssertTrue(intentAlert.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(intentAlert.disappears(timeout: Fixture.timeout))
 
             let browserAlert = tapLink("Open the signed-in preview", in: app, transcript: transcript)
             XCTAssertTrue(alertText(browserAlert, contains: "The in-app browser couldn’t open this link."))
             XCTAssertTrue(alertText(browserAlert, contains: "http://user@localhost:3000"))
             captureMedia(app, named: "In-app browser failure message \(appearance)")
             browserAlert.buttons["OK"].tap()
-            XCTAssertTrue(browserAlert.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(browserAlert.disappears(timeout: Fixture.timeout))
             XCTAssertTrue(transcript.exists, "Dismissing the message must keep the conversation open")
             app.terminate()
         }
@@ -50,27 +50,27 @@ nonisolated final class UnopenableLinkUITests: XCTestCase {
     @MainActor
     private func openTranscript(in app: XCUIApplication) -> XCUIElement {
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        if !workspace.waitForExistence(timeout: Fixture.launchTimeout) {
+        if !workspace.appears(timeout: Fixture.launchTimeout) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
-            XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         }
         workspace.tap()
         let agent = app.staticTexts[Fixture.agentName].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
         agent.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
         return transcript
     }
 
     @MainActor
     private func tapLink(_ label: String, in app: XCUIApplication, transcript: XCUIElement) -> XCUIElement {
         let link = app.links[label].firstMatch
-        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(link.appears(timeout: Fixture.timeout))
         reveal(link, in: transcript)
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let alert = app.alerts[Fixture.alertTitle].firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: Fixture.timeout), "Tapping \(label) must show a message")
+        XCTAssertTrue(alert.appears(timeout: Fixture.timeout), "Tapping \(label) must show a message")
         XCTAssertTrue(alert.buttons["Copy Link"].exists)
         XCTAssertTrue(alert.buttons["OK"].exists)
         return alert

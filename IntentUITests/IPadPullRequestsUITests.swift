@@ -11,14 +11,14 @@ extension IPadSidebarUITests {
             app.buttons["ipad.rail.pullRequests"].tap()
             XCTAssertTrue(app.buttons["ipad.rail.pullRequests"].isSelected)
             let row = app.buttons["pullRequests.row.nova-labs/console#482"]
-            XCTAssertTrue(row.waitForExistence(timeout: Self.pullRequestsTimeout))
+            XCTAssertTrue(row.appears(timeout: Self.pullRequestsTimeout))
             attachScreenshot(named: "iPad pull requests \(appearance)")
             row.tap()
             let checks = app.buttons["pullRequest.checks"]
-            XCTAssertTrue(checks.waitForExistence(timeout: Self.pullRequestsTimeout))
+            XCTAssertTrue(checks.appears(timeout: Self.pullRequestsTimeout))
             attachScreenshot(named: "iPad pull request detail \(appearance)")
             app.buttons["pullRequest.back"].tap()
-            XCTAssertTrue(checks.waitForNonExistence(timeout: Self.pullRequestsTimeout))
+            XCTAssertTrue(checks.disappears(timeout: Self.pullRequestsTimeout))
             app.buttons["ipad.rail.workspaces"].tap()
             XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
             app.terminate()
@@ -29,10 +29,10 @@ extension IPadSidebarUITests {
 
     @MainActor
     private func launchDemo(appearance: String) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "-appThemePreference", appearance]
         app.launch()
-        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].waitForExistence(timeout: Self.pullRequestsTimeout))
+        XCTAssertTrue(app.buttons["ipad.rail.workspaces"].appears(timeout: Self.pullRequestsTimeout))
         return app
     }
 

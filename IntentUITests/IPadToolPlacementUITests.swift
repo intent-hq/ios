@@ -15,7 +15,7 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
             agent.tap()
             let composer = app.textViews["composer.textView"]
-            XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(composer.appears(timeout: Self.timeout))
             composer.tap()
             composer.typeText("Keep this draft beside the preview")
             app.buttons["ipad.focus.close"].tap()
@@ -24,8 +24,8 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             capture(app, "ipad-tool-before-\(appearance)")
             drag(browser, into: app)
             let close = app.buttons["Close main browser"]
-            XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(close.appears(timeout: Self.timeout))
+            XCTAssertTrue(composer.appears(timeout: Self.timeout))
             XCTAssertEqual(composer.value as? String, "Keep this draft beside the preview")
             XCTAssertLessThan(composer.frame.maxX, close.frame.minX)
             capture(app, "ipad-tool-browser-chat-\(appearance)")
@@ -42,8 +42,8 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             agent.tap()
             XCTAssertEqual(composer.value as? String, editedDraft)
             close.tap()
-            XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
-            XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(close.disappears(timeout: Self.timeout))
+            XCTAssertTrue(composer.appears(timeout: Self.timeout))
             XCTAssertGreaterThan(composer.frame.minX, app.frame.width / 3)
             XCTAssertEqual(composer.value as? String, editedDraft)
             capture(app, "ipad-tool-restored-\(appearance)")
@@ -63,7 +63,7 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             app.buttons["Workspace actions"].firstMatch.tap()
             app.buttons["New terminal"].tap()
             let title = app.staticTexts["mobile-terminal-title"]
-            XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(title.appears(timeout: Self.timeout))
             app.buttons["Back to workspace"].tap()
             let agent = app.buttons["workspace.agent.demo-agent-implementor"]
             XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
@@ -71,9 +71,9 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             let terminal = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'terminal.row.'")).firstMatch
             reveal(terminal, in: app)
             drag(terminal, into: app)
-            XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(title.appears(timeout: Self.timeout))
             let composer = app.textViews["composer.textView"]
-            XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(composer.appears(timeout: Self.timeout))
             XCTAssertLessThan(composer.frame.maxX, title.frame.minX)
             let keyboardToggle = app.buttons["terminal.keyboard.toggle"]
             XCTAssertTrue(keyboardToggle.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
@@ -89,10 +89,10 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
             XCTAssertTrue(title.exists)
             XCTAssertEqual(composer.value as? String, "Explain this output")
             app.buttons["Back to workspace"].tap()
-            XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(title.disappears(timeout: Self.timeout))
             reveal(terminal, in: app)
             terminal.tap()
-            XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), "Closing the pane leaves the terminal session running")
+            XCTAssertTrue(title.appears(timeout: Self.timeout), "Closing the pane leaves the terminal session running")
             app.terminate()
         }
     }
@@ -102,10 +102,10 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
         reveal(browser, in: app)
         drag(browser, into: app)
         let close = app.buttons["Close main browser"]
-        XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.appears(timeout: Self.timeout))
         app.buttons["conversation.back"].tap()
         app.buttons["ipad.rail.workspaces"].tap()
-        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.disappears(timeout: Self.timeout))
         let workspace = app.buttons["workspace.row.demo-ws-reconnect"]
         XCTAssertTrue(workspace.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         workspace.tap()
@@ -114,11 +114,11 @@ nonisolated final class IPadToolPlacementUITests: XCTestCase {
 
     @MainActor
     private func launch(_ appearance: String) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-browsers", "-appThemePreference", appearance]
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
         return app
     }

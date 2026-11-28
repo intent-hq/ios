@@ -51,7 +51,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         }
         verifyMenuDragBehavior(in: app)
         app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Self.timeout))
         XCTAssertEqual(visibleRow?.frame.minY ?? 0, position, accuracy: Self.scrollTolerance)
         list.swipeDown()
         XCTAssertTrue(app.buttons["workspace.row.demo-ws-reconnect"].isHittable)
@@ -81,7 +81,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(app.frame.contains(app.buttons["intent.menu.close"].frame))
         attachScreenshot(app.screenshot(), named: "Intent menu placement open")
         app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.close"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.close"].disappears(timeout: Self.timeout))
         for (title, closeId) in [
             ("Recent connections", "connection-switcher.close"),
             ("Recent agents", "agent-history.close")
@@ -89,20 +89,20 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             XCTAssertTrue(waitUntilHittable(app.buttons["workspaces.menu"]))
             app.buttons["workspaces.menu"].tap()
             let action = app.buttons[title]
-            XCTAssertTrue(action.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(action.appears(timeout: Self.timeout))
             action.tap()
             let close = app.buttons[closeId]
             XCTAssertTrue(waitUntilHittable(close))
             XCTAssertFalse(app.buttons["workspace.row.demo-ws-dashboard"].isHittable)
             attachScreenshot(app.screenshot(), named: "Intent menu placement \(title)")
             close.tap()
-            XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(close.disappears(timeout: Self.timeout))
             XCTAssertTrue(waitUntilHittable(launcher))
             XCTAssertEqual(launcher.frame.minX, originalFrame.minX, accuracy: 1)
             XCTAssertEqual(launcher.frame.minY, originalFrame.minY, accuracy: 1)
             openMenu(app)
             app.buttons["intent.menu.close"].tap()
-            XCTAssertTrue(app.buttons["intent.menu.close"].waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.buttons["intent.menu.close"].disappears(timeout: Self.timeout))
         }
     }
 
@@ -114,10 +114,10 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         let app = launchHome()
         app.staticTexts["Add usage analytics dashboard"].firstMatch.tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.appears(timeout: Self.timeout))
         agent.tap()
         var composer = app.textViews["composer.textView"]
-        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(composer.appears(timeout: Self.timeout))
         let rail = app.buttons["ipad.rail.workspaces"]
         let send = app.buttons["Send Message"]
         XCTAssertTrue(rail.isHittable)
@@ -140,7 +140,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         XCTAssertTrue(rail.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)
         app.hideWorkspaceSidebar()
-        XCTAssertTrue(app.buttons["ipad.sidebar.expand"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["ipad.sidebar.expand"].appears(timeout: Self.timeout))
         XCTAssertEqual(composer.value as? String, draft)
         attachScreenshot(XCUIScreen.main.screenshot(), named: "iPad collapsed conversation with draft")
         for destination in ["settings", "connections", "workspaces"] {
@@ -150,7 +150,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
             XCTAssertTrue(rail.isHittable)
         }
         app.buttons["ipad.rail.assistant"].tap()
-        XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].appears(timeout: Self.timeout))
         app.buttons["ipad.rail.workspaces"].tap()
         composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, draft)
@@ -165,12 +165,12 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
     private func verifySendAndBack(in app: XCUIApplication, draft: String) throws {
         try app.buttons.matching(identifier: "Send Message").singleHittableElement().tap()
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", draft))
-            .firstMatch.waitForExistence(timeout: Self.timeout))
+            .firstMatch.appears(timeout: Self.timeout))
         let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
         XCTAssertEqual(composer.value as? String, "")
         try app.buttons.matching(identifier: "conversation.back").singleHittableElement().tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.appears(timeout: Self.timeout))
         XCTAssertFalse(app.textViews.matching(identifier: "composer.textView").allElementsBoundByIndex.contains { $0.isHittable })
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
         XCTAssertTrue(waitUntilHittable(agent))
@@ -181,21 +181,21 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad persistent rail")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=question-cards"]
         app.launch()
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-design"]
-        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.appears(timeout: Self.timeout))
         agent.tap()
         XCUIDevice.shared.orientation = .portrait
         let firstAnswer = app.buttons["Keep working locally"]
-        XCTAssertTrue(firstAnswer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(firstAnswer.appears(timeout: Self.timeout))
         firstAnswer.tap()
         let multiAnswer = app.buttons["Local tests"]
-        XCTAssertTrue(multiAnswer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(multiAnswer.appears(timeout: Self.timeout))
         multiAnswer.tap()
 
         let rail = app.buttons["ipad.rail.workspaces"]
@@ -214,7 +214,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         next.tap()
         XCUIDevice.shared.orientation = .landscapeLeft
         let lastAnswer = app.buttons["Summary"]
-        XCTAssertTrue(lastAnswer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(lastAnswer.appears(timeout: Self.timeout))
         lastAnswer.tap()
         let send = app.buttons["Send"]
         XCTAssertTrue(waitUntilHittable(send))
@@ -225,7 +225,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         send.tap()
 
         let composer = app.textViews["composer.textView"]
-        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(composer.appears(timeout: Self.timeout))
         XCTAssertTrue(rail.isHittable)
         XCTAssertTrue(waitUntilHittable(composer))
     }
@@ -238,7 +238,7 @@ nonisolated final class HomeActionMenuUITests: XCTestCase {
         reveal("appearance", in: app).tap()
         _ = reveal("settings", in: app)
         reveal("connections", in: app).tap()
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].appears(timeout: Self.timeout))
         app.terminate()
         app.launchArguments = ["--demo-data", "--demo-long-workspace-list"]
         app.launch()
@@ -311,11 +311,11 @@ extension HomeActionMenuUITests {
 
     @MainActor
     private func launchHome(themePreference: String = "system") -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-long-workspace-list", "-appThemePreference", themePreference]
         app.launch()
         let navigation = UIDevice.current.userInterfaceIdiom == .pad ? "ipad.rail.workspaces" : "intent.menu.open"
-        XCTAssertTrue(app.buttons[navigation].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons[navigation].appears(timeout: Self.timeout))
         return app
     }
 
@@ -338,7 +338,7 @@ extension HomeActionMenuUITests {
     @MainActor
     private func openMenu(_ app: XCUIApplication) {
         app.buttons["intent.menu.open"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.assistant"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.assistant"].appears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -404,7 +404,7 @@ extension HomeActionMenuUITests {
         attachScreenshot(app.screenshot(), named: "Folded Duo Changes launcher rail")
         openMenu(app)
         app.buttons["intent.menu.close"].tap()
-        XCTAssertTrue(app.buttons["intent.menu.close"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.close"].disappears(timeout: Self.timeout))
         app.buttons["Agents"].firstMatch.tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         XCTAssertTrue(waitUntilHittable(agent))
@@ -464,7 +464,7 @@ extension HomeActionMenuUITests {
         attachScreenshot(app.screenshot(), named: "Unfolded Duo conversation split")
         back.tap()
         XCTAssertTrue(waitUntilHittable(agent))
-        XCTAssertTrue(composer.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(composer.disappears(timeout: Self.timeout))
         XCTAssertTrue(workspace.isHittable)
         XCTAssertEqual(sidebar.frame, sidebarFrame)
         XCTAssertFalse(app.buttons["workspaceDetail.back"].exists)

@@ -6,7 +6,7 @@ extension InlineResponseImageUITests {
         let named = activity.descendants(matching: .any).matching(
             NSPredicate(format: "label CONTAINS %@", "Demo brief")
         ).firstMatch
-        XCTAssertTrue(named.waitForExistence(timeout: timeout), "Share sheet must show the original PDF name")
+        XCTAssertTrue(named.appears(timeout: timeout), "Share sheet must show the original PDF name")
         let cacheNamed = activity.descendants(matching: .any).matching(
             NSPredicate(format: "label CONTAINS %@", "chat-pdf-")
         ).firstMatch

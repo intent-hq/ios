@@ -61,7 +61,7 @@ extension ConversationTranscriptScrollUITests {
         let beforeSend = forcedFollowRequestCount(in: opened)
         prompt.tap()
         XCTAssertTrue(
-            prompt.waitForNonExistence(timeout: 5),
+            prompt.disappears(timeout: 5),
             "suggested prompt rows stayed in the transcript after tapping one"
         )
         let sentRow = message(in: app, containing: Fixture.firstSuggestedPromptLabel)
@@ -150,7 +150,7 @@ extension ConversationTranscriptScrollUITests {
                 + restingState(of: firstMessage, named: "first user paragraph", in: opened)
         )
         XCTAssertTrue(
-            goToEnd.waitForExistence(timeout: 5),
+            goToEnd.appears(timeout: 5),
             "Go to End is absent at the top of the transcript"
         )
 
@@ -166,7 +166,7 @@ extension ConversationTranscriptScrollUITests {
             alsoReporting: (endRow.element, endRow.name)
         ) else { return }
         XCTAssertTrue(
-            goToEnd.waitForNonExistence(timeout: 5),
+            goToEnd.disappears(timeout: 5),
             "Go to End stayed visible after one tap from the top — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened)
         )
@@ -187,7 +187,7 @@ extension ConversationTranscriptScrollUITests {
         let app = try launchStartupConversation(metadataReady: true, holdSnapshot: true)
         addTeardownBlock { @MainActor [self] () async in finishStartup(app) }
         let opened = enterLongConversation(in: app, context: "ready metadata", waitForTranscript: false)
-        XCTAssertTrue(startupControl(app).waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(startupControl(app).appears(timeout: Fixture.settleTimeout))
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { self.startupReport(app).contains("metadata=ready") })
         XCTAssertFalse(opened.transcript.exists, "the chat snapshot is still held")
         try Data().write(to: startupSnapshotGate)
@@ -255,7 +255,7 @@ extension ConversationTranscriptScrollUITests {
         }
         startupControl(app).tap()
         let back = app.buttons["demo.conversation.return"].firstMatch
-        XCTAssertTrue(back.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(back.appears(timeout: Fixture.settleTimeout))
         back.tap()
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) {
             self.startupReport(app).contains("metadata=pending") && isInside(row, opened.transcript)

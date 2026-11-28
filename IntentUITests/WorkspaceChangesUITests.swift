@@ -28,20 +28,20 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         reveal(unstaged, in: app)
         capture(app, name: "workspace-changes")
         unstaged.tap()
-        XCTAssertTrue(app.navigationBars["Unstaged Changes"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.navigationBars["Unstaged Changes"].appears(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let enabled = true")
         capture(app, name: "unstaged-diff")
         app.buttons["Done"].tap()
         let staged = app.buttons["changes.file.staged.Tests/AnalyticsTests.swift"].firstMatch
         reveal(staged, in: app)
         staged.tap()
-        XCTAssertTrue(app.navigationBars["Staged Changes"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.navigationBars["Staged Changes"].appears(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let staged = true")
         app.buttons["Done"].tap()
         let commit = app.staticTexts["feat: add usage analytics"].firstMatch
         reveal(commit, in: app)
         commit.tap()
-        XCTAssertTrue(app.navigationBars["Commit Changes"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.navigationBars["Commit Changes"].appears(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let count = 1")
         capture(app, name: "commit-diff")
         verifyCommitNavigation(in: app)
@@ -53,7 +53,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         source.tap()
         XCTAssertEqual(source.value as? String, "Collapsed")
         app.buttons["commit.view.Details"].tap()
-        XCTAssertTrue(app.scrollViews["commit.details"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.scrollViews["commit.details"].appears(timeout: Fixture.timeout))
         app.buttons["commit.copy"].tap()
         XCTAssertEqual(app.buttons["commit.copy"].label, "Copied")
         capture(app, name: "commit-details")
@@ -63,17 +63,17 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         reveal(tests, in: app)
         tests.tap()
         let jump = app.buttons["commit.jump"]
-        XCTAssertTrue(jump.waitForNonExistence(timeout: Fixture.timeout), "All collapsed files fit in the viewport")
+        XCTAssertTrue(jump.disappears(timeout: Fixture.timeout), "All collapsed files fit in the viewport")
         capture(app, name: "commit-files-fit")
         source.tap()
         reveal(tests, in: app)
         tests.tap()
-        XCTAssertTrue(jump.waitForExistence(timeout: Fixture.timeout), "Expanded diffs extend below the viewport")
+        XCTAssertTrue(jump.appears(timeout: Fixture.timeout), "Expanded diffs extend below the viewport")
         capture(app, name: "commit-files-offscreen")
         jump.tap()
         capture(app, name: "commit-file-picker")
         let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(search.appears(timeout: Fixture.timeout))
         search.tap()
         search.typeText("no-such-file")
         XCTAssertFalse(app.buttons["commit.jump.file.Sources/Analytics.swift"].exists)
@@ -81,10 +81,10 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         search.typeText("Tests/")
         XCTAssertFalse(app.buttons["commit.jump.file.Sources/Analytics.swift"].exists)
         let testFile = app.buttons["commit.jump.file.Tests/AnalyticsTests.swift"].firstMatch
-        XCTAssertTrue(testFile.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(testFile.appears(timeout: Fixture.timeout))
         capture(app, name: "commit-file-search")
         testFile.tap()
-        XCTAssertTrue(app.buttons["commit.file.Tests/AnalyticsTests.swift"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["commit.file.Tests/AnalyticsTests.swift"].appears(timeout: Fixture.timeout))
         app.buttons["commit.jump"].tap()
         app.buttons["commit.jump.file.Sources/Analytics.swift"].tap()
         XCTAssertEqual(source.value as? String, "Expanded")
@@ -162,11 +162,11 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         reveal(nested, in: app)
         nested.tap()
         XCTAssertEqual(nested.value as? String, "Collapsed")
-        XCTAssertTrue(child.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(child.disappears(timeout: Fixture.timeout))
         let parent = app.buttons["changes.folder.unstaged.Sources"].firstMatch
         reveal(parent, in: app, towardTop: true)
         parent.tap()
-        XCTAssertTrue(nested.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(nested.disappears(timeout: Fixture.timeout))
         parent.tap()
         reveal(nested, in: app)
         XCTAssertEqual(nested.value as? String, "Collapsed")
@@ -182,20 +182,20 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         selectRepository("Main repository", in: app)
         reveal(child, in: app)
         child.tap()
-        XCTAssertTrue(app.navigationBars["Unstaged Changes"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.navigationBars["Unstaged Changes"].appears(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let enabled = true")
     }
 
     @MainActor
     private func openChanges(largeText: Bool = false, launchArguments: [String] = []) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"] + launchArguments
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"]
         }
         app.launch()
         let workspace = app.buttons["workspace.row.demo-ws-dashboard"]
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         let workspaces = app.buttons["ipad.rail.workspaces"]
         if workspaces.exists {
             waitForStableRailButton(workspaces)
@@ -235,7 +235,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
         let picker = revealRepositoryPicker(in: app)
         picker.tap()
         let option = app.buttons[name].firstMatch
-        XCTAssertTrue(option.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(option.appears(timeout: Fixture.timeout))
         option.tap()
     }
 
@@ -260,7 +260,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
             if towardTop { scrollTarget.swipeDown() } else { scrollTarget.swipeUp() }
         }
         guard required else { return }
-        XCTAssertTrue(element.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(element.appears(timeout: Fixture.timeout))
         XCTAssertTrue(element.isHittable)
     }
 
@@ -271,7 +271,7 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
                 format: "label CONTAINS %@ AND (label BEGINSWITH 'Addition,' OR label BEGINSWITH 'Deletion,')",
                 text
             )).firstMatch
-        XCTAssertTrue(line.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(line.appears(timeout: Fixture.timeout))
         let viewport = app.scrollViews["changes.diff.scroll"].firstMatch
         XCTAssertTrue(viewport.exists)
         XCTAssertTrue(line.isHittable)
@@ -296,7 +296,7 @@ extension WorkspaceChangesUITests {
         for appearance in ["light", "dark"] {
             let app = openChanges(launchArguments: ["-appThemePreference", appearance])
             let section = app.buttons["changes.section.pullRequests"].firstMatch
-            XCTAssertTrue(section.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(section.appears(timeout: Fixture.timeout))
             let open = app.buttons["changes.pullRequest.nova-labs/console#482"].firstMatch
             XCTAssertTrue(open.exists && app.buttons["changes.pullRequest.nova-labs/analytics-sdk#31"].exists)
             XCTAssertLessThan(open.frame.minY, app.buttons["changes.section.unstaged"].firstMatch.frame.minY)
@@ -320,7 +320,7 @@ extension WorkspaceChangesUITests {
             reveal(commit, in: app)
             commit.tap()
             let source = app.buttons["commit.file.Sources/Analytics.swift"].firstMatch
-            XCTAssertTrue(source.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(source.appears(timeout: Fixture.timeout))
             let viewport = app.scrollViews["commit.changes.scroll"]
             viewport.swipeUp()
             assertPinned(source, in: viewport)
@@ -360,11 +360,11 @@ extension WorkspaceChangesUITests {
         defer { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {
             XCUIDevice.shared.orientation = .landscapeLeft
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             app.launchArguments = ["--demo-data", "-appThemePreference", appearance]
             app.launch()
             let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
-            XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
             workspace.tap()
             app.buttons["Changes"].firstMatch.tap()
             selectRepository("ios", in: app)
@@ -386,7 +386,7 @@ extension WorkspaceChangesUITests {
             assertIPadCommitPane(in: app, minimumWidth: overviewWidth * 0.95)
             capture(app, name: "ipad-commit-main-\(appearance)")
             app.buttons["commit.view.Details"].tap()
-            XCTAssertTrue(app.scrollViews["commit.details"].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(app.scrollViews["commit.details"].appears(timeout: Fixture.timeout))
             capture(app, name: "ipad-commit-details-\(appearance)")
             app.buttons["commit.view.Changes"].tap()
 
@@ -394,7 +394,7 @@ extension WorkspaceChangesUITests {
             assertIPadCommitPane(in: app)
             capture(app, name: "ipad-commit-portrait-\(appearance)")
             app.buttons["commit.back"].tap()
-            XCTAssertTrue(app.buttons["changes.section.pullRequests"].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(app.buttons["changes.section.pullRequests"].appears(timeout: Fixture.timeout))
             XCTAssertEqual(revealRepositoryPicker(in: app).value as? String, "ios")
 
             verifyIPadSidebarViewers(in: app, appearance: appearance)
@@ -408,11 +408,11 @@ extension WorkspaceChangesUITests {
         let agents = app.buttons["Agents"].firstMatch
         reveal(agents, in: app, towardTop: true)
         agents.tap()
-        if !app.buttons["changes.section.pullRequests"].waitForNonExistence(timeout: Fixture.tabSwitchTimeout) { agents.tap() }
+        if !app.buttons["changes.section.pullRequests"].disappears(timeout: Fixture.tabSwitchTimeout) { agents.tap() }
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
         reveal(agent, in: app)
         agent.tap()
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Fixture.timeout))
         app.buttons["Changes"].firstMatch.tap()
         selectRepository("ios", in: app)
         openIPadCommit(in: app)
@@ -424,12 +424,12 @@ extension WorkspaceChangesUITests {
         XCTAssertFalse(app.buttons["commit.back"].exists, "File selection replaces the commit")
         capture(app, name: "ipad-diff-from-sidebar-\(appearance)")
         app.buttons["diff.back"].tap()
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Fixture.timeout))
         openIPadFileDiff(in: app, staged: true)
         selectRepository("Main repository", in: app)
-        XCTAssertTrue(app.buttons["diff.back"].waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons["commit.back"].waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["diff.back"].disappears(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["commit.back"].disappears(timeout: Fixture.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Fixture.timeout))
     }
 
     @MainActor
@@ -441,7 +441,7 @@ extension WorkspaceChangesUITests {
         reveal(file, in: app, towardTop: !staged, required: false)
         reveal(file, in: app, towardTop: staged)
         file.tap()
-        XCTAssertTrue(app.buttons["diff.back"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["diff.back"].appears(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: staged ? "let mobileStaged = true" : "let mobile = true")
     }
 
@@ -466,7 +466,7 @@ extension WorkspaceChangesUITests {
         }
         XCTAssertTrue(commit.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout))
         commit.tap()
-        XCTAssertTrue(app.buttons["commit.back"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["commit.back"].appears(timeout: Fixture.timeout))
         assertDiffLine(in: app, containing: "let mobileCount = 1")
     }
 

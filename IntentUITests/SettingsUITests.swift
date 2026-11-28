@@ -40,10 +40,10 @@ nonisolated final class SettingsUITests: XCTestCase {
         openConnections(app)
         assertConnections(app, current: "Studio Mac", other: "Travel Mac")
         card(app, named: "Studio Mac").tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Self.timeout))
         openConnections(app)
         card(app, named: "Travel Mac").tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Self.timeout))
         openConnections(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
 
@@ -58,7 +58,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         openConnections(app)
         assertConnections(app, current: "Studio Mac", other: "Travel Mac")
         card(app, named: "Travel Mac").tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Self.timeout))
         openConnections(app)
         assertConnections(app, current: "Travel Mac", other: "Studio Mac")
     }
@@ -68,7 +68,7 @@ nonisolated final class SettingsUITests: XCTestCase {
         let app = launch()
         openSettings(app)
         let toggle = app.scrollViews["settings.scroll"].switches["settings.liveActivities"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(toggle.appears(timeout: Self.timeout))
         XCTAssertEqual(toggle.value as? String, "1")
         let control = toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5))
         control.tap()
@@ -85,23 +85,23 @@ nonisolated final class SettingsUITests: XCTestCase {
         reveal(app.buttons["Manual Connection"], in: app)
         app.buttons["Manual Connection"].tap()
         let manual = app.staticTexts["manual.title"]
-        XCTAssertTrue(manual.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(manual.appears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["manual.connect"].exists)
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(manual.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(manual.disappears(timeout: Self.timeout))
         reveal(app.buttons["QR Code"], in: app)
         app.buttons["QR Code"].tap()
         let cancel = app.buttons["Cancel"]
-        XCTAssertTrue(cancel.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(cancel.appears(timeout: Self.timeout))
         cancel.tap()
-        XCTAssertTrue(cancel.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(cancel.disappears(timeout: Self.timeout))
         reveal(app.buttons["Acknowledgements"], in: app)
         app.buttons["Acknowledgements"].tap()
         let acknowledgements = app.navigationBars["Acknowledgements"]
-        XCTAssertTrue(acknowledgements.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(acknowledgements.appears(timeout: Self.timeout))
         capture(app, named: "Settings-Acknowledgements")
         acknowledgements.buttons.firstMatch.tap()
-        XCTAssertTrue(acknowledgements.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(acknowledgements.disappears(timeout: Self.timeout))
         scrollToTop(app)
         XCTAssertTrue(Self.header("New Connection", in: app).exists)
         XCTAssertTrue(app.buttons["settings.close"].isHittable)
@@ -117,10 +117,10 @@ nonisolated final class SettingsUITests: XCTestCase {
         scrollToTop(app)
         app.buttons["Disconnect"].tap()
         let confirmation = app.staticTexts["log-off.title"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
         capture(app, named: "Log-Off-Light-LargeText")
         app.buttons["log-off.cancel"].tap()
-        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.disappears(timeout: Self.timeout))
         scrollToTop(app)
         XCTAssertTrue(Self.header("New Connection", in: app).exists)
     }
@@ -133,15 +133,15 @@ nonisolated final class SettingsUITests: XCTestCase {
         reveal(logOff, in: app)
         logOff.tap()
         let confirmation = app.staticTexts["log-off.title"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
         XCTAssertEqual(confirmation.label, "Disconnect from Studio Mac?")
         app.buttons["log-off.cancel"].tap()
-        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.disappears(timeout: Self.timeout))
         reveal(logOff, in: app)
         logOff.tap()
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.disappears(timeout: Self.timeout))
         scrollToTop(app)
         XCTAssertTrue(Self.header("New Connection", in: app).exists)
     }
@@ -154,12 +154,12 @@ nonisolated final class SettingsUITests: XCTestCase {
         reveal(logOff, in: app)
         logOff.tap()
         let confirmation = app.staticTexts["log-off.title"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
         capture(app, named: "Log-Off-Dark")
         app.buttons["log-off.confirm"].tap()
-        XCTAssertTrue(confirmation.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.disappears(timeout: Self.timeout))
         app.openHomeAction("connections")
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].appears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Travel Mac")).firstMatch.exists)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Studio Mac")).firstMatch.exists)
     }
@@ -195,7 +195,7 @@ nonisolated final class SettingsUITests: XCTestCase {
     @MainActor
     private func launch(largeText: Bool = false, themePreference: String = "system") -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-settings", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launchArguments += ["-appThemePreference", themePreference]
         if largeText {
@@ -208,13 +208,13 @@ nonisolated final class SettingsUITests: XCTestCase {
     @MainActor
     private func openSettings(_ app: XCUIApplication) {
         app.openHomeAction("settings")
-        XCTAssertTrue(app.buttons["settings.close"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["settings.close"].appears(timeout: Self.timeout))
     }
 
     @MainActor
     private func openConnections(_ app: XCUIApplication) {
         app.openHomeAction("connections")
-        XCTAssertTrue(app.staticTexts["saved-connections.title"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["saved-connections.title"].appears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -225,7 +225,7 @@ nonisolated final class SettingsUITests: XCTestCase {
     @MainActor
     private func assertConnections(_ app: XCUIApplication, current: String, other: String) {
         let selected = card(app, named: current)
-        XCTAssertTrue(selected.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(selected.appears(timeout: Self.timeout))
         XCTAssertTrue(selected.label.contains("Connected"))
         let saved = card(app, named: other)
         XCTAssertTrue(saved.exists)
@@ -256,16 +256,16 @@ nonisolated final class SettingsUITests: XCTestCase {
     private func captureWorkspaceSurfaces(_ app: XCUIApplication, appearance: String) {
         app.buttons["settings.close"].tap()
         let options = app.buttons["intent.menu.open"]
-        XCTAssertTrue(options.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(options.appears(timeout: Self.timeout))
         options.tap()
-        XCTAssertTrue(app.buttons["intent.menu.assistant"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.assistant"].appears(timeout: Self.timeout))
         capture(app, named: "Workspace-Menu-" + appearance)
         app.revealHomeAction("connections").tap()
         let title = app.staticTexts["saved-connections.title"]
-        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(title.appears(timeout: Self.timeout))
         capture(app, named: "Connections-" + appearance)
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(title.disappears(timeout: Self.timeout))
         openSettings(app)
     }
 

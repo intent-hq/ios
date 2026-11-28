@@ -18,7 +18,7 @@ nonisolated final class ConversationMarkdownTableUITests: XCTestCase {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
         defer { XCUIDevice.shared.orientation = .portrait }
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=tables"]
         if accessibleText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
@@ -26,13 +26,13 @@ nonisolated final class ConversationMarkdownTableUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
         let agent = app.staticTexts["Continue Spec Writer"].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.appears(timeout: Self.timeout))
         agent.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-        XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(transcript.appears(timeout: Self.timeout))
         let setup = transcript.staticTexts["Setup"].firstMatch
         revealHeader(setup, in: transcript)
         capture(app, name: accessibleText ? "table-accessibility-portrait" : "table-portrait")
@@ -59,7 +59,7 @@ nonisolated final class ConversationMarkdownTableUITests: XCTestCase {
     private func verifyGoToEnd(in app: XCUIApplication, transcript: XCUIElement) {
         let goToEnd = app.buttons["transcript.goToEnd"].firstMatch
         if !goToEnd.exists { transcript.swipeDown() }
-        XCTAssertTrue(goToEnd.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(goToEnd.appears(timeout: Self.timeout))
         goToEnd.tap()
         let end = transcript.staticTexts["End of the table comparison."].firstMatch
         XCTAssertTrue(waitUntil(timeout: Self.timeout) { isVisible(end, in: transcript) })

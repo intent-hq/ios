@@ -33,21 +33,21 @@ nonisolated final class IPadAssistantSwipeUITests: XCTestCase {
             capture(app, name: "iPad Assistant swipe delete \(appearance)")
             app.buttons["assistant.thread.delete.\(Self.otherID)"].tap()
             let alert = app.alerts["Delete Conversation?"]
-            XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(alert.appears(timeout: Self.timeout))
             alert.buttons["Cancel"].tap()
             XCTAssertTrue(other.exists)
             XCTAssertTrue(current.isSelected)
 
             delete(in: app, id: Self.otherID)
-            XCTAssertTrue(other.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(other.disappears(timeout: Self.timeout))
             XCTAssertTrue(current.isSelected)
             delete(in: app, id: Self.currentID)
-            XCTAssertTrue(current.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(current.disappears(timeout: Self.timeout))
             let selected = app.buttons.matching(NSPredicate(
                 format: "identifier BEGINSWITH %@ AND selected == true", "assistant.thread."
             )).firstMatch
-            XCTAssertTrue(selected.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(selected.appears(timeout: Self.timeout))
+            XCTAssertTrue(app.textViews["composer.textView"].firstMatch.appears(timeout: Self.timeout))
         }
     }
 
@@ -57,19 +57,19 @@ nonisolated final class IPadAssistantSwipeUITests: XCTestCase {
         let app = launch(appearance: "light", history: false)
         defer { app.terminate() }
         delete(in: app, id: Self.currentID)
-        XCTAssertTrue(app.buttons["assistant.thread.\(Self.currentID)"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.thread.\(Self.currentID)"].disappears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["assistant.sidebar.newConversation"].isEnabled)
         app.buttons["ipad.sidebar.collapse"].tap()
         let start = app.buttons["assistant.startConversation"].firstMatch
         XCTAssertTrue(start.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         XCTAssertFalse(app.textViews["composer.textView"].firstMatch.exists)
         start.tap()
-        XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].firstMatch.appears(timeout: Self.timeout))
     }
 
     @MainActor
     private func launch(appearance: String, history: Bool) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "-appThemePreference", appearance]
         if history { app.launchArguments.append("--demo-assistant-history") }
         app.launch()
@@ -80,7 +80,7 @@ nonisolated final class IPadAssistantSwipeUITests: XCTestCase {
         XCTAssertTrue(assistant.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         assistant.tap()
         XCTAssertTrue(assistant.wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
-        XCTAssertTrue(app.buttons["assistant.thread.\(Self.currentID)"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.thread.\(Self.currentID)"].appears(timeout: Self.timeout))
         return app
     }
 
@@ -98,7 +98,7 @@ nonisolated final class IPadAssistantSwipeUITests: XCTestCase {
         revealDelete(in: app, id: id)
         app.buttons["assistant.thread.delete.\(id)"].tap()
         let alert = app.alerts["Delete Conversation?"]
-        XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(alert.appears(timeout: Self.timeout))
         alert.buttons["Delete"].tap()
     }
 

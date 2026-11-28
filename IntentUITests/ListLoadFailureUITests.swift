@@ -21,17 +21,17 @@ nonisolated final class ListLoadFailureUITests: XCTestCase {
         for appearance in ["light", "dark"] {
             let app = launch(failures: "agent-list,note-list", appearance: appearance)
             let workspace = app.buttons[Fixture.workspaceRow]
-            XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
             workspace.tap()
 
             assertFailureThenRetry(prefix: "workspace.agents", in: app, capture: "load-failure-agents-\(appearance)")
             XCTAssertFalse(app.staticTexts["No Agents"].exists, "A loaded workspace's agents replace the error")
 
             let context = app.buttons["Context"].firstMatch
-            XCTAssertTrue(context.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(context.appears(timeout: Fixture.timeout))
             context.tap()
             assertFailureThenRetry(prefix: "notes", in: app, capture: "load-failure-notes-\(appearance)")
-            XCTAssertTrue(app.buttons["workspace.note.demo-note-spec"].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(app.buttons["workspace.note.demo-note-spec"].appears(timeout: Fixture.timeout))
             app.terminate()
         }
     }
@@ -40,13 +40,13 @@ nonisolated final class ListLoadFailureUITests: XCTestCase {
     func testFailedWorkspaceListShowsRetryInsteadOfEmptyState() {
         let app = launch(failures: "workspace-list", appearance: "light")
         assertFailureThenRetry(prefix: "workspaceList", in: app, capture: "load-failure-workspaces-light")
-        XCTAssertTrue(app.buttons[Fixture.workspaceRow].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons[Fixture.workspaceRow].appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.staticTexts["No Workspaces"].exists)
     }
 
     @MainActor
     private func launch(failures: String, appearance: String) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-failures=\(failures)", "-appThemePreference", appearance]
         app.launch()
         return app
@@ -55,13 +55,13 @@ nonisolated final class ListLoadFailureUITests: XCTestCase {
     @MainActor
     private func assertFailureThenRetry(prefix: String, in app: XCUIApplication, capture name: String) {
         let failure = app.descendants(matching: .any)["\(prefix).loadFailure"].firstMatch
-        XCTAssertTrue(failure.waitForExistence(timeout: Fixture.timeout), "\(prefix) shows its load error")
+        XCTAssertTrue(failure.appears(timeout: Fixture.timeout), "\(prefix) shows its load error")
         let retry = app.buttons["\(prefix).loadFailure.retry"].firstMatch
-        XCTAssertTrue(retry.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(retry.appears(timeout: Fixture.timeout))
         XCTAssertTrue(retry.isHittable)
         capture(app, name: name)
         retry.tap()
-        XCTAssertTrue(failure.waitForNonExistence(timeout: Fixture.timeout), "Retry loads \(prefix)")
+        XCTAssertTrue(failure.disappears(timeout: Fixture.timeout), "Retry loads \(prefix)")
     }
 
     @MainActor

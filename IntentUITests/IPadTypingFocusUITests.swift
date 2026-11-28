@@ -10,14 +10,14 @@ nonisolated final class IPadTypingFocusUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             app.launchArguments = ["--demo-data", "-appThemePreference", appearance]
             app.launch()
             let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-            XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(workspace.appears(timeout: Self.timeout))
             workspace.tap()
             let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-            XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(agent.appears(timeout: Self.timeout))
             agent.tap()
             let composer = try app.textViews.matching(identifier: "composer.textView").singleHittableElement()
             composer.tap()
@@ -25,8 +25,8 @@ nonisolated final class IPadTypingFocusUITests: XCTestCase {
             let close = app.buttons["ipad.focus.close"]
             XCTAssertTrue(close.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
             try app.buttons.matching(identifier: "composer.send").singleHittableElement().tap()
-            XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
-            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(close.disappears(timeout: Self.timeout))
+            XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
             XCTAssertEqual(composer.value as? String, "")
             XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isSelected)
             let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())

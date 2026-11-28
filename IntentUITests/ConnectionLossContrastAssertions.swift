@@ -8,14 +8,14 @@ extension ConnectionLossUITests {
         let app = launch(directory: directory, arguments: ["--demo-connection-loss-stopped"])
         try trigger("loss", in: directory)
         let home = app.buttons["connection-loss.home"]
-        XCTAssertTrue(home.waitForExistence(timeout: timeout))
+        XCTAssertTrue(home.appears(timeout: timeout))
         home.tap()
         let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        XCTAssertTrue(saved.appears(timeout: timeout))
 
         XCUIDevice.shared.press(.home)
         app.activate()
-        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        XCTAssertTrue(saved.appears(timeout: timeout))
         XCTAssertFalse(app.buttons["workspaces.search.open"].exists)
         capture(app, named: "demo-home-before-relaunch")
         XCUIDevice.shared.press(.home)
@@ -23,8 +23,8 @@ extension ConnectionLossUITests {
 
         app.launchArguments = ["--demo-data"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["Deflake payment integration tests"].firstMatch.waitForExistence(timeout: timeout))
-        XCTAssertTrue(app.buttons["workspaces.search.open"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.staticTexts["Deflake payment integration tests"].firstMatch.appears(timeout: timeout))
+        XCTAssertTrue(app.buttons["workspaces.search.open"].appears(timeout: timeout))
         XCTAssertFalse(app.buttons["pairing.saved-connections"].exists)
         capture(app, named: "demo-workspaces-after-relaunch")
     }
@@ -47,26 +47,26 @@ extension ConnectionLossUITests {
         let saved = app.buttons["pairing.saved-connections"]
         saved.tap()
         let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.waitForExistence(timeout: timeout))
+        XCTAssertTrue(machine.appears(timeout: timeout))
         machine.tap()
         assertStartupState("connected", in: app)
-        XCTAssertTrue(back.waitForExistence(timeout: timeout))
+        XCTAssertTrue(back.appears(timeout: timeout))
         XCTAssertEqual(back.label, "Back to Home")
         XCTAssertTrue(back.isHittable)
         XCTAssertLessThan(back.frame.maxX, app.frame.midX)
         XCTAssertLessThan(back.frame.maxY, app.frame.midY)
         capture(app, named: "connecting-back")
         back.tap()
-        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        XCTAssertTrue(saved.appears(timeout: timeout))
         XCTAssertFalse(back.exists)
         try trigger("initial-data", in: directory)
         saved.tap()
-        XCTAssertTrue(machine.waitForExistence(timeout: timeout))
+        XCTAssertTrue(machine.appears(timeout: timeout))
         XCTAssertFalse(app.buttons[ConnectionLossUITestFixture.navigationIdentifier].exists, "A late startup completion must not leave Home")
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)
         capture(app, named: "connecting-returned-home")
         machine.tap()
-        XCTAssertTrue(app.buttons[ConnectionLossUITestFixture.navigationIdentifier].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons[ConnectionLossUITestFixture.navigationIdentifier].appears(timeout: timeout))
         XCTAssertFalse(back.exists)
         capture(app, named: "connecting-machine-reselected")
     }
@@ -114,7 +114,7 @@ extension ConnectionLossUITests {
     @MainActor
     func assertFailureBackReturnsHome(in app: XCUIApplication, timeout: TimeInterval) {
         let back = app.buttons["connection-failure.home"]
-        XCTAssertTrue(back.waitForExistence(timeout: timeout))
+        XCTAssertTrue(back.appears(timeout: timeout))
         XCTAssertEqual(back.label, "Back to Home")
         XCTAssertTrue(back.isHittable)
         XCTAssertLessThan(back.frame.maxX, app.frame.midX)
@@ -122,7 +122,7 @@ extension ConnectionLossUITests {
         capture(app, named: "connection-failure-back")
         back.tap()
         let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.waitForExistence(timeout: timeout))
+        XCTAssertTrue(saved.appears(timeout: timeout))
         XCTAssertFalse(back.exists)
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists)
         capture(app, named: "connection-failure-returned-home")

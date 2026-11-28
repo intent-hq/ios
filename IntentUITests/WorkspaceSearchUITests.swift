@@ -44,7 +44,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             }
         }
         app.buttons["workspaces.search.open"].tap()
-        XCTAssertTrue(app.textFields["workspaces.search.field"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.textFields["workspaces.search.field"].appears(timeout: Fixture.timeout))
     }
 
     @MainActor
@@ -53,23 +53,23 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         captureSearchState(name: "Workspace Intent menu button")
         app.buttons["workspaces.search.open"].tap()
         let field = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.appears(timeout: Fixture.timeout))
         field.typeText("no-matching-workspace")
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        XCTAssertTrue(workspace.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.descendants(matching: .any)["workspaces.search.empty"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.disappears(timeout: Fixture.timeout))
+        XCTAssertTrue(app.descendants(matching: .any)["workspaces.search.empty"].appears(timeout: Fixture.timeout))
         captureSearchState(name: "Empty workspace search results")
         app.buttons["workspaces.search.clear"].tap()
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
 
         field.typeText("payment")
         XCTAssertTrue(workspace.exists)
         field.typeText("-no-match")
-        XCTAssertTrue(workspace.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.disappears(timeout: Fixture.timeout))
         app.buttons["workspaces.search.cancel"].tap()
-        XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.disappears(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Fixture.timeout))
     }
 
     @MainActor
@@ -80,13 +80,13 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         for appearance in ["light", "dark"] {
             let app = launchWorkspaces(arguments: ["--demo-ipad-pane-geometry"], appearance: appearance)
             let heading = app.staticTexts["workspace.title.heading"]
-            XCTAssertTrue(heading.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(heading.appears(timeout: Fixture.timeout))
             let selectedTitle = heading.label
             let background = try prepareSearchBackground(in: app)
             XCTAssertEqual(heading.label, selectedTitle)
             app.buttons["workspaces.search.open"].tap()
             let field = app.textFields["workspaces.search.field"]
-            XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(field.appears(timeout: Fixture.timeout))
             field.typeText("payment")
             captureSearchState(name: "iPad focused search \(appearance)")
             XCTAssertFalse(app.staticTexts["Add usage analytics dashboard"].firstMatch.exists)
@@ -102,7 +102,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             try verifyBlockedSearchBackground(in: app, controls: background, panel: panel, keyboardVisible: true)
             try verifySearchWithoutKeyboardAndRotation(in: app, field: field, background: background, appearance: appearance)
             cancel.tap()
-            XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(field.disappears(timeout: Fixture.timeout))
             let restored = heading.wait(for: \.isHittable, toEqual: true, timeout: Fixture.timeout)
             if !restored {
                 background.actions.recordRestorationFailure(in: app, name: "iPad search restoration failure \(appearance)") {
@@ -128,7 +128,7 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     @MainActor
     private func verifySearchWithoutKeyboardAndRotation(in app: XCUIApplication, field: XCUIElement, background: SearchBackgroundControls, appearance: String) throws {
         field.typeText("\n")
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["workspaces.search.cancel"].isHittable)
         XCTAssertEqual(field.value as? String, "payment")
         let panel = try IPadFocusBackgroundTap.paneFrame("ipad.sidebar.panel", in: app)
@@ -150,14 +150,14 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         let app = launchWorkspaces()
         app.buttons["workspaces.search.open"].tap()
         let field = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.appears(timeout: Fixture.timeout))
         field.typeText("payment")
         app.buttons["workspace.row.demo-ws-flaky-tests"].tap()
-        XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.disappears(timeout: Fixture.timeout))
         let heading = app.staticTexts["workspace.title.heading"]
         XCTAssertTrue(heading.wait(for: \.label, toEqual: Fixture.workspaceTitle, timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["ipad.rail.workspaces"].isHittable)
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Fixture.timeout))
     }
 
     @MainActor
@@ -175,9 +175,9 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         XCTAssertTrue(app.buttons[navigation].exists)
         app.buttons["workspaces.search.open"].tap()
         let field = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.appears(timeout: Fixture.timeout))
         let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(keyboard.appears(timeout: Fixture.timeout))
         XCTAssertLessThanOrEqual(field.frame.maxY, keyboard.frame.minY)
         if UIDevice.current.userInterfaceIdiom != .pad {
             XCTAssertGreaterThan(field.frame.minY, app.frame.midY)
@@ -191,15 +191,15 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         field.typeText("\n")
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(keyboard.disappears(timeout: Fixture.timeout))
         XCTAssertTrue(field.exists)
         XCTAssertFalse(app.buttons["intent.menu.open"].exists)
         app.buttons["workspaces.search.cancel"].tap()
-        XCTAssertTrue(field.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.disappears(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons[navigation].exists)
         XCTAssertTrue(app.buttons["workspaces.viewMode.Recent"].isHittable)
         app.buttons["workspaces.search.open"].tap()
-        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.appears(timeout: Fixture.timeout))
         XCTAssertEqual(field.value as? String, "Search workspaces")
     }
 
@@ -210,11 +210,11 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
             app.buttons["workspaces.viewMode.\(mode)"].tap()
             app.buttons["workspaces.search.open"].tap()
             let field = app.textFields["workspaces.search.field"]
-            XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(field.appears(timeout: Fixture.timeout))
             field.typeText("payment")
             XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.exists)
             field.typeText("-no-match")
-            XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.disappears(timeout: Fixture.timeout))
             app.buttons["workspaces.search.cancel"].tap()
             XCTAssertTrue(app.buttons["workspaces.viewMode.\(mode)"].isSelected)
         }
@@ -252,9 +252,9 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
         add(collapsed)
         search.tap()
         let field = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(field.appears(timeout: Fixture.timeout))
         field.typeText("payment")
-        XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.appears(timeout: Fixture.timeout))
         app.buttons["workspaces.search.cancel"].tap()
     }
 
@@ -286,13 +286,13 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
 
     @MainActor
     private func launchWorkspaces(arguments: [String] = [], appearance: String? = nil) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"] + arguments
         app.launchArguments += ["-appThemePreference", appearance ?? ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
         app.launch()
-        XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.appears(timeout: Fixture.timeout))
         let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
-        if allowNotifications.waitForExistence(timeout: 2) { allowNotifications.tap() }
+        if allowNotifications.appears(timeout: 2) { allowNotifications.tap() }
         return app
     }
 }
@@ -327,9 +327,9 @@ extension WorkspaceSearchUITests {
         ))
         try controls.actions.activate(in: app)
         let createAgent = app.buttons["Create New Agent"]
-        XCTAssertTrue(createAgent.waitForExistence(timeout: Fixture.timeout), "The saved workspace action point must actually open its menu")
+        XCTAssertTrue(createAgent.appears(timeout: Fixture.timeout), "The saved workspace action point must actually open its menu")
         dismissMenu.tap()
-        XCTAssertTrue(createAgent.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(createAgent.disappears(timeout: Fixture.timeout))
     }
 
     @MainActor

@@ -24,7 +24,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory)
         let row = app.buttons[Self.rowID]
-        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.appears(timeout: Self.timeout))
         XCTAssertTrue(row.label.contains(Self.originalName), "VoiceOver must retain the full untruncated name")
         XCTAssertEqual((row.value as? String)?.contains("Watch expires"), true)
         XCTAssertFalse(app.buttons["script-monitor-demo-script-watch-other-owner"].exists)
@@ -32,7 +32,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         XCTAssertFalse(try requests(directory).contains("scriptMonitor.get"), "Summary hydration must not fetch details")
         capture(app, "script-monitors-active")
         row.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["script-monitor-details"].firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.descendants(matching: .any)["script-monitor-details"].firstMatch.appears(timeout: Self.timeout))
         assertDetailText(app, "demo-script-build-check")
         assertDetailText(app, "demo-run-watched-original")
         assertDetailText(app, "Continue Spec Writer")
@@ -51,7 +51,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         assertDetailText(app, "This watch is no longer available")
         capture(app, "script-monitors-removed-details")
         closeDetails(app)
-        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.disappears(timeout: Self.timeout))
         XCTAssertFalse(app.buttons["script-monitor-demo-script-watch-other-owner"].exists)
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 1, "Complete events must update locally")
         capture(app, "script-monitors-removed")
@@ -61,15 +61,15 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     func testLoadingFailureRetriesWithoutInventingAnEmptyState() throws {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, scenario: "retry")
-        XCTAssertTrue(app.descendants(matching: .any)["script-monitors-loading"].firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.descendants(matching: .any)["script-monitors-loading"].firstMatch.appears(timeout: Self.timeout))
         XCTAssertFalse(app.buttons[Self.rowID].exists)
         capture(app, "script-monitors-loading")
         try trigger("list-ready", directory: directory)
         let retry = app.buttons["script-monitors-retry"]
-        XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(retry.appears(timeout: Self.timeout))
         capture(app, "script-monitors-error")
         retry.tap()
-        XCTAssertTrue(app.buttons[Self.rowID].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons[Self.rowID].appears(timeout: Self.timeout))
         XCTAssertFalse(retry.exists)
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 2)
         capture(app, "script-monitors-retried")
@@ -80,7 +80,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, scenario: "page-retry")
         let loadMore = app.buttons["script-monitors-load-more"]
-        XCTAssertTrue(loadMore.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(loadMore.appears(timeout: Self.timeout))
         XCTAssertFalse(app.buttons[Self.rowID].exists)
         XCTAssertFalse(app.buttons["script-monitor-demo-script-watch-other-owner"].exists)
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 1)
@@ -90,11 +90,11 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         XCTAssertTrue(loadMore.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         loadMore.tap()
         let retry = app.buttons["script-monitors-retry"]
-        XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(retry.appears(timeout: Self.timeout))
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 2)
         capture(app, "script-monitors-page-error")
         retry.tap()
-        XCTAssertTrue(app.buttons[Self.rowID].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons[Self.rowID].appears(timeout: Self.timeout))
         XCTAssertFalse(loadMore.exists)
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 3)
         capture(app, "script-monitors-next-page")
@@ -105,14 +105,14 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, scenario: "detail-retry")
         let row = app.buttons[Self.rowID]
-        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.appears(timeout: Self.timeout))
         row.tap()
         let retry = app.buttons["script-monitor-details-retry"]
-        XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(retry.appears(timeout: Self.timeout))
         assertDetailText(app, "demo-run-watched-original")
         capture(app, "script-monitors-detail-error")
         retry.tap()
-        XCTAssertTrue(retry.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(retry.disappears(timeout: Self.timeout))
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.get" }.count, 2)
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 1)
         capture(app, "script-monitors-detail-retried")
@@ -122,7 +122,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     func testUnsupportedConnectionDoesNotReadOrSubscribe() throws {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, scenario: "unsupported")
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Self.timeout))
         XCTAssertFalse(app.buttons[Self.rowID].exists)
         XCTAssertFalse(app.buttons["script-monitors-load-more"].exists)
         XCTAssertTrue(try requests(directory).isEmpty, "Unsupported negotiation must prevent both reads and subscriptions")
@@ -134,11 +134,11 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, scenario: "deadline-reached")
         let row = app.buttons[Self.rowID]
-        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.appears(timeout: Self.timeout))
         XCTAssertEqual((row.value as? String)?.contains("awaiting confirmation"), true)
         capture(app, "script-monitors-deadline")
         try trigger("expired", directory: directory)
-        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.disappears(timeout: Self.timeout))
         capture(app, "script-monitors-expired")
     }
 
@@ -147,13 +147,13 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let directory = try fixtureDirectory()
         let app = launch(directory: directory, scenario: "multiple")
         let pill = app.buttons["script-monitors-menu"]
-        XCTAssertTrue(pill.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(pill.appears(timeout: Self.timeout))
         XCTAssertTrue(pill.label.contains("Watching 3 scripts"), pill.label)
         XCTAssertFalse(app.buttons[Self.rowID].exists, "Several watches must not render one pill each")
         capture(app, "script-monitors-multiple")
         pill.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let item = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", Self.originalName)).firstMatch
-        XCTAssertTrue(item.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(item.appears(timeout: Self.timeout))
         capture(app, "script-monitors-multiple-menu")
         item.tap()
         assertDetailText(app, "demo-run-watched-original")
@@ -168,12 +168,12 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
         let option = isPad ? app.buttons["Yes, confirmed"] : app.buttons["question.option.0"]
         if isPad {
-            XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(option.appears(timeout: Self.timeout))
         } else {
-            XCTAssertTrue(app.buttons["question.answer"].waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.buttons["question.answer"].appears(timeout: Self.timeout))
         }
         let row = app.buttons[Self.rowID]
-        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.appears(timeout: Self.timeout))
         print("Script watch native hit report: " + app.descendants(matching: .any)["script-monitors.geometry"].firstMatch.label)
         XCTAssertTrue(row.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         XCTAssertGreaterThanOrEqual(row.frame.height, Self.tapHeight)
@@ -185,7 +185,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         try auditScrollableDetails(app)
         closeDetails(app)
         if !isPad { app.buttons["question.answer"].tap() }
-        XCTAssertTrue(option.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(option.appears(timeout: Self.timeout))
         XCTAssertTrue(option.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         if isPad { XCTAssertEqual(option.value as? String, "Not selected") }
     }
@@ -193,7 +193,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     @MainActor
     private func auditScrollableDetails(_ app: XCUIApplication) throws {
         let details = app.scrollViews["script-monitor-details"]
-        XCTAssertTrue(details.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(details.appears(timeout: Self.timeout))
         let patternStart = "^(build|test) completed: "
         let patternEnd = " [0-9]+$"
         var unseen: Set<String> = [
@@ -253,7 +253,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         appearance: String = "light",
         longPrLabel: Bool = false
     ) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = [
             "--demo-data", "--demo-design-scenario=" + design, "--demo-script-monitors=" + scenario,
             "--demo-script-monitor-hit-probe",
@@ -267,10 +267,10 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
             app.terminate()
         }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         let agent = app.staticTexts["Continue Spec Writer"].firstMatch
         if !(agent.exists && agent.isHittable) { workspace.tap() }
-        XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(agent.appears(timeout: Self.timeout))
         agent.tap()
         return app
     }
@@ -293,15 +293,15 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     @MainActor
     private func assertDetailText(_ app: XCUIApplication, _ text: String) {
         let label = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
-        XCTAssertTrue(label.waitForExistence(timeout: Self.timeout), "Details must contain: " + text)
+        XCTAssertTrue(label.appears(timeout: Self.timeout), "Details must contain: " + text)
     }
 
     @MainActor
     private func closeDetails(_ app: XCUIApplication) {
         let close = app.buttons["connection-sheet.close"]
-        XCTAssertTrue(close.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.appears(timeout: Self.timeout))
         close.tap()
-        XCTAssertTrue(close.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(close.disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -322,11 +322,11 @@ extension ScriptMonitorsUITests {
             let monitor = app.buttons["monitoredPr.demo-design-pr-56"]
             let watch = app.buttons[Self.rowID]
             let more = app.buttons["script-monitors-load-more"]
-            XCTAssertTrue(watch.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(more.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(watch.appears(timeout: Self.timeout))
+            XCTAssertTrue(more.appears(timeout: Self.timeout))
             more.tap()
             let retry = app.buttons["script-monitors-retry"]
-            XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(retry.appears(timeout: Self.timeout))
             capture(app, "status-pills-page-error-" + appearance)
             let row = try statusPillRowBounds(in: app)
             let controls = [monitor, watch, retry, more]
@@ -342,8 +342,8 @@ extension ScriptMonitorsUITests {
             }
             XCTAssertTrue(watch.label.contains(Self.originalName))
             retry.tap()
-            XCTAssertTrue(retry.waitForNonExistence(timeout: Self.timeout))
-            XCTAssertTrue(more.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(retry.disappears(timeout: Self.timeout))
+            XCTAssertTrue(more.disappears(timeout: Self.timeout))
             try assertPillWidths(monitor, watch, in: app)
             capture(app, "status-pills-page-recovered-" + appearance)
             watch.tap()
@@ -360,17 +360,17 @@ extension ScriptMonitorsUITests {
             let directory = try fixtureDirectory()
             let app = launch(directory: directory, scenario: "retry", appearance: appearance, longPrLabel: true)
             let monitor = app.buttons["monitoredPr.demo-design-pr-56"]
-            XCTAssertTrue(monitor.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(monitor.appears(timeout: Self.timeout))
             XCTAssertEqual(monitor.label, "Monitoring PR intent-hq/intentd: #56")
             try trigger("list-ready", directory: directory)
             let retry = app.buttons["script-monitors-retry"]
-            XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(retry.appears(timeout: Self.timeout))
             capture(app, "status-pills-retry-" + appearance)
             try assertPillWidths(monitor, retry, in: app)
             retry.tap()
             let watch = app.buttons[Self.rowID]
-            XCTAssertTrue(watch.waitForExistence(timeout: Self.timeout))
-            XCTAssertTrue(retry.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(watch.appears(timeout: Self.timeout))
+            XCTAssertTrue(retry.disappears(timeout: Self.timeout))
             XCTAssertTrue(watch.label.contains(Self.originalName))
             capture(app, "status-pills-watching-" + appearance)
             try assertPillWidths(monitor, watch, in: app)
@@ -403,7 +403,7 @@ extension ScriptMonitorsUITests {
     @MainActor
     private func statusPillRowBounds(in app: XCUIApplication) throws -> CGRect {
         let marker = app.descendants(matching: .any)["workspace-status-pills.geometry"].firstMatch
-        XCTAssertTrue(marker.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(marker.appears(timeout: Self.timeout))
         let value = try XCTUnwrap(marker.value as? String)
         let bounds = try JSONDecoder().decode([String: CGFloat].self, from: Data(value.utf8))
         return CGRect(

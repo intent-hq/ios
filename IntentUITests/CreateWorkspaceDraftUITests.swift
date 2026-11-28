@@ -12,7 +12,7 @@ nonisolated final class CreateWorkspaceDraftUITests: XCTestCase {
     @MainActor
     func testDismissedPromptRestoresAndClearsAfterSuccessfulRetry() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-github-create-retry"]
         app.launch()
         openGitHubForm(in: app)
@@ -23,30 +23,30 @@ nonisolated final class CreateWorkspaceDraftUITests: XCTestCase {
         attachEvidence(in: app)
 
         app.buttons["creation.create"].tap()
-        XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.alerts["Error"].appears(timeout: Fixture.timeout))
         app.alerts.buttons["OK"].tap()
         dismissForm(in: app)
         assertRestoredPrompt(in: app)
         app.buttons["creation.create"].tap()
-        XCTAssertTrue(app.scrollViews["creation.form"].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.scrollViews["creation.form"].disappears(timeout: Fixture.timeout))
         let back = app.buttons["workspaceDetail.back"]
-        XCTAssertTrue(back.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(back.appears(timeout: Fixture.timeout))
         back.tap()
         app.openHomeAction("workspace")
-        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.textViews["creation.prompt"].exists)
     }
 
     @MainActor
     func testNewRepositoryDraftRestoresAndErasingPromptStartsFresh() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data"]
         app.launch()
         app.openHomeAction("workspace")
         app.buttons["creation.newRepository"].tap()
         let name = app.textFields["creation.newRepositoryName"]
-        XCTAssertTrue(name.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(name.appears(timeout: Fixture.timeout))
         name.tap()
         name.typeText("draft-project")
         app.buttons["Next"].tap()
@@ -59,13 +59,13 @@ nonisolated final class CreateWorkspaceDraftUITests: XCTestCase {
         prompt.tap()
         prompt.press(forDuration: 1)
         let selectAll = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Select All")).firstMatch
-        XCTAssertTrue(selectAll.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(selectAll.appears(timeout: Fixture.timeout))
         selectAll.tap()
         prompt.typeText(XCUIKeyboardKey.delete.rawValue)
         XCTAssertEqual(prompt.value as? String, "")
         dismissForm(in: app)
         app.openHomeAction("workspace")
-        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].appears(timeout: Fixture.timeout))
         XCTAssertFalse(prompt.exists)
     }
 
@@ -73,11 +73,11 @@ nonisolated final class CreateWorkspaceDraftUITests: XCTestCase {
     private func openGitHubForm(in app: XCUIApplication) {
         app.openHomeAction("workspace")
         let repo = app.buttons["creation.repository.nova-labs/console"]
-        XCTAssertTrue(repo.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(repo.appears(timeout: Fixture.timeout))
         repo.tap()
         app.buttons["Next"].tap()
         let branch = app.buttons["creation.branch.feature/docs"]
-        XCTAssertTrue(branch.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(branch.appears(timeout: Fixture.timeout))
         branch.tap()
         app.buttons["Next"].tap()
     }
@@ -85,7 +85,7 @@ nonisolated final class CreateWorkspaceDraftUITests: XCTestCase {
     @MainActor
     private func typePrompt(in app: XCUIApplication) {
         let prompt = app.textViews["creation.prompt"]
-        XCTAssertTrue(prompt.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(prompt.appears(timeout: Fixture.timeout))
         prompt.tap()
         prompt.typeText(Fixture.prompt)
     }
@@ -97,17 +97,17 @@ nonisolated final class CreateWorkspaceDraftUITests: XCTestCase {
         for _ in 0..<2 {
             let start = form.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: -1))
             start.press(forDuration: Fixture.dragDuration, thenDragTo: end)
-            if form.waitForNonExistence(timeout: Fixture.dismissalTimeout) { break }
+            if form.disappears(timeout: Fixture.dismissalTimeout) { break }
         }
         XCTAssertFalse(form.exists)
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Fixture.timeout))
     }
 
     @MainActor
     private func assertRestoredPrompt(in app: XCUIApplication) {
         app.openHomeAction("workspace")
         let prompt = app.textViews["creation.prompt"]
-        XCTAssertTrue(prompt.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(prompt.appears(timeout: Fixture.timeout))
         XCTAssertEqual(prompt.value as? String, Fixture.prompt)
         XCTAssertFalse(app.staticTexts["creation.repositoryTitle"].exists)
         let create = app.buttons["creation.create"]

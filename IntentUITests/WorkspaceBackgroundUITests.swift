@@ -19,13 +19,13 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     @MainActor
     func testNoteBackgroundMatchesWorkspaceInBothAppearances() throws {
         for appearance in ["dark", "light"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             let expected = try openWorkspace(in: app, appearance: appearance)
             app.buttons["Context"].firstMatch.tap()
             let note = app.buttons["workspace.note.demo-note-spec"]
-            XCTAssertTrue(note.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(note.appears(timeout: Sample.timeout))
             note.tap()
-            XCTAssertTrue(app.navigationBars["Spec"].waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(app.navigationBars["Spec"].appears(timeout: Sample.timeout))
             let goal = try app.staticTexts.matching(identifier: "Goal")
                 .waitForSingleHittableElement(timeout: Sample.timeout)
             let point = CGPoint(x: goal.frame.minX - Sample.gutterInset, y: goal.frame.midY)
@@ -38,25 +38,25 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     @MainActor
     func testNewAgentBackgroundMatchesWorkspaceInBothAppearances() throws {
         for appearance in ["dark", "light"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             let expected = try openWorkspace(in: app, appearance: appearance)
             app.buttons["Workspace actions"].tap()
             let createAgent = app.buttons["Create New Agent"]
-            XCTAssertTrue(createAgent.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(createAgent.appears(timeout: Sample.timeout))
             createAgent.tap()
             let navigation = app.navigationBars["New Agent"]
-            XCTAssertTrue(navigation.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(navigation.appears(timeout: Sample.timeout))
             let specialist = app.staticTexts["Implementor"].firstMatch
-            XCTAssertTrue(specialist.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(specialist.appears(timeout: Sample.timeout))
             specialist.tap()
             var point = CGPoint(x: navigation.frame.minX + Sample.gutterInset, y: specialist.frame.midY)
             let actual = try background(in: app, at: point, capture: "workspace-background-agent-\(appearance)")
             assertMatches(actual, expected: expected, screen: "New Agent (\(appearance))")
             app.buttons["Next"].tap()
             let providerNavigation = app.navigationBars["Provider & Model"]
-            XCTAssertTrue(providerNavigation.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(providerNavigation.appears(timeout: Sample.timeout))
             let provider = app.buttons["creation.providerPicker"]
-            XCTAssertTrue(provider.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(provider.appears(timeout: Sample.timeout))
             point = CGPoint(x: providerNavigation.frame.minX + Sample.gutterInset, y: provider.frame.midY)
             let providerColor = try background(in: app, at: point, capture: "workspace-background-provider-\(appearance)")
             assertMatches(providerColor, expected: expected, screen: "Provider & Model (\(appearance))")
@@ -67,21 +67,21 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     @MainActor
     func testBrowserBackgroundMatchesWorkspaceInBothAppearances() throws {
         for appearance in ["dark", "light"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             let expected = try openWorkspace(in: app, appearance: appearance, arguments: ["--demo-browsers"])
             let browser = app.buttons["browser.row.tab:demo-agent-browser"]
             for _ in 0..<3 where !browser.isHittable { app.swipeUp() }
-            XCTAssertTrue(browser.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(browser.appears(timeout: Sample.timeout))
             browser.tap()
             let navigation = app.navigationBars["Browser"]
-            XCTAssertTrue(navigation.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(navigation.appears(timeout: Sample.timeout))
             let unavailable = app.staticTexts["Page unavailable"]
-            XCTAssertTrue(unavailable.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(unavailable.appears(timeout: Sample.timeout))
             var point = CGPoint(x: navigation.frame.minX + Sample.gutterInset, y: unavailable.frame.midY)
             let canvas = try background(in: app, at: point, capture: "workspace-background-browser-\(appearance)")
             assertMatches(canvas, expected: expected, screen: "Browser (\(appearance))")
             let address = app.textFields["Browser URL"]
-            XCTAssertTrue(address.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(address.appears(timeout: Sample.timeout))
             point = CGPoint(x: navigation.frame.minX + Sample.gutterInset, y: address.frame.midY)
             let surround = try background(in: app, at: point, capture: "workspace-background-browser-address-\(appearance)")
             assertMatches(surround, expected: expected, screen: "Browser address surround (\(appearance))")
@@ -92,15 +92,15 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     @MainActor
     func testConversationBackgroundMatchesWorkspaceInBothAppearances() throws {
         for appearance in ["dark", "light"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             let expected = try openWorkspace(in: app, appearance: appearance, arguments: ["--demo-browsers"])
             let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-            XCTAssertTrue(agent.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(agent.appears(timeout: Sample.timeout))
             agent.tap()
-            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Sample.timeout))
-            XCTAssertTrue(app.links["Open server preview"].firstMatch.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Sample.timeout))
+            XCTAssertTrue(app.links["Open server preview"].firstMatch.appears(timeout: Sample.timeout))
             let transcript = app.scrollViews["transcript.scrollView"]
-            XCTAssertTrue(transcript.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(transcript.appears(timeout: Sample.timeout))
             let point = CGPoint(x: transcript.frame.midX, y: transcript.frame.midY)
             let actual = try background(in: app, at: point, capture: "workspace-background-conversation-\(appearance)")
             assertMatches(actual, expected: expected, screen: "Conversation (\(appearance))")
@@ -111,7 +111,7 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     @MainActor
     func testSettingsBackgroundsMatchWorkspaceInBothAppearances() throws {
         for appearance in ["dark", "light"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             let reference = try openWorkspace(in: app, appearance: appearance, arguments: ["--demo-settings"])
             let expected = appearance == "dark" ? reference : Sample.lightSettings
             openSettings(in: app)
@@ -125,20 +125,20 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
             assertMatches(actual, expected: settingsExpected, screen: "Settings (\(appearance))")
             manual.tap()
             let host = app.textFields["manual.host"]
-            XCTAssertTrue(host.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(host.appears(timeout: Sample.timeout))
             let cancel = app.buttons["ipad.pairing.cancel"]
             let close = cancel.exists ? cancel : app.buttons["connection-sheet.close"]
             let manualPoint = CGPoint(x: close.frame.minX - Sample.gutterInset, y: host.frame.midY)
             let manualColor = try background(in: app, at: manualPoint, capture: "workspace-background-manual-\(appearance)")
             assertMatches(manualColor, expected: expected, screen: "Manual connection (\(appearance))")
             close.tap()
-            XCTAssertTrue(host.waitForNonExistence(timeout: Sample.timeout))
+            XCTAssertTrue(host.disappears(timeout: Sample.timeout))
             if app.buttons["ipad.rail.settings"].exists { openSettings(in: app) }
             let disconnect = app.buttons["Disconnect"]
             revealSettingsAction(disconnect, in: app)
             disconnect.tap()
             let title = app.staticTexts["log-off.title"]
-            XCTAssertTrue(title.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(title.appears(timeout: Sample.timeout))
             let cancelDisconnect = app.buttons["log-off.cancel"]
             let confirmationPoint = CGPoint(x: cancelDisconnect.frame.minX - Sample.gutterInset, y: title.frame.midY)
             let confirmation = try background(in: app, at: confirmationPoint, capture: "workspace-background-disconnect-confirmation-\(appearance)")
@@ -153,7 +153,7 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar")
         XCUIDevice.shared.orientation = .portrait
         for appearance in ["dark", "light"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             let content = try openWorkspace(
                 in: app,
                 appearance: appearance,
@@ -173,7 +173,7 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
                 assertMatches(detail, expected: content, screen: "iPad workspace beside Settings (\(appearance))")
             }
             let panel = app.descendants(matching: .any)["ipad.sidebar.panel.geometry"].firstMatch
-            XCTAssertTrue(panel.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(panel.appears(timeout: Sample.timeout))
             let corner = CGPoint(x: panel.frame.minX + 1, y: panel.frame.minY + 1)
             let cornerColor = try background(in: app, at: corner, capture: "ipad-settings-corner-\(appearance)")
             assertMatches(cornerColor, expected: shell, screen: "iPad Settings sidebar leading corner (\(appearance))")
@@ -184,26 +184,26 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
     @MainActor
     func testSettingsSupportBackgroundsMatchWorkspaceInBothAppearances() throws {
         for appearance in ["dark", "light"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             let expected = try openWorkspace(in: app, appearance: appearance, arguments: ["--demo-settings"])
             openSettings(in: app)
             let acknowledgements = app.buttons["Acknowledgements"]
             revealSettingsAction(acknowledgements, in: app)
             acknowledgements.tap()
             let navigation = app.navigationBars["Acknowledgements"]
-            XCTAssertTrue(navigation.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(navigation.appears(timeout: Sample.timeout))
             let point = CGPoint(x: navigation.frame.minX + Sample.gutterInset, y: navigation.frame.maxY + Sample.contentOffset)
             let actual = try background(in: app, at: point, capture: "workspace-background-acknowledgements-\(appearance)")
             assertMatches(actual, expected: expected, screen: "Acknowledgements (\(appearance))")
             navigation.buttons.firstMatch.tap()
-            XCTAssertTrue(navigation.waitForNonExistence(timeout: Sample.timeout))
+            XCTAssertTrue(navigation.disappears(timeout: Sample.timeout))
             let logs = app.buttons["Export logs"]
             revealSettingsAction(logs, in: app)
             logs.tap()
             let exportNavigation = app.navigationBars["Export logs"]
-            XCTAssertTrue(exportNavigation.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(exportNavigation.appears(timeout: Sample.timeout))
             let share = app.buttons["diagnosticShareZIP"]
-            XCTAssertTrue(share.waitForExistence(timeout: Sample.timeout))
+            XCTAssertTrue(share.appears(timeout: Sample.timeout))
             let exportPoint = CGPoint(x: exportNavigation.frame.minX + Sample.gutterInset, y: share.frame.midY)
             let diagnostics = try background(in: app, at: exportPoint, capture: "workspace-background-diagnostics-\(appearance)")
             let diagnosticsExpected = appearance == "dark" ? expected : Sample.lightDiagnostics
@@ -239,11 +239,11 @@ nonisolated final class WorkspaceBackgroundUITests: XCTestCase {
         app.launchArguments = ["--demo-data", "-appThemePreference", appearance] + arguments
         app.launch()
         let workspace = app.buttons["workspace.row.demo-ws-dashboard"]
-        XCTAssertTrue(workspace.waitForExistence(timeout: Sample.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Sample.timeout))
         let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
-        if allowNotifications.waitForExistence(timeout: 2) {
+        if allowNotifications.appears(timeout: 2) {
             allowNotifications.tap()
-            XCTAssertTrue(allowNotifications.waitForNonExistence(timeout: Sample.timeout))
+            XCTAssertTrue(allowNotifications.disappears(timeout: Sample.timeout))
         }
         let workspaces = app.buttons["ipad.rail.workspaces"]
         if workspaces.exists { workspaces.tap() }

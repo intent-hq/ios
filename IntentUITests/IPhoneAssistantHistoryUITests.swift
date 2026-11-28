@@ -24,7 +24,7 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
             let app = launch(appearance: appearance, history: true)
             defer { app.terminate() }
             let composer = app.textViews["composer.textView"].firstMatch
-            XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(composer.appears(timeout: Self.timeout))
             composer.tap()
             composer.typeText(Self.draft)
             openHistory(in: app)
@@ -35,26 +35,26 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
             capture(name: "iPhone Assistant history swipe delete \(appearance)")
             app.buttons["assistant.history.delete.\(Self.otherID)"].tap()
             let alert = app.alerts["Delete Conversation?"]
-            XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(alert.appears(timeout: Self.timeout))
             alert.buttons["Cancel"].tap()
             XCTAssertTrue(other.exists)
             XCTAssertTrue(current.isSelected)
             delete(in: app, id: Self.otherID)
-            XCTAssertTrue(other.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(other.disappears(timeout: Self.timeout))
             XCTAssertTrue(current.isSelected)
             app.buttons["assistant.history.close"].tap()
-            XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(composer.appears(timeout: Self.timeout))
             XCTAssertEqual(composer.value as? String, Self.draft)
             openHistory(in: app)
             delete(in: app, id: Self.currentID)
-            XCTAssertTrue(current.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(current.disappears(timeout: Self.timeout))
             let selected = app.buttons.matching(NSPredicate(
                 format: "identifier BEGINSWITH %@ AND selected == true", "assistant.history.thread."
             )).firstMatch
-            XCTAssertTrue(selected.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(selected.appears(timeout: Self.timeout))
             selected.tap()
-            XCTAssertTrue(app.buttons["assistant.history.close"].waitForNonExistence(timeout: Self.timeout))
-            XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.buttons["assistant.history.close"].disappears(timeout: Self.timeout))
+            XCTAssertTrue(composer.appears(timeout: Self.timeout))
             XCTAssertEqual(composer.value as? String, "")
         }
     }
@@ -66,37 +66,37 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
         defer { app.terminate() }
         openHistory(in: app)
         delete(in: app, id: Self.currentID)
-        XCTAssertTrue(row(in: app, id: Self.currentID).waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(row(in: app, id: Self.currentID).disappears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["assistant.history.close"].exists)
-        XCTAssertTrue(app.buttons["assistant.startConversation"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.startConversation"].appears(timeout: Self.timeout))
         let newConversation = app.buttons["assistant.history.newConversation"]
         XCTAssertTrue(newConversation.isEnabled)
         newConversation.tap()
-        XCTAssertTrue(app.buttons["assistant.history.close"].waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.textViews["composer.textView"].firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.history.close"].disappears(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].firstMatch.appears(timeout: Self.timeout))
         openHistory(in: app)
         XCTAssertFalse(row(in: app, id: Self.currentID).exists)
         let created = app.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@", "assistant.history.thread.demo-assistant-created-"
         )).firstMatch
-        XCTAssertTrue(created.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(created.appears(timeout: Self.timeout))
     }
 
     @MainActor
     private func launch(appearance: String, history: Bool) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "-appThemePreference", appearance]
         if history { app.launchArguments.append("--demo-assistant-history") }
         app.launch()
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
-        if allow.waitForExistence(timeout: Self.notificationTimeout) { allow.tap() }
+        if allow.appears(timeout: Self.notificationTimeout) { allow.tap() }
         let launcher = app.buttons["intent.menu.open"]
         XCTAssertTrue(launcher.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         launcher.tap()
         let assistant = app.buttons["intent.menu.assistant"]
-        XCTAssertTrue(assistant.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(assistant.appears(timeout: Self.timeout))
         assistant.tap()
-        XCTAssertTrue(app.buttons["assistant.actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.actions"].appears(timeout: Self.timeout))
         return app
     }
 
@@ -104,9 +104,9 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
     private func openHistory(in app: XCUIApplication) {
         app.buttons["assistant.actions"].tap()
         let history = app.buttons["assistant.conversations"]
-        XCTAssertTrue(history.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(history.appears(timeout: Self.timeout))
         history.tap()
-        XCTAssertTrue(app.buttons["assistant.history.close"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.history.close"].appears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -127,7 +127,7 @@ nonisolated final class IPhoneAssistantHistoryUITests: XCTestCase {
         revealDelete(in: app, id: id)
         app.buttons["assistant.history.delete.\(id)"].tap()
         let alert = app.alerts["Delete Conversation?"]
-        XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(alert.appears(timeout: Self.timeout))
         alert.buttons["Delete"].tap()
     }
 

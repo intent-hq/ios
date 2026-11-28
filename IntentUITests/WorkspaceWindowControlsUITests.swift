@@ -7,14 +7,14 @@ nonisolated final class WorkspaceWindowControlsUITests: XCTestCase {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "-appThemePreference", "light"]
         app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let allow = springboard.alerts.buttons["Allow"]
-        if allow.waitForExistence(timeout: 3) { allow.tap() }
+        if allow.appears(timeout: 3) { allow.tap() }
         let grabber = springboard.otherElements["resize-grabber"]
-        try XCTSkipUnless(grabber.waitForExistence(timeout: 5), "Enable Windowed Apps on this simulator first")
+        try XCTSkipUnless(grabber.appears(timeout: 5), "Enable Windowed Apps on this simulator first")
         if app.windows.firstMatch.frame.width > 600 {
             let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.9))
             let start = grabber.isHittable
@@ -24,27 +24,27 @@ nonisolated final class WorkspaceWindowControlsUITests: XCTestCase {
         }
         XCTAssertLessThan(app.windows.firstMatch.frame.width, 600, "Must exercise a real compact window")
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: 30))
+        XCTAssertTrue(workspace.appears(timeout: 30))
         workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-        XCTAssertTrue(agent.waitForExistence(timeout: 15))
+        XCTAssertTrue(agent.appears(timeout: 15))
         try capture(app, springboard: springboard, name: "workspace-detail")
         let windowControls = springboard.buttons["window-controls:dev.intentapp.ios"]
         assertClear(app.buttons["workspaceDetail.back"], of: windowControls)
         agent.tap()
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: 15))
         try capture(app, springboard: springboard, name: "conversation")
         assertClear(app.buttons["conversation.back"], of: windowControls)
         app.buttons["conversation.back"].tap()
-        XCTAssertTrue(agent.waitForExistence(timeout: 15))
+        XCTAssertTrue(agent.appears(timeout: 15))
         app.buttons["workspaceDetail.back"].tap()
-        XCTAssertTrue(app.buttons["workspaces.search.open"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["workspaces.search.open"].appears(timeout: 15))
     }
 
     @MainActor
     private func assertClear(_ back: XCUIElement, of windowControls: XCUIElement) {
-        XCTAssertTrue(windowControls.waitForExistence(timeout: 5))
-        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        XCTAssertTrue(windowControls.appears(timeout: 5))
+        XCTAssertTrue(back.appears(timeout: 5))
         XCTAssertFalse(back.frame.intersects(windowControls.frame), "Back must not overlap the native window controls")
     }
 

@@ -9,11 +9,11 @@ nonisolated final class ToastUITests: XCTestCase {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
         defer { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             app.launchArguments = ["--demo-data", "--demo-toast", "-appThemePreference", appearance]
             app.launch()
             let toast = app.buttons["Add usage analytics dashboard: Dashboard Implementor completed"]
-            XCTAssertTrue(toast.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(toast.appears(timeout: Self.timeout))
             XCTAssertLessThanOrEqual(toast.frame.width, Self.maximumWidth, "Wide windows cap the toast width")
             let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
             attachment.name = "toast-\(appearance)"

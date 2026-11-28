@@ -17,7 +17,7 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     func testArchiveSelectionAndSavedOutcome() {
         let app = openAssistant(arguments: ["--demo-assistant-proposal"])
         let apply = app.buttons["proposal.apply"]
-        XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(apply.appears(timeout: Self.timeout))
         let item = app.buttons["proposal.item.demo-ws-flaky-tests"]
         XCTAssertTrue(item.isSelected)
         XCTAssertEqual(item.value as? String, "On")
@@ -33,7 +33,7 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         XCTAssertFalse(app.buttons["assistant.workspace.demo-ws-flaky-tests"].exists)
         apply.tap()
         let outcome = app.staticTexts["proposal.outcome"]
-        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(outcome.appears(timeout: Self.timeout))
         XCTAssertEqual(outcome.label, "Applied")
         XCTAssertFalse(apply.exists)
     }
@@ -42,11 +42,11 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     func testDismissProposal() {
         let app = openAssistant(arguments: ["--demo-assistant-proposal"])
         let dismiss = app.buttons["proposal.dismiss"]
-        XCTAssertTrue(dismiss.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(dismiss.appears(timeout: Self.timeout))
         dismiss.tap()
         app.buttons["Dismiss proposal"].tap()
         let outcome = app.staticTexts["proposal.outcome"]
-        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(outcome.appears(timeout: Self.timeout))
         XCTAssertEqual(outcome.label, "Dismissed")
     }
 
@@ -55,11 +55,11 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         let trigger = FileManager.default.temporaryDirectory.appendingPathComponent("workspace-stream-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: trigger) }
         let app = openAssistant(arguments: ["--demo-workspace-stream-trigger=\(trigger.path)"])
-        XCTAssertTrue(app.staticTexts["Workspace links are loading."].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Workspace links are loading."].appears(timeout: Self.timeout))
         let raw = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "@@@")).firstMatch
         XCTAssertFalse(raw.exists)
         try Data().write(to: trigger)
-        XCTAssertTrue(app.buttons["assistant.workspace.demo-ws-flaky-tests"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["assistant.workspace.demo-ws-flaky-tests"].appears(timeout: Self.timeout))
         XCTAssertFalse(raw.exists)
     }
 
@@ -67,32 +67,32 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     func testCreateWorkspaceFromProposalAndOpenIt() {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let apply = app.buttons["proposal.apply"]
-        XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(apply.appears(timeout: Self.timeout))
         XCTAssertEqual(apply.label, "Create")
         captureSwitches(in: app, name: "Workspace proposal review")
         apply.tap()
         let outcome = app.staticTexts["proposal.outcome"]
-        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(outcome.appears(timeout: Self.timeout))
         XCTAssertEqual(outcome.label, "Workspace created")
         let open = app.buttons["proposal.openWorkspace"]
         XCTAssertTrue(open.exists)
         captureSwitches(in: app, name: "Workspace proposal created")
         open.tap()
-        XCTAssertTrue(open.waitForNonExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.staticTexts["Investigate Mermaid tests"].firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(open.disappears(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["Investigate Mermaid tests"].firstMatch.appears(timeout: Self.timeout))
     }
 
     @MainActor
     func testWorkspaceProposalRetriesLostResponse() {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal", "--demo-workspace-proposal-retry"])
         let apply = app.buttons["proposal.apply"]
-        XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(apply.appears(timeout: Self.timeout))
         apply.tap()
-        XCTAssertTrue(app.staticTexts["proposal.error"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["proposal.error"].appears(timeout: Self.timeout))
         XCTAssertEqual(apply.label, "Retry")
         apply.tap()
         let outcome = app.staticTexts["proposal.outcome"]
-        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(outcome.appears(timeout: Self.timeout))
         XCTAssertEqual(outcome.label, "Workspace created")
         XCTAssertTrue(app.buttons["proposal.openWorkspace"].exists)
     }
@@ -101,37 +101,37 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     func testProposalButtonPaddingReceivesTaps() {
         let app = openAssistant(arguments: ["--demo-assistant-proposal"])
         let dismiss = app.buttons["proposal.dismiss"]
-        XCTAssertTrue(dismiss.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(dismiss.appears(timeout: Self.timeout))
         tapPadding(of: dismiss)
-        XCTAssertTrue(app.buttons["Dismiss proposal"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Dismiss proposal"].appears(timeout: Self.timeout))
     }
 
     @MainActor
     func testWorkspaceProposalMessageTextKeepsCopyMenu() {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
-        XCTAssertTrue(app.buttons["proposal.dismiss"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["proposal.dismiss"].appears(timeout: Self.timeout))
         let message = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "follow-up workspace for the Mermaid failures")
         ).firstMatch
-        XCTAssertTrue(message.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(message.appears(timeout: Self.timeout))
         message.press(forDuration: 1)
         let copy = app.menuItems["Copy"].firstMatch
-        XCTAssertTrue(copy.waitForExistence(timeout: Self.timeout), "Message text must keep its Copy menu")
+        XCTAssertTrue(copy.appears(timeout: Self.timeout), "Message text must keep its Copy menu")
         copy.tap()
-        XCTAssertTrue(copy.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(copy.disappears(timeout: Self.timeout))
     }
 
     @MainActor
     func testWorkspaceProposalDismissPaddingReceivesTaps() {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let dismiss = app.buttons["proposal.dismiss"]
-        XCTAssertTrue(dismiss.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(dismiss.appears(timeout: Self.timeout))
         tapPadding(of: dismiss)
         let confirm = app.buttons["Dismiss proposal"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirm.appears(timeout: Self.timeout))
         confirm.tap()
         let outcome = app.staticTexts["proposal.outcome"]
-        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(outcome.appears(timeout: Self.timeout))
         XCTAssertEqual(outcome.label, "Dismissed")
     }
 
@@ -139,15 +139,15 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     func testWorkspaceProposalCreateAndOpenPaddingReceiveTaps() {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         let apply = app.buttons["proposal.apply"]
-        XCTAssertTrue(apply.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(apply.appears(timeout: Self.timeout))
         tapPadding(of: apply)
         let outcome = app.staticTexts["proposal.outcome"]
-        XCTAssertTrue(outcome.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(outcome.appears(timeout: Self.timeout))
         XCTAssertEqual(outcome.label, "Workspace created")
         let open = app.buttons["proposal.openWorkspace"]
         XCTAssertTrue(open.exists)
         tapPadding(of: open)
-        XCTAssertTrue(open.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(open.disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -168,14 +168,14 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
 
     @MainActor
     private func openAssistant(arguments: [String]) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"] + arguments
         app.launch()
         let launcher = app.buttons["intent.menu.open"]
-        XCTAssertTrue(launcher.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(launcher.appears(timeout: Self.timeout))
         launcher.tap()
         let assistantTile = app.buttons["intent.menu.assistant"]
-        XCTAssertTrue(assistantTile.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(assistantTile.appears(timeout: Self.timeout))
         assistantTile.tap()
         return app
     }

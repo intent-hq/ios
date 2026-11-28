@@ -531,6 +531,8 @@ the visionOS platform is absent and produce a bogus successful build.
 
 Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes pin `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/intent#759](https://github.com/intent-hq/intent/issues/759)).
 
+UI tests create the app with `XCUIApplication.intent()`, which launches it with animations off, and wait with `element.appears(timeout:)` / `element.disappears(timeout:)`. XCTest's own `waitForExistence` checks once a second, so it costs a full second even when the element is already on screen; the `ui_test_launch_helpers` lint rule enforces both helpers. Pass `animations: true` only for a test that checks motion.
+
 ### CI and review evidence
 
 `.github/workflows/ci.yml` runs unit tests, the UI smoke selectors in
@@ -538,8 +540,9 @@ Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes
 queue. Smoke coverage uses two balanced iPhone shards and an independent job for
 all eleven focused iPad regressions: sidebar and rail navigation, search, the
 Pull Requests section, the empty detail-pane placeholder, and commit and file
-diff viewing in the main pane. Each lane owns its build directory,
-disposable simulator, results, and evidence. All lanes prefer an idle
+diff viewing in the main pane. The `iOS UI Test Build` job compiles the UI
+test products once; each lane installs them into its own build directory and
+owns its disposable simulator, results, and evidence. All lanes prefer an idle
 self-hosted Mac; WarpBuild Macs handle overflow when the local pool is busy.
 Matrix fail-fast is
 disabled, and the existing `iOS UI Tests` check requires every lane to succeed.
