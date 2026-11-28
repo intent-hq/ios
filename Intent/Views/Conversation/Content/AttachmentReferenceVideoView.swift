@@ -47,12 +47,12 @@ struct AttachmentReferenceVideoView<Fallback: View>: View {
             }
             .buttonStyle(IntentContentButtonStyle())
             .contextMenu {
-                AttachmentFileActionMenuItems(url: video.url, kind: .video)
+                VideoAttachmentActionMenuItems(video: video, name: name)
             }
             .accessibilityLabel("Video: \(name)")
             .accessibilityHint("Play full screen")
             .fullScreenCover(isPresented: $lightboxPresented) {
-                VideoLightboxView(video: video)
+                VideoLightboxView(video: video, name: name)
                     .coversConversationComposers()
             }
         } else if failed {

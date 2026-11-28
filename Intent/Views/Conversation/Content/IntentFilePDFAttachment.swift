@@ -24,7 +24,7 @@ struct IntentFilePDFAttachment: Attachment {
         .frame(width: SquareImageThumbnail.transcriptSide, height: SquareImageThumbnail.transcriptSide)
         .background(.background, in: .rect(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
         .contextMenu {
-            AttachmentFileActionMenuItems(url: pdf.shareURL, kind: .pdf)
+            PDFAttachmentActionMenuItems(pdf: pdf)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("PDF: \(pdf.name), \(pdf.pageCount) pages")

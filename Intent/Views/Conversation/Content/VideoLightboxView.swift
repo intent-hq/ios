@@ -3,6 +3,7 @@ import SwiftUI
 
 struct VideoLightboxView: View {
     let video: WorkspaceVideo
+    let name: String
     @Environment(\.dismiss) private var dismiss
     @State private var player: AVPlayer?
     @State private var audioLease: UUID?
@@ -15,7 +16,7 @@ struct VideoLightboxView: View {
             .background(.black)
             .safeAreaInset(edge: .top, alignment: .trailing) {
                 HStack(spacing: 0) {
-                    ShareLink(item: video.url) {
+                    VideoShareLink(video: video, name: name) {
                         actionIcon(.upload)
                     }
                     .buttonStyle(IntentContentButtonStyle())

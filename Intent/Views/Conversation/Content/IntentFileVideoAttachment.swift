@@ -19,7 +19,7 @@ struct IntentFileVideoAttachment: Attachment {
                 VideoAttachmentPlayIcon()
             }
             .contextMenu {
-                AttachmentFileActionMenuItems(url: video.url, kind: .video)
+                VideoAttachmentActionMenuItems(video: video, name: name)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Video: \(name)")

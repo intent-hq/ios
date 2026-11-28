@@ -237,28 +237,42 @@ enum ChatAttachmentPasteboard {
     }
 }
 
-struct AttachmentFileActionMenuItems: View {
-    enum Kind {
-        case video
-        case pdf
+struct VideoShareLink<Label: View>: View {
+    let video: WorkspaceVideo
+    let name: String
+    @ViewBuilder let label: () -> Label
 
-        var copyTitle: LocalizedStringKey {
-            switch self {
-            case .video: "Copy Video"
-            case .pdf: "Copy PDF"
-            }
-        }
+    var body: some View {
+        ShareLink(item: (try? video.shareFile(named: name)) ?? video.url, label: label)
+    }
+}
 
-        var shareTitle: LocalizedStringKey {
-            switch self {
-            case .video: "Share Video"
-            case .pdf: "Share PDF"
-            }
+struct VideoAttachmentActionMenuItems: View {
+    let video: WorkspaceVideo
+    let name: String
+
+    var body: some View {
+        AttachmentCopyButton(url: video.url, title: "Copy Video")
+        VideoShareLink(video: video, name: name) {
+            Label("Share Video", image: "Upload")
         }
     }
+}
 
+struct PDFAttachmentActionMenuItems: View {
+    let pdf: WorkspacePDF
+
+    var body: some View {
+        AttachmentCopyButton(url: pdf.shareURL, title: "Copy PDF")
+        ShareLink(item: pdf.shareURL) {
+            Label("Share PDF", image: "Upload")
+        }
+    }
+}
+
+private struct AttachmentCopyButton: View {
     let url: URL
-    let kind: Kind
+    let title: LocalizedStringKey
 
     var body: some View {
         Button {
@@ -267,10 +281,7 @@ struct AttachmentFileActionMenuItems: View {
                 HapticManager.notification(copied ? .success : .error)
             }
         } label: {
-            Label(kind.copyTitle, image: "Copy")
-        }
-        ShareLink(item: url) {
-            Label(kind.shareTitle, image: "Upload")
+            Label(title, image: "Copy")
         }
     }
 }
