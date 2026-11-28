@@ -531,7 +531,7 @@ the visionOS platform is absent and produce a bogus successful build.
 
 Tests run **serially** by default — the shared `Intent` and `IntentUI` schemes pin `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/intent#759](https://github.com/intent-hq/intent/issues/759)).
 
-UI tests create the app with `XCUIApplication.intent()`, which launches it with animations off, and wait with `element.appears(timeout:)` / `element.disappears(timeout:)`. XCTest's own `waitForExistence` checks once a second, so it costs a full second even when the element is already on screen; the `ui_test_launch_helpers` lint rule enforces both helpers. Pass `animations: true` only for a test that checks motion.
+UI tests create the app with `XCUIApplication.intent()` and wait with `element.appears(timeout:)` / `element.disappears(timeout:)`. XCTest's own `waitForExistence` checks once a second, so it costs a full second even when the element is already on screen; the `ui_test_launch_helpers` lint rule enforces both helpers. `XCUIApplication.intent(animations: false)` turns animations off for a test that does not check keyboard, scroll or motion positions.
 
 ### CI and review evidence
 

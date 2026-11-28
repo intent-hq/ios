@@ -1,7 +1,7 @@
 import XCTest
 
 extension XCUIApplication {
-    static func intent(animations: Bool = false) -> XCUIApplication {
+    static func intent(animations: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         if !animations {
             app.launchEnvironment["INTENT_UI_TEST_ANIMATIONS"] = "off"

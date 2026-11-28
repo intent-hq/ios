@@ -6,7 +6,7 @@ nonisolated final class ManualConnectionDesignUITests: XCTestCase {
     @MainActor
     func testSavedBlocksBackgroundNavigationAndRestoresItAfterDismissal() {
         continueAfterFailure = false
-        let app = XCUIApplication.intent(animations: true)
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data"]
         app.launch()
         let search = app.buttons["workspaces.search.open"]
