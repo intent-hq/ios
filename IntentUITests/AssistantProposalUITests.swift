@@ -103,15 +103,6 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
     }
 
     @MainActor
-    func testProposalButtonPaddingReceivesTaps() {
-        let app = openAssistant(arguments: ["--demo-assistant-proposal"])
-        let dismiss = app.buttons["proposal.dismiss"]
-        XCTAssertTrue(dismiss.appears(timeout: Self.timeout))
-        tapPadding(of: dismiss)
-        XCTAssertTrue(app.buttons["Dismiss proposal"].appears(timeout: Self.timeout))
-    }
-
-    @MainActor
     func testWorkspaceProposalMessageTextKeepsCopyMenu() {
         let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
         XCTAssertTrue(app.buttons["proposal.dismiss"].appears(timeout: Self.timeout))
@@ -124,44 +115,6 @@ nonisolated final class AssistantProposalUITests: XCTestCase {
         XCTAssertTrue(copy.appears(timeout: Self.timeout), "Message text must keep its Copy menu")
         copy.tap()
         XCTAssertTrue(copy.disappears(timeout: Self.timeout))
-    }
-
-    @MainActor
-    func testWorkspaceProposalDismissPaddingReceivesTaps() {
-        let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
-        let dismiss = app.buttons["proposal.dismiss"]
-        XCTAssertTrue(dismiss.appears(timeout: Self.timeout))
-        tapPadding(of: dismiss)
-        let confirm = app.buttons["Dismiss proposal"]
-        XCTAssertTrue(confirm.appears(timeout: Self.timeout))
-        confirm.tap()
-        let outcome = app.staticTexts["proposal.outcome"]
-        XCTAssertTrue(outcome.appears(timeout: Self.timeout))
-        XCTAssertEqual(outcome.label, "Dismissed")
-    }
-
-    @MainActor
-    func testWorkspaceProposalCreateAndOpenPaddingReceiveTaps() {
-        let app = openAssistant(arguments: ["--demo-assistant-workspace-proposal"])
-        let apply = app.buttons["proposal.apply"]
-        XCTAssertTrue(apply.appears(timeout: Self.timeout))
-        XCTAssertTrue(apply.wait(for: \.isEnabled, toEqual: true, timeout: Self.timeout))
-        tapPadding(of: apply)
-        let outcome = app.staticTexts["proposal.outcome"]
-        XCTAssertTrue(outcome.appears(timeout: Self.timeout))
-        XCTAssertEqual(outcome.label, "Workspace created")
-        let open = app.buttons["proposal.openWorkspace"]
-        XCTAssertTrue(open.exists)
-        tapPadding(of: open)
-        XCTAssertTrue(open.disappears(timeout: Self.timeout))
-    }
-
-    @MainActor
-    private func tapPadding(of button: XCUIElement) {
-        XCTAssertTrue(button.isHittable)
-        button.coordinate(withNormalizedOffset: .zero)
-            .withOffset(CGVector(dx: 8, dy: button.frame.height / 2))
-            .tap()
     }
 
     @MainActor

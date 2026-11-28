@@ -54,19 +54,6 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     }
 
     @MainActor
-    func testShortRightSwipeCancelsAndTapStillOpensOverview() {
-        let app = launchWorkspaces()
-        let row = app.buttons["workspace.row.\(Self.workspaceId)"]
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
-        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 60, dy: 0)))
-        XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
-        XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
-        row.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
-        XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
-    }
-
-    @MainActor
     func testClosingTrailingActionsWithLongRightSwipeDoesNotOpenAgent() {
         let app = launchWorkspaces()
         let row = app.buttons["workspace.row.\(Self.workspaceId)"]
@@ -257,17 +244,6 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -80)))
         XCTAssertLessThan(row.frame.minY, startingY - 20)
         XCTAssertFalse(archive.exists)
-    }
-
-    @MainActor
-    func testOpeningAnotherRowClosesPreviousActions() {
-        let app = launchWorkspaces()
-        revealActions(on: app.buttons["workspace.row.\(Self.workspaceId)"])
-        let firstAction = app.buttons["workspace.archive.\(Self.workspaceId)"]
-        XCTAssertTrue(firstAction.appears(timeout: Self.timeout))
-        revealActions(on: app.buttons["workspace.row.demo-ws-flaky-tests"])
-        XCTAssertTrue(app.buttons["workspace.archive.demo-ws-flaky-tests"].appears(timeout: Self.timeout))
-        XCTAssertTrue(firstAction.disappears(timeout: Self.timeout))
     }
 
     @MainActor

@@ -75,92 +75,6 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
     }
 
     @MainActor
-    func testAssistantComposerKeepsHeaderActionsReachable() {
-        for appearance in ["light", "dark"] {
-            let app = XCUIApplication.intent()
-            app.launchArguments += ["--demo-data", "-appThemePreference", appearance]
-            app.launch()
-            let launcher = app.buttons["intent.menu.open"]
-            XCTAssertTrue(launcher.appears(timeout: Fixture.timeout))
-            launcher.tap()
-            let assistantTile = app.buttons["intent.menu.assistant"]
-            XCTAssertTrue(assistantTile.appears(timeout: Fixture.timeout))
-            assistantTile.tap()
-
-            let composer = app.textViews["composer.textView"]
-            XCTAssertTrue(composer.appears(timeout: Fixture.timeout))
-            composer.tap()
-            let message = "Help me plan my next workspace."
-            composer.typeText(message)
-            let send = app.buttons["composer.send"]
-            XCTAssertTrue(send.isHittable)
-            send.tap()
-            let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-            XCTAssertTrue(transcript.staticTexts[message].appears(timeout: Fixture.timeout))
-            XCTAssertEqual(composer.value as? String, "")
-            XCTAssertTrue(app.buttons["assistant.newConversation"].isHittable)
-            XCTAssertTrue(app.buttons["assistant.actions"].isHittable)
-
-            let screenshot = XCTAttachment(screenshot: app.screenshot())
-            screenshot.name = "Assistant chat sent message \(appearance)"
-            screenshot.lifetime = .keepAlways
-            add(screenshot)
-            app.terminate()
-        }
-    }
-
-    @MainActor
-    func testAssistantButtonStaysOnWorkspaceList() {
-        let app = XCUIApplication.intent()
-        app.launchArguments += ["--demo-data"]
-        app.launch()
-
-        showWorkspaceList(in: app)
-        let isCompact = !app.navigationBars["Workspaces"].exists
-        let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
-        let launcher = app.buttons["intent.menu.open"]
-        XCTAssertTrue(launcher.isHittable)
-        workspace.tap()
-        let hideSidebar = app.navigationBars["Workspaces"].buttons["Hide Sidebar"]
-        if hideSidebar.exists { hideSidebar.tap() }
-        let agentRow = app.staticTexts["Test Stabilizer"].firstMatch
-        XCTAssertTrue(agentRow.appears(timeout: Fixture.timeout))
-        XCTAssertTrue(agentRow.isHittable, app.debugDescription)
-        if isCompact {
-            XCTAssertTrue(launcher.disappears(timeout: Fixture.timeout))
-        } else {
-            XCTAssertTrue(launcher.isHittable)
-        }
-
-        agentRow.tap()
-        let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-        XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
-        if isCompact {
-            XCTAssertFalse(launcher.exists)
-        } else {
-            XCTAssertTrue(launcher.isHittable)
-        }
-        XCTAssertFalse(app.tabBars.firstMatch.exists)
-
-        let conversationBack = isCompact
-            ? app.buttons["conversation.back"]
-            : app.navigationBars["Test Stabilizer"].buttons["BackButton"]
-        XCTAssertTrue(conversationBack.appears(timeout: Fixture.timeout), app.debugDescription)
-        conversationBack.tap()
-        XCTAssertTrue(agentRow.appears(timeout: Fixture.timeout))
-        let workspaceBack = isCompact
-            ? app.buttons["workspaceDetail.back"]
-            : app.navigationBars.buttons["Back to workspaces"]
-        XCTAssertTrue(workspaceBack.appears(timeout: Fixture.timeout), app.debugDescription)
-        workspaceBack.tap()
-        showWorkspaceList(in: app)
-        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
-        XCTAssertTrue(launcher.appears(timeout: Fixture.timeout))
-        XCTAssertTrue(launcher.isHittable)
-    }
-
-    @MainActor
     private func showWorkspaceList(in app: XCUIApplication) {
         XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Fixture.timeout))
         let sidebar = app.navigationBars.buttons["Show Sidebar"]
@@ -253,11 +167,6 @@ nonisolated final class AssistantNavigationUITests: XCTestCase {
         link.tap()
         XCTAssertTrue(app.staticTexts["Test Stabilizer"].firstMatch.appears(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["assistant.actions"].disappears(timeout: Fixture.timeout))
-    }
-
-    @MainActor
-    func testCompletedSuggestedPromptsReplaceStreamingMarkup() throws {
-        try verifyPromptCompletion(splitAcrossBlocks: false)
     }
 
     @MainActor

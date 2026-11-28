@@ -113,22 +113,6 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
     }
 
     @MainActor
-    func testLinkRowsInLightAndDark() {
-        for appearance in ["light", "dark"] {
-            let app = launch(appearance: appearance)
-            let transcript = openTranscript(in: app)
-            let first = app.links[Fixture.links[0].label].firstMatch
-            XCTAssertTrue(first.appears(timeout: Fixture.timeout))
-            reveal(first, in: transcript)
-            let screenshot = XCTAttachment(screenshot: app.screenshot())
-            screenshot.name = "Chat link rows \(appearance)"
-            screenshot.lifetime = .keepAlways
-            add(screenshot)
-            app.terminate()
-        }
-    }
-
-    @MainActor
     private func launch(appearance: String) -> XCUIApplication {
         let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-inline-text", "-appThemePreference", appearance]

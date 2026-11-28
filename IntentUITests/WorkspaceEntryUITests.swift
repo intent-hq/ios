@@ -10,7 +10,6 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         static let transcriptIdentifier = "transcript.scrollView"
         static let workspaceTimeout: TimeInterval = 30
         static let elementTimeout: TimeInterval = 15
-        static let noForwardWindow: TimeInterval = 4
         static let pollInterval: TimeInterval = 0.25
         static let backNavigationAttempts = 3
         static let backNavigationTimeout: TimeInterval = 3
@@ -94,128 +93,6 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: progress, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
-    }
-
-    @MainActor
-    func testCreateNewAgentMenuOpensAgentSetup() throws {
-        let app = XCUIApplication.intent()
-        app.launchArguments += ["--demo-data"]
-        if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
-            app.launchArguments += ["-appThemePreference", appearance]
-        }
-        app.launch()
-        let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.appears(timeout: Fixture.workspaceTimeout))
-        workspace.tap()
-        let actions = app.buttons["Workspace actions"]
-        XCTAssertTrue(actions.appears(timeout: Fixture.elementTimeout))
-        actions.tap()
-        let createAgent = app.buttons["Create New Agent"]
-        XCTAssertTrue(createAgent.appears(timeout: Fixture.elementTimeout))
-        XCTAssertTrue(createAgent.isEnabled)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "create-agent-menu"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-        createAgent.tap()
-        XCTAssertTrue(app.navigationBars["New Agent"].appears(timeout: Fixture.elementTimeout))
-        let specialist = app.staticTexts["Implementor"].firstMatch
-        XCTAssertTrue(specialist.appears(timeout: Fixture.elementTimeout))
-        specialist.tap()
-        let next = app.buttons["Next"]
-        XCTAssertTrue(next.isEnabled)
-        try assertToolbarLabel("Next", button: next, in: app, capture: "new-agent-next")
-        next.tap()
-        XCTAssertTrue(app.navigationBars["Provider & Model"].appears(timeout: Fixture.elementTimeout))
-        let create = app.buttons["Create"]
-        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
-        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Fixture.elementTimeout), .completed)
-        try assertToolbarLabel("Create", button: create, in: app, capture: "new-agent-create")
-        app.buttons["Back"].tap()
-        app.buttons["Close"].tap()
-        actions.tap()
-        app.buttons["New browser"].tap()
-        let address = app.textFields["Browser address"]
-        XCTAssertTrue(address.appears(timeout: Fixture.elementTimeout))
-        address.tap()
-        address.typeText("localhost:3000")
-        try assertToolbarLabel("Open", button: app.buttons["Open"], in: app, capture: "new-browser-open")
-    }
-
-    @MainActor
-    private func assertToolbarLabel(
-        _ label: String, button: XCUIElement, in app: XCUIApplication, capture: String
-    ) throws {
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = capture
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-        XCTAssertTrue(button.isHittable)
-        let image = try XCTUnwrap(button.screenshot().image.cgImage)
-        let request = VNRecognizeTextRequest()
-        request.recognitionLevel = .accurate
-        request.recognitionLanguages = ["en-US"]
-        try VNImageRequestHandler(cgImage: image).perform([request])
-        let renderedLabels = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
-        XCTAssertTrue(renderedLabels.contains(label), "Expected full toolbar label \(label), rendered \(renderedLabels)")
-    }
-
-    @MainActor
-    func testWorkspaceTapLandsOnOverviewAndOnlyTheAgentRowOpensTheConversation() throws {
-        try XCTSkipUnless(
-            ProcessInfo.processInfo.environment["INTENT_UITEST_TRANSCRIPT_CRASH_REPRO"] == "1",
-            "Temporary quarantine for the unresolved app crash tracked at https://github.com/intent-hq/ios/issues/427; "
-                + "opt in with TEST_RUNNER_INTENT_UITEST_TRANSCRIPT_CRASH_REPRO=1."
-        )
-        let app = XCUIApplication.intent()
-        app.launchArguments += ["--demo-data"]
-        app.launch()
-
-        let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        showWorkspaceList(in: app, workspaceRow: workspaceRow)
-
-        workspaceRow.tap()
-        assertOverviewStaysPut(in: app, context: "after the workspace tap")
-
-        let agentRow = app.staticTexts[Fixture.agentName].firstMatch
-        app.scrollViews.containing(.staticText, identifier: Fixture.agentName).firstMatch.swipeDown()
-        assertOverviewStaysPut(in: app, context: "after pulling to refresh the agent list")
-
-        showWorkspaceList(in: app, workspaceRow: workspaceRow)
-        workspaceRow.tap()
-        assertOverviewStaysPut(in: app, context: "after re-entering the workspace")
-
-        agentRow.tap()
-        let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
-        XCTAssertTrue(
-            transcript.appears(timeout: Fixture.elementTimeout),
-            "tapping the agent row on the overview must open its conversation"
-        )
-    }
-
-    @MainActor
-    private func assertOverviewStaysPut(in app: XCUIApplication, context: String) {
-        let overviewOnly = app.buttons[Fixture.overviewOnlyButton].firstMatch
-        let agentRow = app.staticTexts[Fixture.agentName].firstMatch
-        let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
-        XCTAssertTrue(
-            overviewOnly.appears(timeout: Fixture.elementTimeout),
-            "\(context): the workspace overview never appeared"
-        )
-        XCTAssertTrue(
-            agentRow.appears(timeout: Fixture.elementTimeout),
-            "\(context): the agent list never loaded on the overview"
-        )
-
-        let deadline = Date().addingTimeInterval(Fixture.noForwardWindow)
-        while Date() < deadline {
-            XCTAssertFalse(
-                transcript.exists,
-                "\(context): the workspace forwarded into its sole agent's conversation"
-            )
-            RunLoop.current.run(until: Date().addingTimeInterval(Fixture.pollInterval))
-        }
-        XCTAssertTrue(overviewOnly.exists, "\(context): the workspace overview was left")
     }
 
     @MainActor

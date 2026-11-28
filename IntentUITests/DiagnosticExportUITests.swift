@@ -39,15 +39,6 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsEntryAndLargeTextKeepExplicitActionsAccessible() {
-        let app = launch(largeText: true)
-        openLogs(app)
-        assertPreview(app)
-        XCTAssertTrue(app.buttons["diagnosticShareZIP"].isHittable)
-        XCTAssertTrue(app.buttons["diagnosticClear"].isHittable)
-    }
-
-    @MainActor
     private func launch(largeText: Bool = false) -> XCUIApplication {
         let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]

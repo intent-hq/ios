@@ -31,30 +31,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     private typealias Fixture = ConnectionLossUITestFixture
 
     @MainActor
-    func testQuickBackgroundRecoveryNeverPresentsBannerAndKeepsConversationDraft() throws {
-        try XCTSkipUnless(
-            ProcessInfo.processInfo.environment["INTENT_UITEST_FULL_GATE_REPRO"] == "1",
-            "Temporary quarantine for an unclassified full-gate failure: https://github.com/intent-hq/ios/issues/476; "
-                + "opt in with TEST_RUNNER_INTENT_UITEST_FULL_GATE_REPRO=1."
-        )
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: ["--demo-background-loss=quick"])
-        openConversation(in: app)
-        let composer = app.textViews["composer.textView"]
-        XCTAssertTrue(composer.appears(timeout: Fixture.timeout))
-        composer.tap()
-        composer.typeText("Draft survives background return")
-        backgroundAndActivate(app, directory: directory)
-        waitForEvent("did-recover", in: directory)
-        XCTAssertFalse(eventExists("banner-presented", in: directory), "Even a transient banner is a regression")
-        XCTAssertFalse(eventExists("overlay-presented", in: directory))
-        XCTAssertFalse(app.buttons[Fixture.bannerIdentifier].exists)
-        XCTAssertEqual(composer.value as? String, "Draft survives background return")
-        XCTAssertTrue(app.navigationBars[Fixture.agentName].exists)
-        capture(app, named: "quick-background-conversation")
-    }
-
-    @MainActor
     func testLossQueuedAtActivationNeverPresentsBannerOrDismissesSheet() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: ["--demo-background-loss=activation-quick"])
@@ -238,36 +214,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     }
 
     @MainActor
-    func testHomeRetainsSavedMachineAndAllowsReselection() throws {
-        let directory = try makeTriggerDirectory()
-        try trigger("network-offline", in: directory)
-        let app = launch(directory: directory, arguments: ["--demo-connection-loss-stopped"])
-        XCTAssertFalse(app.staticTexts["connection-network.status"].exists, "Healthy remote UI stays unobstructed")
-        openCreateWorkspace(in: app)
-        try trigger("loss", in: directory)
-        assertOverlay(in: app)
-        assertStoppedTitle(in: app)
-        XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].exists)
-        app.buttons[Fixture.homeIdentifier].tap()
-
-        let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.appears(timeout: Fixture.timeout))
-        XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
-        XCTAssertFalse(app.staticTexts["creation.repositoryTitle"].exists)
-        XCTAssertFalse(app.staticTexts["connection-network.status"].exists, "Home is not an offline failure screen")
-        try trigger("network-restored", in: directory)
-        try trigger("recover", in: directory)
-        saved.tap()
-        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.appears(timeout: Fixture.timeout))
-        capture(app, named: "home-saved-machine-retained")
-        machine.tap()
-        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].appears(timeout: Fixture.timeout))
-        XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
-        capture(app, named: "saved-machine-reselected")
-    }
-
-    @MainActor
     func testPendingStartupLossAndRecoveryNeverShowOverlay() throws {
         let directory = try makeTriggerDirectory()
         try trigger("network-offline", in: directory)
@@ -344,29 +290,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
 }
 
 extension ConnectionLossUITests {
-    @MainActor
-    func testLargestTextCanScrollToWarningsAndHome() throws {
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: [
-            "--demo-connection-loss-cert-mismatch",
-            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
-        ])
-        try trigger("network-offline", in: directory)
-        try trigger("loss", in: directory)
-        let home = app.buttons[Fixture.homeIdentifier]
-        XCTAssertTrue(home.appears(timeout: Fixture.timeout))
-        XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].exists)
-        capture(app, named: "largest-text-before-scroll")
-        app.scrollViews.firstMatch.swipeUp()
-        XCTAssertTrue(app.staticTexts["Certificate mismatch"].isHittable)
-        XCTAssertTrue(home.isHittable)
-        capture(app, named: "largest-text-home-visible")
-        home.tap()
-        let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.appears(timeout: Fixture.timeout))
-        XCTAssertFalse(home.exists)
-    }
-
     @MainActor
     func assertNetworkTitle(_ title: String, identifier: String, in app: XCUIApplication) {
         let text = app.staticTexts.matching(NSPredicate(

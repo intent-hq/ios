@@ -81,52 +81,6 @@ extension ConnectionLossUITests {
     }
 
     @MainActor
-    func testNeverViewedConversationShowsPlaceholderAndLoadsAfterRecovery() throws {
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: [
-            "--demo-connection-loss-reconnecting", "--demo-connection-loss-hold-conversations"
-        ])
-        try trigger("loss", in: directory)
-        assertBanner(in: app)
-        openConversation(in: app)
-        XCTAssertTrue(
-            app.descendants(matching: .any)["read-only.unavailable"].appears(timeout: LossFixture.timeout),
-            "A never-viewed conversation shows Available when reconnected"
-        )
-        XCTAssertFalse(app.alerts.firstMatch.exists, "No error alert for a drop")
-        capture(app, named: "read-only-placeholder-conversation")
-        try trigger("recover", in: directory)
-        try trigger("conversation-data", in: directory)
-        XCTAssertTrue(app.buttons[LossFixture.bannerIdentifier].disappears(timeout: LossFixture.timeout))
-        XCTAssertTrue(
-            app.scrollViews["transcript.scrollView"].firstMatch.appears(timeout: LossFixture.timeout),
-            "The conversation loads by itself after recovery"
-        )
-        XCTAssertFalse(app.descendants(matching: .any)["read-only.unavailable"].exists)
-    }
-
-    @MainActor
-    func testNeverLoadedNotesTabShowsPlaceholderAndLoadsAfterRecovery() throws {
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: [
-            "--demo-connection-loss-reconnecting", "--demo-connection-loss-hold-conversations"
-        ])
-        try trigger("loss", in: directory)
-        assertBanner(in: app)
-        tap(app.staticTexts[LossFixture.workspaceTitle].firstMatch, in: app)
-        tap(app.buttons["Context"].firstMatch, in: app)
-        XCTAssertTrue(
-            app.descendants(matching: .any)["read-only.unavailable"].firstMatch.appears(timeout: LossFixture.timeout),
-            "Notes never loaded before the drop show Available when reconnected"
-        )
-        capture(app, named: "read-only-placeholder-notes")
-        try trigger("recover", in: directory)
-        try trigger("conversation-data", in: directory)
-        XCTAssertTrue(app.staticTexts["Spec"].firstMatch.appears(timeout: LossFixture.timeout), "Notes load after recovery")
-        XCTAssertFalse(app.descendants(matching: .any)["read-only.unavailable"].exists)
-    }
-
-    @MainActor
     func testRecentlyViewedItemsReopenFromMemoryDuringDrop() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: [

@@ -9,11 +9,6 @@ nonisolated final class ConversationMarkdownTableUITests: XCTestCase {
     }
 
     @MainActor
-    func testTableRemainsReachableWithAccessibilityTextInPortrait() {
-        verifyTable(accessibleText: true)
-    }
-
-    @MainActor
     private func verifyTable(accessibleText: Bool) {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait

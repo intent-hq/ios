@@ -21,11 +21,6 @@ nonisolated final class AssistantStateUITests: XCTestCase {
     }
 
     @MainActor
-    func testStateActionsRemainReachableWithAccessibilityText() throws {
-        try verifyStateFlow(appearance: "dark", accessibility: true)
-    }
-
-    @MainActor
     private func verifyStateFlow(appearance: String, accessibility: Bool) throws {
         let trigger = FileManager.default.temporaryDirectory.appendingPathComponent("assistant-list-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: trigger) }

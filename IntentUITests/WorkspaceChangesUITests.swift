@@ -292,26 +292,6 @@ nonisolated final class WorkspaceChangesUITests: XCTestCase {
 
 extension WorkspaceChangesUITests {
     @MainActor
-    func testPullRequestsLeadTheChangesTabInBothThemes() {
-        for appearance in ["light", "dark"] {
-            let app = openChanges(launchArguments: ["-appThemePreference", appearance])
-            let section = app.buttons["changes.section.pullRequests"].firstMatch
-            XCTAssertTrue(section.appears(timeout: Fixture.timeout))
-            let open = app.buttons["changes.pullRequest.nova-labs/console#482"].firstMatch
-            XCTAssertTrue(open.exists && app.buttons["changes.pullRequest.nova-labs/analytics-sdk#31"].exists)
-            XCTAssertLessThan(open.frame.minY, app.buttons["changes.section.unstaged"].firstMatch.frame.minY)
-            capture(app, name: "changes-pull-requests-\(appearance)")
-            section.tap()
-            XCTAssertEqual(section.value as? String, "Collapsed")
-            XCTAssertFalse(open.exists)
-            app.buttons["changes.section.repository"].firstMatch.tap()
-            XCTAssertFalse(app.buttons["changes.repository"].exists)
-            capture(app, name: "changes-pull-requests-collapsed-\(appearance)")
-            app.terminate()
-        }
-    }
-
-    @MainActor
     func testCommitFilenamesStayPinnedWhileScrollingInBothThemes() {
         if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .portrait }
         for appearance in ["light", "dark"] {

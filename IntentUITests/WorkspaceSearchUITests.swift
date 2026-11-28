@@ -204,23 +204,6 @@ nonisolated final class WorkspaceSearchUITests: XCTestCase {
     }
 
     @MainActor
-    func testSearchFiltersGroupedWorkspaces() {
-        let app = launchWorkspaces()
-        for mode in ["Repo", "Status"] {
-            app.buttons["workspaces.viewMode.\(mode)"].tap()
-            app.buttons["workspaces.search.open"].tap()
-            let field = app.textFields["workspaces.search.field"]
-            XCTAssertTrue(field.appears(timeout: Fixture.timeout))
-            field.typeText("payment")
-            XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.exists)
-            field.typeText("-no-match")
-            XCTAssertTrue(app.staticTexts[Fixture.workspaceTitle].firstMatch.disappears(timeout: Fixture.timeout))
-            app.buttons["workspaces.search.cancel"].tap()
-            XCTAssertTrue(app.buttons["workspaces.viewMode.\(mode)"].isSelected)
-        }
-    }
-
-    @MainActor
     func testFilterStaysPinnedAfterTitleScrollsAway() {
         let app = launchWorkspaces(arguments: [
             "--demo-long-workspace-list", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"

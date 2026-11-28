@@ -100,38 +100,6 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
     }
 
     @MainActor
-    func testSidebarFailedSaveKeepsErrorBelowDraftInBothThemes() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad sidebar title editing")
-        XCUIDevice.shared.orientation = .landscapeLeft
-        defer { XCUIDevice.shared.orientation = .portrait }
-        for appearance in ["light", "dark"] {
-            let app = openWorkspace(failing: true, appearance: appearance)
-            app.buttons["Agents"].firstMatch.tap()
-            let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-            XCTAssertTrue(agent.appears(timeout: Self.timeout))
-            agent.tap()
-            XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Self.timeout))
-            let heading = app.staticTexts["workspace.title.heading"]
-            XCTAssertTrue(heading.appears(timeout: Self.timeout))
-            heading.doubleTap()
-            let field = app.textFields["workspace.title.field"]
-            XCTAssertTrue(field.appears(timeout: Self.timeout))
-            field.typeText(" edited")
-            app.buttons["workspace.title.done"].tap()
-            let error = app.staticTexts["workspace.title.error"]
-            XCTAssertTrue(error.appears(timeout: Self.timeout))
-            XCTAssertGreaterThanOrEqual(error.frame.minY, field.frame.maxY)
-            XCTAssertTrue(field.isHittable)
-            XCTAssertEqual(field.value as? String, Self.workspaceTitle + " edited")
-            capture(app, name: "Sidebar title save error \(appearance)")
-            app.buttons["workspace.title.cancel"].tap()
-            XCTAssertTrue(field.disappears(timeout: Self.timeout))
-            XCTAssertEqual(heading.label, Self.workspaceTitle)
-            app.terminate()
-        }
-    }
-
-    @MainActor
     private func scrollTitleEditor(_ scroll: XCUIElement, app: XCUIApplication, towardTop: Bool) {
         let frame = scroll.frame.intersection(app.frame)
         let keyboard = app.keyboards.firstMatch

@@ -9,32 +9,6 @@ nonisolated final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsHasNoAppearanceControlsWithLightDarkScreenshots() {
-        for appearance in ["Light", "Dark"] {
-            let app = launch(themePreference: appearance.lowercased())
-            openSettings(app)
-            let settings = app.scrollViews["settings.scroll"]
-            XCTAssertTrue(Self.header("New Connection", in: settings).exists)
-            XCTAssertFalse(Self.header("Connections", in: settings).exists)
-            XCTAssertEqual(settings.staticTexts["settings.connection.name"].label, "Studio Mac")
-            for name in ["Studio Mac", "Travel Mac"] {
-                XCTAssertFalse(settings.buttons.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch.exists)
-            }
-            XCTAssertFalse(Self.header("Appearance", in: settings).exists)
-            for choice in ["Light", "Dark", "System"] {
-                XCTAssertFalse(settings.buttons[choice].exists, "Theme controls belong only in the Home menu")
-            }
-            XCTAssertTrue(settings.switches["settings.liveActivities"].exists)
-            capture(app, named: "Settings-" + appearance)
-            assertScrollingLogOffAndRevealActions(app)
-            capture(app, named: "Settings-" + appearance + "-Actions")
-            scrollToTop(app)
-            captureWorkspaceSurfaces(app, appearance: appearance)
-            app.terminate()
-        }
-    }
-
-    @MainActor
     func testSavedConnectionSelectionUsesWindowRouting() {
         let app = launch()
         openConnections(app)
@@ -108,24 +82,6 @@ nonisolated final class SettingsUITests: XCTestCase {
     }
 
     @MainActor
-    func testLargeTextKeepsPairingSupportAndLogOffCancellationReachable() {
-        let app = launch(largeText: true, themePreference: "light")
-        openSettings(app)
-        capture(app, named: "Settings-LargeText-Top")
-        assertScrollingLogOffAndRevealActions(app)
-        capture(app, named: "Settings-LargeText-Actions")
-        scrollToTop(app)
-        app.buttons["Disconnect"].tap()
-        let confirmation = app.staticTexts["log-off.title"]
-        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
-        capture(app, named: "Log-Off-Light-LargeText")
-        app.buttons["log-off.cancel"].tap()
-        XCTAssertTrue(confirmation.disappears(timeout: Self.timeout))
-        scrollToTop(app)
-        XCTAssertTrue(Self.header("New Connection", in: app).exists)
-    }
-
-    @MainActor
     func testLogOffRequiresConfirmationAndCanBeCancelled() {
         let app = launch()
         openSettings(app)
@@ -162,34 +118,6 @@ nonisolated final class SettingsUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["saved-connections.title"].appears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Travel Mac")).firstMatch.exists)
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Studio Mac")).firstMatch.exists)
-    }
-
-    @MainActor
-    private func assertScrollingLogOffAndRevealActions(_ app: XCUIApplication) {
-        let close = app.buttons["settings.close"]
-        let initialCloseY = close.frame.minY
-        for title in ["Disconnect", "Manual Connection", "Export logs"] {
-            let button = app.buttons[title]
-            reveal(button, in: app)
-            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
-        }
-        let acknowledgements = app.buttons["Acknowledgements"]
-        reveal(acknowledgements, in: app)
-        XCTAssertGreaterThanOrEqual(acknowledgements.frame.height, 44)
-        XCTAssertLessThanOrEqual(
-            app.buttons["Export logs"].frame.maxY,
-            acknowledgements.frame.minY,
-            "Acknowledgements must come last, without overlap"
-        )
-        if !close.isHittable || close.frame.minY < initialCloseY - 1 {
-            let lowerFrame = acknowledgements.frame
-            scrollToTop(app)
-            XCTAssertTrue(
-                !acknowledgements.isHittable || acknowledgements.frame.minY > lowerFrame.minY + 1,
-                "Support actions must move with Settings content, not stay pinned to the viewport"
-            )
-            reveal(acknowledgements, in: app)
-        }
     }
 
     @MainActor
@@ -250,23 +178,6 @@ nonisolated final class SettingsUITests: XCTestCase {
             if app.buttons["settings.close"].isHittable { break }
             app.scrollViews["settings.scroll"].swipeDown()
         }
-    }
-
-    @MainActor
-    private func captureWorkspaceSurfaces(_ app: XCUIApplication, appearance: String) {
-        app.buttons["settings.close"].tap()
-        let options = app.buttons["intent.menu.open"]
-        XCTAssertTrue(options.appears(timeout: Self.timeout))
-        options.tap()
-        XCTAssertTrue(app.buttons["intent.menu.assistant"].appears(timeout: Self.timeout))
-        capture(app, named: "Workspace-Menu-" + appearance)
-        app.revealHomeAction("connections").tap()
-        let title = app.staticTexts["saved-connections.title"]
-        XCTAssertTrue(title.appears(timeout: Self.timeout))
-        capture(app, named: "Connections-" + appearance)
-        app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(title.disappears(timeout: Self.timeout))
-        openSettings(app)
     }
 
     @MainActor

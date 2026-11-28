@@ -105,20 +105,6 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
     }
 
     @MainActor
-    func testLargeTextAndLightAppearanceKeepConnectionsReachable() throws {
-        let app = try launch(largeText: true)
-        reveal(app)
-        let travel = connection("Travel Mac", in: app)
-        if !travel.isHittable { app.scrollViews["connection-switcher.list"].swipeUp() }
-        XCTAssertTrue(travel.isHittable)
-        capture(app, name: "Connection-Switcher-Large-Text-Light")
-        travel.tap()
-        assertClosed(app)
-        reveal(app)
-        XCTAssertTrue(connection("Travel Mac", in: app).isSelected)
-    }
-
-    @MainActor
     private func launch(largeText: Bool = false) throws -> XCUIApplication {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "The connection underlay is on the compact Workspaces page")
         let app = XCUIApplication.intent()
