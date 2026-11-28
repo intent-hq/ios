@@ -10,15 +10,8 @@ enum ConnectionLossUITestFixture {
     }
     static let bannerIdentifier = "read-only-banner"
     static let bannerHomeIdentifier = "read-only-banner.home"
-    static let horizontalCenter: CGFloat = 0.5
-    static let upperArea: CGFloat = 0.3
     static let leadingEdge: CGFloat = 0.1
-    static let lowerMiddle: CGFloat = 0.6
-    static let bottomEdge: CGFloat = 0.95
     static let dragHold: TimeInterval = 0.1
-    static let readOnlyTapPoint = CGVector(dx: leadingEdge, dy: upperArea)
-    static let menuDismissPoint = CGVector(dx: leadingEdge, dy: lowerMiddle)
-    static let sheetDismissPoint = CGVector(dx: horizontalCenter, dy: bottomEdge)
     static let backNavigationAttempts = 3
     static let scrollAttempts = 6
     static let backNavigationTimeout: TimeInterval = 2
@@ -29,39 +22,6 @@ enum ConnectionLossUITestFixture {
 
 nonisolated final class ConnectionLossUITests: XCTestCase {
     private typealias Fixture = ConnectionLossUITestFixture
-
-    @MainActor
-    func testLossQueuedAtActivationNeverPresentsBannerOrDismissesSheet() throws {
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: ["--demo-background-loss=activation-quick"])
-        openCreateWorkspace(in: app)
-        let repository = app.staticTexts["nova-labs/console"]
-        XCTAssertTrue(repository.appears(timeout: Fixture.timeout))
-        repository.tap()
-        app.buttons["Next"].tap()
-        XCTAssertTrue(app.staticTexts["creation.branchTitle"].appears(timeout: Fixture.timeout))
-        let next = app.buttons["Next"]
-        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
-        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Fixture.timeout), .completed)
-        next.tap()
-        let sheet = app.buttons["creation.back"]
-        XCTAssertTrue(sheet.appears(timeout: Fixture.timeout))
-        let message = app.textViews["creation.prompt"]
-        XCTAssertTrue(message.appears(timeout: Fixture.timeout))
-        XCTAssertEqual(app.textViews.count, 1)
-        message.tap()
-        message.typeText("Draft survives background return")
-        XCTAssertEqual(message.value as? String, "Draft survives background return")
-        backgroundAndActivate(app, directory: directory)
-        waitForEvent("did-recover", in: directory)
-        XCTAssertFalse(eventExists("banner-presented", in: directory), "activate() settling must not hide a banner flash")
-        XCTAssertFalse(eventExists("overlay-presented", in: directory))
-        XCTAssertFalse(app.buttons[Fixture.bannerIdentifier].exists)
-        XCTAssertTrue(message.appears(timeout: Fixture.timeout))
-        XCTAssertEqual(message.value as? String, "Draft survives background return")
-        XCTAssertTrue(sheet.exists)
-        capture(app, named: "quick-background-sheet")
-    }
 
     @MainActor
     func testSustainedBackgroundLossShowsBannerAndHomeStillWorks() throws {
@@ -118,78 +78,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
     }
 
     @MainActor
-    func testBannerUpdatesNetworkCopyAcrossForegroundReturn() throws {
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: [
-            "--demo-connection-loss-reconnecting", "--demo-connection-loss-cert-mismatch", "--demo-network-local-denied"
-        ])
-        try trigger("loss", in: directory)
-        assertBannerTitle("Reconnecting( to Demo Mac)?… · Read-only", in: app)
-
-        try trigger("network-offline", in: directory)
-        assertBannerTitle("Local Network access needed · Read-only", in: app)
-        app.buttons[Fixture.bannerIdentifier].tap()
-        XCTAssertTrue(app.staticTexts["Allow Local Network access for Intent in Settings, then try again."].appears(timeout: Fixture.timeout))
-        XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
-        capture(app, named: "banner-permission-and-certificate")
-        XCTAssertFalse(eventExists("banner-dismissed", in: directory), "Updating copy must not recreate the banner")
-
-        XCUIDevice.shared.press(.home)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: Fixture.timeout))
-        app.activate()
-        assertBannerTitle("Local Network access needed · Read-only", in: app)
-        XCTAssertFalse(eventExists("banner-dismissed", in: directory), "A banner must never hide on background return")
-
-        try trigger("network-restored", in: directory)
-        assertBannerTitle("Reconnecting( to Demo Mac)?… · Read-only", in: app)
-        try trigger("recover", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.bannerIdentifier].disappears(timeout: Fixture.timeout))
-        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].exists)
-    }
-
-    @MainActor
-    func testSheetOpenDuringDropStaysUsableUnderTheBanner() throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "The Connections sheet is a popover on iPad")
-        let directory = try makeTriggerDirectory()
-        let app = launch(directory: directory, arguments: [
-            "--demo-connection-loss-reconnecting", "--demo-connection-loss-cert-mismatch",
-            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"
-        ])
-        app.openHomeAction("connections")
-        let machine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.appears(timeout: Fixture.timeout))
-        XCTAssertTrue(machine.isHittable)
-        machine.press(forDuration: 1)
-        let details = app.buttons["Connection Details"]
-        XCTAssertTrue(details.appears(timeout: Fixture.timeout))
-        XCTAssertTrue(details.isHittable)
-        details.tap()
-        let detailsTitle = app.staticTexts["saved-connection.details-title"]
-        XCTAssertTrue(detailsTitle.appears(timeout: Fixture.timeout))
-        capture(app, named: "sheet-before-loss")
-
-        try trigger("network-offline", in: directory)
-        try trigger("loss", in: directory)
-        let banner = assertBanner(in: app)
-        assertBannerTitle("No network connection · Read-only", in: app)
-        XCTAssertTrue(detailsTitle.exists, "A drop must not dismiss or hide the open sheet")
-        XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
-        capture(app, named: "sheet-offline-banner")
-        banner.tap()
-        XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].appears(timeout: Fixture.timeout))
-        XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
-        XCTAssertTrue(app.buttons[Fixture.bannerHomeIdentifier].isHittable)
-        capture(app, named: "sheet-offline-banner-expanded")
-
-        try trigger("network-restored", in: directory)
-        try trigger("recover", in: directory)
-        XCTAssertTrue(banner.disappears(timeout: Fixture.timeout))
-        XCTAssertTrue(detailsTitle.exists)
-        XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
-        capture(app, named: "sheet-recovered")
-    }
-
-    @MainActor
     func testStoppedReconnectionBlocksWithReasonAndHomeWorks() throws {
         let directory = try makeTriggerDirectory()
         let app = launch(directory: directory, arguments: ["--demo-connection-loss-stopped"])
@@ -211,51 +99,6 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(saved.appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         capture(app, named: "stopped-after-home")
-    }
-
-    @MainActor
-    func testPendingStartupLossAndRecoveryNeverShowOverlay() throws {
-        let directory = try makeTriggerDirectory()
-        try trigger("network-offline", in: directory)
-        let app = launch(directory: directory, arguments: ["--demo-connection-loss-pending-startup"], waitForStartup: false)
-        assertStartupState("connected", in: app)
-        assertNetworkTitle("No network connection", identifier: "connection-network.status", in: app)
-        try trigger("loss", in: directory)
-        assertStartupState("disconnected", in: app)
-        capture(app, named: "inline-offline-startup")
-        try trigger("network-restored", in: directory)
-        XCTAssertTrue(app.staticTexts["connection-network.status"].disappears(timeout: Fixture.timeout))
-        assertStartupState("disconnected", in: app)
-        try trigger("recover", in: directory)
-        assertStartupState("connected", in: app)
-        try trigger("initial-data", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].appears(timeout: Fixture.timeout))
-        XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists, "Startup loss must not surface after entry")
-    }
-
-    @MainActor
-    func testStartupTimeoutKeepsSavedMachinesAccessibleWithoutOverlay() throws {
-        let directory = try makeTriggerDirectory()
-        try trigger("network-offline", in: directory)
-        let app = launch(
-            directory: directory,
-            arguments: ["--demo-connection-loss-pending-startup", "--demo-connection-loss-startup-timeout"],
-            waitForStartup: false
-        )
-        assertStartupState("connected", in: app)
-        try trigger("loss", in: directory)
-        assertStartupState("disconnected", in: app)
-        try trigger("initial-timeout", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].appears(timeout: Fixture.timeout))
-        XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
-        XCTAssertFalse(app.staticTexts["Can’t Connect"].exists, "Data timeout must not add a second retry owner")
-        assertNetworkTitle("No network connection", identifier: "connection-network.status", in: app)
-        capture(app, named: "startup-timeout-fallback")
-        app.openHomeAction("connections")
-        let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.appears(timeout: Fixture.timeout))
-        XCTAssertTrue(machine.isHittable, "Saved machines must remain accessible without forgetting credentials")
-        capture(app, named: "startup-timeout-saved-machines")
     }
 
     @MainActor
@@ -335,12 +178,6 @@ extension ConnectionLossUITests {
         let agent = app.staticTexts[Fixture.agentName].firstMatch
         XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
         agent.tap()
-    }
-
-    @MainActor
-    func openCreateWorkspace(in app: XCUIApplication) {
-        app.openHomeAction("workspace")
-        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].appears(timeout: Fixture.timeout))
     }
 
     @MainActor

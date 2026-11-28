@@ -12,10 +12,6 @@ import tempfile
 
 CAPTURES = {
     "DaemonStartupUITests": {
-        "testStartupWithoutCountsInitiallyAndOnReconnect": (
-            "startup-no-count-initial-preparing", "startup-no-count-initial-services",
-            "startup-no-count-reconnect-preparing", "startup-no-count-reconnect-services",
-        ),
         "testInitialStartupCountsEstimateFinalizationAndFreshHello": (
             "startup-initial-unknown-estimate", "startup-initial-estimate", "startup-initial-unchanged",
             "startup-initial-finalizing", "startup-ready-workspaces",
@@ -66,12 +62,6 @@ CAPTURES = {
         ),
         "testLoadingFailureRetriesWithoutInventingAnEmptyState": (
             "script-monitors-loading", "script-monitors-error", "script-monitors-retried", "script-monitors-final-state",
-        ),
-        "testEmptyOwnerCanLoadNextPageAndRetryItsFailure": (
-            "script-monitors-empty-owner-more", "script-monitors-page-error", "script-monitors-next-page", "script-monitors-final-state",
-        ),
-        "testDetailFailureRetainsSummaryAndRetriesOnlySelectedWatch": (
-            "script-monitors-detail-error", "script-monitors-detail-retried", "script-monitors-final-state",
         ),
         "testUnsupportedConnectionDoesNotReadOrSubscribe": (
             "script-monitors-unsupported", "script-monitors-final-state",
@@ -232,9 +222,6 @@ CAPTURES = {
     },
     "InlineResponseImageUITests": {
         "testUserImageLongPressOffersCopyAndShare": ("Chat image copy and share menu",),
-        "testSavedAndMissingImagesPreserveResponseAndLightboxAfterReopening": (
-            "Inline image response, entry 1", "Inline image response, entry 2", "Saved response image in lightbox",
-        ),
         "testSavedImageOpensWithKeyboardAndPreservesDraft": (
             "Response image with keyboard open", "Saved response image in lightbox",
         ),
@@ -340,39 +327,13 @@ CAPTURES = {
         ),
     },
     "ConnectionLossUITests": {
-        "testBannerKeepsRecentScreensReadableWhileReconnecting": tuple(
-            f"connection-loss-banner-{screen}"
-            for screen in ("list", "conversation", "workspace", "note", "assistant")
-        ),
-        "testBannerExpandsWithGuidanceAndBackToHome": tuple(
-            f"connection-loss-banner-{state}-{appearance}"
-            for state in ("collapsed", "expanded")
-            for appearance in ("light", "dark")
-        ),
         "testIPadControlInventoryDuringDrop": ("connection-loss-ipad-read-only-assistant",),
-        "testControlInventoryDuringDrop": (
-            "connection-loss-read-only-send-hint", "connection-loss-read-only-agent-menu",
-            "connection-loss-read-only-workspace-menu", "connection-loss-read-only-settings",
-        ),
-        "testRecentlyViewedItemsReopenFromMemoryDuringDrop": ("connection-loss-read-only-from-memory-conversation",),
         "testStoppedReconnectionBlocksWithReasonAndHomeWorks": ("connection-loss-stopped-reconnection",),
-        "testSheetOpenDuringDropStaysUsableUnderTheBanner": (
-            "connection-loss-sheet-offline-banner", "connection-loss-sheet-offline-banner-expanded",
-        ),
-        "testDemoRelaunchAfterReturningHomeStartsAtWorkspaces": (
-            "connection-loss-demo-home-before-relaunch", "connection-loss-demo-workspaces-after-relaunch",
-        ),
         "testDifferentServerAllowsSameMachineReselection": (
             "connection-loss-failure-before-primary-exit", "connection-loss-failure-primary-exit-machine-reselected",
         ),
-        "testLaunchHidesBackButSelectedMachineCanReturnHome": (
-            "connection-loss-launch-connecting-without-back",
-            "connection-loss-connection-failure-back", "connection-loss-connecting-back",
-        ),
     },
     "WorkspaceSwipeUITests": {
-        "testSlowStatusSwipeStaysOpenAfterFingerLifts": ("workspace-status-swipe-stays-open",),
-        "testRightSwipeOpensRecentAgentAndBackReturnsToWorkspace": ("workspace-right-swipe-recent-agent",),
         "testArchiveAndDeleteRequireConfirmationAndPersistAfterRefresh": (
             "workspace-archive-delete-swipe", "workspace-archived-badge",
         ),

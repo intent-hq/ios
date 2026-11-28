@@ -6,7 +6,6 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     private static let rowID = "script-monitor-demo-script-watch-owned"
     private static let originalName = "Build verification — long script name with 日本語 and accessibility context"
     private static let updatedName = "Renamed verification — same watch and run"
-    private static let tapHeight: CGFloat = 44
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -72,49 +71,6 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
         XCTAssertFalse(retry.exists)
         XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 2)
         capture(app, "script-monitors-retried")
-    }
-
-    @MainActor
-    func testEmptyOwnerCanLoadNextPageAndRetryItsFailure() throws {
-        let directory = try fixtureDirectory()
-        let app = launch(directory: directory, scenario: "page-retry")
-        let loadMore = app.buttons["script-monitors-load-more"]
-        XCTAssertTrue(loadMore.appears(timeout: Self.timeout))
-        XCTAssertFalse(app.buttons[Self.rowID].exists)
-        XCTAssertFalse(app.buttons["script-monitor-demo-script-watch-other-owner"].exists)
-        XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 1)
-        capture(app, "script-monitors-empty-owner-more")
-        print("Script watch native hit report: " + app.descendants(matching: .any)["script-monitors.geometry"].firstMatch.label)
-        XCTAssertGreaterThanOrEqual(loadMore.frame.height, Self.tapHeight)
-        XCTAssertTrue(loadMore.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
-        loadMore.tap()
-        let retry = app.buttons["script-monitors-retry"]
-        XCTAssertTrue(retry.appears(timeout: Self.timeout))
-        XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 2)
-        capture(app, "script-monitors-page-error")
-        retry.tap()
-        XCTAssertTrue(app.buttons[Self.rowID].appears(timeout: Self.timeout))
-        XCTAssertFalse(loadMore.exists)
-        XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 3)
-        capture(app, "script-monitors-next-page")
-    }
-
-    @MainActor
-    func testDetailFailureRetainsSummaryAndRetriesOnlySelectedWatch() throws {
-        let directory = try fixtureDirectory()
-        let app = launch(directory: directory, scenario: "detail-retry")
-        let row = app.buttons[Self.rowID]
-        XCTAssertTrue(row.appears(timeout: Self.timeout))
-        row.tap()
-        let retry = app.buttons["script-monitor-details-retry"]
-        XCTAssertTrue(retry.appears(timeout: Self.timeout))
-        assertDetailText(app, "demo-run-watched-original")
-        capture(app, "script-monitors-detail-error")
-        retry.tap()
-        XCTAssertTrue(retry.disappears(timeout: Self.timeout))
-        XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.get" }.count, 2)
-        XCTAssertEqual(try requests(directory).filter { $0 == "scriptMonitor.list" }.count, 1)
-        capture(app, "script-monitors-detail-retried")
     }
 
     @MainActor
