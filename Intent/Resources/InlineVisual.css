@@ -1,0 +1,287 @@
+:where(:root) {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --primary: 66.4 67% 64.3%;
+  --primary-ink: 67 40% 12%;
+  --primary-foreground: 67 40% 12%;
+  --secondary: 0 0% 89.8039215686%;
+  --secondary-foreground: 0 0% 0%;
+  --muted: 20 4.7619047619% 87.6470588235%;
+  --muted-foreground: 60 0.826446281% 27.7254901961%;
+  --border: 20 4.7619047619% 87.6470588235%;
+  --input: 0 0% 0%;
+  --ring: 217.2 91.2% 59.8%;
+  --danger: 0 63% 31%;
+  --info: 260 58% 46%;
+  --success: 145 67% 28%;
+  --warning: 42 91% 54%;
+  --sidebar: 0 0% 96%;
+  --sidebar-accent: 0 0% 89.8039215686%;
+  --app-background: 0 0% 100%;
+  --agent-avatar-surface-active: 66.892 71.845% 59.608%;
+  --agent-avatar-foreground: 0 0% 0%;
+  --font-ui: Inter, system-ui, -apple-system, sans-serif;
+  --font-code: ui-monospace, 'SFMono-Regular', monospace;
+  --text-caption-size: 0.8125rem;
+  --text-caption-line-height: 1.125rem;
+  --text-caption-weight: 400;
+  --text-caption-tracking: -0.01em;
+  --text-body-size: 0.9375rem;
+  --text-body-line-height: 1.375rem;
+  --text-body-weight: 400;
+  --text-body-tracking: -0.016em;
+  --text-body-strong-size: var(--text-body-size);
+  --text-body-strong-line-height: var(--text-body-line-height);
+  --text-body-strong-weight: 500;
+  --text-body-strong-tracking: var(--text-body-tracking);
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --control-height-compact: 1.75rem;
+  --control-height-small: 1.75rem;
+  --control-height-medium: 2rem;
+  --control-height-large: 2.25rem;
+  --radius-small: 8px;
+  --radius-medium: 8px;
+  --radius-large: 8px;
+  --radius-full: 9999px;
+  --motion-fast: 150ms;
+  --motion-standard: 250ms;
+  --motion-slow: 400ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --diagram-host-surface: hsl(var(--app-background));
+  --diagram-canvas: var(--diagram-host-surface);
+  --diagram-label-surface: var(--diagram-host-surface);
+  --diagram-node-surface: hsl(var(--sidebar));
+  --diagram-node-hover-surface: color-mix(in srgb, hsl(var(--sidebar-accent)) 28%, var(--diagram-node-surface));
+  --diagram-node-outline: hsl(var(--border) / 0.42);
+  --diagram-node-title: hsl(var(--foreground));
+  --diagram-metadata: hsl(var(--muted-foreground));
+  --diagram-group-outline: hsl(var(--border) / 0.58);
+  --diagram-connector: color-mix(in srgb, hsl(var(--muted-foreground)) 52%, var(--diagram-canvas));
+  --diagram-connector-hover: color-mix(in srgb, hsl(var(--muted-foreground)) 64%, var(--diagram-canvas));
+  --diagram-connector-muted: color-mix(in srgb, hsl(var(--muted-foreground)) 34%, var(--diagram-canvas));
+  --diagram-connector-inactive: color-mix(in srgb, hsl(var(--muted-foreground)) 25%, var(--diagram-canvas));
+  --diagram-connector-danger: color-mix(in srgb, hsl(var(--danger)) 58%, var(--diagram-canvas));
+  --diagram-connector-success: color-mix(in srgb, hsl(var(--success)) 56%, var(--diagram-canvas));
+  --diagram-connector-warning: color-mix(in srgb, hsl(var(--warning)) 52%, var(--diagram-canvas));
+  --diagram-accent: hsl(var(--agent-avatar-surface-active));
+  --diagram-accent-foreground: hsl(var(--agent-avatar-foreground));
+  --diagram-connector-active: color-mix(in srgb, var(--diagram-accent) 58%, var(--diagram-canvas));
+  --diagram-node-radius: 16px;
+  --diagram-group-radius: 32px;
+  --diagram-connector-width: 1.125px;
+  --chart-lightness: 0.6;
+  --chart-1: oklch(from hsl(var(--info)) var(--chart-lightness) c h);
+  --chart-2: oklch(from hsl(var(--success)) var(--chart-lightness) c h);
+  --chart-3: oklch(from hsl(var(--warning)) calc(var(--chart-lightness) + 0.08) c h);
+  --chart-4: oklch(from hsl(var(--danger)) var(--chart-lightness) max(c, 0.14) h);
+  --chart-5: oklch(from color-mix(in oklch, hsl(var(--info)), hsl(var(--success))) var(--chart-lightness) max(c, 0.1) h);
+  --chart-6: oklch(from hsl(var(--primary)) calc(var(--chart-lightness) + 0.04) c h);
+  color-scheme: light;
+}
+
+:where(:root.dark) {
+  --background: 0 0% 10.1960784314%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 10.1960784314%;
+  --card-foreground: 0 0% 100%;
+  --primary: 67 78% 68%;
+  --primary-ink: 67 78% 68%;
+  --primary-foreground: 154 25% 9%;
+  --secondary: 0 0% 14.9019607843%;
+  --secondary-foreground: 20 4.7619047619% 87.6470588235%;
+  --muted: 0 0% 14.9019607843%;
+  --muted-foreground: 20 4.7619047619% 83.6470588235%;
+  --border: 60 0.826446281% 23.7254901961%;
+  --input: 20 4.7619047619% 87.6470588235%;
+  --ring: 213.1 93.9% 67.8%;
+  --danger: 0 70% 88%;
+  --info: 260 80% 72%;
+  --success: 145 58% 55%;
+  --warning: 42 91% 63%;
+  --sidebar: 0 0% 14.9019607843%;
+  --sidebar-accent: 0 0% 20%;
+  --app-background: 0 0% 10.1960784314%;
+  --agent-avatar-surface-active: 67 78% 68%;
+  --chart-lightness: 0.74;
+  color-scheme: dark;
+}
+
+:where(html) {
+  height: auto;
+  overflow-x: hidden;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+:where(body) {
+  margin: 0;
+  padding: var(--space-4);
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+  font-weight: var(--text-body-weight);
+  letter-spacing: var(--text-body-tracking);
+  color: hsl(var(--foreground));
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+:where(*), :where(*)::before, :where(*)::after { box-sizing: border-box; }
+:where(img, svg, canvas) { max-width: 100%; }
+:where(svg text:not([fill])) { fill: currentColor; }
+:where(svg [fill] text:not([fill])) { fill: inherit; }
+:where(h1, h2, h3, h4, h5, h6) {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-body-strong-size);
+  line-height: var(--text-body-strong-line-height);
+  font-weight: var(--text-body-strong-weight);
+  letter-spacing: var(--text-body-strong-tracking);
+  overflow-wrap: anywhere;
+}
+:where(p, ul, ol) { margin: 0 0 var(--space-3); }
+:where(p, label, output, figcaption) { overflow-wrap: anywhere; }
+:where(label, output, figcaption) {
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line-height);
+}
+:where(code, pre) { font-family: var(--font-code); }
+:where(button, input, select, textarea) { font: inherit; color: inherit; }
+:where(button, select, textarea, input:not([type]),
+  input[type="text"], input[type="number"], input[type="search"],
+  input[type="email"], input[type="url"], input[type="tel"], input[type="password"]) {
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--control-height-medium);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--diagram-node-outline);
+  border-radius: var(--radius-small);
+  background: hsl(var(--background));
+}
+:where(button) {
+  background: var(--diagram-node-surface);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+:where(button:active:not(:disabled)) { background: var(--diagram-node-hover-surface); }
+:where(button[aria-pressed="true"]) { background: hsl(var(--secondary)); }
+:where(button:disabled, input:disabled, select:disabled, textarea:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+:where(input[type="checkbox"], input[type="radio"]) { accent-color: hsl(var(--foreground)); }
+:where(input[type="range"]) {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-height-medium);
+  margin: 0;
+  background: transparent;
+  accent-color: hsl(var(--foreground));
+  cursor: pointer;
+}
+:where(input[type="range"])::-webkit-slider-runnable-track {
+  height: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--diagram-connector-muted);
+}
+:where(input[type="range"])::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: calc((var(--space-1) - 1.25rem) / 2);
+  border: 0;
+  border-radius: var(--radius-full);
+  background: hsl(var(--foreground));
+}
+:where(:focus-visible) {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+:where(.visual) { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+:where(.visual > *) { min-width: 0; margin: 0; }
+:where(.visual-controls) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+:where(.visual-controls > *) { min-width: 0; max-width: 100%; }
+:where(.visual-controls > input[type="range"]) { flex: 1 1 0; width: 0; }
+:where(.visual-controls > output) {
+  min-width: 5ch;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+:where(.visual-controls > .visual-field) { flex: 1 1 12rem; }
+:where(.visual-field, .visual-row) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) fit-content(50%);
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+:where(.visual-field > *, .visual-row > *) { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+:where(.visual-field > output, .visual-row > :last-child) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+:where(.visual-field > input, .visual-field > select, .visual-field > textarea) {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+:where(.visual-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--space-4);
+  min-width: 0;
+}
+:where(.visual-note) {
+  color: hsl(var(--muted-foreground));
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line-height);
+}
+:where(.diagram-surface) {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  color: hsl(var(--foreground));
+}
+:where(.diagram-surface > svg) { display: block; width: 100%; height: auto; }
+:where(.diagram-node) {
+  fill: color-mix(in srgb, hsl(var(--foreground)) 4%, transparent);
+  stroke: color-mix(in srgb, hsl(var(--foreground)) 18%, transparent);
+  stroke-width: var(--diagram-connector-width);
+  vector-effect: non-scaling-stroke;
+}
+:where(.diagram-connector, .diagram-guide) {
+  fill: none;
+  stroke: color-mix(in srgb, hsl(var(--foreground)) 36%, transparent);
+  stroke-width: var(--diagram-connector-width);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+:where(.diagram-guide) {
+  stroke: color-mix(in srgb, hsl(var(--foreground)) 16%, transparent);
+  stroke-dasharray: 4 4;
+}
+:where(.diagram-label) {
+  fill: currentColor;
+  font-family: var(--font-ui);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  letter-spacing: var(--text-body-tracking);
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(button) { transition: none; }
+}

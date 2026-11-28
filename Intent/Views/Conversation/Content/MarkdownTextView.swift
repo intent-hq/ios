@@ -8,6 +8,7 @@ struct MarkdownTextView: View {
     var linkStyle: MarkdownLinkStyle
     private let markdownSource: String
     private let mermaidSources: [String: String]
+    private let visualSources: [String: String]
     private let pendingDiagram: MermaidMarkdownContent.PendingDiagram?
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var inheritedOpenURL
@@ -42,6 +43,7 @@ struct MarkdownTextView: View {
         let prepared = MarkdownContentCache.shared.preparedContent(for: text)
         self.markdownSource = prepared.markdown
         self.mermaidSources = prepared.mermaidSources
+        self.visualSources = prepared.visualSources
         self.pendingDiagram = prepared.pendingDiagram
     }
 
@@ -94,7 +96,8 @@ struct MarkdownTextView: View {
         )
             .textual.structuredTextStyle(CompactMarkdownStyle(
                 mermaidSources: mermaidSources,
-                pendingMermaidLanguage: pending?.language
+                visualSources: visualSources,
+                pending: pending
             ))
             .textual.imageAttachmentLoader(
                 IntentFileAttachmentLoader(

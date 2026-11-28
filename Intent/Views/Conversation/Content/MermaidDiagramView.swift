@@ -26,10 +26,11 @@ struct MermaidDiagramView: View {
 }
 
 struct MermaidStreamingPlaceholder: View {
+    var title: LocalizedStringKey = "Generating diagram"
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ProgressView("Generating diagram")
+        ProgressView(title)
             .interFont(Constants.Typography.bodyXS)
             .frame(maxWidth: .infinity, minHeight: MermaidAppearance.minimumHeight)
             .background(Theme.background(for: colorScheme))

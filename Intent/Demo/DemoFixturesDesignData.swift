@@ -12,6 +12,54 @@ extension DemoDesignFixtures {
     | Baseline with descriptive theme names and a separate validation pass for every incoming document | 120 | 62.2% | 58.4% | 12 | 4.9 min | 512 MB |
     | Batched setup with shared context | 124 | 91.3% | 87.6% | 0 | 2.1 min | 384 MB |
     """
+    static let inlineVisual = """
+    Drag the slider to compare sync strategies.
+
+    ```ws-block:html
+    <style>
+      .sync-bars { display: grid; gap: var(--space-2); }
+      .sync-bar { height: var(--space-3); border-radius: var(--radius-full); transition: width .2s; }
+    </style>
+    <div class="visual">
+      <div class="visual-controls">
+        <input id="libraries" type="range" min="1" max="40" value="12" aria-label="Libraries">
+        <output id="libraries-value">12 libraries</output>
+      </div>
+      <div class="sync-bars">
+        <div class="visual-row"><span>Full merge</span><span id="merge-time"></span></div>
+        <div class="sync-bar" id="merge-bar" style="background: var(--chart-1)"></div>
+        <div class="visual-row"><span>Incremental sync</span><span id="sync-time"></span></div>
+        <div class="sync-bar" id="sync-bar" style="background: var(--chart-2)"></div>
+      </div>
+      <p class="visual-note">Incremental sync only transfers changed records.</p>
+    </div>
+    <script>
+      const input = document.getElementById('libraries');
+      const saved = window.intentVisual?.state;
+      if (saved && Number.isFinite(saved.libraries)) input.value = saved.libraries;
+      const render = () => {
+        const count = Number(input.value);
+        const merge = count * 2.4;
+        const sync = 3 + count * 0.4;
+        document.getElementById('libraries-value').textContent = count + ' libraries';
+        document.getElementById('merge-time').textContent = merge.toFixed(1) + ' s';
+        document.getElementById('sync-time').textContent = sync.toFixed(1) + ' s';
+        document.getElementById('merge-bar').style.width = (merge / 96 * 100) + '%';
+        document.getElementById('sync-bar').style.width = (sync / 96 * 100) + '%';
+        window.intentVisual?.publish({
+          state: { libraries: count },
+          title: 'Sync comparison',
+          inputs: { libraries: count },
+          results: { merge: merge.toFixed(1) + ' s', sync: sync.toFixed(1) + ' s' }
+        });
+      };
+      input.addEventListener('input', render);
+      render();
+    </script>
+    ```
+
+    After the visual.
+    """
     static let mermaidDiagram = """
     Before the interactive diagram.
 
@@ -153,6 +201,9 @@ extension DemoDesignFixtures {
         ]
         if scenario == .mermaid {
             rows.append(Self.message(id: "demo-design-mermaid", role: "assistant", blocks: [DemoFixtures.textBlock(Self.mermaidDiagram)]))
+        }
+        if scenario == .inlineVisual {
+            rows.append(Self.message(id: "demo-design-visual", role: "assistant", blocks: [DemoFixtures.textBlock(Self.inlineVisual)]))
         }
         if scenario == .tables {
             let text = """

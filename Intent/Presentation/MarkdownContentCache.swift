@@ -8,23 +8,26 @@ final class MarkdownContentCache: MarkupParser {
     struct PreparedContent {
         let markdown: String
         let mermaidSources: [String: String]
+        let visualSources: [String: String]
         let pendingDiagram: MermaidMarkdownContent.PendingDiagram?
 
         init(_ source: String) {
             let mermaid = MermaidMarkdownContent(source)
             markdown = MarkdownTextView.replacingTaskListMarkers(mermaid.markdown)
             mermaidSources = mermaid.sources
+            visualSources = mermaid.visuals
             pendingDiagram = mermaid.pending.map { pending in
                 .init(
                     markdown: MarkdownTextView.replacingTaskListMarkers(pending.markdown),
-                    language: pending.language
+                    language: pending.language,
+                    isVisual: pending.isVisual
                 )
             }
         }
 
         var cost: Int {
             let pendingCost = pendingDiagram.map { $0.markdown.utf8.count + $0.language.utf8.count } ?? 0
-            let sourcesCost = mermaidSources.reduce(0) { cost, source in
+            let sourcesCost = [mermaidSources, visualSources].joined().reduce(0) { cost, source in
                 cost + source.key.utf8.count + source.value.utf8.count + Self.sourceOverhead
             }
             return markdown.utf8.count + pendingCost + sourcesCost
@@ -33,7 +36,7 @@ final class MarkdownContentCache: MarkupParser {
         private static let sourceOverhead = 128
     }
 
-    private static let preparationVersion = 1
+    private static let preparationVersion = 2
     private static let parserVersion = 1
     private static let standaloneLinkRowsVariant = 1 << 16
     private static let preparedCostLimit = 2_097_152
