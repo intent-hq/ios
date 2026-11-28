@@ -53,21 +53,21 @@ nonisolated final class TranscriptVideoUITests: XCTestCase {
 
     @MainActor
     func testSentVideoOffersCopyAndShare() {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-transcript-video"]
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        if !workspace.waitForExistence(timeout: launchTimeout) {
+        if !workspace.appears(timeout: launchTimeout) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
-            XCTAssertTrue(workspace.waitForExistence(timeout: timeout))
+            XCTAssertTrue(workspace.appears(timeout: timeout))
         }
         workspace.tap()
         let agent = app.staticTexts["Dashboard Implementor"].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: timeout))
+        XCTAssertTrue(agent.appears(timeout: timeout))
         agent.tap()
 
         let poster = app.buttons["Video: Recording.mp4"].firstMatch
-        XCTAssertTrue(poster.waitForExistence(timeout: timeout))
+        XCTAssertTrue(poster.appears(timeout: timeout))
         let transcript = app.scrollViews["transcript.scrollView"]
         XCTAssertTrue(waitUntil(timeout: timeout) { poster.isHittable && isInside(poster, transcript) })
         XCTAssertNotNil(waitUntilSteady(timeout: timeout, tolerance: 1) { poster.frame.midY })
@@ -75,16 +75,16 @@ nonisolated final class TranscriptVideoUITests: XCTestCase {
 
         let copy = app.buttons["Copy Video"].firstMatch
         let share = app.buttons["Share Video"].firstMatch
-        XCTAssertTrue(copy.waitForExistence(timeout: timeout), "Long-pressing a video must offer Copy Video")
-        XCTAssertTrue(share.waitForExistence(timeout: timeout), "Long-pressing a video must offer Share Video")
+        XCTAssertTrue(copy.appears(timeout: timeout), "Long-pressing a video must offer Copy Video")
+        XCTAssertTrue(share.appears(timeout: timeout), "Long-pressing a video must offer Share Video")
         capture(app, named: "Sent video copy and share menu")
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).tap()
-        XCTAssertTrue(share.waitForNonExistence(timeout: timeout))
+        XCTAssertTrue(share.disappears(timeout: timeout))
 
         XCTAssertTrue(waitUntil(timeout: timeout) { poster.isHittable })
         poster.tap()
         let playerShare = app.buttons["Share video"].firstMatch
-        XCTAssertTrue(playerShare.waitForExistence(timeout: timeout), "Full-screen playback must offer Share")
+        XCTAssertTrue(playerShare.appears(timeout: timeout), "Full-screen playback must offer Share")
         XCTAssertTrue(waitUntil(timeout: timeout) { playerShare.isHittable })
         capture(app, named: "Sent video full-screen share button")
         app.buttons["Close video"].firstMatch.tap()
