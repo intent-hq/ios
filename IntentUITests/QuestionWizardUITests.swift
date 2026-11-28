@@ -39,6 +39,7 @@ nonisolated final class QuestionWizardUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Detailed answers"].appears(timeout: Self.timeout))
         let first = app.buttons["question.option.0"]
         let second = app.buttons["question.option.1"]
+        XCTAssertTrue(second.appears(timeout: Self.timeout))
         XCTAssertLessThan(first.frame.maxY, second.frame.minY)
         XCTAssertEqual(first.frame.minX, second.frame.minX, accuracy: 1)
         let shortHeight = first.frame.height
