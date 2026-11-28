@@ -6,10 +6,15 @@ struct WorkspaceStatusPill<Trailing: View>: View {
     var truncates = false
     @ViewBuilder var trailing: Trailing
     @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .footnote) private var maximumWidth = Constants.Conversation.Design.Status.pillMaximumWidth
 
     private typealias Design = Constants.Conversation.Design
 
     var body: some View {
+        WidthCappedLayout(maximumWidth: maximumWidth) { pill }
+    }
+
+    private var pill: some View {
         HStack(spacing: Design.Status.iconSpacing) {
             Image(icon)
                 .renderingMode(.template)
@@ -34,6 +39,22 @@ struct WorkspaceStatusPill<Trailing: View>: View {
         .background(Design.Palette.surface(for: colorScheme), in: Capsule())
         .frame(minHeight: Design.minimumTapTarget)
         .contentShape(Rectangle())
+    }
+}
+
+struct WidthCappedLayout: Layout {
+    let maximumWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        subviews.first?.sizeThatFits(cappedProposal(proposal)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: cappedProposal(proposal))
+    }
+
+    private func cappedProposal(_ proposal: ProposedViewSize) -> ProposedViewSize {
+        ProposedViewSize(width: min(proposal.width ?? maximumWidth, maximumWidth), height: proposal.height)
     }
 }
 

@@ -78,6 +78,7 @@ extension Constants.Conversation.Design {
         static let composerSpacing: CGFloat = 8
         static let trailingFadeWidth: CGFloat = 32
         static let trailingFadeDuration: Double = 0.2
+        static let pillMaximumWidth: CGFloat = 220
         static let goToEndLeadingPadding: CGFloat = 12
         static let goToEndTrailingPadding: CGFloat = 16
         static let goToEndIconSpacing: CGFloat = 10
@@ -130,7 +131,6 @@ extension Constants.Conversation.Design {
 
 extension Constants.Conversation.Design {
     enum Goal {
-        static let pillMaximumWidth: CGFloat = 220
         static let editorMinimumHeight: CGFloat = 160
         static let editorSpacing: CGFloat = 12
     }

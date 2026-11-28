@@ -8,6 +8,7 @@ nonisolated final class ScriptMonitorsUITests: XCTestCase {
     private static let updatedName = "Renamed verification — same watch and run"
     private static let tapHeight: CGFloat = 44
     private static let pillSpacing: CGFloat = 8
+    private static let pillMaximumWidth: CGFloat = 220
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -387,6 +388,7 @@ extension ScriptMonitorsUITests {
         for (index, pill) in ordered.enumerated() {
             XCTAssertTrue(pill.exists)
             XCTAssertGreaterThan(pill.frame.width, 0)
+            XCTAssertLessThanOrEqual(pill.frame.width, min(Self.pillMaximumWidth, row.width) + 1, "Long pill labels must truncate")
             XCTAssertEqual(pill.frame.height, Self.tapHeight, accuracy: 1, "Pill labels must remain on one line")
             XCTAssertEqual(pill.frame.midY, ordered[0].frame.midY, accuracy: 1, "Pills must share one scrolling row")
             if index + 1 < ordered.count {
