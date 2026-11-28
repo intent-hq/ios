@@ -61,7 +61,7 @@ struct AgentSession: Identifiable, Equatable {
             return userLine
         }
         guard let raw = digest ?? lastAgentResponse else { return nil }
-        var cleaned = raw.replacingOccurrences(
+        var cleaned = BrowserCompleteMarker.strip(from: raw).replacingOccurrences(
             of: "<group:[^>\\n<]+>",
             with: "",
             options: .regularExpression

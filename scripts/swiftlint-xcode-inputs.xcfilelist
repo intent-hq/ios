@@ -168,6 +168,7 @@ $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
 $(SRCROOT)/Intent/Presentation/AgentConversationPresentation.swift
 $(SRCROOT)/Intent/Presentation/BoundedMarkdownCache.swift
+$(SRCROOT)/Intent/Presentation/BrowserCompleteMarker.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStatusTiming.swift
 $(SRCROOT)/Intent/Presentation/ConversationConnectionStep.swift
 $(SRCROOT)/Intent/Presentation/ConversationGoalPillState.swift
