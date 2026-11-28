@@ -102,7 +102,7 @@ nonisolated final class WorkspaceListMenuUITests: XCTestCase {
             app.buttons["pullRequests.filter.Mine"].tap()
             switchList(in: app, to: "workspaces")
             XCTAssertTrue(app.staticTexts["Add usage analytics dashboard"].appears(timeout: Self.timeout))
-            XCTAssertFalse(linked.exists)
+            XCTAssertTrue(linked.disappears(timeout: Self.timeout))
             app.terminate()
         }
     }
