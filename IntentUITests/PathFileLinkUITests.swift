@@ -42,34 +42,34 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
 
     @MainActor
     private func openReport(linkLabel: String, appearance: String, screenshotName: String) {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-inline-text", "-appThemePreference", appearance]
         app.launch()
         let transcript = openTranscript(in: app)
 
         let link = app.links[linkLabel].firstMatch
-        XCTAssertTrue(link.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(link.appears(timeout: Fixture.timeout))
         reveal(link, in: transcript)
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
-        XCTAssertTrue(app.navigationBars[Fixture.fileName].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.navigationBars[Fixture.fileName].appears(timeout: Fixture.timeout))
         let page = app.webViews["html.content"].firstMatch
-        XCTAssertTrue(page.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(page.staticTexts[Fixture.heading].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(page.appears(timeout: Fixture.timeout))
+        XCTAssertTrue(page.staticTexts[Fixture.heading].appears(timeout: Fixture.timeout))
         let chart = page.images[Fixture.chartLabel].firstMatch
-        XCTAssertTrue(chart.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(chart.appears(timeout: Fixture.timeout))
         XCTAssertTrue(
             waitUntil(timeout: Fixture.timeout) { chart.frame.height > Fixture.minimumChartHeight },
             "The relative PNG must render, not a broken image: \(chart.frame)"
         )
-        XCTAssertTrue(page.staticTexts[Fixture.stylesheetNote].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(page.staticTexts[Fixture.stylesheetNote].appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.alerts[Fixture.alertTitle].exists, "A resolvable path link must not show the message")
         captureMedia(app, named: screenshotName)
 
         let close = app.buttons["html.close"].firstMatch
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { close.isHittable })
         close.tap()
-        XCTAssertTrue(page.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(page.disappears(timeout: Fixture.timeout))
         XCTAssertTrue(transcript.exists, "Closing the viewer must keep the conversation open")
         app.terminate()
     }
@@ -77,16 +77,16 @@ nonisolated final class PathFileLinkUITests: XCTestCase {
     @MainActor
     private func openTranscript(in app: XCUIApplication) -> XCUIElement {
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        if !workspace.waitForExistence(timeout: Fixture.launchTimeout) {
+        if !workspace.appears(timeout: Fixture.launchTimeout) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
-            XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         }
         workspace.tap()
         let agent = app.staticTexts[Fixture.agentName].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
         agent.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
         return transcript
     }
 

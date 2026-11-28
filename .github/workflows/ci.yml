@@ -824,8 +824,10 @@ jobs:
     # run the complete UI bundle. Filtered dispatches already run their
     # requested selector in build-and-test.
     # The iOS UI Tests check below requires every lane, even if one fails.
-    if: ${{ !cancelled() && needs.select-macos-runner.result == 'success' && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad' || inputs.pre_pr_gate)) }}
-    needs: select-macos-runner
+    # Lanes test the products ios-ui-build compiled once instead of each
+    # building its own copy.
+    if: ${{ !cancelled() && needs.select-macos-runner.result == 'success' && needs.ios-ui-build.result == 'success' && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad' || inputs.pre_pr_gate)) }}
+    needs: [select-macos-runner, ios-ui-build]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-macos-runner.outputs.ui-matrix) }}
@@ -872,34 +874,6 @@ jobs:
       - name: Pre-boot simulator
         run: xcrun simctl boot "$SIM_UDID" > "$SIMULATOR_EVIDENCE_DIR/boot.log" 2>&1 || true &
 
-      - name: Cache TailcatKit.xcframework
-        id: tailcat-cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            TailcatKit/build/TailcatKit.xcframework
-            TailcatKit/build/tcecho
-          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
-
-      # No Go cache, matching build-and-test.
-      - name: Set up Go
-        if: steps.tailcat-cache.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: TailcatKit/go.mod
-          cache: false
-
-      - name: Build TailcatKit.xcframework
-        if: steps.tailcat-cache.outputs.cache-hit != 'true'
-        run: ./TailcatKit/build_xcframework.sh
-
-      # Populate the shared cache identically to build-and-test. This job never
-      # starts tcecho because IntentUITests do not consume its smoke token.
-      - name: Build tailcat echo server
-        if: steps.tailcat-cache.outputs.cache-hit != 'true'
-        working-directory: TailcatKit
-        run: go build -o build/tcecho ./cmd/tcecho
-
       - name: Cache SPM packages
         uses: actions/cache@v6
         with:
@@ -908,18 +882,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
-      # The runner's checkout path is fixed, so every branch shares one
-      # DerivedData folder; start each self-hosted job from a clean build, as
-      # hosted runners do (ios#592).
-      - name: Clear DerivedData on local Mac
-        if: runner.environment == 'self-hosted'
-        run: .github/scripts/clear-local-derived-data.sh
-
       - name: Resolve SPM packages
         run: scripts/xcodebuild.sh resolve
 
-      - name: Build for testing
-        run: scripts/xcodebuild.sh build-for-testing-ui
+      - name: Download UI test build
+        uses: actions/download-artifact@v8
+        with:
+          name: ios-ui-test-build
+          path: ${{ runner.temp }}/ios-ui-test-build
+
+      - name: Install UI test build
+        run: |
+          mkdir -p "$DERIVED_DATA_DIR/Build"
+          tar -xf "$RUNNER_TEMP/ios-ui-test-build/products.tar" -C "$DERIVED_DATA_DIR/Build"
+          rm -rf "$RUNNER_TEMP/ios-ui-test-build"
 
       - name: Verify assertion-abort fixture evidence
         if: matrix.capture
@@ -1120,6 +1096,113 @@ jobs:
       # if the visionOS platform is not installed.
       - name: Build
         run: scripts/xcodebuild.sh build-visionos
+
+  ios-ui-build:
+    name: iOS UI Test Build
+    # Compiles the UI test products once; every UI lane downloads them and
+    # runs test-without-building instead of building its own copy.
+    if: ${{ !cancelled() && needs.select-macos-runner.result == 'success' && !(github.event_name == 'workflow_dispatch' && (inputs.only_testing != '' || inputs.simulator_family == 'ipad' || inputs.pre_pr_gate)) }}
+    needs: select-macos-runner
+    runs-on: ${{ fromJSON(needs.select-macos-runner.outputs.build-runs-on || '"warp-macos-26-arm64-6x"') }}
+    timeout-minutes: 30
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      SPM_CLONE_DIR: build/SourcePackages
+      SIMULATOR_FAMILY: iphone
+      UI_LANE: build
+      SIM_LOCK_TIMEOUT: '60'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Use isolated build directory
+        run: |
+          echo "DERIVED_DATA_DIR=$RUNNER_TEMP/intent-derived-data-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui-build" >> "$GITHUB_ENV"
+          echo "SIMULATOR_EVIDENCE_DIR=$RUNNER_TEMP/intent-simulator-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-ui-build" >> "$GITHUB_ENV"
+
+      - name: Select Xcode
+        run: |
+          xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' ! -iname '*beta*' ! -iname '*candidate*' | sort -V | tail -n 1)
+          if [ -z "$xcode" ]; then
+            echo '::error::Xcode 26 (GA) is required on this runner' >&2
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+
+      - name: Ensure Metal toolchain
+        run: |
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+            xcrun metal -v
+          fi
+
+      - name: Create owned UI simulator
+        run: python3 scripts/ci_simulator.py prepare-ci
+
+      - name: Cache TailcatKit.xcframework
+        id: tailcat-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            TailcatKit/build/TailcatKit.xcframework
+            TailcatKit/build/tcecho
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
+
+      # No Go cache, matching build-and-test.
+      - name: Set up Go
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache: false
+
+      - name: Build TailcatKit.xcframework
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        run: ./TailcatKit/build_xcframework.sh
+
+      # Populate the shared cache identically to build-and-test.
+      - name: Build tailcat echo server
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        working-directory: TailcatKit
+        run: go build -o build/tcecho ./cmd/tcecho
+
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      # The runner's checkout path is fixed, so every branch shares one
+      # DerivedData folder; start each self-hosted job from a clean build, as
+      # hosted runners do (ios#592).
+      - name: Clear DerivedData on local Mac
+        if: runner.environment == 'self-hosted'
+        run: .github/scripts/clear-local-derived-data.sh
+
+      - name: Resolve SPM packages
+        run: scripts/xcodebuild.sh resolve
+
+      - name: Build for testing
+        run: scripts/xcodebuild.sh build-for-testing-ui
+
+      # tar keeps the symlinks and executable bits that artifact zips drop.
+      - name: Package UI test build
+        run: tar -cf "$RUNNER_TEMP/products.tar" -C "$DERIVED_DATA_DIR/Build" Products
+
+      - name: Upload UI test build
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ui-test-build
+          path: ${{ runner.temp }}/products.tar
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Clean up owned UI simulator
+        if: always() && env.SIMULATOR_EVIDENCE_DIR != ''
+        run: python3 scripts/ci_simulator.py cleanup
 
   pr-title:
     runs-on: ubuntu-24.04

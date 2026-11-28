@@ -177,7 +177,7 @@ func launchDemoApp(
     endDerealization: EndDerealization? = nil,
     extraArguments: [String] = []
 ) -> XCUIApplication {
-    let app = XCUIApplication()
+    let app = XCUIApplication.intent()
     app.launchArguments += ["--demo-data", Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path] + extraArguments
     if let blockHydrationTriggerFile {
         app.launchArguments.append(
@@ -205,7 +205,7 @@ func openLongConversation(
 ) -> OpenConversation {
     let opened = enterLongConversation(in: app, context: context, evidence: evidence)
     XCTAssertTrue(
-        opened.lastMessage.waitForExistence(timeout: Fixture.settleTimeout),
+        opened.lastMessage.appears(timeout: Fixture.settleTimeout),
         "\(context): last transcript message never appeared — "
             + restingState(of: opened.lastMessage, named: "last assistant paragraph", in: opened)
     )
@@ -237,27 +237,27 @@ func enterLongConversation(
     }
 
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
-    if !workspaceRow.waitForExistence(timeout: Fixture.workspaceTimeout) {
+    if !workspaceRow.appears(timeout: Fixture.workspaceTimeout) {
         app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(workspaceRow.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(workspaceRow.appears(timeout: Fixture.settleTimeout))
     }
     workspaceRow.tap()
 
     let overview = app.buttons[Fixture.overviewOnlyButton].firstMatch
     XCTAssertTrue(
-        overview.waitForExistence(timeout: Fixture.settleTimeout),
+        overview.appears(timeout: Fixture.settleTimeout),
         "\(context): workspace overview not shown after the workspace tap"
     )
     let agentRow = app.staticTexts[Fixture.agentName].firstMatch
     XCTAssertTrue(
-        agentRow.waitForExistence(timeout: Fixture.settleTimeout),
+        agentRow.appears(timeout: Fixture.settleTimeout),
         "\(context): agent row not found on the workspace overview"
     )
     agentRow.tap()
 
     if waitForTranscript {
         XCTAssertTrue(
-            opened.transcript.waitForExistence(timeout: Fixture.elementTimeout),
+            opened.transcript.appears(timeout: Fixture.elementTimeout),
             "\(context): transcript scroll view not found"
         )
     }
@@ -306,14 +306,14 @@ func leaveConversation(in app: XCUIApplication) {
     let workspaceList = app.buttons[Fixture.workspaceListIdentifier].firstMatch
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
     var backTapsLeft = Fixture.backNavigationAttempts
-    while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {
+    while backTapsLeft > 0, !workspaceList.appears(timeout: Fixture.backNavigationTimeout) {
         let workspaceBack = app.buttons["conversation.back"]
         let back = workspaceBack.exists ? workspaceBack : app.navigationBars.buttons.element(boundBy: 0)
         guard back.exists else { break }
         back.tap()
         backTapsLeft -= 1
     }
-    if !workspaceList.exists || !workspaceRow.waitForExistence(timeout: Fixture.elementTimeout) {
+    if !workspaceList.exists || !workspaceRow.appears(timeout: Fixture.elementTimeout) {
         app.launch()
     }
 }

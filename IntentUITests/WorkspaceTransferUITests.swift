@@ -5,24 +5,24 @@ nonisolated final class WorkspaceTransferUITests: XCTestCase {
 
     @MainActor
     func testWorkspaceMenuOpensTransferFormAndDismissesWithoutLeavingWorkspace() {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data"]
         if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
             app.launchArguments += ["-appThemePreference", appearance]
         }
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
         let actions = app.buttons["Workspace actions"]
-        XCTAssertTrue(actions.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(actions.appears(timeout: Self.timeout))
         actions.tap()
         let transfer = app.buttons["workspace.transfer"]
-        XCTAssertTrue(transfer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(transfer.appears(timeout: Self.timeout))
         transfer.tap()
 
         let destination = app.buttons["workspace-transfer.destination"]
-        XCTAssertTrue(destination.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(destination.appears(timeout: Self.timeout))
         let submit = app.buttons["workspace-transfer.submit"]
         XCTAssertTrue(submit.exists)
         XCTAssertFalse(submit.isEnabled, "A transfer requires an explicit destination.")
@@ -36,11 +36,11 @@ nonisolated final class WorkspaceTransferUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         app.buttons["connection-sheet.close"].tap()
-        XCTAssertTrue(destination.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(destination.disappears(timeout: Self.timeout))
         XCTAssertTrue(actions.exists)
         actions.tap()
         transfer.tap()
-        XCTAssertTrue(destination.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(destination.appears(timeout: Self.timeout))
         XCTAssertEqual(archive.value as? String, "0", "Reopening starts a fresh form.")
     }
 }

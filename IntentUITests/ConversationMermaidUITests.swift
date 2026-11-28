@@ -21,20 +21,20 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
     @MainActor
     func testDiagramHistoryReopensAndGoToEndShowsLastAnswer() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=mermaid-history", "--trace-conversation"]
         app.launch()
         defer { app.terminate() }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         workspace.tap()
 
         for visit in 1...Fixture.historyVisits {
             let agent = app.staticTexts["Continue Spec Writer"].firstMatch
-            XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
             agent.tap()
             let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-            XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
             let lastAnswer = transcript.staticTexts.matching(NSPredicate(
                 format: "label CONTAINS %@", "Architecture answer 4 is complete."
             )).firstMatch
@@ -50,7 +50,7 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
             app.buttons["conversation.back"].tap()
             if visit < Fixture.historyVisits {
                 visitOtherWorkspace(in: app)
-                XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+                XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
                 workspace.tap()
             }
         }
@@ -59,27 +59,27 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
     @MainActor
     func testDiagramHistoryRemainsUsableWhenItGrowsPastEagerLimit() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=mermaid-history", "--trace-conversation"]
         app.launch()
         defer { app.terminate() }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         workspace.tap()
         let agent = app.staticTexts["Continue Spec Writer"].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
         agent.tap()
         let transcript = app.scrollViews["transcript.scrollView"]
-        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
         for index in 1...Fixture.growthMessages {
             let composer = app.textViews["composer.textView"]
             composer.tap()
             composer.typeText("Diagram follow-up \(index)")
             app.buttons["composer.send"].tap()
             let stop = app.buttons["composer.stop"]
-            XCTAssertTrue(stop.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(stop.appears(timeout: Fixture.timeout))
             stop.tap()
-            XCTAssertTrue(stop.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(stop.disappears(timeout: Fixture.timeout))
         }
         let lastMessage = transcript.staticTexts["Diagram follow-up \(Fixture.growthMessages)"].firstMatch
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) {
@@ -92,17 +92,17 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
     @MainActor
     private func visitOtherWorkspace(in app: XCUIApplication) {
         let back = app.buttons["workspaceDetail.back"]
-        XCTAssertTrue(back.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(back.appears(timeout: Fixture.timeout))
         back.tap()
         let otherWorkspace = app.staticTexts["Deflake payment integration tests"].firstMatch
-        XCTAssertTrue(otherWorkspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(otherWorkspace.appears(timeout: Fixture.timeout))
         otherWorkspace.tap()
         let otherAgent = app.staticTexts["Test Stabilizer"].firstMatch
-        XCTAssertTrue(otherAgent.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(otherAgent.appears(timeout: Fixture.timeout))
         otherAgent.tap()
-        XCTAssertTrue(app.scrollViews["transcript.scrollView"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.scrollViews["transcript.scrollView"].appears(timeout: Fixture.timeout))
         app.buttons["conversation.back"].tap()
-        XCTAssertTrue(back.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(back.appears(timeout: Fixture.timeout))
         back.tap()
     }
 
@@ -115,7 +115,7 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
         )
         continueAfterFailure = false
         XCUIDevice.shared.orientation = .portrait
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=mermaid"]
         app.launch()
         addTeardownBlock { @MainActor [self] () async in
@@ -123,20 +123,20 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
             app.terminate()
         }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         workspace.tap()
         let agent = app.staticTexts["Continue Spec Writer"].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
         agent.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
         let webView = transcript.webViews["mermaid.webview"].firstMatch
         let expand = transcript.buttons["mermaid.expand"].firstMatch
-        XCTAssertTrue(webView.waitForExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(expand.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(webView.appears(timeout: Fixture.timeout))
+        XCTAssertTrue(expand.appears(timeout: Fixture.timeout))
         reveal(webView, expand: expand, in: transcript)
         let diagram = webView.images["Mermaid diagram"].firstMatch
-        XCTAssertTrue(diagram.waitForExistence(timeout: Fixture.timeout), "WebKit must expose the rendered SVG for gesture assertions")
+        XCTAssertTrue(diagram.appears(timeout: Fixture.timeout), "WebKit must expose the rendered SVG for gesture assertions")
         capture(app, name: "mermaid-inline-before-gestures")
         XCTAssertGreaterThan(diagram.frame.width, webView.frame.width, "The fixture must overflow horizontally")
         XCTAssertGreaterThan(diagram.frame.height, webView.frame.height, "The fixture must overflow vertically")
@@ -157,14 +157,14 @@ nonisolated final class ConversationMermaidUITests: XCTestCase {
             .withOffset(CGVector(dx: expand.frame.width - Fixture.edgeInset, dy: expand.frame.height / 2))
             .tap()
         let done = app.buttons["mermaid.done"].firstMatch
-        XCTAssertTrue(done.waitForExistence(timeout: Fixture.timeout), "The button's outer edge must open fullscreen")
+        XCTAssertTrue(done.appears(timeout: Fixture.timeout), "The button's outer edge must open fullscreen")
         let expandedDiagram = app.webViews["mermaid.fullscreen.webview"].images["Mermaid diagram"].firstMatch
-        let rendered = expandedDiagram.waitForExistence(timeout: Fixture.timeout)
+        let rendered = expandedDiagram.appears(timeout: Fixture.timeout)
         capture(app, name: "mermaid-fullscreen-from-button-edge")
         XCTAssertTrue(rendered, "The fullscreen renderer must draw its own diagram")
         done.tap()
-        XCTAssertTrue(done.waitForNonExistence(timeout: Fixture.timeout))
-        XCTAssertTrue(webView.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(done.disappears(timeout: Fixture.timeout))
+        XCTAssertTrue(webView.appears(timeout: Fixture.timeout))
     }
 
     @MainActor

@@ -8,12 +8,12 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
     func testDoubleTapShowsKeyboardAndDoneSavesTheTitle() {
         let app = openWorkspace()
         let heading = app.staticTexts["workspace.title.heading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(heading.appears(timeout: Self.timeout))
         heading.doubleTap()
         let field = app.textFields["workspace.title.field"]
         let done = app.buttons["workspace.title.done"]
-        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(field.appears(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.timeout))
         field.typeText(" edited")
         XCTAssertTrue(done.isHittable)
         XCTAssertGreaterThan(done.frame.midX, app.frame.midX)
@@ -22,15 +22,15 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
 
         done.tap()
 
-        XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(field.disappears(timeout: Self.timeout))
         XCTAssertEqual(heading.label, Self.workspaceTitle + " edited")
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         if app.buttons["workspaceDetail.back"].exists {
             app.buttons["workspaceDetail.back"].tap()
         } else {
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
-        XCTAssertTrue(app.staticTexts[Self.workspaceTitle + " edited"].firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts[Self.workspaceTitle + " edited"].firstMatch.appears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -43,20 +43,20 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
 
     @MainActor
     private func verifyTitleDraftSurvivesScrolling(appearance: String) {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=agent-groups-large"]
         app.launchArguments += ["-appThemePreference", appearance]
         app.launch()
         defer { app.terminate() }
         let workspace = app.staticTexts["Workspace agent design"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
         let heading = app.staticTexts["workspace.title.heading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(heading.appears(timeout: Self.timeout))
         heading.doubleTap()
         let field = app.textFields["workspace.title.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(field.appears(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.timeout))
         field.typeText(" edited")
         let draft = "Workspace agent design edited"
         XCTAssertEqual(field.value as? String, draft)
@@ -75,7 +75,7 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
         XCTAssertEqual(field.value as? String, draft + " again")
         capture(app, name: "Workspace title draft restored \(appearance)")
         app.buttons["workspace.title.cancel"].tap()
-        XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(field.disappears(timeout: Self.timeout))
         XCTAssertEqual(heading.label, "Workspace agent design")
     }
 
@@ -83,19 +83,19 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
     func testFailedSaveKeepsTheDraftAndCancelDiscardsIt() {
         let app = openWorkspace(failing: true)
         let heading = app.staticTexts["workspace.title.heading"]
-        XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(heading.appears(timeout: Self.timeout))
         heading.doubleTap()
         let field = app.textFields["workspace.title.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(field.appears(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.timeout))
         field.typeText(" edited")
         app.buttons["workspace.title.done"].tap()
 
-        XCTAssertTrue(app.staticTexts["workspace.title.error"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["workspace.title.error"].appears(timeout: Self.timeout))
         XCTAssertEqual(field.value as? String, Self.workspaceTitle + " edited")
         app.buttons["workspace.title.cancel"].tap()
 
-        XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(field.disappears(timeout: Self.timeout))
         XCTAssertEqual(heading.label, Self.workspaceTitle)
     }
 
@@ -108,24 +108,24 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
             let app = openWorkspace(failing: true, appearance: appearance)
             app.buttons["Agents"].firstMatch.tap()
             let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-            XCTAssertTrue(agent.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(agent.appears(timeout: Self.timeout))
             agent.tap()
-            XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Self.timeout))
             let heading = app.staticTexts["workspace.title.heading"]
-            XCTAssertTrue(heading.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(heading.appears(timeout: Self.timeout))
             heading.doubleTap()
             let field = app.textFields["workspace.title.field"]
-            XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(field.appears(timeout: Self.timeout))
             field.typeText(" edited")
             app.buttons["workspace.title.done"].tap()
             let error = app.staticTexts["workspace.title.error"]
-            XCTAssertTrue(error.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(error.appears(timeout: Self.timeout))
             XCTAssertGreaterThanOrEqual(error.frame.minY, field.frame.maxY)
             XCTAssertTrue(field.isHittable)
             XCTAssertEqual(field.value as? String, Self.workspaceTitle + " edited")
             capture(app, name: "Sidebar title save error \(appearance)")
             app.buttons["workspace.title.cancel"].tap()
-            XCTAssertTrue(field.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(field.disappears(timeout: Self.timeout))
             XCTAssertEqual(heading.label, Self.workspaceTitle)
             app.terminate()
         }
@@ -151,13 +151,13 @@ nonisolated final class WorkspaceTitleEditingUITests: XCTestCase {
     @MainActor
     private func openWorkspace(failing: Bool = false, appearance: String? = nil) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-workspace-actions"]
         if let appearance { app.launchArguments += ["-appThemePreference", appearance] }
         if failing { app.launchArguments.append("--demo-workspace-action-error") }
         app.launch()
         let workspace = app.staticTexts[Self.workspaceTitle].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
         return app
     }

@@ -20,7 +20,7 @@ nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
 
     @MainActor func testRetainedProducerHidingComparison() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "The retained pane discriminator requires iPad")
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-ipad-producer-visibility"]
         app.launch()
         addTeardownBlock { @MainActor [self] () async throws in
@@ -36,7 +36,7 @@ nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
         let draft = try XCTUnwrap(editor.value as? String)
         XCTAssertTrue(draft.contains("typed"))
         app.buttons["visibility.prepare"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         var original: [String: String] = [:]
         for phase in ["visible", "outerHidden", "outerRestored", "producerHidden", "producerRestored"] {
             if phase != "visible" { app.buttons["visibility.next"].tap() }
@@ -58,7 +58,7 @@ nonisolated final class IPadProducerVisibilityUITests: XCTestCase {
         for identifier in Self.identifiers {
             let matches = elements(in: app, identifier: identifier)
             let element = matches.firstMatch
-            XCTAssertTrue(element.waitForExistence(timeout: Self.timeout), "Missing visible sentinel: \(identifier)")
+            XCTAssertTrue(element.appears(timeout: Self.timeout), "Missing visible sentinel: \(identifier)")
             XCTAssertEqual(matches.count, 1, "Ambiguous visible sentinel: \(identifier)")
             XCTAssertTrue(element.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), "Unreachable visible sentinel: \(identifier)")
         }
@@ -153,7 +153,7 @@ extension IPadProducerVisibilityUITests {
     }
 
     @MainActor private func prepareInteractionApp() throws -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-ipad-producer-visibility"]
         app.launch()
         addTeardownBlock { @MainActor [self] () async throws in
@@ -167,7 +167,7 @@ extension IPadProducerVisibilityUITests {
         editor.typeText(" typed")
         XCTAssertTrue(try XCTUnwrap(editor.value as? String).contains("typed"))
         app.buttons["visibility.prepare"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
         let probe = app.descendants(matching: .any)["visibility.native"].firstMatch
         XCTAssertTrue(probe.wait(for: \.label, toEqual: "visible", timeout: Self.timeout))
         return app
@@ -178,7 +178,7 @@ extension IPadProducerVisibilityUITests {
         XCTAssertEqual(lists.count, 1)
         let frame = lists.firstMatch.frame
         let action = app.buttons["visibility.action"]
-        XCTAssertTrue(action.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(action.appears(timeout: Self.timeout))
         let actionFrame = action.frame
         XCTAssertFalse(actionFrame.isEmpty)
         XCTAssertTrue(frame.contains(actionFrame))

@@ -62,6 +62,14 @@ enum ConversationTranscriptScrollPolicy {
         return .waitForScrollView
     }
 
+    static func preservedEntryDistanceToBottom(
+        _ distanceToBottom: CGFloat?,
+        endRecoveryArmed: Bool,
+        isInteracting: Bool
+    ) -> CGFloat? {
+        endRecoveryArmed && !isInteracting ? 0 : distanceToBottom
+    }
+
     static func scrolledAwayTransition(
         current: Bool,
         geometryAway: Bool,

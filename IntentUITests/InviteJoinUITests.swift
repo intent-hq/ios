@@ -9,7 +9,7 @@ nonisolated final class InviteJoinUITests: XCTestCase {
         for appearance in ["light", "dark"] {
             let app = launch(scenario: "first-join", appearance: appearance)
             let title = app.staticTexts["invite-join-title"]
-            XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), app.debugDescription)
+            XCTAssertTrue(title.appears(timeout: Self.timeout), app.debugDescription)
             XCTAssertEqual(title.label, "Billing revamp")
             let explanation = app.staticTexts["invite-join-explanation"]
             XCTAssertTrue(explanation.label.contains("Ada's MacBook Pro"), explanation.label)
@@ -20,7 +20,7 @@ nonisolated final class InviteJoinUITests: XCTestCase {
             capture(app, name: "Invite join confirm \(appearance)")
 
             join.tap()
-            XCTAssertTrue(title.waitForNonExistence(timeout: Self.timeout), "Joining closes the sheet")
+            XCTAssertTrue(title.disappears(timeout: Self.timeout), "Joining closes the sheet")
             app.terminate()
         }
     }
@@ -31,7 +31,7 @@ nonisolated final class InviteJoinUITests: XCTestCase {
         for appearance in ["light", "dark"] {
             let app = launch(scenario: "no-mac", appearance: appearance)
             let title = app.staticTexts["invite-join-message-title"]
-            XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), app.debugDescription)
+            XCTAssertTrue(title.appears(timeout: Self.timeout), app.debugDescription)
             XCTAssertEqual(title.label, "Confirm Your Account on Your Mac")
             XCTAssertTrue(app.buttons["invite-join-copy-link"].exists)
             XCTAssertFalse(app.buttons["invite-join-button"].exists, "Nothing to join from here")
@@ -45,7 +45,7 @@ nonisolated final class InviteJoinUITests: XCTestCase {
         continueAfterFailure = false
         let app = launch(scenario: "expired", appearance: "light")
         let title = app.staticTexts["invite-join-message-title"]
-        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        XCTAssertTrue(title.appears(timeout: Self.timeout), app.debugDescription)
         XCTAssertEqual(title.label, "Invite Expired")
         XCTAssertFalse(app.buttons["invite-join-retry"].exists, "An expired link can't succeed on retry")
         capture(app, name: "Invite join expired light")
@@ -53,7 +53,7 @@ nonisolated final class InviteJoinUITests: XCTestCase {
 
     @MainActor
     private func launch(scenario: String, appearance: String) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-invite=\(scenario)", "-appThemePreference", appearance]
         app.launch()
         return app

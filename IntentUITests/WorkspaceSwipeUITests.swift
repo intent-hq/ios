@@ -19,8 +19,8 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
             thenHoldForDuration: 0.5
         )
         let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
-        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
-        XCTAssertFalse(archive.waitForNonExistence(timeout: 2), "Actions must remain open after the drag settles")
+        XCTAssertTrue(archive.appears(timeout: Self.timeout))
+        XCTAssertFalse(archive.disappears(timeout: 2), "Actions must remain open after the drag settles")
         XCTAssertTrue(archive.isHittable)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-status-swipe-stays-open"
@@ -28,7 +28,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         add(screenshot)
         archive.tap()
         let alert = app.alerts["Archive Workspace"]
-        XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(alert.appears(timeout: Self.timeout))
         alert.buttons["Cancel"].tap()
         XCTAssertTrue(row.exists)
     }
@@ -40,16 +40,16 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 280, dy: 0)))
         let transcript = app.scrollViews["transcript.scrollView"]
-        XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(transcript.appears(timeout: Self.timeout))
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-right-swipe-recent-agent"
         screenshot.lifetime = .keepAlways
         add(screenshot)
         let back = app.buttons["conversation.back"]
-        XCTAssertTrue(back.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(back.appears(timeout: Self.timeout))
         XCTAssertTrue(back.isHittable)
         back.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
         XCTAssertFalse(transcript.exists)
     }
 
@@ -62,7 +62,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
         XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
         row.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
         XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
     }
 
@@ -72,10 +72,10 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let row = app.buttons["workspace.row.\(Self.workspaceId)"]
         revealActions(on: row)
         let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
-        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(archive.appears(timeout: Self.timeout))
         let start = visibleRowPoint(in: app, row: row, action: archive)
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 220, dy: 0)))
-        XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(archive.disappears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
         XCTAssertFalse(app.scrollViews["transcript.scrollView"].exists)
     }
@@ -88,7 +88,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let row = app.buttons["workspace.row.\(Self.workspaceId)"]
         if UIDevice.current.userInterfaceIdiom == .pad {
             app.buttons["workspace.row.demo-ws-flaky-tests"].tap()
-            XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].appears(timeout: Self.timeout))
         }
         XCTAssertTrue(row.label.contains("Updated "))
         verifyActionCancellation(in: app, row: row)
@@ -99,20 +99,20 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         add(screenshot)
         app.buttons["workspace.archive.\(Self.workspaceId)"].tap()
         app.alerts["Archive Workspace"].buttons["Archive"].tap()
-        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.disappears(timeout: Self.timeout))
         if UIDevice.current.userInterfaceIdiom == .pad {
             XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].exists)
         }
 
         let otherId = "demo-ws-flaky-tests"
         let other = app.buttons["workspace.row.\(otherId)"]
-        XCTAssertTrue(other.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(other.appears(timeout: Self.timeout))
         revealActions(on: other)
         app.buttons["workspace.delete.\(otherId)"].tap()
         app.alerts["Delete Workspace"].buttons["Delete"].tap()
-        XCTAssertTrue(other.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(other.disappears(timeout: Self.timeout))
         if UIDevice.current.userInterfaceIdiom == .pad {
-            XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].disappears(timeout: Self.timeout))
         }
         workspaceList(in: app).swipeDown()
         XCTAssertFalse(row.exists)
@@ -124,7 +124,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
     private func verifyArchivedWorkspace(in app: XCUIApplication, row: XCUIElement, deleted: XCUIElement) {
         app.buttons["workspaces.menu"].tap()
         app.buttons["Show archived"].tap()
-        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.appears(timeout: Self.timeout))
         XCTAssertTrue(row.label.contains("Archived"))
         XCTAssertFalse(row.label.contains("Updated "))
         XCTAssertFalse(deleted.exists)
@@ -138,7 +138,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         add(archivedScreenshot)
         app.buttons["workspaces.menu"].tap()
         app.buttons["Hide archived"].tap()
-        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -146,10 +146,10 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         for action in ["Archive", "Delete"] {
             revealActions(on: row)
             let button = app.buttons["workspace.\(action.lowercased()).\(Self.workspaceId)"]
-            XCTAssertTrue(button.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(button.appears(timeout: Self.timeout))
             button.tap()
             let alert = app.alerts["\(action) Workspace"]
-            XCTAssertTrue(alert.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(alert.appears(timeout: Self.timeout))
             XCTAssertTrue(alert.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Add usage analytics dashboard")).firstMatch.exists)
             alert.buttons["Cancel"].tap()
             XCTAssertTrue(row.exists)
@@ -166,25 +166,25 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
             XCTAssertTrue(row.isHittable)
             revealActions(on: row)
             let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
-            XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(archive.appears(timeout: Self.timeout))
             visibleRowPoint(in: app, row: row, action: archive).tap()
-            XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(archive.disappears(timeout: Self.timeout))
             XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
         }
         app.buttons["workspaces.search.open"].tap()
         let field = app.textFields["workspaces.search.field"]
-        XCTAssertTrue(field.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(field.appears(timeout: Self.timeout))
         field.typeText("usage\n")
         let row = app.buttons["workspace.row.\(Self.workspaceId)"]
         revealActions(on: row)
         let delete = app.buttons["workspace.delete.\(Self.workspaceId)"]
-        XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(delete.appears(timeout: Self.timeout))
         let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
         let start = visibleRowPoint(in: app, row: row, action: archive)
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 100, dy: 0)))
-        XCTAssertTrue(delete.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(delete.disappears(timeout: Self.timeout))
         row.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -196,16 +196,16 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let other = app.buttons["workspace.row.demo-ws-flaky-tests"]
         if UIDevice.current.userInterfaceIdiom == .pad {
             other.tap()
-            XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.buttons["workspace.agent.demo-agent-deflake"].appears(timeout: Self.timeout))
         }
         revealActions(on: row)
         app.buttons["workspace.delete.\(Self.workspaceId)"].tap()
         let confirmation = app.alerts["Delete Workspace"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
         XCTAssertTrue(confirmation.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Add usage analytics dashboard")).firstMatch.exists)
         confirmation.buttons["Delete"].tap()
         let error = app.alerts["Workspace action failed"]
-        XCTAssertTrue(error.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(error.appears(timeout: Self.timeout))
         error.buttons["OK"].tap()
         XCTAssertTrue(row.exists)
         XCTAssertTrue(other.exists)
@@ -232,7 +232,7 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let app = launchWorkspaces(arguments: ["--demo-long-workspace-list"])
         let workspaceId = "demo-ws-flaky-tests"
         let row = app.buttons["workspace.row.\(workspaceId)"]
-        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.appears(timeout: Self.timeout))
         let origin = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         origin.press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: 0, dy: -80)))
         XCTAssertTrue(row.isHittable)
@@ -246,10 +246,10 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
             let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
             let end = start.withOffset(CGVector(dx: -180, dy: verticalDrift))
             start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
-            XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(archive.appears(timeout: Self.timeout))
             XCTAssertEqual(row.frame.minY, startingY, accuracy: 2)
             visibleRowPoint(in: app, row: row, action: archive).tap()
-            XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+            XCTAssertTrue(archive.disappears(timeout: Self.timeout))
         }
 
         let startingY = row.frame.minY
@@ -264,10 +264,10 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let app = launchWorkspaces()
         revealActions(on: app.buttons["workspace.row.\(Self.workspaceId)"])
         let firstAction = app.buttons["workspace.archive.\(Self.workspaceId)"]
-        XCTAssertTrue(firstAction.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(firstAction.appears(timeout: Self.timeout))
         revealActions(on: app.buttons["workspace.row.demo-ws-flaky-tests"])
-        XCTAssertTrue(app.buttons["workspace.archive.demo-ws-flaky-tests"].waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(firstAction.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.archive.demo-ws-flaky-tests"].appears(timeout: Self.timeout))
+        XCTAssertTrue(firstAction.disappears(timeout: Self.timeout))
     }
 
     @MainActor
@@ -277,19 +277,19 @@ nonisolated final class WorkspaceSwipeUITests: XCTestCase {
         let archive = app.buttons["workspace.archive.\(Self.workspaceId)"]
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -24, dy: 0)))
-        XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(archive.disappears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspaces.search.open"].exists)
 
         revealActions(on: row)
-        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(archive.appears(timeout: Self.timeout))
         let openStart = visibleRowPoint(in: app, row: row, action: archive)
         openStart.press(forDuration: 0.05, thenDragTo: openStart.withOffset(CGVector(dx: 24, dy: 0)))
         XCTAssertTrue(archive.isHittable)
         XCTAssertFalse(app.alerts.firstMatch.exists)
         openStart.press(forDuration: 0.05, thenDragTo: openStart.withOffset(CGVector(dx: 100, dy: 0)))
-        XCTAssertTrue(archive.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(archive.disappears(timeout: Self.timeout))
         row.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
     }
 }
 
@@ -297,18 +297,18 @@ private extension WorkspaceSwipeUITests {
     @MainActor
     func launchWorkspaces(arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-workspace-actions"] + arguments
         app.launch()
         let row = app.buttons["workspace.row.\(Self.workspaceId)"]
-        if UIDevice.current.userInterfaceIdiom == .pad, !row.waitForExistence(timeout: 2) {
+        if UIDevice.current.userInterfaceIdiom == .pad, !row.appears(timeout: 2) {
             revealSidebarIfNeeded(in: app)
         }
-        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.appears(timeout: Self.timeout))
         if UIDevice.current.userInterfaceIdiom == .pad {
             XCTAssertTrue(row.isHittable)
             row.tap()
-            XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
             revealSidebarIfNeeded(in: app)
             XCTAssertTrue(row.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         }

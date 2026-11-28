@@ -320,6 +320,7 @@ $(SRCROOT)/Intent/Demo/DemoSharingFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoStartupConnection.swift
 $(SRCROOT)/Intent/Demo/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoWorkspaceActionFixtures.swift
+$(SRCROOT)/Intent/Demo/UITestAnimations.swift
 $(SRCROOT)/Intent/DesignSystem
 $(SRCROOT)/Intent/DesignSystem/AgentAvatarDesign.swift
 $(SRCROOT)/Intent/DesignSystem/Colors.swift

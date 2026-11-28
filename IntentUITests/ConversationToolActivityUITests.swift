@@ -19,7 +19,7 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
     @MainActor
     func testIPadConsecutiveToolsExpandAndCollapseInBothThemes() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad tool activity evidence")
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         addTeardownBlock { @MainActor [self] () async in
             if app.state == .runningForeground {
                 capture(app, name: "iPad tools final state")
@@ -38,7 +38,7 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
     @MainActor
     func testIPadClaudeToolTitlesKeepExpandedDetails() throws {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad Claude tool title evidence")
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         addTeardownBlock { @MainActor [self] () async in
             if app.state == .runningForeground {
                 capture(app, name: "iPad Claude tools final state")
@@ -58,14 +58,14 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
             capture(app, name: "iPad Claude tools collapsed \(appearance)")
             loading.tap()
             let output = transcript.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Loaded workspace_api")).firstMatch
-            XCTAssertTrue(output.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(output.appears(timeout: Self.timeout))
             let input = transcript.buttons["Input"].firstMatch
             XCTAssertTrue(input.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
             input.tap()
             let selector = transcript.staticTexts.matching(NSPredicate(
                 format: "label CONTAINS %@", "select:mcp__workspace-mcp__workspace_api"
             )).firstMatch
-            XCTAssertTrue(selector.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(selector.appears(timeout: Self.timeout))
             XCTAssertEqual(loading.label, "Loading tools")
             capture(app, name: "iPad Claude tools expanded \(appearance)")
             app.terminate()
@@ -86,14 +86,14 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
         let agent = app.buttons["workspace.agent.demo-agent-design"]
         XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         agent.tap()
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
     }
 
     @MainActor
     private func verifyTools(in app: XCUIApplication, appearance: String) {
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-        XCTAssertTrue(transcript.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(transcript.appears(timeout: Self.timeout))
         let rows = Self.toolLabels.map { transcript.buttons[$0] }
         let summary = transcript.buttons["3 tool calls"]
         XCTAssertTrue(summary.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
@@ -101,7 +101,7 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
         capture(app, name: "iPad tools summary \(appearance)")
         openToolSummary("3 tool calls", in: transcript)
         for row in rows {
-            XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(row.appears(timeout: Self.timeout))
         }
         let output = transcript.staticTexts.matching(NSPredicate(
             format: "label CONTAINS %@",
@@ -115,7 +115,7 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
         let read = rows[0]
         read.tap()
         XCTAssertTrue(waitUntil(timeout: Self.timeout) { read.value as? String == "Expanded" })
-        XCTAssertTrue(output.waitForExistence(timeout: Self.timeout), "A physical tap must expose the paired output")
+        XCTAssertTrue(output.appears(timeout: Self.timeout), "A physical tap must expose the paired output")
         XCTAssertTrue(waitUntil(timeout: Self.timeout) { isInside(output, transcript) && read.isHittable })
         XCTAssertNotNil(waitUntilSteady(timeout: Self.timeout, tolerance: Self.frameTolerance) { output.frame.midY })
         for row in rows.dropFirst() {
@@ -125,16 +125,16 @@ nonisolated final class ConversationToolActivityUITests: XCTestCase {
 
         read.tap()
         XCTAssertTrue(waitUntil(timeout: Self.timeout) { read.value as? String == "Collapsed" })
-        XCTAssertTrue(output.waitForNonExistence(timeout: Self.timeout), "Collapsing must hide the paired output again")
+        XCTAssertTrue(output.disappears(timeout: Self.timeout), "Collapsing must hide the paired output again")
         assertCollapsedRows(rows, in: transcript)
 
         toggleToolActivity(in: app)
-        XCTAssertTrue(summary.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(summary.disappears(timeout: Self.timeout))
         assertCollapsedRows(rows, in: transcript)
         toggleToolActivity(in: app)
-        XCTAssertTrue(summary.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(summary.appears(timeout: Self.timeout))
         summary.tap()
-        XCTAssertTrue(rows[0].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(rows[0].disappears(timeout: Self.timeout))
     }
 
     @MainActor

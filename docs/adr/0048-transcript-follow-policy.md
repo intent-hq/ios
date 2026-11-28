@@ -37,6 +37,11 @@ so the entry scroll waits for the finder to resolve. Once the bounded wait
 elapses it runs anyway, so a finder that never resolves cannot leave the
 transcript unscrolled. It runs at most once, whichever path gets there first.
 
+When the rows are already presented before entry metadata arrives, the entry
+keeps them. Rows that re-measure in that moment can move the end out of view;
+that is content growth, not a gesture, so while an end recovery is armed the
+kept entry stays pinned and the recovery brings the end back (§3).
+
 ### 3. Only a gesture unpins the transcript
 
 Applies to: `scrolledAwayTransition(current:geometryAway:isInteracting:isEndRealized:)`

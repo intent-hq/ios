@@ -67,6 +67,7 @@ $(SRCROOT)/Intent/Demo/DemoSharingFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoStartupConnection.swift
 $(SRCROOT)/Intent/Demo/DemoTerminalFixtures.swift
 $(SRCROOT)/Intent/Demo/DemoWorkspaceActionFixtures.swift
+$(SRCROOT)/Intent/Demo/UITestAnimations.swift
 $(SRCROOT)/Intent/DesignSystem/AgentAvatarDesign.swift
 $(SRCROOT)/Intent/DesignSystem/Colors.swift
 $(SRCROOT)/Intent/DesignSystem/ComponentLayout.swift
@@ -1302,6 +1303,7 @@ $(SRCROOT)/IntentUITests/StartupWebSocketFixture.swift
 $(SRCROOT)/IntentUITests/ToastUITests.swift
 $(SRCROOT)/IntentUITests/TranscriptVideoUITests.swift
 $(SRCROOT)/IntentUITests/TurnFailureNoticeUITests.swift
+$(SRCROOT)/IntentUITests/UITestLaunch.swift
 $(SRCROOT)/IntentUITests/UnopenableLinkUITests.swift
 $(SRCROOT)/IntentUITests/WatcherMessageUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceAgentGroupsUITests.swift

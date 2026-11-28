@@ -26,32 +26,32 @@ extension ConnectionLossUITests {
         assertStartupState("connected", in: app)
         try trigger("loss", in: directory)
         let reconnect = app.buttons["connection-failure.reconnect"]
-        XCTAssertTrue(reconnect.waitForExistence(timeout: RecoveryFixture.timeout))
+        XCTAssertTrue(reconnect.appears(timeout: RecoveryFixture.timeout))
         XCTAssertEqual(reconnect.label, certificateMismatch ? "Re-pair Device" : "Connect to different server")
         capture(app, named: "failure-before-primary-exit")
         reconnect.tap()
 
         let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.waitForExistence(timeout: RecoveryFixture.timeout))
+        XCTAssertTrue(saved.appears(timeout: RecoveryFixture.timeout))
         XCTAssertFalse(app.buttons["connection-failure.home"].exists)
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Manual Connection")).firstMatch.exists)
         saved.tap()
         let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.waitForExistence(timeout: RecoveryFixture.timeout), "The saved pairing must be retained")
+        XCTAssertTrue(machine.appears(timeout: RecoveryFixture.timeout), "The saved pairing must be retained")
         machine.tap()
         assertStartupState("connected", in: app)
         let back = app.buttons["connecting.home"]
-        XCTAssertTrue(back.waitForExistence(timeout: RecoveryFixture.timeout), "An explicit retry must remain cancellable")
+        XCTAssertTrue(back.appears(timeout: RecoveryFixture.timeout), "An explicit retry must remain cancellable")
         back.tap()
-        XCTAssertTrue(saved.waitForExistence(timeout: RecoveryFixture.timeout))
+        XCTAssertTrue(saved.appears(timeout: RecoveryFixture.timeout))
 
         try trigger("initial-data", in: directory)
         saved.tap()
-        XCTAssertTrue(machine.waitForExistence(timeout: RecoveryFixture.timeout))
+        XCTAssertTrue(machine.appears(timeout: RecoveryFixture.timeout))
         XCTAssertFalse(app.buttons["intent.menu.open"].exists, "A late completion must not reopen the abandoned connection")
         XCTAssertFalse(app.buttons["connection-failure.home"].exists)
         machine.tap()
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: RecoveryFixture.timeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: RecoveryFixture.timeout))
         XCTAssertFalse(reconnect.exists)
         capture(app, named: "failure-primary-exit-machine-reselected")
     }

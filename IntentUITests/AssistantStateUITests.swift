@@ -29,7 +29,7 @@ nonisolated final class AssistantStateUITests: XCTestCase {
     private func verifyStateFlow(appearance: String, accessibility: Bool) throws {
         let trigger = FileManager.default.temporaryDirectory.appendingPathComponent("assistant-list-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: trigger) }
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += [
             "--demo-data", "--demo-assistant-empty", "--demo-assistant-list-retry",
             "--demo-assistant-list-trigger-file=\(trigger.path)", "-appThemePreference", appearance
@@ -40,13 +40,13 @@ nonisolated final class AssistantStateUITests: XCTestCase {
         app.launch()
         defer { app.terminate() }
         let launcher = app.buttons["intent.menu.open"]
-        XCTAssertTrue(launcher.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(launcher.appears(timeout: Self.timeout))
         launcher.tap()
         let assistant = app.buttons["intent.menu.assistant"]
-        XCTAssertTrue(assistant.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(assistant.appears(timeout: Self.timeout))
         assistant.tap()
         let loading = app.staticTexts["Loading Assistant…"]
-        XCTAssertTrue(loading.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(loading.appears(timeout: Self.timeout))
         let newConversation = app.buttons["assistant.newConversation"]
         XCTAssertTrue(newConversation.exists)
         XCTAssertFalse(newConversation.isEnabled)
@@ -56,15 +56,15 @@ nonisolated final class AssistantStateUITests: XCTestCase {
 
         try Data().write(to: trigger)
         let retry = app.buttons["Retry"]
-        XCTAssertTrue(retry.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(retry.appears(timeout: Self.timeout))
         XCTAssertTrue(retry.isHittable)
         XCTAssertFalse(newConversation.isEnabled)
         capture(app, name: "Assistant error \(suffix)")
         retry.tap()
 
-        XCTAssertTrue(retry.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(retry.disappears(timeout: Self.timeout))
         let start = app.buttons["Start a Conversation"]
-        XCTAssertTrue(start.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(start.appears(timeout: Self.timeout))
         if !start.isHittable { app.swipeUp() }
         XCTAssertTrue(start.isEnabled)
         XCTAssertTrue(start.isHittable)
@@ -73,9 +73,9 @@ nonisolated final class AssistantStateUITests: XCTestCase {
         capture(app, name: "Assistant empty \(suffix)")
         start.tap()
         let composer = app.textViews["composer.textView"]
-        XCTAssertTrue(composer.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(composer.appears(timeout: Self.timeout))
         XCTAssertTrue(composer.isHittable)
-        XCTAssertTrue(start.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(start.disappears(timeout: Self.timeout))
         XCTAssertTrue(newConversation.isHittable)
     }
 

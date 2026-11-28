@@ -10,19 +10,19 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let gate = FileManager.default.temporaryDirectory
             .appendingPathComponent("workspace-selection-\(UUID().uuidString).trigger")
         defer { try? FileManager.default.removeItem(at: gate) }
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-workspace-selection-trigger-file=" + gate.path]
         app.launchArguments += ["-appThemePreference", ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
         app.launch()
         app.openHomeAction("workspace")
         try releaseSelectionLoading(in: app, step: "repository", gate: gate)
         let repository = app.buttons["creation.repository.nova-labs/console"]
-        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(repository.appears(timeout: Self.elementTimeout))
         repository.tap()
         try FileManager.default.removeItem(at: gate)
         app.buttons["Next"].tap()
         try releaseSelectionLoading(in: app, step: "branch", gate: gate)
-        XCTAssertTrue(app.buttons["creation.branch.main"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.buttons["creation.branch.main"].appears(timeout: Self.elementTimeout))
     }
 
     @MainActor
@@ -30,14 +30,14 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         let title = app.staticTexts["creation.\(step)Title"]
         let spinner = app.activityIndicators["creation.\(step)Title.loading"]
         let search = app.buttons["creation.\(step)Search.open"]
-        XCTAssertTrue(spinner.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(spinner.appears(timeout: Self.elementTimeout))
         XCTAssertTrue(title.exists)
         XCTAssertFalse(search.exists)
         let loadingTitleY = title.frame.minY
         attachEvidence(in: app, name: "\(step)-loading")
         try Data().write(to: gate)
-        XCTAssertTrue(spinner.waitForNonExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(spinner.disappears(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(title.frame.minY, loadingTitleY, accuracy: 1)
         attachEvidence(in: app, name: "\(step)-loaded")
     }
@@ -45,17 +45,17 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     @MainActor
     func testRepositorySelectionSearchAndClose() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data"]
         app.launchArguments += ["-appThemePreference", ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] ?? "light"]
         app.launch()
         app.openHomeAction("workspace")
         let title = app.staticTexts["creation.repositoryTitle"]
-        XCTAssertTrue(title.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(title.appears(timeout: Self.elementTimeout))
         let next = app.buttons["Next"]
         XCTAssertFalse(next.isEnabled)
         let repository = app.buttons["creation.repository.nova-labs/console"]
-        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(repository.appears(timeout: Self.elementTimeout))
         repository.tap()
         XCTAssertTrue(repository.isSelected)
         XCTAssertTrue(next.isEnabled)
@@ -63,18 +63,18 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
 
         selectRepositoryThroughSearch(in: app, previous: repository)
         app.buttons["creation.repositorySearch.open"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.elementTimeout))
         let close = app.buttons["creation.close"]
         XCTAssertFalse(close.exists)
         XCTAssertFalse(next.exists)
         app.buttons["creation.repositorySearch.cancel"].tap()
-        XCTAssertTrue(close.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(close.appears(timeout: Self.elementTimeout))
         XCTAssertTrue(next.isHittable)
         XCTAssertEqual(close.label, "Close")
         XCTAssertTrue(close.isHittable)
         close.tap()
-        XCTAssertTrue(title.waitForNonExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(app.buttons["intent.menu.open"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(title.disappears(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.buttons["intent.menu.open"].appears(timeout: Self.elementTimeout))
     }
 
     @MainActor
@@ -83,8 +83,8 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertFalse(search.exists)
         let initialRowY = previous.frame.minY
         app.buttons["creation.repositorySearch.open"].tap()
-        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.appears(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.elementTimeout))
         XCTAssertFalse(app.buttons["creation.close"].exists)
         XCTAssertFalse(app.buttons["Next"].exists)
         attachEvidence(in: app, name: "repository-search-opened")
@@ -92,14 +92,14 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(previous.isHittable)
         search.typeText("docs")
         let docs = app.buttons["creation.repository.nova-labs/docs"]
-        XCTAssertTrue(docs.waitForExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(previous.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(docs.appears(timeout: Self.elementTimeout))
+        XCTAssertTrue(previous.disappears(timeout: Self.elementTimeout))
         XCTAssertTrue(docs.isHittable)
         docs.tap()
         XCTAssertTrue(docs.isSelected)
         attachEvidence(in: app, name: "repository-search-results")
         app.buttons["creation.repositorySearch.clear"].tap()
-        XCTAssertTrue(previous.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(previous.appears(timeout: Self.elementTimeout))
         XCTAssertFalse(previous.isSelected)
         XCTAssertTrue(docs.isSelected)
         checkSearchCancellation(in: app, prefix: "creation.repositorySearch", placeholder: "Search repositories", result: previous)
@@ -109,12 +109,12 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     @MainActor
     func testImagePasteSurvivesBackAndFailedCreationAndCanBeRemoved() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data"]
         app.launch()
         openCreationForm(in: app)
         let prompt = app.textViews["creation.prompt"]
-        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(prompt.appears(timeout: Self.elementTimeout))
         prompt.tap()
         UIPasteboard.general.string = "Use this design"
         defer { UIPasteboard.general.items = [] }
@@ -123,14 +123,14 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         seedImageClipboard()
         pasteClipboard(into: prompt, in: app)
         let remove = app.buttons["creation.removeImage"]
-        XCTAssertTrue(remove.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(remove.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(prompt.value as? String, "Use this design")
         attachEvidence(in: app, name: "image-pasted-in-workspace-prompt")
         app.buttons["creation.back"].tap()
         app.buttons["Next"].tap()
-        XCTAssertTrue(remove.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(remove.appears(timeout: Self.elementTimeout))
         app.buttons["Create"].tap()
-        XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.alerts["Error"].appears(timeout: Self.elementTimeout))
         app.alerts.buttons["OK"].tap()
         XCTAssertTrue(remove.exists)
         XCTAssertEqual(prompt.value as? String, "Use this design")
@@ -145,10 +145,10 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     private func pasteClipboard(into editor: XCUIElement, in app: XCUIApplication) {
         editor.press(forDuration: 1.2)
         let paste = app.menuItems["Paste"]
-        XCTAssertTrue(paste.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(paste.appears(timeout: Self.elementTimeout))
         paste.tap()
         let allowPaste = app.alerts.buttons["Allow Paste"]
-        if allowPaste.waitForExistence(timeout: 2) { allowPaste.tap() }
+        if allowPaste.appears(timeout: 2) { allowPaste.tap() }
     }
 
     @MainActor
@@ -168,10 +168,10 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
             attachment.tap()
             app.buttons[picker].tap()
             let cancel = app.buttons["Cancel"]
-            XCTAssertTrue(cancel.waitForExistence(timeout: Self.elementTimeout))
+            XCTAssertTrue(cancel.appears(timeout: Self.elementTimeout))
             cancel.tap()
-            XCTAssertTrue(cancel.waitForNonExistence(timeout: Self.elementTimeout))
-            XCTAssertTrue(app.textViews["creation.prompt"].waitForExistence(timeout: Self.elementTimeout))
+            XCTAssertTrue(cancel.disappears(timeout: Self.elementTimeout))
+            XCTAssertTrue(app.textViews["creation.prompt"].appears(timeout: Self.elementTimeout))
         }
     }
 
@@ -189,7 +189,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
             .appendingPathComponent("workspace-provider-\(UUID().uuidString).trigger")
         defer { try? FileManager.default.removeItem(at: gate) }
         try Data().write(to: gate)
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-workspace-provider-trigger-file=" + gate.path]
         app.launchArguments += ["-appThemePreference", appearance]
         app.launch()
@@ -198,10 +198,10 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
 
         let provider = app.buttons["creation.providerPicker"]
         let model = app.buttons["creation.modelPicker"]
-        XCTAssertTrue(provider.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(provider.appears(timeout: Self.elementTimeout))
         provider.tap()
         app.buttons["Codex"].tap()
-        XCTAssertTrue(model.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(model.appears(timeout: Self.elementTimeout))
         model.tap()
         app.buttons["Named Model"].tap()
         let reasoning = app.buttons["creation.reasoningPicker"]
@@ -211,10 +211,10 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         assertSelections(in: app)
 
         app.buttons["creation.back"].tap()
-        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].appears(timeout: Self.elementTimeout))
         try FileManager.default.removeItem(at: gate)
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.staticTexts["Loading providers…"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["Loading providers…"].appears(timeout: Self.elementTimeout))
         XCTAssertFalse(provider.exists)
         XCTAssertFalse(model.exists)
         XCTAssertFalse(reasoning.exists)
@@ -222,7 +222,7 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         attachEvidence(in: app, name: "refresh-pending-\(appearance)")
 
         try Data().write(to: gate)
-        XCTAssertTrue(provider.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(provider.appears(timeout: Self.elementTimeout))
         assertSelections(in: app)
         XCTAssertEqual(reasoning.value as? String, "high")
         attachEvidence(in: app, name: "selected-after-refresh-\(appearance)")
@@ -233,20 +233,20 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
     @MainActor
     private func editSourceAndCheckDraft(in app: XCUIApplication) {
         let prompt = app.textViews["creation.prompt"]
-        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(prompt.appears(timeout: Self.elementTimeout))
         let draft = "Keep these instructions when editing the source."
         prompt.tap()
         prompt.typeText(draft)
         app.revealWorkspaceSource().tap()
-        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].appears(timeout: Self.elementTimeout))
         app.buttons["creation.branchBack"].tap()
-        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].appears(timeout: Self.elementTimeout))
         app.staticTexts["nova-labs/docs"].tap()
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].appears(timeout: Self.elementTimeout))
         selectBranchThroughSearch(in: app)
         app.buttons["Next"].tap()
-        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(prompt.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(prompt.value as? String, draft)
         XCTAssertEqual(app.buttons["creation.sourceCard"].label, "Source. Repository: nova-labs/docs. Branch: feature/docs")
         assertSelections(in: app)
@@ -260,8 +260,8 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertFalse(search.exists)
         let initialRowY = main.frame.minY
         app.buttons["creation.branchSearch.open"].tap()
-        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.appears(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.elementTimeout))
         XCTAssertFalse(app.buttons["creation.branchBack"].exists)
         XCTAssertFalse(app.buttons["Next"].exists)
         attachEvidence(in: app, name: "branch-search-opened")
@@ -269,23 +269,23 @@ nonisolated final class CreateWorkspaceSelectionUITests: XCTestCase {
         XCTAssertTrue(main.isHittable)
         search.typeText("feature")
         let feature = app.buttons["creation.branch.feature/docs"]
-        XCTAssertTrue(feature.waitForExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(main.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(feature.appears(timeout: Self.elementTimeout))
+        XCTAssertTrue(main.disappears(timeout: Self.elementTimeout))
         XCTAssertTrue(feature.isHittable)
         feature.tap()
         XCTAssertTrue(feature.isSelected)
         attachEvidence(in: app, name: "branch-search-results")
         app.buttons["creation.branchSearch.clear"].tap()
-        XCTAssertTrue(main.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(main.appears(timeout: Self.elementTimeout))
         XCTAssertTrue(feature.isSelected)
         checkSearchCancellation(in: app, prefix: "creation.branchSearch", placeholder: "Search branches", result: main)
         XCTAssertTrue(feature.isSelected)
         app.buttons["creation.branchSearch.open"].tap()
-        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.appears(timeout: Self.elementTimeout))
         search.typeText("feature")
         XCTAssertFalse(app.buttons["Next"].exists)
         app.buttons["creation.branchSearch.cancel"].tap()
-        XCTAssertTrue(search.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.disappears(timeout: Self.elementTimeout))
         XCTAssertTrue(app.buttons["creation.branchBack"].isHittable)
         XCTAssertTrue(app.buttons["Next"].isHittable)
     }
@@ -296,27 +296,27 @@ extension CreateWorkspaceSelectionUITests {
     private func checkSearchCancellation(in app: XCUIApplication, prefix: String, placeholder: String, result: XCUIElement) {
         let search = app.textFields["\(prefix).field"]
         search.typeText("no-matching-source")
-        XCTAssertTrue(result.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(result.disappears(timeout: Self.elementTimeout))
         app.buttons["\(prefix).cancel"].tap()
-        XCTAssertTrue(search.waitForNonExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.elementTimeout))
-        XCTAssertTrue(result.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.disappears(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.elementTimeout))
+        XCTAssertTrue(result.appears(timeout: Self.elementTimeout))
         app.buttons["\(prefix).open"].tap()
-        XCTAssertTrue(search.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(search.value as? String, placeholder)
         app.buttons["\(prefix).cancel"].tap()
-        XCTAssertTrue(search.waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(search.disappears(timeout: Self.elementTimeout))
     }
 
     @MainActor
     private func openCreationForm(in app: XCUIApplication) {
         app.openHomeAction("workspace")
         let repository = app.staticTexts["nova-labs/console"]
-        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(repository.appears(timeout: Self.elementTimeout))
         repository.tap()
         attachEvidence(in: app, name: "selected-repository")
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].appears(timeout: Self.elementTimeout))
         let next = app.buttons["Next"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
@@ -324,7 +324,7 @@ extension CreateWorkspaceSelectionUITests {
         attachEvidence(in: app, name: "selected-branch")
         next.tap()
         let back = app.buttons["creation.back"]
-        XCTAssertTrue(back.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(back.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(back.label, "Back")
     }
 

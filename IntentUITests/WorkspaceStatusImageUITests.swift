@@ -21,19 +21,19 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
 
     @MainActor
     func testStatusImageIsAbsentFromListAndOpensFullSizeFromDetail() {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         app.launch()
 
         let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        if !workspaceRow.waitForExistence(timeout: 30) {
+        if !workspaceRow.appears(timeout: 30) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
-            XCTAssertTrue(workspaceRow.waitForExistence(timeout: 15))
+            XCTAssertTrue(workspaceRow.appears(timeout: 15))
         }
 
         let listImage = app.descendants(matching: .any)[Fixture.statusImageLabel].firstMatch
         XCTAssertFalse(
-            listImage.waitForExistence(timeout: 3),
+            listImage.appears(timeout: 3),
             "workspace list rows must not render status image thumbnails"
         )
 
@@ -42,7 +42,7 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
         let detailImage = app.descendants(matching: .any)
             .matching(identifier: Fixture.detailIdentifier).firstMatch
         XCTAssertTrue(
-            detailImage.waitForExistence(timeout: 15),
+            detailImage.appears(timeout: 15),
             "status image never appeared in the workspace detail header"
         )
         let inlineWidth = detailImage.frame.width
@@ -53,11 +53,11 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
         detailImage.tap()
 
         let lightbox = app.descendants(matching: .any)[Fixture.lightboxLabel].firstMatch
-        XCTAssertTrue(lightbox.waitForExistence(timeout: 10), "tapping the status image did not open the lightbox")
+        XCTAssertTrue(lightbox.appears(timeout: 10), "tapping the status image did not open the lightbox")
         XCTAssertGreaterThanOrEqual(lightbox.frame.width, inlineWidth)
 
         app.buttons[Fixture.lightboxCloseLabel].firstMatch.tap()
-        XCTAssertTrue(lightbox.waitForNonExistence(timeout: 10), "the lightbox did not close")
+        XCTAssertTrue(lightbox.disappears(timeout: 10), "the lightbox did not close")
         XCTAssertTrue(detailImage.exists)
     }
 }

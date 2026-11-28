@@ -8,7 +8,7 @@ nonisolated final class FixtureCaptureLifecycleUITests: XCTestCase {
             "Run scripts/verify_fixture_capture_lifecycle.py for the intentional failure"
         )
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         app.launch()
         addTeardownBlock { @MainActor [self] () async in
@@ -22,7 +22,7 @@ nonisolated final class FixtureCaptureLifecycleUITests: XCTestCase {
     @MainActor
     func testPassingFixtureRetainsRepeatedFinalCapture() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         app.launch()
         addTeardownBlock { @MainActor [self] () async in

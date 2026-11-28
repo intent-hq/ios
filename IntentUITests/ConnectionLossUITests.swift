@@ -41,7 +41,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         let app = launch(directory: directory, arguments: ["--demo-background-loss=quick"])
         openConversation(in: app)
         let composer = app.textViews["composer.textView"]
-        XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(composer.appears(timeout: Fixture.timeout))
         composer.tap()
         composer.typeText("Draft survives background return")
         backgroundAndActivate(app, directory: directory)
@@ -60,18 +60,18 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         let app = launch(directory: directory, arguments: ["--demo-background-loss=activation-quick"])
         openCreateWorkspace(in: app)
         let repository = app.staticTexts["nova-labs/console"]
-        XCTAssertTrue(repository.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(repository.appears(timeout: Fixture.timeout))
         repository.tap()
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].appears(timeout: Fixture.timeout))
         let next = app.buttons["Next"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: next)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Fixture.timeout), .completed)
         next.tap()
         let sheet = app.buttons["creation.back"]
-        XCTAssertTrue(sheet.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(sheet.appears(timeout: Fixture.timeout))
         let message = app.textViews["creation.prompt"]
-        XCTAssertTrue(message.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(message.appears(timeout: Fixture.timeout))
         XCTAssertEqual(app.textViews.count, 1)
         message.tap()
         message.typeText("Draft survives background return")
@@ -81,7 +81,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertFalse(eventExists("banner-presented", in: directory), "activate() settling must not hide a banner flash")
         XCTAssertFalse(eventExists("overlay-presented", in: directory))
         XCTAssertFalse(app.buttons[Fixture.bannerIdentifier].exists)
-        XCTAssertTrue(message.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(message.appears(timeout: Fixture.timeout))
         XCTAssertEqual(message.value as? String, "Draft survives background return")
         XCTAssertTrue(sheet.exists)
         capture(app, named: "quick-background-sheet")
@@ -99,11 +99,11 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         capture(app, named: "sustained-background-banner")
         banner.tap()
         let home = app.buttons[Fixture.bannerHomeIdentifier]
-        XCTAssertTrue(home.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(home.appears(timeout: Fixture.timeout))
         XCTAssertEqual(home.label, "Back to Home")
         home.tap()
         let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(saved.appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.bannerIdentifier].exists)
         capture(app, named: "source-after-home")
     }
@@ -114,7 +114,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         let app = launch(directory: directory, arguments: ["--demo-connection-loss-reconnecting"])
         openConversation(in: app)
         let composer = app.textViews["composer.textView"]
-        XCTAssertTrue(composer.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(composer.appears(timeout: Fixture.timeout))
         composer.tap()
         composer.typeText("Draft survives ")
         capture(app, named: "conversation-before-loss")
@@ -131,7 +131,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         capture(app, named: "conversation-read-only")
 
         try trigger("recover", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.bannerIdentifier].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons[Fixture.bannerIdentifier].disappears(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, "Draft survives connection loss")
         if UIDevice.current.userInterfaceIdiom != .pad {
             XCTAssertTrue(app.buttons["conversation.back"].exists, "Still in the same conversation")
@@ -153,7 +153,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("network-offline", in: directory)
         assertBannerTitle("Local Network access needed · Read-only", in: app)
         app.buttons[Fixture.bannerIdentifier].tap()
-        XCTAssertTrue(app.staticTexts["Allow Local Network access for Intent in Settings, then try again."].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["Allow Local Network access for Intent in Settings, then try again."].appears(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         capture(app, named: "banner-permission-and-certificate")
         XCTAssertFalse(eventExists("banner-dismissed", in: directory), "Updating copy must not recreate the banner")
@@ -167,7 +167,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("network-restored", in: directory)
         assertBannerTitle("Reconnecting( to Demo Mac)?… · Read-only", in: app)
         try trigger("recover", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.bannerIdentifier].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons[Fixture.bannerIdentifier].disappears(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].exists)
     }
 
@@ -181,15 +181,15 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         ])
         app.openHomeAction("connections")
         let machine = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(machine.appears(timeout: Fixture.timeout))
         XCTAssertTrue(machine.isHittable)
         machine.press(forDuration: 1)
         let details = app.buttons["Connection Details"]
-        XCTAssertTrue(details.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(details.appears(timeout: Fixture.timeout))
         XCTAssertTrue(details.isHittable)
         details.tap()
         let detailsTitle = app.staticTexts["saved-connection.details-title"]
-        XCTAssertTrue(detailsTitle.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(detailsTitle.appears(timeout: Fixture.timeout))
         capture(app, named: "sheet-before-loss")
 
         try trigger("network-offline", in: directory)
@@ -200,14 +200,14 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
         capture(app, named: "sheet-offline-banner")
         banner.tap()
-        XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].appears(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         XCTAssertTrue(app.buttons[Fixture.bannerHomeIdentifier].isHittable)
         capture(app, named: "sheet-offline-banner-expanded")
 
         try trigger("network-restored", in: directory)
         try trigger("recover", in: directory)
-        XCTAssertTrue(banner.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(banner.disappears(timeout: Fixture.timeout))
         XCTAssertTrue(detailsTitle.exists)
         XCTAssertTrue(app.staticTexts["demo.invalid:443"].exists)
         capture(app, named: "sheet-recovered")
@@ -232,7 +232,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try assertConnectionLossSubtitleContrast(in: app, sourceImage: sourceImage)
         app.buttons[Fixture.homeIdentifier].tap()
         let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(saved.appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         capture(app, named: "stopped-after-home")
     }
@@ -251,7 +251,7 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         app.buttons[Fixture.homeIdentifier].tap()
 
         let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(saved.appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         XCTAssertFalse(app.staticTexts["creation.repositoryTitle"].exists)
         XCTAssertFalse(app.staticTexts["connection-network.status"].exists, "Home is not an offline failure screen")
@@ -259,10 +259,10 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("recover", in: directory)
         saved.tap()
         let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(machine.appears(timeout: Fixture.timeout))
         capture(app, named: "home-saved-machine-retained")
         machine.tap()
-        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         capture(app, named: "saved-machine-reselected")
     }
@@ -278,12 +278,12 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertStartupState("disconnected", in: app)
         capture(app, named: "inline-offline-startup")
         try trigger("network-restored", in: directory)
-        XCTAssertTrue(app.staticTexts["connection-network.status"].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["connection-network.status"].disappears(timeout: Fixture.timeout))
         assertStartupState("disconnected", in: app)
         try trigger("recover", in: directory)
         assertStartupState("connected", in: app)
         try trigger("initial-data", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists, "Startup loss must not surface after entry")
     }
 
@@ -300,14 +300,14 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         try trigger("loss", in: directory)
         assertStartupState("disconnected", in: app)
         try trigger("initial-timeout", in: directory)
-        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].appears(timeout: Fixture.timeout))
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         XCTAssertFalse(app.staticTexts["Can’t Connect"].exists, "Data timeout must not add a second retry owner")
         assertNetworkTitle("No network connection", identifier: "connection-network.status", in: app)
         capture(app, named: "startup-timeout-fallback")
         app.openHomeAction("connections")
         let machine = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Demo Mac")).firstMatch
-        XCTAssertTrue(machine.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(machine.appears(timeout: Fixture.timeout))
         XCTAssertTrue(machine.isHittable, "Saved machines must remain accessible without forgetting credentials")
         capture(app, named: "startup-timeout-saved-machines")
     }
@@ -330,13 +330,13 @@ nonisolated final class ConnectionLossUITests: XCTestCase {
         assertNetworkTitle("No network connection", identifier: "connection-network.status", in: app)
         XCTAssertTrue(app.staticTexts["Allow Local Network access for Intent in Settings, then try again."].exists)
         try trigger("loss", in: directory)
-        XCTAssertTrue(app.staticTexts["Can’t Connect"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["Can’t Connect"].appears(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         XCTAssertTrue(app.buttons["Re-pair Device"].exists)
         XCTAssertTrue(app.staticTexts["Allow Local Network access for Intent in Settings, then try again."].exists)
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         try trigger("network-restored", in: directory)
-        XCTAssertTrue(app.staticTexts["connection-network.status"].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["connection-network.status"].disappears(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Certificate mismatch"].exists)
         XCTAssertTrue(app.buttons["Re-pair Device"].isHittable)
         assertFailureBackReturnsHome(in: app, timeout: Fixture.timeout)
@@ -354,7 +354,7 @@ extension ConnectionLossUITests {
         try trigger("network-offline", in: directory)
         try trigger("loss", in: directory)
         let home = app.buttons[Fixture.homeIdentifier]
-        XCTAssertTrue(home.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(home.appears(timeout: Fixture.timeout))
         XCTAssertTrue(app.staticTexts["Check your Wi-Fi or cellular connection."].exists)
         capture(app, named: "largest-text-before-scroll")
         app.scrollViews.firstMatch.swipeUp()
@@ -363,7 +363,7 @@ extension ConnectionLossUITests {
         capture(app, named: "largest-text-home-visible")
         home.tap()
         let saved = app.buttons["pairing.saved-connections"]
-        XCTAssertTrue(saved.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(saved.appears(timeout: Fixture.timeout))
         XCTAssertFalse(home.exists)
     }
 
@@ -372,7 +372,7 @@ extension ConnectionLossUITests {
         let text = app.staticTexts.matching(NSPredicate(
             format: "identifier == %@ AND label == %@", identifier, title
         )).firstMatch
-        XCTAssertTrue(text.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(text.appears(timeout: Fixture.timeout))
     }
 
     @MainActor
@@ -380,7 +380,7 @@ extension ConnectionLossUITests {
         let status = app.staticTexts.matching(NSPredicate(
             format: "identifier == %@ AND label == %@", "demo-connection-startup", state
         )).firstMatch
-        XCTAssertTrue(status.waitForExistence(timeout: Fixture.timeout), "Must observe the pending startup, not the workspace UI")
+        XCTAssertTrue(status.appears(timeout: Fixture.timeout), "Must observe the pending startup, not the workspace UI")
         XCTAssertFalse(app.buttons[Fixture.navigationIdentifier].exists)
         XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
     }
@@ -388,15 +388,15 @@ extension ConnectionLossUITests {
     @MainActor
     func launch(directory: URL, arguments: [String] = [], waitForStartup: Bool = true) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-connection-loss-directory=" + directory.path] + arguments
         app.launch()
         let allowNotifications = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
-        if allowNotifications.waitForExistence(timeout: 2) {
+        if allowNotifications.appears(timeout: 2) {
             allowNotifications.tap()
         }
         if waitForStartup {
-            XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(app.buttons[Fixture.navigationIdentifier].appears(timeout: Fixture.timeout))
             XCTAssertFalse(app.buttons[Fixture.homeIdentifier].exists)
         }
         return app
@@ -405,25 +405,25 @@ extension ConnectionLossUITests {
     @MainActor
     func openConversation(in app: XCUIApplication) {
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         workspace.tap()
         let agentsTab = app.buttons["workspace.content.Agents"]
-        if agentsTab.waitForExistence(timeout: Fixture.backNavigationTimeout) { agentsTab.tap() }
+        if agentsTab.appears(timeout: Fixture.backNavigationTimeout) { agentsTab.tap() }
         let agent = app.staticTexts[Fixture.agentName].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
         agent.tap()
     }
 
     @MainActor
     func openCreateWorkspace(in app: XCUIApplication) {
         app.openHomeAction("workspace")
-        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].appears(timeout: Fixture.timeout))
     }
 
     @MainActor
     func assertOverlay(in app: XCUIApplication) {
         let home = app.buttons[Fixture.homeIdentifier]
-        XCTAssertTrue(home.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(home.appears(timeout: Fixture.timeout))
         XCTAssertTrue(home.isHittable)
         XCTAssertTrue(app.staticTexts["connection-loss.status"].exists)
         XCTAssertGreaterThan(home.frame.minY, app.staticTexts["connection-loss.message"].frame.maxY)

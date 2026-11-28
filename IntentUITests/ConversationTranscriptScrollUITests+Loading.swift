@@ -18,15 +18,15 @@ extension ConversationTranscriptScrollUITests {
         let skeleton = block.otherElements["conversation.loadingSkeleton"]
         let retry = block.buttons["conversation.retryNow"]
         let composer = app.textViews[Fixture.composerIdentifier].firstMatch
-        XCTAssertTrue(skeleton.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(skeleton.appears(timeout: Fixture.settleTimeout))
         XCTAssertFalse(retry.exists)
         attachLoading(app.screenshot(), named: "Conversation loading before idle \(appearance)")
         XCTAssertFalse(opened.transcript.exists, "The snapshot must remain held while checking loading status")
         XCTAssertFalse(composer.exists, "Loading must hide the message bar")
 
-        XCTAssertTrue(status.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(status.appears(timeout: Fixture.settleTimeout))
         XCTAssertFalse(skeleton.exists)
-        XCTAssertTrue(retry.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(retry.appears(timeout: Fixture.settleTimeout))
         XCTAssertTrue(status.label.hasPrefix("Requesting messages, Current, elapsed: "))
         XCTAssertTrue(status.label.contains("Taking longer than usual"))
         XCTAssertTrue(retry.isHittable)
@@ -36,9 +36,9 @@ extension ConversationTranscriptScrollUITests {
         attachLoading(app.screenshot(), named: "Conversation loading after idle \(appearance)")
 
         try Data().write(to: startupSnapshotGate)
-        XCTAssertTrue(opened.transcript.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(opened.transcript.appears(timeout: Fixture.settleTimeout))
         XCTAssertTrue(waitUntil(timeout: Fixture.settleTimeout) { self.startupReport(app).contains("positioned=true") })
-        XCTAssertTrue(composer.waitForExistence(timeout: Fixture.settleTimeout))
+        XCTAssertTrue(composer.appears(timeout: Fixture.settleTimeout))
         XCTAssertFalse(block.exists)
         XCTAssertFalse(app.buttons["conversation.retryNow"].exists)
     }

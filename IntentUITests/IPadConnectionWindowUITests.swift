@@ -16,34 +16,34 @@ nonisolated final class IPadConnectionWindowUITests: XCTestCase {
     @MainActor
     func testSwitchingConnectionReusesWindowAndLongPressOpensNewWindow() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .pad, "Multiple windows are an iPad feature")
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-settings", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launchArguments += ["-appThemePreference", "dark"]
         app.launch()
-        XCTAssertTrue(app.buttons["ipad.rail.connections"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["ipad.rail.connections"].appears(timeout: Self.timeout))
         let initialWindows = app.windows.count
 
         openConnections(app)
         let travel = card(app, named: "Travel Mac")
-        XCTAssertTrue(travel.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(travel.appears(timeout: Self.timeout))
         XCTAssertTrue(card(app, named: "Studio Mac").label.contains("Connected"))
         capture(name: "IPad-Connections-Before-Switch")
         travel.tap()
 
-        XCTAssertTrue(app.buttons["workspaces.menu"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspaces.menu"].appears(timeout: Self.timeout))
         XCTAssertEqual(app.windows.count, initialWindows, app.debugDescription)
         openConnections(app)
-        XCTAssertTrue(card(app, named: "Travel Mac").waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(card(app, named: "Travel Mac").appears(timeout: Self.timeout))
         XCTAssertTrue(card(app, named: "Travel Mac").label.contains("Connected"), app.debugDescription)
         XCTAssertFalse(card(app, named: "Studio Mac").label.contains("Connected"))
         capture(name: "IPad-Connections-After-Switch")
 
         card(app, named: "Studio Mac").press(forDuration: 1)
         let newWindow = app.buttons["Open in New Window"]
-        XCTAssertTrue(newWindow.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(newWindow.appears(timeout: Self.timeout))
         capture(name: "IPad-Connection-Long-Press-Menu")
         newWindow.tap()
-        XCTAssertTrue(newWindow.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(newWindow.disappears(timeout: Self.timeout))
         XCTAssertTrue(app.windows.firstMatch.buttons["ipad.rail.workspaces"].wait(for: \.isSelected, toEqual: true, timeout: Self.timeout))
         XCTAssertGreaterThan(app.windows.count, initialWindows, app.debugDescription)
         XCTAssertTrue(card(app, named: "Travel Mac, Connected").exists, app.debugDescription)

@@ -73,7 +73,7 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
         XCTAssertTrue(workspace.isHittable)
         workspace.tap()
-        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.agent.demo-agent-implementor"].appears(timeout: Self.timeout))
         drag(app, from: CGVector(dx: 0.005, dy: 0.5), to: CGVector(dx: 0.85, dy: 0.5))
         assertClosed(app)
     }
@@ -86,20 +86,20 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
         let end = start.withOffset(CGVector(dx: -180, dy: 0))
         start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
-        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(archive.appears(timeout: Self.timeout))
 
         let edge = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 2, dy: row.frame.midY))
         edge.press(forDuration: 0.05, thenDragTo: edge.withOffset(CGVector(dx: 300, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0.5)
-        XCTAssertTrue(app.buttons["connection-switcher.close"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["connection-switcher.close"].appears(timeout: Self.timeout))
         app.buttons["connection-switcher.close"].tap()
         assertClosed(app)
         XCTAssertFalse(archive.exists)
 
         start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
-        XCTAssertTrue(archive.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(archive.appears(timeout: Self.timeout))
         archive.tap()
         let confirmation = app.alerts["Archive Workspace"]
-        XCTAssertTrue(confirmation.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(confirmation.appears(timeout: Self.timeout))
         confirmation.buttons["Cancel"].tap()
         XCTAssertTrue(row.exists)
     }
@@ -121,30 +121,30 @@ nonisolated final class ConnectionSwitcherUITests: XCTestCase {
     @MainActor
     private func launch(largeText: Bool = false) throws -> XCUIApplication {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "The connection underlay is on the compact Workspaces page")
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-settings", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launchArguments += ["-appThemePreference", largeText ? "light" : "dark"]
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
-        XCTAssertTrue(app.buttons["workspaces.search.open"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspaces.search.open"].appears(timeout: Self.timeout))
         return app
     }
 
     @MainActor
     private func reveal(_ app: XCUIApplication) {
         drag(app, from: CGVector(dx: 0.005, dy: 0.5), to: CGVector(dx: 0.85, dy: 0.5))
-        XCTAssertTrue(app.buttons["connection-switcher.close"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["connection-switcher.close"].appears(timeout: Self.timeout))
         XCTAssertTrue(connection("Studio Mac", in: app).exists)
     }
 
     @MainActor
     private func assertClosed(_ app: XCUIApplication) {
-        XCTAssertTrue(app.buttons["connection-switcher.close"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["connection-switcher.close"].disappears(timeout: Self.timeout))
         XCTAssertFalse(connection("Studio Mac", in: app).exists)
         XCTAssertFalse(connection("Travel Mac", in: app).exists)
-        XCTAssertTrue(app.buttons["workspaces.search.open"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspaces.search.open"].appears(timeout: Self.timeout))
     }
 
     @MainActor

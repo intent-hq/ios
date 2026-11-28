@@ -19,12 +19,12 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         assertRestingComposerPlacement(in: app, composer: composer)
         composer.tap()
         composer.typeText("Keep this unsent draft")
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(keyboard.appears(timeout: Fixture.timeout))
         attachComposerGeometry(in: app, composer: composer, state: "keyboard visible")
         let transcript = app.scrollViews["transcript.scrollView"]
         transcript.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
 
-        let dismissed = keyboard.waitForNonExistence(timeout: Fixture.timeout)
+        let dismissed = keyboard.disappears(timeout: Fixture.timeout)
         let composerFocused = try XCTUnwrap(composer.value(forKey: "hasKeyboardFocus") as? Bool)
         XCTAssertTrue(dismissed, "A transcript tap must dismiss the keyboard; composer focus: \(composerFocused)")
         XCTAssertFalse(composerFocused)
@@ -35,7 +35,7 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [reopened], timeout: 2), .completed)
 
         composer.tap()
-        XCTAssertTrue(keyboard.waitForExistence(timeout: Fixture.timeout), "An explicit tap must still focus the editor")
+        XCTAssertTrue(keyboard.appears(timeout: Fixture.timeout), "An explicit tap must still focus the editor")
         XCTAssertEqual(composer.value as? String, "Keep this unsent draft")
     }
 
@@ -49,7 +49,7 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         XCTAssertFalse(stop.exists)
 
         composer.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Fixture.timeout))
         let message = "Make the logo bigger\nand keep its proportions"
         enterMultilineMessage(message, into: composer, in: app)
         let typedMessage = XCTNSPredicateExpectation(
@@ -57,29 +57,29 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         )
         XCTAssertEqual(XCTWaiter.wait(for: [typedMessage], timeout: Fixture.timeout), .completed)
         XCTAssertEqual(composer.value as? String, message, "The multiline draft must remain unsent until the send button is tapped")
-        XCTAssertTrue(send.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(send.appears(timeout: Fixture.timeout))
         assertReachable(send, in: app)
         send.tap()
 
-        XCTAssertTrue(stop.waitForExistence(timeout: Fixture.timeout), "The actual send starts a streaming response")
+        XCTAssertTrue(stop.appears(timeout: Fixture.timeout), "The actual send starts a streaming response")
         XCTAssertEqual(composer.value as? String, "")
         let sentMessage = app.scrollViews["transcript.scrollView"].staticTexts
             .matching(NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "Make the logo bigger", "keep its proportions"))
             .firstMatch
-        XCTAssertTrue(sentMessage.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(sentMessage.appears(timeout: Fixture.timeout))
         assertSendDismissesKeyboard(in: app, sentMessage: sentMessage)
 
         let draft = "Keep this draft while stopping"
         composer.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Fixture.timeout), "Tapping the composer must reopen the keyboard")
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Fixture.timeout), "Tapping the composer must reopen the keyboard")
         XCTAssertEqual(composer.value(forKey: "hasKeyboardFocus") as? Bool, true)
         composer.typeText(draft)
-        XCTAssertTrue(send.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(send.appears(timeout: Fixture.timeout))
         assertReachable(send, in: app)
         assertReachable(stop, in: app)
         assertReachable(app.buttons["composer.attachment"], in: app)
         stop.tap()
-        XCTAssertTrue(stop.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(stop.disappears(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, draft, "Stop must not consume the next message")
         XCTAssertTrue(send.isEnabled)
     }
@@ -98,7 +98,7 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     @MainActor
     private func assertSendDismissesKeyboard(in app: XCUIApplication, sentMessage: XCUIElement) {
         let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForNonExistence(timeout: Fixture.timeout), "Sending must dismiss the keyboard")
+        XCTAssertTrue(keyboard.disappears(timeout: Fixture.timeout), "Sending must dismiss the keyboard")
         let composer = app.textViews["composer.textView"]
         XCTAssertEqual(composer.value(forKey: "hasKeyboardFocus") as? Bool, false, "Sending must leave the composer unfocused")
         let transcript = app.scrollViews["transcript.scrollView"]
@@ -127,11 +127,11 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         }
         pasteClipboard(into: composer, in: app)
         let remove = app.buttons["Remove image 1"]
-        XCTAssertTrue(remove.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(remove.appears(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, "Keep this draft")
         XCTAssertTrue(app.buttons["composer.send"].isEnabled)
         remove.tap()
-        XCTAssertTrue(remove.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(remove.disappears(timeout: Fixture.timeout))
         XCTAssertEqual(composer.value as? String, "Keep this draft")
     }
 
@@ -150,13 +150,13 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         }
         defer { UIPasteboard.general.items = [] }
         pasteClipboard(into: composer, in: app)
-        XCTAssertTrue(app.buttons["Remove image \(colors.count)"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["Remove image \(colors.count)"].appears(timeout: Fixture.timeout))
 
         let attachment = app.buttons["composer.attachment"]
         assertReachable(attachment, in: app)
         attachment.tap()
         let photos = app.buttons["Photos"]
-        XCTAssertTrue(photos.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(photos.appears(timeout: Fixture.timeout))
         XCTAssertTrue(photos.isEnabled, "Library videos do not use image slots")
         XCTAssertTrue(app.buttons["Files"].isEnabled)
         let menuShot = XCTAttachment(screenshot: app.screenshot())
@@ -165,23 +165,23 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         add(menuShot)
         photos.tap()
         let cancel = app.buttons["Cancel"].firstMatch
-        XCTAssertTrue(cancel.waitForExistence(timeout: Fixture.timeout), "Photos must open at the image limit")
+        XCTAssertTrue(cancel.appears(timeout: Fixture.timeout), "Photos must open at the image limit")
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Composer Photos offers videos at image limit"
         screenshot.lifetime = .keepAlways
         add(screenshot)
         cancel.tap()
-        XCTAssertTrue(app.buttons["Remove image \(colors.count)"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["Remove image \(colors.count)"].appears(timeout: Fixture.timeout))
     }
 
     @MainActor
     private func pasteClipboard(into editor: XCUIElement, in app: XCUIApplication) {
         editor.press(forDuration: 1.2)
         let paste = app.menuItems["Paste"]
-        XCTAssertTrue(paste.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(paste.appears(timeout: Fixture.timeout))
         paste.tap()
         let allowPaste = app.alerts.buttons["Allow Paste"]
-        if allowPaste.waitForExistence(timeout: 2) { allowPaste.tap() }
+        if allowPaste.appears(timeout: 2) { allowPaste.tap() }
     }
 
     @MainActor
@@ -191,27 +191,27 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         assertReachable(actions, in: app)
         assertReachable(app.buttons["conversation.back"], in: app)
         actions.tap()
-        XCTAssertTrue(app.buttons["Rename"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["Rename"].appears(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["Delete Agent"].exists)
         app.scrollViews["transcript.scrollView"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
-        XCTAssertTrue(app.buttons["Rename"].waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["Rename"].disappears(timeout: Fixture.timeout))
         let monitor = app.buttons[Fixture.monitor]
-        XCTAssertTrue(monitor.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(monitor.appears(timeout: Fixture.timeout))
         XCTAssertEqual(app.buttons.matching(identifier: Fixture.monitor).count, 1)
         XCTAssertEqual(monitor.label, "Monitoring PR #56")
         assertTapTargetGeometry(monitor, in: app)
         monitor.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        XCTAssertTrue(app.buttons["Check and flush"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["Check and flush"].appears(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["Open PR"].exists)
         let cancel = app.buttons["Cancel monitor"]
         XCTAssertTrue(cancel.exists)
         cancel.tap()
-        XCTAssertTrue(monitor.waitForNonExistence(timeout: Fixture.timeout), "Cancellation must remove the live monitor")
+        XCTAssertTrue(monitor.disappears(timeout: Fixture.timeout), "Cancellation must remove the live monitor")
 
         let attachment = app.buttons["composer.attachment"]
         assertReachable(attachment, in: app)
         attachment.tap()
-        XCTAssertTrue(app.buttons["Photos"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["Photos"].appears(timeout: Fixture.timeout))
         XCTAssertTrue(app.buttons["Files"].exists)
     }
 
@@ -224,7 +224,7 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
         composer.typeText(draft)
         XCTAssertEqual(composer.value as? String, draft)
         let send = app.buttons["composer.send"]
-        XCTAssertTrue(send.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(send.appears(timeout: Fixture.timeout))
         assertReachable(send, in: app)
         assertReachable(app.buttons["composer.stop"], in: app)
         assertReachable(app.buttons["composer.attachment"], in: app)
@@ -233,20 +233,20 @@ nonisolated final class WorkspaceComposerUITests: XCTestCase {
     @MainActor
     private func launch(scenario: String, accessibleText: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=\(scenario)"]
         if accessibleText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
         app.launch()
         let workspace = app.staticTexts[Fixture.workspace].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         workspace.tap()
-        XCTAssertTrue(app.buttons["Context"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.buttons["Context"].appears(timeout: Fixture.timeout))
         let agent = app.staticTexts[Fixture.agent].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
         agent.tap()
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Fixture.timeout))
         return app
     }
 

@@ -2,6 +2,7 @@ import XCTest
 
 nonisolated final class WorkspaceScriptUITests: XCTestCase {
     private static let timeout: TimeInterval = 15
+    private static let revealMargin: CGFloat = 24
 
     private enum Fixture {
         static let server = "Web server"
@@ -19,7 +20,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         XCTAssertFalse(script.exists)
         openScriptsMenu(in: app)
         let server = app.buttons[Fixture.server]
-        XCTAssertTrue(server.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(server.appears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons[Fixture.command].exists)
         server.tap()
         assertServerBrowser(in: app)
@@ -44,7 +45,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let app = launchWorkspace()
         openScriptsMenu(in: app)
         let command = app.buttons[Fixture.command]
-        XCTAssertTrue(command.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(command.appears(timeout: Self.timeout))
         command.tap()
         let commandRow = app.buttons["workspace.script.demo-check"]
         revealResource(commandRow, in: app)
@@ -55,7 +56,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         XCTAssertFalse(app.buttons["workspace.script.demo-server"].exists)
         openScriptsMenu(in: app)
         let server = app.buttons[Fixture.server]
-        XCTAssertTrue(server.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(server.appears(timeout: Self.timeout))
         server.tap()
         assertServerBrowser(in: app)
     }
@@ -66,7 +67,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         openScriptsMenu(in: app)
         XCTAssertTrue(app.buttons[Fixture.verification].exists)
         let dev = app.buttons[Fixture.dev]
-        XCTAssertTrue(dev.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(dev.appears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons[Fixture.build].exists)
         XCTAssertTrue(app.buttons[Fixture.test].exists)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -93,7 +94,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         revealResource(row, in: app)
         revealActions(on: row)
         let stop = app.buttons["workspace.script.stop.demo-server"]
-        XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(stop.appears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["workspace.script.delete.demo-server"].exists)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "workspace-script-stop-delete-actions"
@@ -105,10 +106,10 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         XCTAssertFalse(app.textFields["Browser URL"].exists)
         revealActions(on: row)
         let delete = app.buttons["workspace.script.delete.demo-server"]
-        XCTAssertTrue(delete.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(delete.appears(timeout: Self.timeout))
         XCTAssertFalse(stop.exists)
         delete.tap()
-        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.disappears(timeout: Self.timeout))
         openScriptsMenu(in: app)
         XCTAssertFalse(app.buttons[Fixture.server].exists)
         XCTAssertTrue(app.buttons[Fixture.command].exists)
@@ -129,16 +130,16 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         XCTAssertTrue(script.isHittable)
         revealActions(on: browser)
         let browserDelete = app.buttons["browser.delete.tab:demo-agent-browser"]
-        XCTAssertTrue(browserDelete.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(browserDelete.appears(timeout: Self.timeout))
         revealActions(on: script)
         let stop = app.buttons["workspace.script.stop.demo-server"]
-        XCTAssertTrue(stop.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(browserDelete.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(stop.appears(timeout: Self.timeout))
+        XCTAssertTrue(browserDelete.disappears(timeout: Self.timeout))
         browser.tap()
-        XCTAssertTrue(stop.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(stop.disappears(timeout: Self.timeout))
         XCTAssertFalse(app.textFields["Browser URL"].exists)
         browser.tap()
-        XCTAssertTrue(app.textFields["Browser URL"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textFields["Browser URL"].appears(timeout: Self.timeout))
         XCTAssertTrue(app.buttons["Done"].exists)
     }
 
@@ -152,12 +153,12 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let row = app.buttons["workspace.script.demo-repo-dev"]
         revealResource(row, in: app)
         revealActions(on: row)
-        XCTAssertTrue(app.buttons["workspace.script.stop.demo-repo-dev"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["workspace.script.stop.demo-repo-dev"].appears(timeout: Self.timeout))
         app.buttons["workspace.script.delete.demo-repo-dev"].tap()
-        XCTAssertTrue(row.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(row.disappears(timeout: Self.timeout))
         openScriptsMenu(in: app)
         let dev = app.buttons[Fixture.dev]
-        XCTAssertTrue(dev.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(dev.appears(timeout: Self.timeout))
         dev.tap()
         assertServerBrowser(in: app)
     }
@@ -170,7 +171,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
         let row = app.buttons["workspace.script.demo-check"]
         revealResource(row, in: app)
         app.scrollViews["workspace.detail.scroll"].swipeUp()
-        XCTAssertTrue(app.frame.contains(row.frame))
+        revealResource(row, in: app)
         let startingY = row.frame.minY
         let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 80)))
@@ -182,14 +183,14 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     @MainActor
     private func launchWorkspace(repositoryScripts: Bool = false, longScriptList: Bool = false) -> XCUIApplication {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-browsers", repositoryScripts ? "--demo-repo-scripts" : "--demo-scripts"]
         if longScriptList { app.launchArguments.append("--demo-long-script-list") }
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Self.timeout))
         workspace.tap()
-        XCTAssertTrue(app.buttons["Workspace actions"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Workspace actions"].appears(timeout: Self.timeout))
         return app
     }
 
@@ -197,21 +198,36 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     private func openScriptsMenu(in app: XCUIApplication) {
         app.buttons["Workspace actions"].tap()
         let scripts = app.buttons["workspace.scripts.menu"]
-        XCTAssertTrue(scripts.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(scripts.appears(timeout: Self.timeout))
         scripts.tap()
     }
 
     @MainActor
     private func closeBrowser(in app: XCUIApplication) {
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.textFields["Browser URL"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textFields["Browser URL"].disappears(timeout: Self.timeout))
     }
 
     @MainActor
     private func revealResource(_ resource: XCUIElement, in app: XCUIApplication) {
         let detail = app.scrollViews["workspace.detail.scroll"]
-        XCTAssertTrue(detail.waitForExistence(timeout: Self.timeout))
-        for _ in 0..<5 where !resource.isHittable { detail.swipeUp() }
+        XCTAssertTrue(detail.appears(timeout: Self.timeout))
+        XCTAssertTrue(resource.appears(timeout: Self.timeout))
+        let bounds = detail.frame.intersection(app.frame)
+        let top = bounds.minY + bounds.height / 4
+        let visible = CGRect(x: bounds.minX, y: top, width: bounds.width, height: bounds.maxY - Self.revealMargin - top)
+        let center = detail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        for _ in 0..<8 where !visible.contains(resource.frame) {
+            let target = resource.frame.midY - visible.midY
+            let step = min(abs(target), visible.height / 3)
+            center.press(
+                forDuration: 0.05,
+                thenDragTo: center.withOffset(CGVector(dx: 0, dy: target > 0 ? -step : step)),
+                withVelocity: .slow,
+                thenHoldForDuration: 0.2
+            )
+        }
+        XCTAssertTrue(visible.contains(resource.frame), "\(resource.frame) must be fully visible in \(visible)")
         XCTAssertTrue(resource.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
     }
 
@@ -226,7 +242,7 @@ nonisolated final class WorkspaceScriptUITests: XCTestCase {
     @MainActor
     private func assertServerBrowser(in app: XCUIApplication) {
         let address = app.textFields["Browser URL"]
-        XCTAssertTrue(address.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(address.appears(timeout: Self.timeout))
         XCTAssertEqual(address.value as? String, "http://127.0.0.1:4321")
         XCTAssertTrue(app.buttons["Done"].exists)
     }

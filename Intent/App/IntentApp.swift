@@ -52,6 +52,7 @@ struct IntentApp: App {
                 networkAvailability: Self.networkAvailability
             )
                 .buttonStyle(IntentContentButtonStyle())
+                .uiTestAnimations()
                 #if os(visionOS)
                 .frame(
                     minWidth: Constants.Root.visionMinimumWindowWidth,

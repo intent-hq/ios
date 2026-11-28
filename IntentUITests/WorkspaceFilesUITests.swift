@@ -36,7 +36,7 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
             capture(app, name: "workspace-files-\(appearance)")
             file.tap()
             let text = app.textViews["text.content"].firstMatch
-            XCTAssertTrue(text.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(text.appears(timeout: Fixture.timeout))
             XCTAssertEqual((text.value as? String)?.contains("case workspaceOpened"), true)
             capture(app, name: "workspace-file-preview-\(appearance)")
             app.buttons["text.close"].tap()
@@ -70,7 +70,7 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
         let docs = app.buttons["files.folder.docs"].firstMatch
         reveal(docs, in: app)
         docs.tap()
-        XCTAssertTrue(app.staticTexts["Empty folder"].waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(app.staticTexts["Empty folder"].appears(timeout: Fixture.timeout))
         let files = app.buttons["context.section.files"].firstMatch
         files.tap()
         XCTAssertFalse(docs.exists)
@@ -96,7 +96,7 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
         reveal(file, in: app)
         file.tap()
         let text = app.textViews["text.content"].firstMatch
-        XCTAssertTrue(text.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(text.appears(timeout: Fixture.timeout))
         XCTAssertEqual((text.value as? String)?.contains("export function collect"), true)
         XCTAssertTrue(app.buttons["text.close"].exists)
         XCTAssertFalse(app.staticTexts["Loading file…"].exists)
@@ -106,14 +106,14 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
 
     @MainActor
     private func openContext(appearance: String) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "-appThemePreference", appearance]
         app.launch()
         let workspace = app.buttons["workspace.row.demo-ws-dashboard"]
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         workspace.tap()
         let context = app.buttons["Context"].firstMatch
-        XCTAssertTrue(context.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(context.appears(timeout: Fixture.timeout))
         context.tap()
         return app
     }
@@ -124,7 +124,7 @@ nonisolated final class WorkspaceFilesUITests: XCTestCase {
             if element.exists, element.isHittable { return }
             if towardTop { app.swipeDown() } else { app.swipeUp() }
         }
-        XCTAssertTrue(element.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(element.appears(timeout: Fixture.timeout))
         XCTAssertTrue(element.isHittable)
     }
 

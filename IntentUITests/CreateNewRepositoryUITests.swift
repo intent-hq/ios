@@ -16,7 +16,7 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
     @MainActor
     private func verifyGitHubRetry(switchToNewRepository: Bool) {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-github-create-retry"]
         app.launch()
         app.openHomeAction("workspace")
@@ -26,7 +26,7 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         if switchToNewRepository {
             app.buttons["creation.newRepository"].tap()
             let name = app.textFields["creation.newRepositoryName"]
-            XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+            XCTAssertTrue(name.appears(timeout: Self.elementTimeout))
             name.tap()
             name.typeText("other-project")
             app.buttons["Next"].tap()
@@ -35,18 +35,18 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         }
         openGitHubForm(in: app)
         app.buttons["creation.create"].tap()
-        XCTAssertTrue(app.buttons["creation.sourceCard"].waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.buttons["creation.sourceCard"].disappears(timeout: Self.elementTimeout))
         XCTAssertFalse(app.alerts["Error"].exists)
     }
 
     @MainActor
     private func openGitHubForm(in app: XCUIApplication) {
         let repository = app.buttons["creation.repository.nova-labs/console"]
-        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(repository.appears(timeout: Self.elementTimeout))
         repository.tap()
         app.buttons["Next"].tap()
         let branch = app.buttons["creation.branch.main"]
-        XCTAssertTrue(branch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(branch.appears(timeout: Self.elementTimeout))
         branch.tap()
         app.buttons["Next"].tap()
         waitForCreate(in: app)
@@ -56,14 +56,14 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
     private func submitExpectingLostResponse(in app: XCUIApplication) {
         waitForCreate(in: app)
         app.buttons["creation.create"].tap()
-        XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.alerts["Error"].appears(timeout: Self.elementTimeout))
         app.alerts.buttons["OK"].tap()
     }
 
     @MainActor
     private func waitForCreate(in app: XCUIApplication) {
         let create = app.buttons["creation.create"]
-        XCTAssertTrue(create.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(create.appears(timeout: Self.elementTimeout))
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
     }
@@ -72,7 +72,7 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
     private func returnToProjectPicker(in app: XCUIApplication) {
         app.buttons["creation.back"].tap()
         app.buttons["creation.branchBack"].tap()
-        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.repositoryTitle"].appears(timeout: Self.elementTimeout))
     }
 
     @MainActor
@@ -81,14 +81,14 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         let gate = FileManager.default.temporaryDirectory
             .appendingPathComponent("workspace-create-\(UUID().uuidString).trigger")
         defer { try? FileManager.default.removeItem(at: gate) }
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data", "--demo-github-disconnected", "--demo-workspace-create-trigger-file=" + gate.path]
         app.launch()
         app.openHomeAction("workspace")
-        XCTAssertTrue(app.staticTexts["GitHub Is Not Connected"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["GitHub Is Not Connected"].appears(timeout: Self.elementTimeout))
         app.buttons["creation.newRepository"].tap()
         let name = app.textFields["creation.newRepositoryName"]
-        XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(name.appears(timeout: Self.elementTimeout))
         XCTAssertFalse(app.buttons["Next"].isEnabled)
         name.tap()
         name.typeText("my-project")
@@ -96,7 +96,7 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         attachEvidence(in: app, name: "new-repository-name-with-keyboard")
         app.buttons["Next"].tap()
         let prompt = app.textViews["creation.prompt"]
-        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(prompt.appears(timeout: Self.elementTimeout))
         XCTAssertFalse(app.staticTexts["creation.branchTitle"].exists)
         let source = app.buttons["creation.sourceCard"]
         XCTAssertEqual(source.label, "Source. New repository: ~/Developer/my-project")
@@ -106,10 +106,10 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         XCTAssertTrue(app.buttons["creation.create"].isHittable)
         attachEvidence(in: app, name: "new-repository-create-with-keyboard")
         app.revealWorkspaceSource().tap()
-        XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(name.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(name.value as? String, "my-project")
         app.buttons["Next"].tap()
-        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(prompt.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(prompt.value as? String, "Build my new project")
         try verifyPendingCreationAndRecovery(in: app, gate: gate)
         retryAfterSourceRevisit(in: app)
@@ -118,7 +118,7 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
     @MainActor
     private func verifyPendingCreationAndRecovery(in app: XCUIApplication, gate: URL) throws {
         app.textViews["creation.prompt"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.keyboards.firstMatch.appears(timeout: Self.elementTimeout))
         let create = app.buttons["creation.create"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.elementTimeout), .completed)
@@ -134,7 +134,7 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
         XCTAssertEqual(app.textViews["creation.prompt"].value as? String, "Build my new project")
         attachEvidence(in: app, name: "new-repository-creating")
         try Data().write(to: gate)
-        XCTAssertTrue(app.alerts["Error"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.alerts["Error"].appears(timeout: Self.elementTimeout))
         app.alerts.buttons["OK"].tap()
         XCTAssertEqual(create.label, "Create")
         XCTAssertTrue(create.isEnabled)
@@ -146,54 +146,54 @@ nonisolated final class CreateNewRepositoryUITests: XCTestCase {
     private func retryAfterSourceRevisit(in app: XCUIApplication) {
         app.buttons["creation.sourceCard"].tap()
         let name = app.textFields["creation.newRepositoryName"]
-        XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(name.appears(timeout: Self.elementTimeout))
         app.buttons["creation.branchBack"].tap()
         app.buttons["creation.newRepository"].tap()
-        XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(name.appears(timeout: Self.elementTimeout))
         app.buttons["Next"].tap()
         let prompt = app.textViews["creation.prompt"]
-        XCTAssertTrue(prompt.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(prompt.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(prompt.value as? String, "Build my new project")
         XCTAssertEqual(app.buttons["creation.sourceCard"].label, "Source. New repository: ~/Developer/my-project")
         attachEvidence(in: app, name: "new-repository-draft-after-retry")
         app.buttons["Create"].tap()
-        XCTAssertTrue(app.buttons["creation.sourceCard"].waitForNonExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.buttons["creation.sourceCard"].disappears(timeout: Self.elementTimeout))
         XCTAssertFalse(app.alerts["Error"].exists)
     }
 
     @MainActor
     func testInvalidAndExistingDestinationsCannotAdvanceAndGitHubSelectionStillWorks() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = ["--demo-data"]
         app.launch()
         app.openHomeAction("workspace")
         let repository = app.buttons["creation.repository.nova-labs/console"]
-        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(repository.appears(timeout: Self.elementTimeout))
         repository.tap()
         app.buttons["creation.newRepository"].tap()
         let name = app.textFields["creation.newRepositoryName"]
-        XCTAssertTrue(name.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(name.appears(timeout: Self.elementTimeout))
         name.tap()
         name.typeText("../project")
         XCTAssertFalse(app.buttons["Next"].isEnabled)
         name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "../project".count))
         name.typeText("existing-project")
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.staticTexts["creation.newRepositoryError"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.newRepositoryError"].appears(timeout: Self.elementTimeout))
         XCTAssertFalse(app.textViews["creation.prompt"].exists)
         attachEvidence(in: app, name: "existing-repository-destination-rejected")
         app.buttons["creation.branchBack"].tap()
-        XCTAssertTrue(repository.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(repository.appears(timeout: Self.elementTimeout))
         XCTAssertTrue(repository.isSelected)
         app.buttons["Next"].tap()
-        XCTAssertTrue(app.staticTexts["creation.branchTitle"].waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(app.staticTexts["creation.branchTitle"].appears(timeout: Self.elementTimeout))
         let branch = app.buttons["creation.branch.main"]
-        XCTAssertTrue(branch.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(branch.appears(timeout: Self.elementTimeout))
         branch.tap()
         app.buttons["Next"].tap()
         let source = app.buttons["creation.sourceCard"]
-        XCTAssertTrue(source.waitForExistence(timeout: Self.elementTimeout))
+        XCTAssertTrue(source.appears(timeout: Self.elementTimeout))
         XCTAssertEqual(source.label, "Source. Repository: nova-labs/console. Branch: main")
     }
 

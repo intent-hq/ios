@@ -17,7 +17,7 @@ extension ConnectionLossUITests {
         XCTAssertTrue(app.buttons["ipad.rail.appearance"].isEnabled, "Appearance is local")
         app.buttons["ipad.rail.assistant"].tap()
         let create = app.buttons["assistant.sidebar.newConversation"]
-        XCTAssertTrue(create.waitForExistence(timeout: LossFixture.timeout), "The Assistant opens from the last confirmed owner")
+        XCTAssertTrue(create.appears(timeout: LossFixture.timeout), "The Assistant opens from the last confirmed owner")
         XCTAssertFalse(create.isEnabled, "A new Assistant conversation needs the Mac")
         capture(app, named: "ipad-read-only-assistant")
     }

@@ -52,7 +52,7 @@ extension ConversationTranscriptScrollUITests {
 
             try Data().write(to: hooksRowTriggerFile)
             XCTAssertTrue(
-                hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout),
+                hooksRow.appears(timeout: Fixture.hooksRowTimeout),
                 "\(context): hooks row never appeared after its trigger file was created"
             )
             XCTAssertTrue(
@@ -160,7 +160,7 @@ extension ConversationTranscriptScrollUITests {
             alsoReporting: (endRow.element, endRow.name)
         ) else { return }
         XCTAssertTrue(
-            opened.goToEnd.waitForNonExistence(timeout: 5),
+            opened.goToEnd.disappears(timeout: 5),
             "\(recovered): Go to End is shown — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened)
         )
@@ -230,7 +230,7 @@ extension ConversationTranscriptScrollUITests {
             "\(gaveUp): the end row reads realized while the fixture holds the marker withdrawn — \(terminal.raw)"
         )
         XCTAssertTrue(
-            opened.goToEnd.waitForExistence(timeout: 5),
+            opened.goToEnd.appears(timeout: 5),
             "\(gaveUp): Go to End is not shown after the recovery gave up — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened)
         )
@@ -299,7 +299,7 @@ extension ConversationTranscriptScrollUITests {
             toolRow.tap()
             XCTAssertEqual(toolRow.value as? String, "Expanded", "\(context): physical expansion")
             XCTAssertTrue(
-                hydrationHint.waitForExistence(timeout: 5),
+                hydrationHint.appears(timeout: 5),
                 "\(context): the hydration hint did not appear"
             )
             revealToolHeader(toolRow, in: transcript, app: app, context: context)
@@ -307,7 +307,7 @@ extension ConversationTranscriptScrollUITests {
             XCTAssertEqual(toolRow.value as? String, "Collapsed", "\(context): physical collapse")
             toolRow.tap()
             XCTAssertEqual(toolRow.value as? String, "Expanded", "\(context): physical re-expansion")
-            if opened.goToEnd.waitForExistence(timeout: 2) { opened.goToEnd.tap() }
+            if opened.goToEnd.appears(timeout: 2) { opened.goToEnd.tap() }
             guard waitUntilSettled(
                 on: lastMessage,
                 named: "last assistant paragraph",
@@ -332,7 +332,7 @@ extension ConversationTranscriptScrollUITests {
                 "\(context): full block did not hydrate after the trigger file was created"
             )
             XCTAssertTrue(
-                fullOutput.waitForExistence(timeout: Fixture.blockHydrationTimeout),
+                fullOutput.appears(timeout: Fixture.blockHydrationTimeout),
                 "\(context): the hydrated listing must contain content beyond the bounded preview"
             )
 
@@ -365,7 +365,7 @@ extension ConversationTranscriptScrollUITests {
             if cycle == 1, !standalone {
                 lastMessage.press(forDuration: 1)
                 let copy = app.menuItems["Copy"].firstMatch
-                XCTAssertTrue(copy.waitForExistence(timeout: Fixture.elementTimeout), "Text copy must remain reachable")
+                XCTAssertTrue(copy.appears(timeout: Fixture.elementTimeout), "Text copy must remain reachable")
                 copy.tap()
             }
             leaveConversation(in: app)

@@ -6,11 +6,11 @@ extension HomeActionMenuUITests {
         defer { XCUIDevice.shared.orientation = .portrait }
         for theme in ["light", "dark"] {
             XCUIDevice.shared.orientation = .portrait
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             app.launchArguments = ["--demo-data", "-appThemePreference", theme]
             app.launch()
             let launcher = app.buttons["intent.menu.open"]
-            XCTAssertTrue(launcher.waitForExistence(timeout: HomeActionMenuTestSupport.timeout))
+            XCTAssertTrue(launcher.appears(timeout: HomeActionMenuTestSupport.timeout))
             launcher.tap()
             for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
                 XCUIDevice.shared.orientation = orientation
@@ -35,7 +35,7 @@ extension HomeActionMenuUITests {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "iPad opens sections from its rail, not the floating carousel")
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments = [
             "--demo-data", "-appThemePreference", "light",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
@@ -43,10 +43,10 @@ extension HomeActionMenuUITests {
         app.launch()
         defer { app.terminate() }
         let launcher = app.buttons["intent.menu.open"]
-        XCTAssertTrue(launcher.waitForExistence(timeout: HomeActionMenuTestSupport.timeout))
+        XCTAssertTrue(launcher.appears(timeout: HomeActionMenuTestSupport.timeout))
         launcher.tap()
         let viewport = app.scrollViews["intent.menu.tiles"]
-        XCTAssertTrue(viewport.waitForExistence(timeout: HomeActionMenuTestSupport.timeout))
+        XCTAssertTrue(viewport.appears(timeout: HomeActionMenuTestSupport.timeout))
         let close = app.buttons["intent.menu.close"]
         XCTAssertTrue(close.isHittable)
         XCTAssertTrue(app.frame.contains(close.frame))
@@ -139,7 +139,7 @@ extension XCUIApplication {
     @MainActor
     func openHomeAction(_ action: String, file: StaticString = #filePath, line: UInt = #line) {
         let launcher = buttons["intent.menu.open"]
-        XCTAssertTrue(launcher.waitForExistence(timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
+        XCTAssertTrue(launcher.appears(timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
         launcher.tap()
         revealHomeAction(action, file: file, line: line).tap()
     }
@@ -167,7 +167,7 @@ extension XCUIApplication {
     func revealHomeAction(_ action: String, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
         let tile = buttons["intent.menu.\(action)"]
         let carousel = scrollViews["intent.menu.tiles"]
-        XCTAssertTrue(tile.waitForExistence(timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
+        XCTAssertTrue(tile.appears(timeout: HomeActionMenuTestSupport.timeout), file: file, line: line)
         var viewport = carousel.frame.intersection(frame)
         for _ in 0..<HomeActionMenuTestSupport.maximumSwipes {
             viewport = carousel.frame.intersection(frame)

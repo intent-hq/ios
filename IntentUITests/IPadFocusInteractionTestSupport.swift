@@ -105,7 +105,7 @@ struct IPadFocusBackgroundTap {
 
     static func paneFrame(_ identifier: String, in app: XCUIApplication) throws -> CGRect {
         let probes = app.otherElements.matching(identifier: "\(identifier).geometry")
-        XCTAssertTrue(probes.firstMatch.waitForExistence(timeout: timeout))
+        XCTAssertTrue(probes.firstMatch.appears(timeout: timeout))
         XCTAssertEqual(probes.count, 1, "The pane must have exactly one independent geometry probe")
         let probe = probes.firstMatch
         XCTAssertLessThanOrEqual(probe.frame.width, 1, "The diagnostic marker must not cover pane controls")

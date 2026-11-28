@@ -16,7 +16,7 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         XCTAssertTrue(sessionStarted.exists)
 
         app.buttons["diagnosticClear"].tap()
-        XCTAssertTrue(app.buttons["Clear logs"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Clear logs"].appears(timeout: Self.timeout))
         XCTAssertTrue(app.staticTexts["Clear local diagnostic logs?"].exists)
         let oldMessage = NSPredicate(format: "label CONTAINS %@", "This removes local diagnostic history")
         XCTAssertFalse(app.staticTexts.matching(oldMessage).firstMatch.exists)
@@ -25,17 +25,17 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
         XCTAssertEqual(retainedRecords.label, originalCount, "Cancelling must preserve the reviewed history")
         XCTAssertFalse(app.staticTexts["diagnosticNotice"].exists)
         app.navigationBars["Export logs"].buttons["diagnosticClose"].tap()
-        XCTAssertTrue(app.navigationBars["Export logs"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.navigationBars["Export logs"].disappears(timeout: Self.timeout))
         closeSettings(app)
         openLogs(app)
         assertPreview(app)
         XCTAssertTrue(sessionStarted.exists, "Reopening must still read the retained session history")
         app.buttons["diagnosticClear"].tap()
-        XCTAssertTrue(app.buttons["Clear logs"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Clear logs"].appears(timeout: Self.timeout))
         app.buttons["Clear logs"].tap()
-        XCTAssertTrue(app.staticTexts["diagnosticNotice"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.staticTexts["diagnosticNotice"].appears(timeout: Self.timeout))
         XCTAssertEqual(app.staticTexts["diagnosticNotice"].label, "Local log history cleared. New events can still be recorded.")
-        XCTAssertTrue(sessionStarted.waitForNonExistence(timeout: Self.timeout), "Confirmed Clear must remove prior history")
+        XCTAssertTrue(sessionStarted.disappears(timeout: Self.timeout), "Confirmed Clear must remove prior history")
     }
 
     @MainActor
@@ -49,7 +49,7 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
 
     @MainActor
     private func launch(largeText: Bool = false) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"]
@@ -62,7 +62,7 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
     private func openLogs(_ app: XCUIApplication) {
         app.openHomeAction("settings")
         let scrollView = app.scrollViews["settings.scroll"]
-        XCTAssertTrue(scrollView.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(scrollView.appears(timeout: Self.timeout))
         let export = app.buttons["Export logs"]
         let viewport = scrollView.frame.intersection(app.frame)
         for _ in 0..<Self.maximumSwipes {
@@ -91,18 +91,18 @@ nonisolated final class DiagnosticExportUITests: XCTestCase {
             app.buttons["Cancel"].tap()
         } else {
             let dismissRegion = app.otherElements["PopoverDismissRegion"]
-            XCTAssertTrue(dismissRegion.waitForExistence(timeout: Self.timeout))
+            XCTAssertTrue(dismissRegion.appears(timeout: Self.timeout))
             XCTAssertTrue(dismissRegion.isHittable)
             dismissRegion.tap()
         }
-        XCTAssertTrue(app.buttons["Clear logs"].waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.buttons["Clear logs"].disappears(timeout: Self.timeout))
     }
 
     @MainActor
     private func assertPreview(_ app: XCUIApplication) {
-        XCTAssertTrue(app.navigationBars["Export logs"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.navigationBars["Export logs"].appears(timeout: Self.timeout))
         let share = app.buttons["diagnosticShareZIP"]
-        XCTAssertTrue(share.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(share.appears(timeout: Self.timeout))
         XCTAssertEqual(share.label, "Share ZIP")
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: share)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Self.timeout), .completed)

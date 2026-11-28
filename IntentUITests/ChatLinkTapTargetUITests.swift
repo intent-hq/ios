@@ -51,12 +51,12 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
         let app = launch(appearance: "light")
         let transcript = openTranscript(in: app)
         let rows = app.links.matching(identifier: Fixture.rowIdentifier)
-        XCTAssertTrue(rows.firstMatch.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(rows.firstMatch.appears(timeout: Fixture.timeout))
         XCTAssertEqual(rows.count, Fixture.links.count, "Every standalone link line must render as a row")
 
         for link in Fixture.links {
             let row = rows[link.label].firstMatch
-            XCTAssertTrue(row.waitForExistence(timeout: Fixture.timeout), "\(link.label) must be a link row")
+            XCTAssertTrue(row.appears(timeout: Fixture.timeout), "\(link.label) must be a link row")
             reveal(row, in: transcript)
             let frame = row.frame
             XCTAssertGreaterThanOrEqual(
@@ -82,7 +82,7 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
                 reveal(row, in: transcript)
                 tap.point.tap()
                 assertOpensAndClose(link.outcome, in: app, context: "\(link.label), \(tap.name)")
-                XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+                XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
             }
         }
     }
@@ -94,19 +94,19 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
         let paragraph = app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", Fixture.firstParagraph)
         ).firstMatch
-        XCTAssertTrue(paragraph.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(paragraph.appears(timeout: Fixture.timeout))
         reveal(paragraph, in: transcript)
 
         paragraph.press(forDuration: Fixture.longPressDuration)
         let copy = app.menuItems["Copy"].firstMatch
-        XCTAssertTrue(copy.waitForExistence(timeout: Fixture.timeout), "The message must keep its Copy menu")
+        XCTAssertTrue(copy.appears(timeout: Fixture.timeout), "The message must keep its Copy menu")
         copy.tap()
-        XCTAssertTrue(copy.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(copy.disappears(timeout: Fixture.timeout))
 
         paragraph.doubleTap()
         let share = app.menuItems["Share…"].firstMatch
         XCTAssertTrue(
-            share.waitForExistence(timeout: Fixture.timeout),
+            share.appears(timeout: Fixture.timeout),
             "Double-tapping message text must still select a word and show the edit menu"
         )
         XCTAssertTrue(app.menuItems["Copy"].firstMatch.exists)
@@ -118,7 +118,7 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
             let app = launch(appearance: appearance)
             let transcript = openTranscript(in: app)
             let first = app.links[Fixture.links[0].label].firstMatch
-            XCTAssertTrue(first.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(first.appears(timeout: Fixture.timeout))
             reveal(first, in: transcript)
             let screenshot = XCTAttachment(screenshot: app.screenshot())
             screenshot.name = "Chat link rows \(appearance)"
@@ -130,7 +130,7 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
 
     @MainActor
     private func launch(appearance: String) -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-inline-text", "-appThemePreference", appearance]
         app.launch()
         return app
@@ -144,37 +144,37 @@ nonisolated final class ChatLinkTapTargetUITests: XCTestCase {
         case .html:
             close(app.buttons["html.close"].firstMatch, context: context)
         case .image:
-            XCTAssertTrue(app.images["Image preview"].waitForExistence(timeout: Fixture.timeout), "\(context) must show the image")
+            XCTAssertTrue(app.images["Image preview"].appears(timeout: Fixture.timeout), "\(context) must show the image")
             close(app.buttons["Close image"].firstMatch, context: context)
         case .message:
             let alert = app.alerts[Fixture.alertTitle].firstMatch
-            XCTAssertTrue(alert.waitForExistence(timeout: Fixture.timeout), "\(context) must open the link")
+            XCTAssertTrue(alert.appears(timeout: Fixture.timeout), "\(context) must open the link")
             alert.buttons["OK"].tap()
-            XCTAssertTrue(alert.waitForNonExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(alert.disappears(timeout: Fixture.timeout))
         }
     }
 
     @MainActor
     private func close(_ button: XCUIElement, context: String) {
-        XCTAssertTrue(button.waitForExistence(timeout: Fixture.timeout), "\(context) must open the link")
+        XCTAssertTrue(button.appears(timeout: Fixture.timeout), "\(context) must open the link")
         XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { button.isHittable })
         button.tap()
-        XCTAssertTrue(button.waitForNonExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(button.disappears(timeout: Fixture.timeout))
     }
 
     @MainActor
     private func openTranscript(in app: XCUIApplication) -> XCUIElement {
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        if !workspace.waitForExistence(timeout: Fixture.launchTimeout) {
+        if !workspace.appears(timeout: Fixture.launchTimeout) {
             app.navigationBars.buttons.element(boundBy: 0).tap()
-            XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.timeout))
+            XCTAssertTrue(workspace.appears(timeout: Fixture.timeout))
         }
         workspace.tap()
         let agent = app.staticTexts[Fixture.agentName].firstMatch
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.timeout))
         agent.tap()
         let transcript = app.scrollViews["transcript.scrollView"].firstMatch
-        XCTAssertTrue(transcript.waitForExistence(timeout: Fixture.timeout))
+        XCTAssertTrue(transcript.appears(timeout: Fixture.timeout))
         return transcript
     }
 

@@ -29,62 +29,62 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     @MainActor
     func testEdgeSwipeBackReturnsThroughWorkspaceAndCanBeCancelled() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "Compact navigation gesture")
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.workspaceTimeout))
         workspace.tap()
         let agent = app.buttons["workspace.agent.demo-agent-implementor"]
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.elementTimeout))
         agent.tap()
         let back = app.buttons["conversation.back"]
-        XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(back.appears(timeout: Fixture.elementTimeout))
 
         edgeSwipe(in: app, progress: 0.15)
         XCTAssertTrue(back.exists, "A cancelled swipe must keep the conversation open")
         edgeSwipe(in: app)
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.elementTimeout))
         XCTAssertFalse(back.exists)
         edgeSwipe(in: app)
         let search = app.buttons[Fixture.workspaceListIdentifier]
-        XCTAssertTrue(search.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(search.appears(timeout: Fixture.elementTimeout))
 
         edgeSwipe(in: app)
         let closeSwitcher = app.buttons["connection-switcher.close"]
-        XCTAssertTrue(closeSwitcher.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(closeSwitcher.appears(timeout: Fixture.elementTimeout))
         closeSwitcher.tap()
-        XCTAssertTrue(closeSwitcher.waitForNonExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(closeSwitcher.disappears(timeout: Fixture.elementTimeout))
         workspace.tap()
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.elementTimeout))
         agent.tap()
-        XCTAssertTrue(back.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(back.appears(timeout: Fixture.elementTimeout))
         back.tap()
-        XCTAssertTrue(agent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(agent.appears(timeout: Fixture.elementTimeout))
     }
 
     @MainActor
     func testSelectedPanelSurvivesCancelledSwipeAndWorkspaceReentry() throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom != .phone, "Compact navigation gesture")
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.workspaceTimeout))
         workspace.tap()
 
         for title in ["Changes", "Context", "Agents"] {
             let tab = app.buttons[title].firstMatch
-            XCTAssertTrue(tab.waitForExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(tab.appears(timeout: Fixture.elementTimeout))
             tab.tap()
             XCTAssertTrue(tab.isSelected)
 
             edgeSwipe(in: app, progress: 0.15)
             XCTAssertTrue(tab.isSelected, "Cancelling navigation must retain the \(title) panel")
             edgeSwipe(in: app)
-            XCTAssertTrue(app.buttons[Fixture.workspaceListIdentifier].waitForExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(app.buttons[Fixture.workspaceListIdentifier].appears(timeout: Fixture.elementTimeout))
             workspace.tap()
-            XCTAssertTrue(tab.waitForExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(tab.appears(timeout: Fixture.elementTimeout))
             XCTAssertTrue(tab.isSelected, "Re-entering the workspace must restore the \(title) panel")
         }
     }
@@ -98,35 +98,35 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
 
     @MainActor
     func testCreateNewAgentMenuOpensAgentSetup() throws {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         if let appearance = ProcessInfo.processInfo.environment["INTENT_UITEST_APPEARANCE"] {
             app.launchArguments += ["-appThemePreference", appearance]
         }
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: Fixture.workspaceTimeout))
+        XCTAssertTrue(workspace.appears(timeout: Fixture.workspaceTimeout))
         workspace.tap()
         let actions = app.buttons["Workspace actions"]
-        XCTAssertTrue(actions.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(actions.appears(timeout: Fixture.elementTimeout))
         actions.tap()
         let createAgent = app.buttons["Create New Agent"]
-        XCTAssertTrue(createAgent.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(createAgent.appears(timeout: Fixture.elementTimeout))
         XCTAssertTrue(createAgent.isEnabled)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "create-agent-menu"
         screenshot.lifetime = .keepAlways
         add(screenshot)
         createAgent.tap()
-        XCTAssertTrue(app.navigationBars["New Agent"].waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(app.navigationBars["New Agent"].appears(timeout: Fixture.elementTimeout))
         let specialist = app.staticTexts["Implementor"].firstMatch
-        XCTAssertTrue(specialist.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(specialist.appears(timeout: Fixture.elementTimeout))
         specialist.tap()
         let next = app.buttons["Next"]
         XCTAssertTrue(next.isEnabled)
         try assertToolbarLabel("Next", button: next, in: app, capture: "new-agent-next")
         next.tap()
-        XCTAssertTrue(app.navigationBars["Provider & Model"].waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(app.navigationBars["Provider & Model"].appears(timeout: Fixture.elementTimeout))
         let create = app.buttons["Create"]
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: create)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: Fixture.elementTimeout), .completed)
@@ -136,7 +136,7 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         actions.tap()
         app.buttons["New browser"].tap()
         let address = app.textFields["Browser address"]
-        XCTAssertTrue(address.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(address.appears(timeout: Fixture.elementTimeout))
         address.tap()
         address.typeText("localhost:3000")
         try assertToolbarLabel("Open", button: app.buttons["Open"], in: app, capture: "new-browser-open")
@@ -167,7 +167,7 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
             "Temporary quarantine for the unresolved app crash tracked at https://github.com/intent-hq/ios/issues/427; "
                 + "opt in with TEST_RUNNER_INTENT_UITEST_TRANSCRIPT_CRASH_REPRO=1."
         )
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         app.launch()
 
@@ -188,7 +188,7 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         agentRow.tap()
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         XCTAssertTrue(
-            transcript.waitForExistence(timeout: Fixture.elementTimeout),
+            transcript.appears(timeout: Fixture.elementTimeout),
             "tapping the agent row on the overview must open its conversation"
         )
     }
@@ -199,11 +199,11 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         let agentRow = app.staticTexts[Fixture.agentName].firstMatch
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         XCTAssertTrue(
-            overviewOnly.waitForExistence(timeout: Fixture.elementTimeout),
+            overviewOnly.appears(timeout: Fixture.elementTimeout),
             "\(context): the workspace overview never appeared"
         )
         XCTAssertTrue(
-            agentRow.waitForExistence(timeout: Fixture.elementTimeout),
+            agentRow.appears(timeout: Fixture.elementTimeout),
             "\(context): the agent list never loaded on the overview"
         )
 
@@ -222,7 +222,7 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
     private func showWorkspaceList(in app: XCUIApplication, workspaceRow: XCUIElement) {
         let workspaceList = app.buttons[Fixture.workspaceListIdentifier].firstMatch
         var backTapsLeft = Fixture.backNavigationAttempts
-        while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {
+        while backTapsLeft > 0, !workspaceList.appears(timeout: Fixture.backNavigationTimeout) {
             let back = app.navigationBars.buttons.element(boundBy: 0)
             guard back.exists else { break }
             back.tap()
@@ -230,14 +230,14 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         }
         XCTAssertTrue(workspaceList.exists, "the workspace list never appeared")
         XCTAssertTrue(
-            workspaceRow.waitForExistence(timeout: Fixture.workspaceTimeout),
+            workspaceRow.appears(timeout: Fixture.workspaceTimeout),
             "the fixture workspace row never appeared in the workspace list"
         )
     }
 
     @MainActor
     func testAgentRowOpensConversationFromPreviewAndEmptySpace() {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         app.launch()
         let workspace = app.staticTexts["Add usage analytics dashboard"].firstMatch
@@ -248,14 +248,14 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         let preview = app.staticTexts["Review CSV export"].firstMatch
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         for target in ["Markdown preview", "row center", "trailing space", "bottom padding"] {
-            XCTAssertTrue(row.waitForExistence(timeout: Fixture.elementTimeout))
-            XCTAssertTrue(preview.waitForExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(row.appears(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(preview.appears(timeout: Fixture.elementTimeout))
             let point = agentRowTapPoint(target, row: row.frame, preview: preview.frame)
             app.coordinate(withNormalizedOffset: .zero)
                 .withOffset(CGVector(dx: point.x, dy: point.y))
                 .tap()
             XCTAssertTrue(
-                transcript.waitForExistence(timeout: Fixture.elementTimeout),
+                transcript.appears(timeout: Fixture.elementTimeout),
                 "Tapping \(target) must open the agent conversation"
             )
             if UIDevice.current.userInterfaceIdiom == .phone {
@@ -270,29 +270,29 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
                     app.navigationBars.buttons.element(boundBy: 0).tap()
                 }
             }
-            XCTAssertTrue(transcript.waitForNonExistence(timeout: Fixture.elementTimeout))
+            XCTAssertTrue(transcript.disappears(timeout: Fixture.elementTimeout))
         }
     }
 
     @MainActor
     func testDelegatedAgentRowOpensConversationFromIndentation() {
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data"]
         app.launch()
         let workspace = app.staticTexts[Fixture.workspaceTitle].firstMatch
         showWorkspaceList(in: app, workspaceRow: workspace)
         workspace.tap()
         let delegates = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "delegated agents")).firstMatch
-        XCTAssertTrue(delegates.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(delegates.appears(timeout: Fixture.elementTimeout))
         delegates.tap()
         let row = app.buttons["workspace.agent.demo-agent-deflake-capture"]
-        XCTAssertTrue(row.waitForExistence(timeout: Fixture.elementTimeout))
+        XCTAssertTrue(row.appears(timeout: Fixture.elementTimeout))
         row.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
             .withOffset(CGVector(dx: 2, dy: 0))
             .tap()
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         XCTAssertTrue(
-            transcript.waitForExistence(timeout: Fixture.elementTimeout),
+            transcript.appears(timeout: Fixture.elementTimeout),
             "Tapping the empty indentation must open the delegated agent conversation"
         )
         if UIDevice.current.userInterfaceIdiom == .phone {
@@ -316,20 +316,20 @@ extension WorkspaceEntryUITests {
     @MainActor
     func testDisclosureAndNoteNavigationKeepSeparateTouchTargets() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.intent()
         app.launchArguments += ["--demo-data", "--demo-design-scenario=context"]
         app.launch()
         let workspace = app.staticTexts["Build Spec Writer Page"].firstMatch
-        XCTAssertTrue(workspace.waitForExistence(timeout: 30))
+        XCTAssertTrue(workspace.appears(timeout: 30))
         workspace.tap()
         let context = app.buttons["Context"].firstMatch
-        XCTAssertTrue(context.waitForExistence(timeout: 15))
+        XCTAssertTrue(context.appears(timeout: 15))
         context.tap()
 
         let disclosure = app.buttons["Child notes for Spec"]
         let task = app.buttons["workspace.note.context-task-1"]
-        XCTAssertTrue(disclosure.waitForExistence(timeout: 15))
-        XCTAssertTrue(task.waitForExistence(timeout: 15))
+        XCTAssertTrue(disclosure.appears(timeout: 15))
+        XCTAssertTrue(task.appears(timeout: 15))
         assertContextTreeSpacing(in: app)
         for _ in 0..<6 where !task.isHittable { app.swipeUp() }
         let screenshot = XCTAttachment(screenshot: app.screenshot())
@@ -340,26 +340,26 @@ extension WorkspaceEntryUITests {
         disclosure.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
             .withOffset(CGVector(dx: 0, dy: -2))
             .tap()
-        XCTAssertTrue(task.waitForNonExistence(timeout: 15))
+        XCTAssertTrue(task.disappears(timeout: 15))
         XCTAssertEqual(disclosure.value as? String, "Collapsed")
         disclosure.tap()
-        XCTAssertTrue(task.waitForExistence(timeout: 15))
+        XCTAssertTrue(task.appears(timeout: 15))
         XCTAssertEqual(disclosure.value as? String, "Expanded")
 
         task.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1))
             .withOffset(CGVector(dx: 0, dy: -2))
             .tap()
         let taskNavigation = app.navigationBars["Build the icon gallery interface"]
-        XCTAssertTrue(taskNavigation.waitForExistence(timeout: 15))
+        XCTAssertTrue(taskNavigation.appears(timeout: 15))
         let noteScreenshot = XCTAttachment(screenshot: app.screenshot())
         noteScreenshot.name = "note-viewer-flat-back-button"
         noteScreenshot.lifetime = .keepAlways
         add(noteScreenshot)
         taskNavigation.buttons.element(boundBy: 0).tap()
         let spec = app.buttons["workspace.note.spec"]
-        XCTAssertTrue(spec.waitForExistence(timeout: 15))
+        XCTAssertTrue(spec.appears(timeout: 15))
         spec.tap()
-        XCTAssertTrue(app.navigationBars["Spec"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.navigationBars["Spec"].appears(timeout: 15))
     }
 
     @MainActor
@@ -369,7 +369,7 @@ extension WorkspaceEntryUITests {
         let second = app.buttons["workspace.note.context-task-1"]
         let last = app.buttons["workspace.note.context-task-2"]
         let preferences = app.buttons["workspace.note.preferences"]
-        XCTAssertTrue(preferences.waitForExistence(timeout: 15))
+        XCTAssertTrue(preferences.appears(timeout: 15))
         XCTAssertEqual(first.frame.minY - spec.frame.maxY, 16, accuracy: 1, "36pt root-to-children gap")
         XCTAssertEqual(second.frame.minY - first.frame.maxY, 4, accuracy: 1, "24pt nested row gap")
         XCTAssertEqual(last.frame.minY - second.frame.maxY, 4, accuracy: 1, "24pt nested row gap")

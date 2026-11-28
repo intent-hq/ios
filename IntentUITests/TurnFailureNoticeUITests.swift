@@ -7,7 +7,7 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
     func testUsageLimitCardHidesRawDetailsUntilExpanded() {
         continueAfterFailure = false
         for appearance in ["light", "dark"] {
-            let app = XCUIApplication()
+            let app = XCUIApplication.intent()
             open(app, appearance: appearance)
             verifyCard(in: app, appearance: appearance)
             app.terminate()
@@ -27,16 +27,16 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
         let agent = app.buttons["workspace.agent.demo-agent-design"]
         XCTAssertTrue(agent.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout))
         agent.tap()
-        XCTAssertTrue(app.textViews["composer.textView"].waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.textViews["composer.textView"].appears(timeout: Self.timeout))
+        XCTAssertTrue(app.keyboards.firstMatch.disappears(timeout: Self.timeout))
     }
 
     @MainActor
     private func verifyCard(in app: XCUIApplication, appearance: String) {
         let title = app.staticTexts["Usage limit reached"].firstMatch
-        XCTAssertTrue(title.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        XCTAssertTrue(title.appears(timeout: Self.timeout), app.debugDescription)
         let message = app.descendants(matching: .any)["turnFailure.message"].firstMatch
-        XCTAssertTrue(message.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        XCTAssertTrue(message.appears(timeout: Self.timeout), app.debugDescription)
         XCTAssertTrue(message.label.contains("You've hit your usage limit."), "Message label: \(message.label)")
         XCTAssertTrue(message.label.contains("try again at Nov 14th, 2026 8:07 AM"), "Message label: \(message.label)")
         for marker in ["codexErrorInfo", "JSON-RPC", "internal error"] {
@@ -50,7 +50,7 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
         XCTAssertTrue(inlineLink(in: app).exists, "The URL in the message is an accessible link\n\(app.debugDescription)")
 
         let details = app.buttons["turnFailure.details"]
-        XCTAssertTrue(details.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(details.appears(timeout: Self.timeout))
         XCTAssertEqual(details.value as? String, "Collapsed", "Details start collapsed")
         let raw = app.descendants(matching: .any)["turnFailure.rawDetails"]
         XCTAssertFalse(raw.exists, "Raw JSON stays hidden until Details is expanded")
@@ -59,7 +59,7 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
 
         XCTAssertTrue(details.wait(for: \.isHittable, toEqual: true, timeout: Self.timeout), app.debugDescription)
         details.tap()
-        XCTAssertTrue(raw.waitForExistence(timeout: Self.timeout), "Expanding Details shows the raw reason")
+        XCTAssertTrue(raw.appears(timeout: Self.timeout), "Expanding Details shows the raw reason")
         XCTAssertEqual(details.value as? String, "Expanded")
         XCTAssertTrue(raw.label.contains(#""codexErrorInfo":"usageLimitExceeded""#), "Raw label: \(raw.label)")
         let copy = app.buttons["turnFailure.copy"]
@@ -72,10 +72,10 @@ nonisolated final class TurnFailureNoticeUITests: XCTestCase {
             "Copy confirms the raw reason reached the pasteboard"
         )
         details.tap()
-        XCTAssertTrue(raw.waitForNonExistence(timeout: Self.timeout), "Collapsing hides the raw reason again")
+        XCTAssertTrue(raw.disappears(timeout: Self.timeout), "Collapsing hides the raw reason again")
 
         let link = inlineLink(in: app)
-        XCTAssertTrue(link.waitForExistence(timeout: Self.timeout), app.debugDescription)
+        XCTAssertTrue(link.appears(timeout: Self.timeout), app.debugDescription)
         let frame = link.frame
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.75)).tap()
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
