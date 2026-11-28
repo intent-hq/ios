@@ -118,6 +118,7 @@ struct CopyContextMenuOverlayHitTestTests {
             frame: CGRect(x: 0, y: 0, width: 50, height: 100)
         )
         fixture.host.insertSubview(marker, belowSubview: fixture.overlay)
+        #expect(fixture.overlay.hitTest(CGPoint(x: 25, y: 50), with: nil) == nil)
         #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
         #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
     }
@@ -130,7 +131,8 @@ struct CopyContextMenuOverlayHitTestTests {
         )
         wrapper.addSubview(marker)
         fixture.host.insertSubview(wrapper, belowSubview: fixture.overlay)
-        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
+        #expect(fixture.overlay.hitTest(CGPoint(x: 25, y: 50), with: nil) == nil)
+        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === fixture.host)
         #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
     }
 
@@ -144,7 +146,8 @@ struct CopyContextMenuOverlayHitTestTests {
         wrapper.addSubview(marker)
         scrollView.addSubview(wrapper)
         fixture.host.insertSubview(scrollView, belowSubview: fixture.overlay)
-        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
+        #expect(fixture.overlay.hitTest(CGPoint(x: 25, y: 50), with: nil) == nil)
+        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === scrollView)
         #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === scrollView)
     }
 }

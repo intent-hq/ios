@@ -10,7 +10,7 @@ struct CopyContextMenuPassthroughPolicyTests {
         "Transcript/ConversationTranscriptView+History.swift": (1, "History retry row has no copy menu."),
         "Transcript/ConversationTranscriptView+Presentation.swift": (3, "Go to End and suggested prompts render beside the rows."),
         "Transcript/WorkspaceConversationHeader.swift": (1, "Header above the transcript."),
-        "Content/ChatImageActions.swift": (2, "Image Save/Copy items render only inside menus."),
+        "Content/ChatImageActions.swift": (3, "Attachment Save/Copy items render only inside menus."),
         "Content/HTMLLinkPreviewView.swift": (2, "Full-screen preview presented from a row."),
         "Content/ImageLightboxView.swift": (8, "Full-screen lightbox presented from a row."),
         "Content/PDFLightboxView.swift": (1, "Full-screen lightbox presented from a row."),

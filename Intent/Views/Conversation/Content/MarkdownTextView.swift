@@ -118,7 +118,7 @@ struct MarkdownTextView: View {
                     composerFocus?.wrappedValue = false
                     lightboxItem = LightboxItem(image: image, galleryItemID: galleryItemID(for: attachment))
                 } else if let video = Self.playbackVideo(for: attachment) {
-                    videoItem = VideoItem(video: video)
+                    videoItem = VideoItem(video: video, name: (attachment.base as? IntentFileVideoAttachment)?.name ?? "")
                 } else if let pdf = Self.previewPDF(for: attachment) {
                     pdfItem = PDFItem(pdf: pdf)
                 } else if let failure = attachment.base as? IntentFilePDFFailureAttachment,
@@ -147,7 +147,7 @@ struct MarkdownTextView: View {
                 .coversConversationComposers()
             }
             .fullScreenCover(item: $videoItem) { item in
-                VideoLightboxView(video: item.video)
+                VideoLightboxView(video: item.video, name: item.name)
                     .coversConversationComposers()
             }
             .fullScreenCover(item: $pdfItem) { item in
@@ -279,6 +279,7 @@ private struct LightboxItem: Identifiable {
 private struct VideoItem: Identifiable {
     let id = UUID()
     let video: WorkspaceVideo
+    let name: String
 }
 
 private struct PDFItem: Identifiable {

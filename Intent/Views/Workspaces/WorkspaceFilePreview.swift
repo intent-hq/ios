@@ -46,7 +46,7 @@ struct WorkspaceFilePreview: View {
         case .image(let image):
             ImageLightboxView(image: image)
         case .video(let video):
-            VideoLightboxView(video: video)
+            VideoLightboxView(video: video, name: URL(fileURLWithPath: link.path).lastPathComponent)
         case .document(let document):
             DocumentLightboxView(document: document)
         case .pdf, .text, nil:

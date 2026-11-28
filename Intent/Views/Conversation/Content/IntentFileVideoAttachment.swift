@@ -18,6 +18,9 @@ struct IntentFileVideoAttachment: Attachment {
             .overlay {
                 VideoAttachmentPlayIcon()
             }
+            .contextMenu {
+                VideoAttachmentActionMenuItems(video: video, name: name)
+            }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Video: \(name)")
             .accessibilityHint("Play full screen")

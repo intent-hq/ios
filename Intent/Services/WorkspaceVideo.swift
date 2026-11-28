@@ -21,7 +21,47 @@ nonisolated final class WorkspaceVideo: Sendable, Hashable {
     deinit {
         Task.detached(priority: .utility) { [url] in
             try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: Self.shareDirectory(for: url))
         }
+    }
+
+    private static let fallbackExportBase = "Video"
+    private static let maxExportBaseLength = 200
+
+    static func exportFileName(for name: String, pathExtension: String) -> String {
+        let unsafe = CharacterSet(charactersIn: "/:\\").union(.controlCharacters).union(.newlines)
+        var base = String(String.UnicodeScalarView(name.unicodeScalars.map { unsafe.contains($0) ? "-" : $0 }))
+            .trimmingCharacters(in: .whitespaces)
+        while base.hasPrefix(".") { base.removeFirst() }
+        if let dot = base.lastIndex(of: "."),
+           UTType(filenameExtension: String(base[base.index(after: dot)...]))?.conforms(to: .movie) == true {
+            base = String(base[..<dot])
+        }
+        base = String(base.prefix(maxExportBaseLength)).trimmingCharacters(in: .whitespaces)
+        if base.isEmpty { base = fallbackExportBase }
+        return pathExtension.isEmpty ? base : base + "." + pathExtension
+    }
+
+    static func shareDirectory(for url: URL) -> URL {
+        url.deletingLastPathComponent()
+            .appendingPathComponent(url.deletingPathExtension().lastPathComponent + "-share", isDirectory: true)
+    }
+
+    func shareFile(named name: String) throws -> URL {
+        let directory = Self.shareDirectory(for: url)
+        let target = directory.appendingPathComponent(
+            Self.exportFileName(for: name, pathExtension: url.pathExtension),
+            isDirectory: false
+        )
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: target.path) { return target }
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        do {
+            try fileManager.linkItem(at: url, to: target)
+        } catch {
+            try fileManager.copyItem(at: url, to: target)
+        }
+        return target
     }
 
     static func == (lhs: WorkspaceVideo, rhs: WorkspaceVideo) -> Bool { lhs === rhs }
