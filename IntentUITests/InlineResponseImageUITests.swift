@@ -404,28 +404,28 @@ extension InlineResponseImageUITests {
         assertGalleryPosition(4, of: preview)
         attachGalleryScreenshot("Image viewer, image 4 of 4")
 
-        preview.swipeLeft()
+        app.swipeLeft()
         assertGalleryPosition(4, of: preview)
 
-        preview.swipeRight()
+        app.swipeRight()
         assertGalleryPosition(3, of: preview)
         attachGalleryScreenshot("Image viewer, response image 3 of 4")
 
-        preview.swipeRight()
+        app.swipeRight()
         assertGalleryPosition(2, of: preview)
         attachGalleryScreenshot("Image viewer, image 2 of 4")
 
-        preview.swipeRight()
+        app.swipeRight()
         assertGalleryPosition(1, of: preview)
         attachGalleryScreenshot("Image viewer, image 1 of 4")
 
-        preview.swipeRight()
+        app.swipeRight()
         assertGalleryPosition(1, of: preview)
 
-        preview.swipeLeft()
+        app.swipeLeft()
         assertGalleryPosition(2, of: preview)
 
-        preview.swipeDown()
+        app.swipeDown()
         XCTAssertTrue(preview.disappears(timeout: Fixture.timeout), "Swiping down must still close the viewer")
     }
 

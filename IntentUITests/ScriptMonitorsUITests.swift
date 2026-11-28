@@ -324,28 +324,20 @@ extension ScriptMonitorsUITests {
             let more = app.buttons["script-monitors-load-more"]
             XCTAssertTrue(watch.appears(timeout: Self.timeout))
             XCTAssertTrue(more.appears(timeout: Self.timeout))
+            try reveal(more, in: app)
             more.tap()
             let retry = app.buttons["script-monitors-retry"]
             XCTAssertTrue(retry.appears(timeout: Self.timeout))
             capture(app, "status-pills-page-error-" + appearance)
-            let row = try statusPillRowBounds(in: app)
-            let controls = [monitor, watch, retry, more]
-            for (index, control) in controls.enumerated() {
-                XCTAssertTrue(control.exists)
-                XCTAssertGreaterThan(control.frame.width, 0)
-                XCTAssertLessThanOrEqual(control.frame.width, (row.width - Self.pillSpacing) / 2 + 1)
-                XCTAssertEqual(control.frame.height, Self.tapHeight, accuracy: 1)
-                XCTAssertTrue(row.insetBy(dx: -1, dy: -1).contains(control.frame))
-                for neighbor in controls.dropFirst(index + 1) {
-                    XCTAssertFalse(control.frame.intersects(neighbor.frame), "Status actions must not overlap")
-                }
-            }
+            try assertPillsShareRow([monitor, watch, retry, more], in: app)
             XCTAssertTrue(watch.label.contains(Self.originalName))
+            try reveal(retry, in: app)
             retry.tap()
             XCTAssertTrue(retry.disappears(timeout: Self.timeout))
             XCTAssertTrue(more.disappears(timeout: Self.timeout))
-            try assertPillWidths(monitor, watch, in: app)
+            try assertPillsShareRow([monitor, watch], in: app)
             capture(app, "status-pills-page-recovered-" + appearance)
+            try reveal(watch, in: app)
             watch.tap()
             assertDetailText(app, Self.originalName)
             closeDetails(app)
@@ -366,14 +358,16 @@ extension ScriptMonitorsUITests {
             let retry = app.buttons["script-monitors-retry"]
             XCTAssertTrue(retry.appears(timeout: Self.timeout))
             capture(app, "status-pills-retry-" + appearance)
-            try assertPillWidths(monitor, retry, in: app)
+            try assertPillsShareRow([monitor, retry], in: app)
+            try reveal(retry, in: app)
             retry.tap()
             let watch = app.buttons[Self.rowID]
             XCTAssertTrue(watch.appears(timeout: Self.timeout))
             XCTAssertTrue(retry.disappears(timeout: Self.timeout))
             XCTAssertTrue(watch.label.contains(Self.originalName))
             capture(app, "status-pills-watching-" + appearance)
-            try assertPillWidths(monitor, watch, in: app)
+            try assertPillsShareRow([monitor, watch], in: app)
+            try reveal(watch, in: app)
             watch.tap()
             assertDetailText(app, Self.originalName)
             closeDetails(app)
@@ -383,21 +377,35 @@ extension ScriptMonitorsUITests {
     }
 
     @MainActor
-    private func assertPillWidths(_ first: XCUIElement, _ second: XCUIElement, in app: XCUIApplication) throws {
+    private func assertPillsShareRow(_ pills: [XCUIElement], in app: XCUIApplication) throws {
         let row = try statusPillRowBounds(in: app)
-        let geometry = XCTAttachment(string: "row=\(row) first=\(first.frame) second=\(second.frame)")
+        let geometry = XCTAttachment(string: "row=\(row) pills=\(pills.map(\.frame))")
         geometry.name = "Status pill native bounds"
         geometry.lifetime = .keepAlways
         add(geometry)
-        let maximumWidth = (row.width - Self.pillSpacing) / 2
-        for pill in [first, second] {
+        let ordered = pills.sorted { $0.frame.minX < $1.frame.minX }
+        for (index, pill) in ordered.enumerated() {
+            XCTAssertTrue(pill.exists)
             XCTAssertGreaterThan(pill.frame.width, 0)
-            XCTAssertLessThanOrEqual(pill.frame.width, maximumWidth + 1)
             XCTAssertEqual(pill.frame.height, Self.tapHeight, accuracy: 1, "Pill labels must remain on one line")
-            XCTAssertTrue(row.insetBy(dx: -1, dy: -1).contains(pill.frame), "Pills must fit inside their row")
+            XCTAssertEqual(pill.frame.midY, ordered[0].frame.midY, accuracy: 1, "Pills must share one scrolling row")
+            if index + 1 < ordered.count {
+                XCTAssertGreaterThanOrEqual(ordered[index + 1].frame.minX - pill.frame.maxX, Self.pillSpacing - 1, "Status actions must not overlap")
+            }
         }
-        XCTAssertEqual(first.frame.midY, second.frame.midY, accuracy: 1)
-        XCTAssertGreaterThanOrEqual(second.frame.minX - first.frame.maxX, Self.pillSpacing - 1)
+    }
+
+    @MainActor
+    private func reveal(_ pill: XCUIElement, in app: XCUIApplication) throws {
+        let row = try statusPillRowBounds(in: app)
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        for _ in 0..<6 where !row.insetBy(dx: -1, dy: -1).contains(pill.frame) {
+            let leftward = pill.frame.maxX > row.maxX
+            let near = origin.withOffset(CGVector(dx: leftward ? row.maxX - 24 : row.minX + 24, dy: row.midY))
+            let far = origin.withOffset(CGVector(dx: leftward ? row.minX + 24 : row.maxX - 24, dy: row.midY))
+            near.press(forDuration: 0.05, thenDragTo: far)
+        }
+        XCTAssertTrue(waitUntil(timeout: Self.timeout) { row.insetBy(dx: -1, dy: -1).contains(pill.frame) && pill.isHittable })
     }
 
     @MainActor

@@ -28,7 +28,7 @@ nonisolated final class DocumentLinkUITests: XCTestCase {
         for appearance in ["light", "dark"] {
             let app = launch(appearance: appearance)
             let transcript = openTranscript(in: app)
-            tapLink(Fixture.linkLabel, in: app)
+            tapLink(Fixture.linkLabel, in: app, transcript: transcript)
 
             XCTAssertTrue(app.navigationBars[Fixture.fileName].appears(timeout: Fixture.timeout))
             let cell = app.descendants(matching: .any).matching(
@@ -53,8 +53,8 @@ nonisolated final class DocumentLinkUITests: XCTestCase {
     @MainActor
     func testSpreadsheetShareKeepsOriginalName() {
         let app = launch(appearance: "light")
-        _ = openTranscript(in: app)
-        tapLink(Fixture.linkLabel, in: app)
+        let transcript = openTranscript(in: app)
+        tapLink(Fixture.linkLabel, in: app, transcript: transcript)
 
         let share = app.buttons["document.share"].firstMatch
         XCTAssertTrue(share.appears(timeout: Fixture.timeout))
@@ -73,7 +73,7 @@ nonisolated final class DocumentLinkUITests: XCTestCase {
     func testMissingSpreadsheetShowsUnavailableWithRetryAndClose() {
         let app = launch(appearance: "light")
         let transcript = openTranscript(in: app)
-        tapLink(Fixture.missingLinkLabel, in: app)
+        tapLink(Fixture.missingLinkLabel, in: app, transcript: transcript)
 
         XCTAssertTrue(app.navigationBars[Fixture.missingFileName].appears(timeout: Fixture.timeout))
         let unavailable = app.staticTexts["File unavailable"].firstMatch
@@ -114,10 +114,10 @@ nonisolated final class DocumentLinkUITests: XCTestCase {
     }
 
     @MainActor
-    private func tapLink(_ label: String, in app: XCUIApplication) {
+    private func tapLink(_ label: String, in app: XCUIApplication, transcript: XCUIElement) {
         let link = app.links[label].firstMatch
         XCTAssertTrue(link.appears(timeout: Fixture.timeout))
-        XCTAssertTrue(waitUntil(timeout: Fixture.timeout) { link.isHittable })
+        XCTAssertTrue(waitUntilVisible(link, in: transcript, timeout: Fixture.timeout))
         link.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
