@@ -225,11 +225,13 @@ struct MessagePlainTextContentTests {
                 type: .text,
                 text: "::browser-complete{title=\"Played {the} recording\"}[Watch the demo](https://example.com). Done."
             ),
+            ContentBlock(type: .text, text: #"::browser-complete{title="Played \"{the}\" recording"}Watch it."#),
             ContentBlock(type: .text, text: "Use `::browser-complete{title=\"x\"}` to finish.")
         ]
         #expect(
             MessageView.assistantCopyText(from: blocks)
-                == "[Watch the demo](https://example.com). Done.\n\nUse `::browser-complete{title=\"x\"}` to finish."
+                == "[Watch the demo](https://example.com). Done.\n\nWatch it.\n\n"
+                + "Use `::browser-complete{title=\"x\"}` to finish."
         )
     }
 
