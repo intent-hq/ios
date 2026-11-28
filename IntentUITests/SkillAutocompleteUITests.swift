@@ -61,7 +61,9 @@ nonisolated final class SkillAutocompleteUITests: XCTestCase {
         let review = app.buttons["composer.skill.code-review"]
         XCTAssertTrue(review.appears(timeout: Self.timeout))
         review.press(forDuration: 1)
-        let description = app.staticTexts["Review changes for bugs, regressions, and missing tests."]
+        let description = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "Review changes for bugs, regressions, and missing tests.")
+        ).firstMatch
         XCTAssertTrue(description.appears(timeout: Self.timeout))
         capture(app, name: "skill-description-preview")
         app.buttons["Use"].tap()
