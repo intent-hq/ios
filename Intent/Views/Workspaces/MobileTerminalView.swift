@@ -5,6 +5,7 @@ struct MobileTerminalView: View {
     let workspaceName: String
     let store: MobileTerminalStore
     var onClose: (() -> Void)?
+    var onFullScreen: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.isIPadPaneVisible) private var isPaneVisible
@@ -15,11 +16,18 @@ struct MobileTerminalView: View {
     @State private var isClosing = false
     @State private var hasPresented = false
 
-    init(terminal: MobileTerminal, workspaceName: String, store: MobileTerminalStore, onClose: (() -> Void)? = nil) {
+    init(
+        terminal: MobileTerminal,
+        workspaceName: String,
+        store: MobileTerminalStore,
+        onClose: (() -> Void)? = nil,
+        onFullScreen: (() -> Void)? = nil
+    ) {
         self.terminal = terminal
         self.workspaceName = workspaceName
         self.store = store
         self.onClose = onClose
+        self.onFullScreen = onFullScreen
         _connection = State(initialValue: MobileTerminalConnection(store: store, terminal: terminal))
     }
 
@@ -97,7 +105,13 @@ struct MobileTerminalView: View {
                 usesConversationLayout: true,
                 onBack: leaveTerminal
             ) {
-                terminalMenu
+                HStack(spacing: 0) {
+                    if let onFullScreen {
+                        WorkspaceToolFullScreenButton(identifier: "terminal.main.fullScreen", action: onFullScreen)
+                            .disabled(isClosing)
+                    }
+                    terminalMenu
+                }
             }
         } else {
             standaloneHeader

@@ -76,7 +76,6 @@ private struct WorkspaceTerminalRow: View {
         .buttonStyle(TerminalRowButtonStyle())
         .visionListRowHitTarget()
         .contextMenu {
-            IPadToolPlacementAction(tool: .terminal(terminal))
             Button("Rename terminal") { isRenaming = true }
             Button("Delete terminal", role: .destructive) { confirmDelete = true }
                 .disabled(!store.isConnected)

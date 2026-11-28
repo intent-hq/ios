@@ -7,6 +7,7 @@ struct WorkspaceBrowserView: View {
     let connection: any SessionConnectionManaging
     var onClose: (() -> Void)?
     var onPageChange: (String, String) -> Void = { _, _ in }
+    var onFullScreen: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.colorScheme) private var colorScheme
@@ -32,9 +33,6 @@ struct WorkspaceBrowserView: View {
     var body: some View {
         NavigationStack {
             browserContent
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if let onClose { mainContentHeader(onClose: onClose) }
-            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 addressBar
                     .padding(.top, BrowserAppearance.rowSpacing)
@@ -84,6 +82,7 @@ struct WorkspaceBrowserView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var addressBar: some View {
@@ -105,6 +104,7 @@ struct WorkspaceBrowserView: View {
                     IntentLoadingIndicator(label: "Loading page")
                 }
                 navigationButton("Reload", icon: .clockwiseArrow, isEnabled: isConnected, action: reloadPage)
+                if let onClose { browserMenu(onClose: onClose) }
             }
             .padding(.horizontal, BrowserAppearance.labelSpacing)
             .frame(minHeight: Constants.WorkspaceSearch.buttonSize)
@@ -182,21 +182,28 @@ struct WorkspaceBrowserView: View {
         }
     }
 
-    private func mainContentHeader(onClose: @escaping () -> Void) -> some View {
-        WorkspaceNavigationHeader(
-            title: page.title.isEmpty ? "Browser" : page.title,
-            subtitle: nil,
-            backLabel: "Close main browser",
-            backIdentifier: "browser.main.close",
-            titleIdentifier: "browser.main.title",
-            leadingIcon: .close,
-            usesConversationLayout: true,
-            onBack: onClose
-        ) {
-            Color.clear
-                .frame(width: Constants.Conversation.Design.Header.controlSize, height: Constants.Conversation.Design.Header.controlSize)
-                .accessibilityHidden(true)
+    private func browserMenu(onClose: @escaping () -> Void) -> some View {
+        Menu {
+            if let onFullScreen {
+                Button(action: onFullScreen) {
+                    Label { Text("Full screen") } icon: { Image(.expand) }
+                }
+                .accessibilityIdentifier("browser.main.fullScreen")
+            }
+            Button(action: onClose) {
+                Label { Text("Close browser") } icon: { Image(.close) }
+            }
+            .accessibilityIdentifier("browser.main.close")
+        } label: {
+            Image(.more)
+                .resizable()
+                .scaledToFit()
+                .frame(width: WorkspaceDetailStyle.iconSize, height: WorkspaceDetailStyle.iconSize)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .frame(width: BrowserAppearance.controlSize, height: BrowserAppearance.controlSize)
+                .contentShape(Rectangle())
         }
+        .accessibilityLabel("Browser actions")
     }
 
     private func unavailable(_ message: String) -> some View {

@@ -52,15 +52,9 @@ struct WorkspaceDetailPresentations: ViewModifier {
                 }
             )
             .onChange(of: presentation.selectedBrowser) { _, _ in presentSelectedBrowser() }
-            .fullScreenCover(
-                item: $presentation.selectedTerminal,
-                onDismiss: {
-                    terminalStore.clearError(workspaceId: workspaceId)
-                },
-                content: { terminal in
-                    MobileTerminalView(terminal: terminal, workspaceName: workspaceName, store: terminalStore)
-                }
-            )
+            .modifier(WorkspaceTerminalPresentation(terminal: $presentation.selectedTerminal, workspaceName: workspaceName) {
+                terminalStore.clearError(workspaceId: workspaceId)
+            })
             .modifier(WorkspaceDetailAlerts(presentation: presentation, workspaceId: workspaceId))
     }
 
@@ -118,6 +112,7 @@ private struct WorkspaceActionConfirmations: ViewModifier {
 private struct WorkspaceDetailAlerts: ViewModifier {
     let presentation: WorkspaceDetailPresentation
     let workspaceId: String
+    @Environment(AppCoordinator.self) private var coordinator: AppCoordinator?
     @Environment(BackendSession.self) private var session
 
     private var terminalStore: MobileTerminalStore { session.mobileTerminalStore }
@@ -125,7 +120,10 @@ private struct WorkspaceDetailAlerts: ViewModifier {
     func body(content: Content) -> some View {
         content
             .alert("Terminal unavailable", isPresented: Binding(
-                get: { terminalStore.errorMessage(workspaceId: workspaceId) != nil && presentation.selectedTerminal == nil },
+                get: {
+                    terminalStore.errorMessage(workspaceId: workspaceId) != nil && presentation.selectedTerminal == nil
+                        && coordinator?.isShowingIPadTerminal(workspaceId: workspaceId) != true
+                },
                 set: { if !$0 { terminalStore.clearError(workspaceId: workspaceId) } }
             )) {
                 Button("OK") { terminalStore.clearError(workspaceId: workspaceId) }

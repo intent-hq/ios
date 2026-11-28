@@ -29,23 +29,8 @@ struct IPadToolDragSource: ViewModifier {
                         .padding()
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: IPadSidebarStyle.rowRadius))
                 }
-                .accessibilityAction(named: "Open in main area") { coordinator.placeIPadTool(tool) }
         } else {
             content
-        }
-    }
-}
-
-struct IPadToolPlacementAction: View {
-    let tool: IPadWorkspaceTool
-    @Environment(AppCoordinator.self) private var coordinator
-    @Environment(\.iPadToolDraggingEnabled) private var isEnabled
-
-    var body: some View {
-        if isEnabled, coordinator.iPadNavigation.canPlaceTool {
-            Button("Open in main area", systemImage: "rectangle.righthalf.inset.filled") {
-                coordinator.placeIPadTool(tool)
-            }
         }
     }
 }
@@ -80,6 +65,11 @@ struct IPadToolDropTarget: ViewModifier {
                 let tools = session.browserStore.browsers(workspaceId: item.workspaceId).map(IPadWorkspaceTool.browser)
                     + session.mobileTerminalStore.activeTerminals(workspaceId: item.workspaceId).map(IPadWorkspaceTool.terminal)
                 guard let tool = tools.first(where: { $0.id == item.toolId }) else { return false }
+                if case let .browser(browser) = tool {
+                    guard coordinator.canPlaceIPadTool(tool) else { return false }
+                    session.browserNavigation.presentUserBrowser(browser)
+                    return true
+                }
                 return coordinator.placeIPadTool(tool)
             } isTargeted: { isTargeted = $0 }
     }
@@ -92,30 +82,106 @@ private extension IPadWorkspaceTool {
     }
 }
 
+struct WorkspaceTerminalPresentation: ViewModifier {
+    @Binding var terminal: MobileTerminal?
+    let workspaceName: String
+    var onDismiss: () -> Void = {}
+    @Environment(AppCoordinator.self) private var coordinator: AppCoordinator?
+    @Environment(BackendSession.self) private var session
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: terminal?.id, initial: true) {
+                if let terminal, coordinator?.placeIPadTool(.terminal(terminal)) == true { self.terminal = nil }
+            }
+            .fullScreenCover(item: coverBinding, onDismiss: onDismiss) { terminal in
+                MobileTerminalView(terminal: terminal, workspaceName: workspaceName, store: session.mobileTerminalStore)
+                    .coversConversationComposers()
+            }
+    }
+
+    private var coverBinding: Binding<MobileTerminal?> {
+        Binding(
+            get: { terminal.flatMap { coordinator?.canPlaceIPadTool(.terminal($0)) == true ? nil : $0 } },
+            set: { terminal = $0 }
+        )
+    }
+}
+
 struct IPadWorkspaceToolView: View {
     let tool: IPadWorkspaceTool
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
+    @State private var isFullScreen = false
 
     var body: some View {
         Group {
-            switch tool {
-            case let .browser(browser):
-                WorkspaceBrowserView(browser: browser, connection: session.connection) { close() }
-            case let .terminal(terminal):
-                MobileTerminalView(
-                    terminal: terminal,
-                    workspaceName: workspaceName,
-                    store: session.mobileTerminalStore,
-                    onClose: close
-                )
+            if isFullScreen {
+                Color.clear
+            } else {
+                content(onClose: close) { isFullScreen = true }
             }
+        }
+        .fullScreenCover(isPresented: $isFullScreen, onDismiss: closeEndedTerminal) {
+            content(onClose: nil, onFullScreen: nil)
+                .coversConversationComposers()
         }
     }
 
-    private func close() { coordinator.iPadNavigation.closeTool() }
+    @ViewBuilder
+    private func content(onClose: (() -> Void)?, onFullScreen: (() -> Void)?) -> some View {
+        switch tool {
+        case let .browser(browser):
+            WorkspaceBrowserView(
+                browser: browser,
+                connection: session.connection,
+                onClose: onClose,
+                onPageChange: { url, title in session.browserNavigation.pageChanged(browser.id, url: url, title: title) },
+                onFullScreen: onFullScreen
+            )
+            .onAppear { session.browserNavigation.setDisplayed(browser.id, true) }
+            .onDisappear { session.browserNavigation.setDisplayed(browser.id, false) }
+        case let .terminal(terminal):
+            MobileTerminalView(
+                terminal: terminal,
+                workspaceName: workspaceName,
+                store: session.mobileTerminalStore,
+                onClose: onClose,
+                onFullScreen: onFullScreen
+            )
+        }
+    }
+
+    private func close() {
+        if case let .terminal(terminal) = tool { session.mobileTerminalStore.clearError(workspaceId: terminal.workspaceId) }
+        coordinator.iPadNavigation.closeTool()
+    }
+
+    private func closeEndedTerminal() {
+        if case let .terminal(terminal) = tool, !session.mobileTerminalStore.isActive(terminal) { close() }
+    }
 
     private var workspaceName: String {
         session.workspaceStore.workspaces.first { $0.id == tool.workspaceId }?.title ?? "Workspace"
+    }
+}
+
+struct WorkspaceToolFullScreenButton: View {
+    let identifier: String
+    let action: () -> Void
+
+    private typealias Design = Constants.Conversation.Design
+
+    var body: some View {
+        Button(action: action) {
+            Image(.expand)
+                .resizable()
+                .scaledToFit()
+                .frame(width: Design.iconSize, height: Design.iconSize)
+                .frame(width: Design.Header.controlSize, height: Design.Header.controlSize)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Full screen")
+        .accessibilityIdentifier(identifier)
     }
 }

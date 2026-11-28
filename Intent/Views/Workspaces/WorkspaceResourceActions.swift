@@ -18,6 +18,7 @@ struct WorkspaceResourceActions<Actions: View>: View {
 
 struct WorkspaceResourceShortcuts: View {
     let workspaceId: String
+    @Environment(AppCoordinator.self) private var coordinator: AppCoordinator?
     @Environment(BackendSession.self) private var session
     @State private var agentStore: AgentStore?
     @State private var showsSpecialistPicker = false
@@ -58,12 +59,16 @@ struct WorkspaceResourceShortcuts: View {
             if let browser { session.browserNavigation.presentUserBrowser(browser) }
             selectedBrowser = nil
         }
-        .fullScreenCover(item: $selectedTerminal, onDismiss: clearTerminalError) { terminal in
-            MobileTerminalView(terminal: terminal, workspaceName: workspaceName, store: terminalStore)
-                .coversConversationComposers()
-        }
+        .modifier(WorkspaceTerminalPresentation(
+            terminal: $selectedTerminal,
+            workspaceName: workspaceName,
+            onDismiss: clearTerminalError
+        ))
         .alert("Terminal unavailable", isPresented: Binding(
-            get: { terminalStore.errorMessage(workspaceId: workspaceId) != nil && selectedTerminal == nil },
+            get: {
+                terminalStore.errorMessage(workspaceId: workspaceId) != nil && selectedTerminal == nil
+                    && coordinator?.isShowingIPadTerminal(workspaceId: workspaceId) != true
+            },
             set: { if !$0 { clearTerminalError() } }
         )) {
             Button("OK", action: clearTerminalError)
