@@ -35,7 +35,7 @@ struct NativeBrowserPresenter: ViewModifier {
                 ])
             }
             #endif
-            .onChange(of: navigation.presentation(window: windowID)?.id, initial: true) { placeInline() }
+            .onChange(of: navigation.presentation(window: windowID), initial: true) { placeInline() }
             .onChange(of: coordinator?.iPadNavigation.mainTool?.id) { placeInline() }
             .fullScreenCover(item: Binding(
                 get: { navigation.presentation(window: windowID).flatMap(coverBrowser) },
@@ -69,7 +69,15 @@ struct NativeBrowserPresenter: ViewModifier {
             inlineID = presented.id
             return
         }
-        guard let inlineID, mainTool?.browserID != inlineID else { return }
+        guard let inlineID else { return }
+        if let presented, presented.id == inlineID, mainTool?.browserID == inlineID {
+            coordinator?.iPadNavigation.refreshTool(.browser(presented))
+            return
+        }
+        if mainTool?.browserID == inlineID {
+            guard !navigation.hasTab(inlineID) else { return }
+            coordinator?.iPadNavigation.closeTool()
+        }
         self.inlineID = nil
         if presented?.id == inlineID { navigation.dismiss(window: windowID) }
     }

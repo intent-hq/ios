@@ -60,6 +60,10 @@ final class NativeBrowserNavigation {
         return tabs.first { $0.id == presentedID }?.browser
     }
 
+    func hasTab(_ id: String) -> Bool {
+        tabs.contains { $0.id == id }
+    }
+
     func setWindow(_ id: UUID, active: Bool) {
         windows.removeAll { $0 == id }
         if active { windows.append(id) }

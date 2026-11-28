@@ -87,6 +87,11 @@ struct IPadNavigationState: Equatable {
         return true
     }
 
+    mutating func refreshTool(_ tool: IPadWorkspaceTool) {
+        guard mainTool?.id == tool.id, mainTool != tool else { return }
+        mainTool = tool
+    }
+
     mutating func closeTool() { mainTool = nil }
 
     var isSidebarVisible: Bool {
